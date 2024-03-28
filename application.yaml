@@ -1,0 +1,11 @@
+logger:
+  encoder: console
+  level: debug
+cmd/subzero:
+  host: localhost:9999
+  version: local
+  development: true
+  wsServer:
+    port: 9999
+    certPath: cmd/subzero/.testdata/localhost.crt
+    keyPath: cmd/subzero/.testdata/localhost.key
