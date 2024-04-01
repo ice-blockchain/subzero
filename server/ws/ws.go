@@ -18,14 +18,14 @@ import (
 	"net/http"
 )
 
-var wsEventListener func(*model.Event) error
-var wsSubscriptionListener func(*model.Subscription) ([]*model.Event, error)
+var wsEventListener func(context.Context, *model.Event) error
+var wsSubscriptionListener func(context.Context, *model.Subscription) ([]*model.Event, error)
 
-func RegisterWSEventListener(listen func(*model.Event) error) {
+func RegisterWSEventListener(listen func(context.Context, *model.Event) error) {
 	wsEventListener = listen
 }
 
-func RegisterWSSubscriptionListener(listen func(*model.Subscription) ([]*model.Event, error)) {
+func RegisterWSSubscriptionListener(listen func(context.Context, *model.Subscription) ([]*model.Event, error)) {
 	wsSubscriptionListener = listen
 }
 func NotifySubscriptions(event *model.Event) error {

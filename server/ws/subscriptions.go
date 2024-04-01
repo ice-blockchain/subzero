@@ -16,7 +16,7 @@ import (
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	if wsSubscriptionListener != nil {
 		var mErr *multierror.Error
-		events, err := wsSubscriptionListener(sub)
+		events, err := wsSubscriptionListener(ctx, sub)
 		if err != nil {
 			return errors.Wrapf(err, "failed to query events for subscription req %+v", sub)
 		}
@@ -58,7 +58,7 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err erro
 		if wsEventListener == nil {
 			log.Panic(errors.Errorf("wsEventListener to store events not set"))
 		}
-		if saveErr := wsEventListener(event); saveErr != nil {
+		if saveErr := wsEventListener(ctx, event); saveErr != nil {
 			switch {
 			case errors.Is(saveErr, database.ErrDuplicate):
 				return nil
