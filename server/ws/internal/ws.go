@@ -17,14 +17,11 @@ import (
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/http2"
 	"github.com/ice-blockchain/subzero/server/ws/internal/http3"
-	appcfg "github.com/ice-blockchain/wintr/config"
 	"github.com/ice-blockchain/wintr/log"
 )
 
-func NewWSServer(service Service, cfgKey string) Server {
-	var cfg config.Config
-	appcfg.MustLoadFromKey(cfgKey, &cfg)
-	s := &srv{cfg: &cfg, service: service}
+func NewWSServer(service Service, cfg *config.Config) Server {
+	s := &srv{cfg: cfg, service: service}
 	s.setupRouter()
 	s.h3server = http3.New(s.cfg, s.service, s.router)
 	s.wsServer = http2.New(s.cfg, s.service, s.router)
@@ -33,7 +30,7 @@ func NewWSServer(service Service, cfgKey string) Server {
 }
 
 func (s *srv) setupRouter() {
-	if !s.cfg.Development {
+	if /*!s.cfg.Development*/ true {
 		gin.SetMode(gin.ReleaseMode)
 		s.router = gin.New()
 		s.router.Use(gin.Recovery())
@@ -66,7 +63,7 @@ func (s *srv) startServer(ctx context.Context, server interface {
 	ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
 }) {
 	defer log.Info("server stopped listening")
-	log.Info(fmt.Sprintf("server started listening on %v...", s.cfg.WSServer.Port))
+	log.Info(fmt.Sprintf("server started listening on %v...", s.cfg.Port))
 
 	isUnexpectedError := func(err error) bool {
 		return err != nil &&
@@ -74,7 +71,7 @@ func (s *srv) startServer(ctx context.Context, server interface {
 			!errors.Is(err, http.ErrServerClosed)
 	}
 
-	if err := server.ListenAndServeTLS(ctx, s.cfg.WSServer.CertPath, s.cfg.WSServer.KeyPath); isUnexpectedError(err) {
+	if err := server.ListenAndServeTLS(ctx, s.cfg.CertPath, s.cfg.KeyPath); isUnexpectedError(err) {
 		s.quit <- syscall.SIGTERM
 		log.Error(errors.Wrap(err, "server.ListenAndServeTLS failed"))
 	}

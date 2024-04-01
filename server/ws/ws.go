@@ -37,9 +37,9 @@ func NotifySubscriptions(event *model.Event) error {
 
 var hdl *handler
 
-func ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
+func ListenAndServe(ctx context.Context, cancel context.CancelFunc, cfg *Config) {
 	hdl = new(handler)
-	internal.NewWSServer(hdl, applicationYamlKey).ListenAndServe(ctx, cancel)
+	internal.NewWSServer(hdl, cfg).ListenAndServe(ctx, cancel)
 }
 
 func (h *handler) RegisterRoutes(r *internal.Router) {

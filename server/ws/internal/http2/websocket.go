@@ -32,7 +32,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
-	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.WSServer.ReadTimeout, s.cfg.WSServer.WriteTimeout)
+	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout)
 	go s.ping(ctx, conn)
 
 	return wsocket, ctx, nil
@@ -45,8 +45,8 @@ func (s *srv) ping(ctx context.Context, conn net.Conn) {
 		select {
 		case <-ticker.C:
 			var dErr error
-			if (s.cfg.WSServer.WriteTimeout) > 0 {
-				dErr = conn.SetWriteDeadline(time.Now().Add(s.cfg.WSServer.WriteTimeout))
+			if (s.cfg.WriteTimeout) > 0 {
+				dErr = conn.SetWriteDeadline(time.Now().Add(s.cfg.WriteTimeout))
 			}
 			if err := multierror.Append(
 				dErr,

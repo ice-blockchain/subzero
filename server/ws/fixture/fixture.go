@@ -4,11 +4,12 @@ import (
 	"context"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
-func NewTestServer(ctx context.Context, cancel context.CancelFunc, applicationYamlKey string, processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte)) *MockService {
+func NewTestServer(ctx context.Context, cancel context.CancelFunc, cfg *config.Config, processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte)) *MockService {
 	service := newMockService(processingFunc)
-	server := internal.NewWSServer(service, applicationYamlKey)
+	server := internal.NewWSServer(service, cfg)
 	service.server = server
 	go service.server.ListenAndServe(ctx, cancel)
 

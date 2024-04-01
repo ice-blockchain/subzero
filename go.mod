@@ -28,6 +28,7 @@ require (
 	cloud.google.com/go/longrunning v0.5.5 // indirect
 	cloud.google.com/go/storage v1.38.0 // indirect
 	dario.cat/mergo v1.0.0 // indirect
+	filippo.io/mkcert v0.0.0-00010101000000-000000000000 // indirect
 	firebase.google.com/go/v4 v4.13.0 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
@@ -132,4 +133,6 @@ require (
 	google.golang.org/protobuf v1.32.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	howett.net/plist v1.0.0 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.2.0 // indirect
 )

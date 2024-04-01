@@ -24,7 +24,7 @@ func New(cfg *config.Config, wshandler adapters.WSHandler, handler http.Handler)
 
 func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error {
 	s.server = &h2ec.Server{
-		Addr:    fmt.Sprintf(":%v", s.cfg.WSServer.Port),
+		Addr:    fmt.Sprintf(":%v", s.cfg.Port),
 		Handler: s.handler,
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx

@@ -27,8 +27,8 @@ func New(cfg *config.Config, wshandler adapters.WSHandler, handler http.Handler)
 func (s *srv) ListenAndServeTLS(_ context.Context, certFile, keyFile string) error {
 	wtserver := &webtransport.Server{
 		H3: http3.Server{
-			Addr:    fmt.Sprintf(":%v", s.cfg.WSServer.Port),
-			Port:    int(s.cfg.WSServer.Port),
+			Addr:    fmt.Sprintf(":%v", s.cfg.Port),
+			Port:    int(s.cfg.Port),
 			Handler: s.handler,
 			QuicConfig: &quic.Config{
 				Tracer:                qlog.DefaultTracer,
@@ -39,7 +39,7 @@ func (s *srv) ListenAndServeTLS(_ context.Context, certFile, keyFile string) err
 			},
 		},
 	}
-	if s.cfg.Development {
+	if /*s.cfg.Development*/ false {
 		noCors := func(_ *http.Request) bool {
 			return true
 		}

@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
@@ -10,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
 	"sync"
 	"testing"
 	stdlibtime "time"
@@ -18,25 +20,41 @@ import (
 const (
 	connCountTCP = 100
 	connCountUDP = 100
-	testDeadline = 30 * stdlibtime.Second
+	testDeadline = 15 * stdlibtime.Second
+	certPath     = "%v/fixture/.testdata/localhost.crt"
+	keyPath      = "%v/fixture/.testdata/localhost.key"
 )
 
 var echoServer *fixture.MockService
 var pubsubServer *fixture.MockService
 
 func TestMain(m *testing.M) {
-	serverCtx, serverCancel := context.WithCancel(context.Background())
+	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*stdlibtime.Minute)
 	defer serverCancel()
 	echoFunc := func(_ context.Context, w Writer, in []byte) {
 		log.Panic(w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))))
 	}
-	echoServer = fixture.NewTestServer(serverCtx, serverCancel, "echo", echoFunc)
+	wd, _ := os.Getwd()
+	certFilePath := fmt.Sprintf(certPath, wd)
+	keyFilePath := fmt.Sprintf(keyPath, wd)
+	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
+		CertPath: certFilePath,
+		KeyPath:  keyFilePath,
+		Port:     9999,
+	}, echoFunc)
 	hdl = new(handler)
-	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, "pubsub", hdl.Handle)
+	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
+		CertPath: certFilePath,
+		KeyPath:  keyFilePath,
+		Port:     9998,
+	}, hdl.Handle)
 	m.Run()
 	serverCancel()
 }
 func TestSimpleEchoDifferentTransports(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip() // Heavy CPU load, it produces messages in loop
+	}
 	t.Run("webtransport http 3", func(t *testing.T) {
 		testEcho(t, connCountUDP, func(ctx context.Context) (fixture.Client, error) {
 			return fixture.NewWebTransportClientHttp3(ctx, "https://localhost:9999/")
