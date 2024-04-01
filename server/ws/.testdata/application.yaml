@@ -1,7 +1,7 @@
 logger:
   encoder: console
   level: debug
-self:
+echo:
   host: localhost:9999
   version: test
   development: true
@@ -9,5 +9,11 @@ self:
     port: 9999
     certPath: fixture/.testdata/localhost.crt
     keyPath: fixture/.testdata/localhost.key
-    writeTimeout: 0s
-    readTimeout: 0s
+pubsub:
+  host: localhost:9998
+  version: test
+  development: true
+  wsServer:
+    port: 9998
+    certPath: fixture/.testdata/localhost.crt
+    keyPath: fixture/.testdata/localhost.key

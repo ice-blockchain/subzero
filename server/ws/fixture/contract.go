@@ -25,6 +25,8 @@ type (
 		server         internal.Server
 		closed         bool
 		closedMx       sync.Mutex
+		handlersMx     sync.Mutex
+		Handlers       map[adapters.WSWriter]struct{}
 		processingFunc func(ctx context.Context, writer adapters.WSWriter, in []byte)
 		ReaderExited   atomic.Uint64
 	}
@@ -38,9 +40,10 @@ type (
 )
 
 const (
-	applicationYamlKey = "self"
-	wtCapsuleStream    = 0x190B4D3B
-	wtCapsuleStreamFin = 0x190B4D3C
+	applicationYamlKeyEcho   = "echo"
+	applicationYamlKeyPubSub = "sub"
+	wtCapsuleStream          = 0x190B4D3B
+	wtCapsuleStreamFin       = 0x190B4D3C
 )
 
 type (

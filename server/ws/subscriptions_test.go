@@ -17,7 +17,6 @@ import (
 )
 
 func TestRelaySubscription(t *testing.T) {
-	hdl = new(handler)
 
 	eventsQueue := []*model.Event{&model.Event{
 		Event: nostr.Event{
@@ -41,11 +40,10 @@ func TestRelaySubscription(t *testing.T) {
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
+	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	srv := fixture.NewTestServer(ctx, cancel, hdl.Handle)
-	stdlibtime.Sleep(100 * stdlibtime.Millisecond)
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9999")
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	if err != nil {
 		panic(err)
 	}
@@ -119,10 +117,16 @@ func TestRelaySubscription(t *testing.T) {
 	require.Empty(t, <-sub.ClosedReason)
 	assert.Equal(t, append(eventsQueue, notMatchingEvent), storedEvents)
 	require.NoError(t, relay.Close())
-	require.Equal(t, uint64(1), srv.ReaderExited.Load())
+	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 }
 func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
-	hdl = new(handler)
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -137,12 +141,11 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	srv := fixture.NewTestServer(ctx, cancel, hdl.Handle)
-	stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+	pubsubServer.Reset()
 	connsCount := 10
 	subsPerConnectionCount := 10
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
 	subs := make(map[*nostr.Relay]map[*nostr.Subscription]struct{}, 0)
 	subCtx, subCancel := context.WithTimeout(ctx, 5*stdlibtime.Second)
 	defer subCancel()
@@ -151,7 +154,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Limit: 1,
 	}}
 	for connIdx := 0; connIdx < connsCount; connIdx++ {
-		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9999")
+		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 		log.Panic(err)
 		subsForConn, ok := subs[relay]
 		if !ok {
@@ -238,22 +241,27 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	for r, _ := range subs {
 		require.NoError(t, r.Close())
 	}
-	require.Equal(t, uint64(connsCount), srv.ReaderExited.Load())
+	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
+	for pubsubServer.ReaderExited.Load() != uint64(connsCount) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), connsCount))
+		}
+		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+	}
+	require.Equal(t, uint64(connsCount), pubsubServer.ReaderExited.Load())
 }
 
 func TestPublishingEvents(t *testing.T) {
-	hdl = new(handler)
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	RegisterWSEventListener(func(event *model.Event) error {
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
+	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	srv := fixture.NewTestServer(ctx, cancel, hdl.Handle)
-	stdlibtime.Sleep(100 * stdlibtime.Millisecond)
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9999")
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	log.Panic(err)
 	validEvent := model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -292,7 +300,14 @@ func TestPublishingEvents(t *testing.T) {
 	})
 
 	require.NoError(t, relay.Close())
-	require.Equal(t, uint64(1), srv.ReaderExited.Load())
+	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{&validEvent}, storedEvents)
 
 }

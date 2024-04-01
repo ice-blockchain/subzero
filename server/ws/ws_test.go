@@ -21,6 +21,21 @@ const (
 	testDeadline = 30 * stdlibtime.Second
 )
 
+var echoServer *fixture.MockService
+var pubsubServer *fixture.MockService
+
+func TestMain(m *testing.M) {
+	serverCtx, serverCancel := context.WithCancel(context.Background())
+	defer serverCancel()
+	echoFunc := func(_ context.Context, w Writer, in []byte) {
+		log.Panic(w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))))
+	}
+	echoServer = fixture.NewTestServer(serverCtx, serverCancel, "echo", echoFunc)
+	hdl = new(handler)
+	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, "pubsub", hdl.Handle)
+	m.Run()
+	serverCancel()
+}
 func TestSimpleEchoDifferentTransports(t *testing.T) {
 	t.Run("webtransport http 3", func(t *testing.T) {
 		testEcho(t, connCountUDP, func(ctx context.Context) (fixture.Client, error) {
@@ -48,20 +63,9 @@ func TestSimpleEchoDifferentTransports(t *testing.T) {
 
 func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture.Client, error)) {
 	t.Helper()
-	serverCtx, serverCancel := context.WithTimeout(context.Background(), 2*testDeadline)
-	defer serverCancel()
-	var handlersMx sync.Mutex
-	handlers := make(map[Writer]struct{}, conns)
-	echoFunc := func(_ context.Context, w Writer, in []byte) {
-		handlersMx.Lock()
-		handlers[w] = struct{}{}
-		handlersMx.Unlock()
-		require.NoError(t, w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))))
-	}
-	srv := fixture.NewTestServer(serverCtx, serverCancel, echoFunc)
-	stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+	echoServer.Reset()
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(serverCtx, testDeadline)
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	var clients []fixture.Client
 	for i := 0; i < conns; i++ {
@@ -101,15 +105,15 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 	}
 	wg.Wait()
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
-	for srv.ReaderExited.Load() != uint64(conns) {
+	for echoServer.ReaderExited.Load() != uint64(conns) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errors.Errorf("shutdown timeout %v of %v", srv.ReaderExited.Load(), conns))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
 		}
 		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
 	}
-	require.Equal(t, uint64(conns), srv.ReaderExited.Load())
-	require.Len(t, handlers, conns)
-	for w := range handlers {
+	require.Equal(t, uint64(conns), echoServer.ReaderExited.Load())
+	require.Len(t, echoServer.Handlers, conns)
+	for w := range echoServer.Handlers {
 		var closed bool
 		switch h := w.(type) {
 		case *adapters.WebsocketAdapter:

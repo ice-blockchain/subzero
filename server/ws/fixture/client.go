@@ -175,7 +175,7 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 }
 
 func NewRelayClient(ctx context.Context, url string) (*nostr.Relay, error) {
-	relay := nostr.NewRelay(ctx, "wss://localhost:9999")
+	relay := nostr.NewRelay(ctx, url)
 	err := relay.ConnectWithTLS(ctx, localhostTLS())
 	return relay, err
 }
