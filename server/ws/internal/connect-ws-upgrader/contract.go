@@ -3,8 +3,8 @@
 package connectwsupgrader
 
 import (
+	"errors"
 	"github.com/gobwas/httphead"
-	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go/http3"
 )
 

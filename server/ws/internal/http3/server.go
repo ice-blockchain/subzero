@@ -5,16 +5,16 @@ package http3
 import (
 	"context"
 	"fmt"
+	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
-	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/webtransport-go"
 	"net/http"
 
-	"github.com/ice-blockchain/wintr/log"
+	"log"
 )
 
 func New(cfg *config.Config, wshandler adapters.WSHandler, handler http.Handler) Server {
@@ -39,15 +39,17 @@ func (s *srv) ListenAndServeTLS(_ context.Context, certFile, keyFile string) err
 			},
 		},
 	}
-	if /*s.cfg.Development*/ false {
+	if /*s.cfg.Development*/ true {
 		noCors := func(_ *http.Request) bool {
 			return true
 		}
 		wtserver.CheckOrigin = noCors
 	}
 	s.server = wtserver
-
-	return errors.Wrap(s.server.ListenAndServeTLS(certFile, keyFile), "failed to start http3/udp server")
+	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil {
+		return errorx.With(err, "failed to start http3/udp server")
+	}
+	return nil
 }
 
 //nolint:revive // .
@@ -62,7 +64,7 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 			ws, ctx, err = s.handleWebsocket(writer, req)
 		}
 		if err != nil {
-			log.Error(errors.Wrapf(err, "http3: upgrading failed for %v", req.Proto))
+			log.Printf("ERROR:%v", errorx.Withf(err, "http3: upgrading failed for %v", req.Proto))
 			writer.WriteHeader(http.StatusBadRequest)
 
 			return
@@ -70,7 +72,10 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 		if ws != nil {
 			go func() {
 				defer func() {
-					log.Error(ws.Close(), "failed to close http3 stream")
+					if clErr := ws.Close(); clErr != nil {
+						log.Printf("ERROR:%v", errorx.Withf(clErr, "failed to close http3 stream"))
+					}
+
 				}()
 				go ws.Write(ctx)        //nolint:contextcheck // It is new context.
 				wsHandler.Read(ctx, ws) //nolint:contextcheck // It is new context.
@@ -86,5 +91,5 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 }
 
 func (s *srv) Shutdown(_ context.Context) error {
-	return errors.Wrap(s.server.Close(), "failed to close http3 server")
+	return errorx.With(s.server.Close(), "failed to close http3 server")
 }

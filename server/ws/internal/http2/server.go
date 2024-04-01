@@ -5,14 +5,14 @@ package http2
 import (
 	"context"
 	"fmt"
+	"github.com/gookit/goutil/errorx"
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
-	"github.com/pkg/errors"
 	"net"
 	"net/http"
 
-	"github.com/ice-blockchain/wintr/log"
+	"log"
 )
 
 func New(cfg *config.Config, wshandler adapters.WSHandler, handler http.Handler) Server {
@@ -30,8 +30,11 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 			return ctx
 		},
 	}
+	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil {
+		return errorx.With(err, "failed to start http2/tcp server")
+	}
 
-	return errors.Wrap(s.server.ListenAndServeTLS(certFile, keyFile), "failed to start http2/tcp server")
+	return nil
 }
 
 //nolint:funlen,revive // .
@@ -46,7 +49,7 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 			wsocket, ctx, err = s.handleWebTransport(writer, req)
 		}
 		if err != nil {
-			log.Error(errors.Wrapf(err, "upgrading failed (http2 / %v)", req.Proto))
+			log.Printf("ERROR:%v", errorx.Withf(err, "upgrading failed (http2 / %v)", req.Proto))
 			writer.WriteHeader(http.StatusBadRequest)
 
 			return
@@ -54,7 +57,9 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 		if wsocket != nil {
 			go func() {
 				defer func() {
-					log.Error(wsocket.Close(), "failed to close websocket conn")
+					if clErr := wsocket.Close(); clErr != nil {
+						log.Printf("ERROR:%v", errorx.With(clErr, "failed to close websocket conn"))
+					}
 				}()
 				go wsocket.Write(ctx)
 				wsHandler.Read(ctx, wsocket)
@@ -71,5 +76,8 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 }
 
 func (s *srv) Shutdown(_ context.Context) error {
-	return errors.Wrapf(s.server.Close(), "failed to close server")
+	if err := s.server.Close(); err != nil {
+		return errorx.Withf(err, "failed to close server")
+	}
+	return nil
 }

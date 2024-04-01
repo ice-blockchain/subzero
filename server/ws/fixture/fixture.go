@@ -51,7 +51,3 @@ func (m *MockService) Init(ctx context.Context, cancel context.CancelFunc) {
 func (m *MockService) Close(ctx context.Context) error {
 	return nil
 }
-
-func (m *MockService) RegisterRoutes(r *internal.Router) {
-
-}

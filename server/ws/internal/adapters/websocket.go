@@ -4,23 +4,23 @@ package adapters
 
 import (
 	"context"
+	"github.com/gookit/goutil/errorx"
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"net"
 	"net/http"
 	"strings"
 	"syscall"
-	stdlibtime "time"
 
+	"errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 
-	"github.com/ice-blockchain/wintr/log"
-	"github.com/ice-blockchain/wintr/time"
+	"log"
+	"time"
 )
 
-func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout stdlibtime.Duration) (WSWithWriter, context.Context) {
+func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration) (WSWithWriter, context.Context) {
 	wt := &WebsocketAdapter{
 		conn:         conn,
 		closeChannel: make(chan struct{}, 1),
@@ -54,15 +54,17 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 		if isConnClosedErr(wErr) {
 			wErr = nil
 		}
-		err = multierror.Append(err,
+		if err = multierror.Append(err,
 			wErr,
-		).ErrorOrNil()
+		).ErrorOrNil(); err != nil {
+			return errorx.Withf(err, "failed to write data to websocket")
+		}
 
 		if flusher, ok := w.conn.(http.Flusher); err == nil && ok {
 			flusher.Flush()
 		}
 
-		return errors.Wrapf(err, "failed to write data to websocket")
+		return nil
 	}
 }
 
@@ -91,7 +93,9 @@ func (w *WebsocketAdapter) Write(ctx context.Context) {
 		if ctx.Err() != nil || isConnClosedErr(w.wrErr) {
 			break
 		}
-		log.Error(w.writeMessageToWebsocket(msg.opCode, msg.data), "failed to send message to websocket")
+		if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
+			log.Printf("ERROR:%v", errorx.Withf(err, "failed to send message to websocket"))
+		}
 	}
 }
 

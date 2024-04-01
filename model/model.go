@@ -7,7 +7,6 @@ type (
 		nostr.Event
 	}
 	Subscription struct {
-		Filters        nostr.Filters
-		SubscriptionID string
+		Filters nostr.Filters
 	}
 )

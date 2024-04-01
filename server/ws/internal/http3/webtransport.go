@@ -4,19 +4,19 @@ package http3
 
 import (
 	"context"
+	"fmt"
+	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"net/http"
 
-	"github.com/pkg/errors"
-
-	"github.com/ice-blockchain/wintr/log"
+	"log"
 )
 
 func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) (ws adapters.WSWithWriter, ctx context.Context, err error) {
 	conn, err := s.server.Upgrade(writer, req)
 	if err != nil {
-		err = errors.Wrapf(err, "upgrading http3/webtransport failed")
-		log.Error(err)
+		err = errorx.Withf(err, "upgrading http3/webtransport failed")
+		log.Printf(fmt.Sprintf("ERROR:%v", err))
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return nil, nil, err
@@ -25,8 +25,8 @@ func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) 
 	stream, err := conn.AcceptStream(acceptCtx)
 	if err != nil {
 		acceptCancel()
-		err = errors.Wrapf(err, "getting http3/webtransport stream failed")
-		log.Error(err)
+		err = errorx.Withf(err, "getting http3/webtransport stream failed")
+		log.Printf(fmt.Sprintf("ERROR:%v", err))
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return nil, nil, err

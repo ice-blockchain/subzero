@@ -4,6 +4,7 @@ package http2
 
 import (
 	"context"
+	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"net"
@@ -12,11 +13,9 @@ import (
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/pkg/errors"
-
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
-	"github.com/ice-blockchain/wintr/log"
-	"github.com/ice-blockchain/wintr/time"
+	"log"
+	"time"
 )
 
 //nolint:gochecknoglobals,grouper // We need single instance to avoid spending extra mem
@@ -30,7 +29,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 		conn, _, _, err = h2Upgrader.Upgrade(req, writer)
 	}
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
+		return nil, nil, errorx.Withf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
 	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout)
 	go s.ping(ctx, conn)
@@ -52,7 +51,7 @@ func (s *srv) ping(ctx context.Context, conn net.Conn) {
 				dErr,
 				wsutil.WriteServerMessage(conn, ws.OpPing, nil),
 			).ErrorOrNil(); err != nil {
-				log.Error(errors.Wrapf(err, "failed to send ping message"))
+				log.Printf("ERROR:%v", errorx.Withf(err, "failed to send ping message"))
 			}
 		case <-ctx.Done():
 			return

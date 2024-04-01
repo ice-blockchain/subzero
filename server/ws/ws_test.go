@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
+	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	"github.com/ice-blockchain/wintr/log"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"log"
 	"os"
 	"sync"
 	"testing"
@@ -32,7 +32,10 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*stdlibtime.Minute)
 	defer serverCancel()
 	echoFunc := func(_ context.Context, w Writer, in []byte) {
-		log.Panic(w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))))
+		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
+			log.Panic(wErr)
+		}
+
 	}
 	wd, _ := os.Getwd()
 	certFilePath := fmt.Sprintf(certPath, wd)
@@ -125,7 +128,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
 	for echoServer.ReaderExited.Load() != uint64(conns) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errors.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
 		}
 		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
 	}

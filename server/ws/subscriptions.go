@@ -4,29 +4,29 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/wintr/log"
+	"github.com/nbd-wtf/go-nostr"
+	"log"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/pkg/errors"
 )
 
-func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscription) error {
 	if wsSubscriptionListener != nil {
 		var mErr *multierror.Error
-		events, err := wsSubscriptionListener(ctx, sub)
+		events, err := wsSubscriptionListener(ctx, sub.Subscription)
 		if err != nil {
-			return errors.Wrapf(err, "failed to query events for subscription req %+v", sub)
+			return errorx.Withf(err, "failed to query events for subscription req %+v", sub)
 		}
 		for _, event := range events {
 			mErr = multierror.Append(mErr, h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event}))
 		}
 		if mErr.ErrorOrNil() != nil {
-			return errors.Wrapf(mErr, "failed to write events for subscription %+v", sub)
+			return errorx.Withf(mErr, "failed to write events for subscription %+v", sub)
 		}
 	} else {
-		log.Warn("RegisterWSSubscriptionListener not registered, ignoring query part")
+		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
 	}
 
 	eos := nostr.EOSEEnvelope(sub.SubscriptionID)
@@ -36,9 +36,9 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 	defer h.subListenersMx.Unlock()
 	subsFromCurrConnection, ok := h.subListeners[respWriter]
 	if !ok {
-		subsFromCurrConnection = make(map[string]*model.Subscription)
+		subsFromCurrConnection = make(map[string]*subscription)
 		if h.subListeners == nil {
-			h.subListeners = make(map[Writer]map[string]*model.Subscription)
+			h.subListeners = make(map[Writer]map[string]*subscription)
 		}
 		h.subListeners[respWriter] = subsFromCurrConnection
 	}
@@ -47,25 +47,25 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 }
 func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err error) {
 	if err = h.validateIncomingEvent(event); err != nil {
-		return errors.Wrapf(err, "invalid event")
+		return errorx.Withf(err, "invalid event")
 	}
 	if event.Kind == nostr.KindDeletion {
-		return errors.Errorf("Not implemented yet")
+		return errorx.Errorf("Not implemented yet")
 	}
 	isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
 	if !isEphemeralEvent {
 		if wsEventListener == nil {
-			log.Panic(errors.Errorf("wsEventListener to store events not set"))
+			log.Panic(errorx.Errorf("wsEventListener to store events not set"))
 		}
 		if saveErr := wsEventListener(ctx, event); saveErr != nil {
 			switch {
 			default:
-				return errors.Wrapf(err, "failed to store event")
+				return errorx.Withf(saveErr, "failed to store event")
 			}
 		}
 	}
 	if err = h.notifyListenersAboutNewEvent(event); err != nil {
-		return errors.Wrapf(err, "failed to notify subscribers about new event: %+v", event)
+		return errorx.Withf(err, "failed to notify subscribers about new event: %+v", event)
 	}
 	return nil
 }
@@ -73,13 +73,13 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err erro
 func (h *handler) validateIncomingEvent(evt *model.Event) (err error) {
 	hash := sha256.Sum256(evt.Serialize())
 	if id := hex.EncodeToString(hash[:]); id != evt.ID {
-		return errors.New("event id is invalid")
+		return errorx.New("event id is invalid")
 	}
 	var ok bool
 	if ok, err = evt.CheckSignature(); err != nil {
-		return errors.Wrapf(err, "invalid event signature")
+		return errorx.Withf(err, "invalid event signature")
 	} else if !ok {
-		return errors.New("invalid event signature")
+		return errorx.New("invalid event signature")
 	}
 	return nil
 }
@@ -110,7 +110,10 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 			if len(subs) == 0 {
 				delete(h.subListeners, respWriter)
 			}
-			return h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""})
+			if err := h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}); err != nil {
+				return errorx.Withf(err, "failed to write CLOSED message")
+			}
+			return nil
 		}
 	}
 	return nil

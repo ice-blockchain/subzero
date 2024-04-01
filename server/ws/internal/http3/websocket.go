@@ -4,13 +4,12 @@ package http3
 
 import (
 	"context"
+	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"net/http"
 
-	"github.com/pkg/errors"
-
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
-	"github.com/ice-blockchain/wintr/log"
+	"log"
 )
 
 //nolint:gochecknoglobals // We need single instance.
@@ -22,8 +21,8 @@ var (
 func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h3ws adapters.WSWithWriter, ctx context.Context, err error) {
 	conn, _, _, err := websocketupgrader.Upgrade(req, writer)
 	if err != nil {
-		err = errors.Wrapf(err, "upgrading http3/websocket failed")
-		log.Error(err)
+		err = errorx.Withf(err, "upgrading http3/websocket failed")
+		log.Printf("ERROR:%v", err)
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return

@@ -55,7 +55,6 @@ type (
 		writeTimeout  stdlibtime.Duration
 		readTimeout   stdlibtime.Duration
 		inputMessages chan []byte
-		wMutex        sync.Mutex
 	}
 	wtransportClient struct {
 		wt            *adapters.WebtransportAdapter

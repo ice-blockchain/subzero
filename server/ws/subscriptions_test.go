@@ -3,17 +3,16 @@ package ws
 import (
 	"context"
 	"github.com/google/uuid"
+	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
-	"github.com/ice-blockchain/wintr/log"
-	"github.com/ice-blockchain/wintr/time"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"log"
 	"sync"
 	"testing"
-	stdlibtime "time"
+	"time"
 )
 
 func TestRelaySubscription(t *testing.T) {
@@ -32,11 +31,11 @@ func TestRelaySubscription(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
-	RegisterWSSubscriptionListener(func(subscription *model.Subscription) ([]*model.Event, error) {
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) ([]*model.Event, error) {
 		return eventsQueue, nil
 	})
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
-	RegisterWSEventListener(func(event *model.Event) error {
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -52,11 +51,13 @@ func TestRelaySubscription(t *testing.T) {
 		Limit: 1,
 	}}
 
-	subCtx, subCancel := context.WithTimeout(ctx, 5*stdlibtime.Second)
+	subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer subCancel()
 
 	sub, err := relay.Subscribe(subCtx, filters)
-	log.Panic(err)
+	if err != nil {
+		log.Panic(err)
+	}
 	eventsCount := 0
 	var wg sync.WaitGroup
 	go func() {
@@ -77,7 +78,7 @@ func TestRelaySubscription(t *testing.T) {
 	select {
 	case <-sub.EndOfStoredEvents:
 	case <-ctx.Done():
-		log.Panic(errors.Wrapf(ctx.Err(), "EOS not received"))
+		log.Panic(errorx.Withf(ctx.Err(), "EOS not received"))
 	}
 
 	eventsQueue = append(eventsQueue, &model.Event{
@@ -120,9 +121,9 @@ func TestRelaySubscription(t *testing.T) {
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
-		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 }
@@ -133,11 +134,11 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Kind:      nostr.KindTextNote,
 		Content:   "db event",
 	}}}
-	RegisterWSSubscriptionListener(func(subscription *model.Subscription) ([]*model.Event, error) {
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) ([]*model.Event, error) {
 		return storedEvents, nil
 	})
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
-	RegisterWSEventListener(func(event *model.Event) error {
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -147,7 +148,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	subs := make(map[*nostr.Relay]map[*nostr.Subscription]struct{}, 0)
-	subCtx, subCancel := context.WithTimeout(ctx, 5*stdlibtime.Second)
+	subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer subCancel()
 	filters := []nostr.Filter{{
 		Kinds: []int{nostr.KindTextNote},
@@ -155,7 +156,9 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	}}
 	for connIdx := 0; connIdx < connsCount; connIdx++ {
 		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-		log.Panic(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		subsForConn, ok := subs[relay]
 		if !ok {
 			subsForConn = make(map[*nostr.Subscription]struct{})
@@ -163,7 +166,9 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		}
 		for subIdx := 0; subIdx < subsPerConnectionCount; subIdx++ {
 			sub, err := relay.Subscribe(subCtx, filters)
-			log.Panic(err)
+			if err != nil {
+				log.Panic(err)
+			}
 			subsForConn[sub] = struct{}{}
 		}
 	}
@@ -184,7 +189,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic(errors.Errorf("timeout waiting for the event"))
+					log.Panic(errorx.Errorf("timeout waiting for the event"))
 				}
 				assert.Equal(t, storedEvents[0].ID, ev.ID)
 				assert.Equal(t, storedEvents[0].Tags, ev.Tags)
@@ -196,12 +201,12 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				select {
 				case <-eosCh:
 				case <-ctx.Done():
-					log.Panic(errors.Errorf("timeout waiting for EOS"))
+					log.Panic(errorx.Errorf("timeout waiting for EOS"))
 				}
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic(errors.Errorf("timeout waiting for the event"))
+					log.Panic(errorx.Errorf("timeout waiting for the event"))
 				}
 				require.NotNil(t, ev)
 				assert.Equal(t, storedEvents[1].ID, ev.ID)
@@ -231,7 +236,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			select {
 			case <-s.EndOfStoredEvents:
 			case <-ctx.Done():
-				log.Panic(errors.Errorf("timeout waiting for EOS"))
+				log.Panic(errorx.Errorf("timeout waiting for EOS"))
 			}
 		}
 	}
@@ -244,9 +249,9 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
 	for pubsubServer.ReaderExited.Load() != uint64(connsCount) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), connsCount))
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), connsCount))
 		}
-		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(connsCount), pubsubServer.ReaderExited.Load())
 }
@@ -254,7 +259,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 func TestPublishingEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(event *model.Event) error {
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -262,7 +267,9 @@ func TestPublishingEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	log.Panic(err)
+	if err != nil {
+		log.Panic(err)
+	}
 	validEvent := model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindTextNote,
@@ -303,9 +310,9 @@ func TestPublishingEvents(t *testing.T) {
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
-		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{&validEvent}, storedEvents)

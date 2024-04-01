@@ -4,15 +4,15 @@ package connectwsupgrader
 
 import (
 	"bufio"
+	"github.com/gookit/goutil/errorx"
 	"net"
 	"net/http"
 
 	"github.com/gobwas/httphead"
 	"github.com/gobwas/ws"
-	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go/http3"
 
-	"github.com/ice-blockchain/wintr/log"
+	"log"
 )
 
 //nolint:funlen,gocritic,revive // Nope, we're keeping it compatible with 3rd party
@@ -29,17 +29,17 @@ func (u *ConnectUpgrader) Upgrade(req *http.Request, writer http.ResponseWriter)
 		httpStreamer := req.Body.(http3.HTTPStreamer) //nolint:errcheck,forcetypeassert // Should be fine unless quick change API.
 		conn = &http3StreamProxy{stream: httpStreamer.HTTPStream(), streamCreator: w.StreamCreator()}
 	default:
-		err = errors.New("http.ResponseWriter does not support hijack")
-		log.Error(err)
+		err = errorx.New("http.ResponseWriter does not support hijack")
+		log.Printf("ERROR:%v", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 
 	if err != nil {
-		return nil, nil, hs, errors.Wrapf(err, "failed to hijack http2")
+		return nil, nil, hs, errorx.Withf(err, "failed to hijack http2")
 	}
 	hs, err = u.syncWSProtocols(req)
 	if err != nil {
-		return nil, nil, hs, errors.Wrapf(err, "failed to sync ws protocol and extensions")
+		return nil, nil, hs, errorx.Withf(err, "failed to sync ws protocol and extensions")
 	}
 
 	writer.Header().Add(headerSecProtocolCanonical, hs.Protocol)
@@ -47,7 +47,7 @@ func (u *ConnectUpgrader) Upgrade(req *http.Request, writer http.ResponseWriter)
 	writer.WriteHeader(http.StatusOK)
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		return conn, rw, hs, errors.New("websocket: response writer must implement flusher")
+		return conn, rw, hs, errorx.New("websocket: response writer must implement flusher")
 	}
 	flusher.Flush()
 

@@ -17,8 +17,10 @@ type (
 type (
 	handler struct {
 		subListenersMx sync.Mutex
-		subListeners   map[adapters.WSWriter]map[string]*model.Subscription
+		subListeners   map[adapters.WSWriter]map[string]*subscription
+	}
+	subscription struct {
+		*model.Subscription
+		SubscriptionID string
 	}
 )
-
-const applicationYamlKey = "cmd/subzero"

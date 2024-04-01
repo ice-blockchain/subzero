@@ -5,27 +5,27 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	connectwsupgrader "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
-	"github.com/ice-blockchain/wintr/log"
-	"github.com/ice-blockchain/wintr/time"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/webtransport-go"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"syscall"
-	stdlibtime "time"
+	"time"
 )
 
 func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
@@ -35,11 +35,11 @@ func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error)
 	d.TLSClientConfig = localhostTLS()
 	_, conn, err := d.Dial(ctx, url, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to establish webtransport conn to %v", url)
+		return nil, errorx.Withf(err, "failed to establish webtransport conn to %v", url)
 	}
 	stream, err := conn.OpenStream()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open webtransport stream to %v", url)
+		return nil, errorx.Withf(err, "failed to open webtransport stream to %v", url)
 	}
 	wt, closectx := adapters.NewWebTransportAdapter(ctx, conn, stream, 0, 0)
 	go wt.Write(closectx)
@@ -72,7 +72,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-		return nil, errors.Errorf("received status %d", rsp.StatusCode)
+		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
 	}
 	stream := rsp.Body.(http3.HTTPStreamer).HTTPStream()
 	streamCreator := rsp.Body.(http3.Hijacker).StreamCreator()
@@ -113,7 +113,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-		return nil, errors.Errorf("received status %d", rsp.StatusCode)
+		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
 	}
 	conn := newHTTP2ClientStream(bodyw, rsp)
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
@@ -146,7 +146,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-		return nil, errors.Errorf("received status %d", rsp.StatusCode)
+		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
 	}
 	conn := newHTTP2ClientStream(bodyw, rsp)
 	stream := &http2WebtransportWrapper{conn: conn}
@@ -166,7 +166,7 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 	dialer.TLSConfig = localhostTLS()
 	conn, _, _, err := dialer.Dial(ctx, url)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to establish websocket conn to %v", url)
+		return nil, errorx.Withf(err, "failed to establish websocket conn to %v", url)
 	}
 	c, closectx := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go c.read(closectx)
@@ -208,7 +208,10 @@ func (c *wtransportClient) Received() <-chan []byte {
 }
 
 func (c *wtransportClient) WriteMessage(messageType int, data []byte) error {
-	return errors.Wrapf(c.wt.WriteMessageToStream(data), "client: webtransport")
+	if wErr := c.wt.WriteMessageToStream(data); wErr != nil {
+		return errorx.Withf(wErr, "client: webtransport writing message failed")
+	}
+	return nil
 }
 
 func (c *wtransportClient) Close() error {
@@ -252,7 +255,7 @@ func (c *wsocketClient) Received() <-chan []byte {
 	return c.inputMessages
 }
 
-func clientWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout stdlibtime.Duration) (*wsocketClient, context.Context) {
+func clientWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration) (*wsocketClient, context.Context) {
 	wt := &wsocketClient{
 		conn:          conn,
 		closeChannel:  make(chan struct{}, 1),
@@ -279,18 +282,18 @@ func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) er
 			return nil
 		}
 		w.closeMx.Unlock()
-		w.wMutex.Lock()
 		wErr := wsutil.WriteClientMessage(w.conn, ws.OpCode(messageType), data)
 		if isConnClosedErr(wErr) {
 			wErr = nil
 		}
-		err = multierror.Append(err, wErr).ErrorOrNil()
+		if err = multierror.Append(err, wErr).ErrorOrNil(); err != nil {
+			return errorx.Withf(err, "client: failed to write data to websocket")
+		}
 
 		if flusher, ok := w.conn.(http.Flusher); err == nil && ok {
 			flusher.Flush()
 		}
-		w.wMutex.Unlock()
-		return errors.Wrapf(err, "client: failed to write data to websocket")
+		return nil
 	}
 }
 
@@ -299,7 +302,10 @@ func (w *wsocketClient) WriteMessage(messageType int, data []byte) error {
 	case <-w.closeChannel:
 		return nil
 	default:
-		return errors.Wrapf(w.writeMessageToWebsocket(messageType, data), "client: failed to send message to websocket")
+		if wErr := w.writeMessageToWebsocket(messageType, data); wErr != nil {
+			return errorx.Withf(wErr, "client: failed to send message to websocket")
+		}
+		return nil
 	}
 }
 
@@ -359,7 +365,7 @@ func (s *http2ClientStream) WriteByte(p byte) (err error) {
 		return err
 	}
 	if n != 1 {
-		return errors.Errorf("expected 1 written byte got %v", n)
+		return errorx.Errorf("expected 1 written byte got %v", n)
 	}
 	return nil
 }
@@ -378,15 +384,15 @@ func (s *http2ClientStream) RemoteAddr() net.Addr {
 	return nil
 }
 
-func (s *http2ClientStream) SetDeadline(t stdlibtime.Time) error {
+func (s *http2ClientStream) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (s *http2ClientStream) SetReadDeadline(t stdlibtime.Time) error {
+func (s *http2ClientStream) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-func (s *http2ClientStream) SetWriteDeadline(t stdlibtime.Time) error {
+func (s *http2ClientStream) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
@@ -411,7 +417,7 @@ func (h *http2WebtransportWrapper) CancelWrite(code webtransport.StreamErrorCode
 	return
 }
 
-func (h *http2WebtransportWrapper) SetWriteDeadline(time stdlibtime.Time) error {
+func (h *http2WebtransportWrapper) SetWriteDeadline(time time.Time) error {
 	return nil
 }
 
@@ -422,14 +428,14 @@ func (h *http2WebtransportWrapper) Read(p []byte) (n int, err error) {
 		var sID uint64
 		sID, err = quicvarint.Read(cData)
 		if err != nil {
-			err = errors.Wrapf(err, "failed to parse WT_STREAM/StreamID")
+			err = errorx.Withf(err, "failed to parse WT_STREAM/StreamID")
 			return 4, err
 		}
 		h.streamID = uint32(sID)
 		return cData.Read(p)
 	} else {
 		if _, err = io.ReadAll(cData); err != nil { // We must read capsule until end.
-			err = errors.Wrapf(err, "failed to parse read till end capsule %v", cType)
+			err = errorx.Withf(err, "failed to parse read till end capsule %v", cType)
 			return 0, err
 		}
 	}
@@ -440,11 +446,11 @@ func (h *http2WebtransportWrapper) CancelRead(code webtransport.StreamErrorCode)
 	return
 }
 
-func (h *http2WebtransportWrapper) SetReadDeadline(time stdlibtime.Time) error {
+func (h *http2WebtransportWrapper) SetReadDeadline(time time.Time) error {
 	return nil
 }
 
-func (h *http2WebtransportWrapper) SetDeadline(time stdlibtime.Time) error {
+func (h *http2WebtransportWrapper) SetDeadline(time time.Time) error {
 	return nil
 }
 
@@ -453,8 +459,8 @@ func http3RoundTripper() *http3.RoundTripper {
 		TLSClientConfig: localhostTLS(),
 		QuicConfig: &quic.Config{
 			EnableDatagrams:      true,
-			MaxIdleTimeout:       600 * stdlibtime.Second,
-			HandshakeIdleTimeout: 600 * stdlibtime.Second,
+			MaxIdleTimeout:       600 * time.Second,
+			HandshakeIdleTimeout: 600 * time.Second,
 		},
 	}
 }
@@ -462,7 +468,7 @@ func http3RoundTripper() *http3.RoundTripper {
 func localhostTLS() *tls.Config {
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM([]byte(localhostCrt)); !ok {
-		log.Panic(errors.New("failed to append localhost tls to cert pool"))
+		log.Panic(errorx.New("failed to append localhost tls to cert pool"))
 	}
 
 	return &tls.Config{

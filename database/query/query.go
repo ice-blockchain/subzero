@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/gookit/goutil/errorx"
 	"github.com/ice-blockchain/subzero/model"
 	_ "github.com/mattn/go-sqlite3"
@@ -12,9 +13,17 @@ func AcceptEvent(ctx context.Context, event *model.Event) error {
 }
 
 func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
+	jtags, _ := json.Marshal(event.Tags)
+
 	sql := `insert or replace into events( kind,  created_at,  id,  pubkey,   sig,  content,  temp_tags, d_tag)
-								   values(:kind, :created_at, :id, :pub_key, :sig, :content, :tags,      (select value->>1 from json_each(jsonb(:tags)) where value->>0 = 'd' limit 1))`
-	rowsAffected, err := db.exec(ctx, sql, event)
+								   values(:kind, :createdat, :id, :pubkey, :sig, :content, :jtags,      (select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1))`
+	rowsAffected, err := db.exec(ctx, sql, &struct {
+		*model.Event
+		JTags string `db:"jtags"`
+	}{
+		Event: event,
+		JTags: string(jtags),
+	})
 	if err != nil {
 		return errorx.With(err, "failed to exec insert event sql")
 	}
@@ -40,9 +49,9 @@ func GetStoredEvents(ctx context.Context, subscription *model.Subscription) (des
 
 func generateSelectEventsSQL(subscription *model.Subscription) (sql string, params map[string]any) {
 	return `select e.kind,
-				   e.created_at,  
+				   e.created_at as createdat,  
 				   e.id,  
-				   e.pubkey as pub_key,   
+				   e.pubkey,   
 				   e.sig,  
 				   e.content,  
 				   '[]' as tags 
