@@ -171,6 +171,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	newRealtimeEvent.SetExtra("extra", uuid.NewString())
 	require.NoError(t, newRealtimeEvent.Sign(privkey))
 	var wg sync.WaitGroup
+	eosCh := make(chan struct{})
 	for _, subsForConn := range subs {
 		for s, _ := range subsForConn {
 			wg.Add(1)
@@ -190,7 +191,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				assert.Equal(t, storedEvents[0].PubKey, ev.PubKey)
 				assert.Equal(t, storedEvents[0].Content, ev.Content)
 				select {
-				case <-sub.EndOfStoredEvents:
+				case <-eosCh:
 				case <-ctx.Done():
 					log.Panic(errors.Errorf("timeout waiting for EOS"))
 				}
@@ -199,6 +200,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				case <-ctx.Done():
 					log.Panic(errors.Errorf("timeout waiting for the event"))
 				}
+				require.NotNil(t, ev)
 				assert.Equal(t, storedEvents[1].ID, ev.ID)
 				assert.Equal(t, storedEvents[1].Tags, ev.Tags)
 				assert.Equal(t, storedEvents[1].CreatedAt, ev.CreatedAt)
@@ -219,12 +221,18 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			}(s)
 		}
 	}
-
 	var randomRelay *nostr.Relay
-	for r, _ := range subs {
+	for r, subsForRelay := range subs {
 		randomRelay = r
-		break
+		for s, _ := range subsForRelay {
+			select {
+			case <-s.EndOfStoredEvents:
+			case <-ctx.Done():
+				log.Panic(errors.Errorf("timeout waiting for EOS"))
+			}
+		}
 	}
+	close(eosCh)
 	require.NoError(t, randomRelay.Publish(ctx, newRealtimeEvent))
 	wg.Wait()
 	for r, _ := range subs {
