@@ -3,16 +3,11 @@ package query
 import (
 	"context"
 	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/model"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func init() {
-	command.RegisterQuerySyncer(acceptEvent)
-}
-
-func acceptEvent(ctx context.Context, event *model.Event) error {
+func AcceptEvent(ctx context.Context, event *model.Event) error {
 	return globalDB.SaveEvent(ctx, event)
 }
 

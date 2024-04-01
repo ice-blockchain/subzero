@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/ice-blockchain/subzero/database"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/wintr/log"
 
@@ -60,8 +59,6 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err erro
 		}
 		if saveErr := wsEventListener(ctx, event); saveErr != nil {
 			switch {
-			case errors.Is(saveErr, database.ErrDuplicate):
-				return nil
 			default:
 				return errors.Wrapf(err, "failed to store event")
 			}
