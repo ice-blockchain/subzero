@@ -3,8 +3,10 @@ package query
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"github.com/gookit/goutil/errorx"
 	"github.com/jmoiron/sqlx"
+	"strings"
 	"sync"
 )
 
@@ -19,11 +21,19 @@ type (
 	}
 )
 
+var (
+	//go:embed DDL.sql
+	ddl string
+)
+
 func MustInit() {
 	globalDB = &dbClient{
 		DB:          sqlx.MustConnect("sqlite3", ":memory:"), //TODO impl this properly
 		stmtCacheMx: new(sync.Mutex),
 		stmtCache:   make(map[string]*sqlx.NamedStmt),
+	}
+	for _, statement := range strings.Split(ddl, "--------") {
+		globalDB.MustExec(statement)
 	}
 }
 
