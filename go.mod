@@ -10,12 +10,13 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gookit/goutil v0.6.15
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/ice-blockchain/go/src v0.0.0-20240401075150-fff9ef83f7e4
+	github.com/ice-blockchain/go/src v0.0.0-20240403114104-1564d284e521
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/nbd-wtf/go-nostr v0.30.0
 	github.com/quic-go/quic-go v0.42.0
 	github.com/quic-go/webtransport-go v0.7.0
+	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.9.0
 )
 
@@ -41,7 +42,6 @@ require (
 	github.com/puzpuzpuz/xsync/v3 v3.1.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
-	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tidwall/gjson v1.17.1 // indirect
 	github.com/tidwall/match v1.1.1 // indirect

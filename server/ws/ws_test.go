@@ -69,6 +69,12 @@ func TestSimpleEchoDifferentTransports(t *testing.T) {
 		})
 	})
 
+	t.Run("webtransport http 2", func(t *testing.T) {
+		testEcho(t, connCountTCP, func(ctx context.Context) (fixture.Client, error) {
+			return fixture.NewWebtransportClientHttp2(ctx, "https://localhost:9999/")
+		})
+	})
+
 	t.Run("websocket http 2", func(t *testing.T) {
 		testEcho(t, connCountTCP, func(ctx context.Context) (fixture.Client, error) {
 			return fixture.NewWebsocketClientHttp2(ctx, "https://localhost:9999/")

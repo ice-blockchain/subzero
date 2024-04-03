@@ -23,6 +23,7 @@ func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) 
 
 			return nil, nil, err
 		}
+		writer.(http.Flusher).Flush()
 		acceptCtx, acceptCancel := context.WithTimeout(req.Context(), acceptStreamTimeout)
 		stream := session.AcceptStream(acceptCtx)
 		acceptCancel()

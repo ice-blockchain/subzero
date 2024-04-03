@@ -141,7 +141,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 	req = req.WithContext(ctx)
 	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: localhostTLS()}
 	client := h2ec.Client{Transport: rt}
-	rsp, err := client.Do(req)
+	rsp, err := client.Transport.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,10 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 		wt:            wt.(*adapters.WebtransportAdapter),
 		inputMessages: make(chan []byte),
 	}
-	go c.read(closectx)
+	go func() {
+		defer c.Close()
+		c.read(ctx)
+	}()
 
 	return c, nil
 }
@@ -215,7 +218,6 @@ func (c *wtransportClient) WriteMessage(messageType int, data []byte) error {
 }
 
 func (c *wtransportClient) Close() error {
-	err := c.wt.Close()
 	c.closedMx.Lock()
 	if c.closed {
 		c.closedMx.Unlock()
@@ -224,7 +226,7 @@ func (c *wtransportClient) Close() error {
 	close(c.inputMessages)
 	c.closed = true
 	c.closedMx.Unlock()
-
+	err := c.wt.Close()
 	return err
 }
 
@@ -406,6 +408,10 @@ func (h *http2WebtransportWrapper) Write(p []byte) (n int, err error) {
 }
 
 func (h *http2WebtransportWrapper) Close() error {
+	b := make([]byte, 0, 4+4)
+	b = quicvarint.Append(b, uint64(h.streamID))
+	b = quicvarint.Append(b, uint64(0))
+	http3.WriteCapsule(h.conn, http3.CapsuleType(wtCapsuleCloseWebtransportSession), b)
 	return h.conn.Close()
 }
 

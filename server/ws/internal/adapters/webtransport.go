@@ -104,12 +104,14 @@ func (w *WebtransportAdapter) Close() error {
 	if w.session != nil {
 		clErr = w.session.CloseWithError(0, "")
 	}
-	if clErr != nil {
+	if clErr != nil || w.session == nil {
 		clErr = w.stream.Close()
-		if clErr != nil && strings.Contains(clErr.Error(), "close called for canceled stream") {
-			return nil
+		if clErr != nil {
+			if strings.Contains(clErr.Error(), "close called for canceled stream") {
+				return nil
+			}
+			return errorx.With(clErr, "failed to close http3/webtransport stream")
 		}
-		return errorx.With(clErr, "failed to close http3/webtransport stream")
 	}
 	return nil
 }

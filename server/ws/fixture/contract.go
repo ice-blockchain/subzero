@@ -40,10 +40,11 @@ type (
 )
 
 const (
-	applicationYamlKeyEcho   = "echo"
-	applicationYamlKeyPubSub = "sub"
-	wtCapsuleStream          = 0x190B4D3B
-	wtCapsuleStreamFin       = 0x190B4D3C
+	applicationYamlKeyEcho            = "echo"
+	applicationYamlKeyPubSub          = "sub"
+	wtCapsuleStream                   = 0x190B4D3B
+	wtCapsuleStreamFin                = 0x190B4D3C
+	wtCapsuleCloseWebtransportSession = 0x2843
 )
 
 type (
