@@ -4,11 +4,13 @@ package http2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/gookit/goutil/errorx"
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
+	"io"
 	"net"
 	"net/http"
 
@@ -30,7 +32,12 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 			return ctx
 		},
 	}
-	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil {
+	isUnexpectedError := func(err error) bool {
+		return err != nil &&
+			!errors.Is(err, io.EOF) &&
+			!errors.Is(err, http.ErrServerClosed)
+	}
+	if err := s.server.ListenAndServeTLS(certFile, keyFile); isUnexpectedError(err) {
 		return errorx.With(err, "failed to start http2/tcp server")
 	}
 

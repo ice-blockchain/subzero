@@ -9,6 +9,10 @@ import (
 )
 
 func AcceptEvent(ctx context.Context, event *model.Event) error {
+	isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
+	if isEphemeralEvent {
+		return nil
+	}
 	return globalDB.SaveEvent(ctx, event)
 }
 

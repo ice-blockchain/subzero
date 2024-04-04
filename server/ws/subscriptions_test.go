@@ -16,7 +16,6 @@ import (
 )
 
 func TestRelaySubscription(t *testing.T) {
-
 	eventsQueue := []*model.Event{&model.Event{
 		Event: nostr.Event{
 			ID:        uuid.NewString(),
@@ -32,7 +31,15 @@ func TestRelaySubscription(t *testing.T) {
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
 	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) ([]*model.Event, error) {
-		return eventsQueue, nil
+		matchingFilter := make([]*model.Event, 0, len(eventsQueue))
+		for _, ev := range eventsQueue {
+			for _, f := range subscription.Filters {
+				if f.Matches(&ev.Event) {
+					matchingFilter = append(matchingFilter, ev)
+				}
+			}
+		}
+		return matchingFilter, nil
 	})
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
@@ -70,10 +77,10 @@ func TestRelaySubscription(t *testing.T) {
 			assert.Equal(t, eventsQueue[eventsCount].Sig, ev.Sig)
 			assert.Equal(t, eventsQueue[eventsCount].Kind, ev.Kind)
 			assert.Equal(t, eventsQueue[eventsCount].PubKey, ev.PubKey)
-			assert.Equal(t, eventsQueue[eventsCount].Content, ev.Content)
+			assert.Equal(t, eventsQueue[eventsCount].Content, ev.Content, eventsCount)
 			eventsCount += 1
 		}
-		assert.Equal(t, 3, eventsCount)
+		assert.Equal(t, 4, eventsCount)
 	}()
 	select {
 	case <-sub.EndOfStoredEvents:
@@ -107,16 +114,35 @@ func TestRelaySubscription(t *testing.T) {
 
 	notMatchingEvent := &model.Event{nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
-		Kind:      nostr.KindArticle,
-		Tags:      nostr.Tags{},
+		Kind:      nostr.KindRepost,
+		Tags:      nostr.Tags{[]string{"e", eventsQueue[len(eventsQueue)-1].ID}},
 		Content:   "realtime event NOT matching filter" + uuid.NewString(),
 	}}
 	notMatchingEvent.SetExtra("extra", uuid.NewString())
 	require.NoError(t, notMatchingEvent.Sign(privkey))
 	require.NoError(t, relay.Publish(ctx, notMatchingEvent.Event))
+	assert.Equal(t, append(eventsQueue, notMatchingEvent), storedEvents)
+	sub.Filters = []nostr.Filter{{
+		Kinds: []int{nostr.KindArticle},
+		Limit: 1,
+	}}
+	replacedSubEnvelope, _ := (nostr.ReqEnvelope{SubscriptionID: sub.GetID(), Filters: sub.Filters}).MarshalJSON()
+	relay.Write(replacedSubEnvelope)
+	eventMatchingReplacedSub := &model.Event{nostr.Event{
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Kind:      nostr.KindArticle,
+		Tags:      nostr.Tags{},
+		Content:   "event matching replaced filter" + uuid.NewString(),
+	}}
+	eventsQueue = append(eventsQueue, eventMatchingReplacedSub)
+	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
+
+	require.NoError(t, relay.Publish(ctx, eventsQueue[len(eventsQueue)-1].Event))
+
 	sub.Close()
 	require.Empty(t, <-sub.ClosedReason)
-	assert.Equal(t, append(eventsQueue, notMatchingEvent), storedEvents)
+
 	require.NoError(t, relay.Close())
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
@@ -260,6 +286,13 @@ func TestPublishingEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
+		assert.False(t, isEphemeralEvent)
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -270,7 +303,7 @@ func TestPublishingEvents(t *testing.T) {
 	if err != nil {
 		log.Panic(err)
 	}
-	validEvent := model.Event{Event: nostr.Event{
+	validEvent := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindTextNote,
 		Tags:      nil,
@@ -305,6 +338,19 @@ func TestPublishingEvents(t *testing.T) {
 		invalidSignature.SetExtra("extra", uuid.NewString())
 		require.Error(t, relay.Publish(ctx, invalidSignature.Event))
 	})
+	t.Run("duplicated event", func(t *testing.T) {
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("ephemeral event", func(t *testing.T) {
+		ephemeralEvent := nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindClientAuthentication,
+			Content:   "bogus",
+		}
+		require.NoError(t, ephemeralEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, ephemeralEvent))
+
+	})
 
 	require.NoError(t, relay.Close())
 	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
@@ -315,6 +361,5 @@ func TestPublishingEvents(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
-	require.Equal(t, []*model.Event{&validEvent}, storedEvents)
-
+	require.Equal(t, []*model.Event{validEvent}, storedEvents)
 }

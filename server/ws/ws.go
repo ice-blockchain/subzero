@@ -99,7 +99,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	}
 	if err != nil {
 		if e, isEvent := input.(*nostr.EventEnvelope); isEvent {
-			err = errorx.Withf(err, "failed to handle EVENT %+v", e)
+			err = errorx.Withf(err, "error: failed to handle EVENT %+v", e)
 			log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &nostr.OKEnvelope{
 				EventID: e.ID,
 				OK:      false,
@@ -107,7 +107,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			})).ErrorOrNil())
 			return
 		}
-		err = errorx.Withf(err, "failed to handle %v %+v", input.Label(), input)
+		err = errorx.Withf(err, "error: failed to handle %v %+v", input.Label(), input)
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
 	}
