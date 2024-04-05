@@ -12,6 +12,17 @@ type (
 	Subscription struct {
 		Filters nostr.Filters
 	}
+	EventReference interface {
+		Filter() nostr.Filter
+	}
+	ReplaceableEventReference struct {
+		Kind   int
+		PubKey string
+		dTag   string
+	}
+	PlainEventReference struct {
+		EventIDs []string
+	}
 )
 
 var (

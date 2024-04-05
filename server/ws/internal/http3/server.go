@@ -91,5 +91,8 @@ func (s *srv) handle(wsHandler adapters.WSHandler, handler http.Handler) http.Ha
 }
 
 func (s *srv) Shutdown(_ context.Context) error {
-	return errorx.With(s.server.Close(), "failed to close http3 server")
+	if err := s.server.Close(); err != nil {
+		return errorx.With(err, "failed to close http3 server")
+	}
+	return nil
 }

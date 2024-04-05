@@ -35,7 +35,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 	isUnexpectedError := func(err error) bool {
 		return err != nil &&
 			!errors.Is(err, io.EOF) &&
-			!errors.Is(err, http.ErrServerClosed)
+			!errors.Is(err, h2ec.ErrServerClosed)
 	}
 	if err := s.server.ListenAndServeTLS(certFile, keyFile); isUnexpectedError(err) {
 		return errorx.With(err, "failed to start http2/tcp server")

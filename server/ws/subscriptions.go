@@ -6,11 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gookit/goutil/errorx"
+	"github.com/hashicorp/go-multierror"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"log"
-
-	"github.com/hashicorp/go-multierror"
 )
 
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscription) error {
@@ -49,9 +48,6 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err error) {
 	if err = h.validateIncomingEvent(event); err != nil {
 		return errorx.Withf(err, "invalid: event is invalid")
-	}
-	if event.Kind == nostr.KindDeletion {
-		return errorx.Errorf("Not implemented yet")
 	}
 	isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
 	if !isEphemeralEvent {
