@@ -14,6 +14,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"io"
 	"log"
+	"net/http"
 )
 
 var wsEventListener func(context.Context, *model.Event) error
@@ -38,6 +39,11 @@ var hdl *handler
 func ListenAndServe(ctx context.Context, cancel context.CancelFunc, cfg *Config) {
 	hdl = new(handler)
 	internal.NewWSServer(hdl, cfg).ListenAndServe(ctx, cancel)
+}
+
+func New(cfg *Config, httpHandler http.Handler) Server {
+	hdl = new(handler)
+	return internal.NewWSServerWithExtraHandler(hdl, cfg, httpHandler)
 }
 
 func (h *handler) Read(ctx context.Context, stream internal.WS) {

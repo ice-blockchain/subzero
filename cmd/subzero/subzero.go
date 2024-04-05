@@ -6,6 +6,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/spf13/cobra"
 
@@ -13,9 +14,9 @@ import (
 )
 
 var (
-	wsPort  int16
-	wsCert  string
-	wsKey   string
+	port    int16
+	cert    string
+	key     string
 	subzero = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
@@ -23,20 +24,20 @@ var (
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			query.MustInit()
-			wsserver.ListenAndServe(ctx, cancel, &wsserver.Config{
-				CertPath: wsCert,
-				KeyPath:  wsKey,
-				Port:     uint16(wsPort),
+			server.ListenAndServe(ctx, cancel, &server.Config{
+				CertPath: cert,
+				KeyPath:  key,
+				Port:     uint16(port),
 			})
 		},
 	}
 	initFlags = func() {
-		subzero.Flags().StringVar(&wsCert, "wscert", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().StringVar(&wsKey, "wskey", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().Int16Var(&wsPort, "wsport", 0, "port to communicate with clients (http/websocket)")
-		subzero.MarkFlagRequired("wscert")
-		subzero.MarkFlagRequired("wskey")
-		subzero.MarkFlagRequired("wsport")
+		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
+		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
+		subzero.Flags().Int16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
+		subzero.MarkFlagRequired("cert")
+		subzero.MarkFlagRequired("key")
+		subzero.MarkFlagRequired("port")
 	}
 )
 
