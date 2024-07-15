@@ -4,23 +4,27 @@ package http3
 
 import (
 	"context"
-	"github.com/ice-blockchain/subzero/server/ws/internal/config"
-	"github.com/quic-go/webtransport-go"
 	"net/http"
 	stdlibtime "time"
+
+	"github.com/quic-go/webtransport-go"
+
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
 type (
 	Server interface {
 		ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
 		Shutdown(ctx context.Context) error
+		HandleWS(wsHandler adapters.WSHandler, handler http.Handler, writer http.ResponseWriter, req *http.Request)
 	}
 )
 type (
 	srv struct {
-		server  *webtransport.Server
-		handler http.HandlerFunc
-		cfg     *config.Config
+		server *webtransport.Server
+		router http.Handler
+		cfg    *config.Config
 	}
 )
 

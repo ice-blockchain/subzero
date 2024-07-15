@@ -1,10 +1,11 @@
 package model
 
 import (
-	"github.com/gookit/goutil/errorx"
-	"github.com/nbd-wtf/go-nostr"
 	"strconv"
 	"strings"
+
+	"github.com/gookit/goutil/errorx"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 func ParseEventReference(tags nostr.Tags) ([]EventReference, error) {

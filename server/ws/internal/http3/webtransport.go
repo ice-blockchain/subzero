@@ -5,11 +5,12 @@ package http3
 import (
 	"context"
 	"fmt"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"log"
 	"net/http"
 
-	"log"
+	"github.com/gookit/goutil/errorx"
+
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
 func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) (ws adapters.WSWithWriter, ctx context.Context, err error) {

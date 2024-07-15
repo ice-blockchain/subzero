@@ -4,24 +4,30 @@ package http2
 
 import (
 	"context"
-	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 	"net/http"
 	stdlibtime "time"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
 type (
 	Server interface {
 		ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
 		Shutdown(ctx context.Context) error
+
+		HandleWS(wsHandler adapters.WSHandler, handler http.Handler, writer http.ResponseWriter, req *http.Request)
+	}
+	Unwrapper interface {
+		Unwrap() http.ResponseWriter
 	}
 )
 type (
 	srv struct {
-		server  *h2ec.Server
-		handler http.HandlerFunc
-		cfg     *config.Config
+		server *h2ec.Server
+		router http.Handler
+		cfg    *config.Config
 	}
 )
 

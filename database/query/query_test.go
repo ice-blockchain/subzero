@@ -3,12 +3,14 @@ package query
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/ice-blockchain/subzero/model"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 const testDeadline = 30 * time.Second

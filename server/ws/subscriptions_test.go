@@ -2,17 +2,19 @@ package ws
 
 import (
 	"context"
-	"github.com/google/uuid"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/server/ws/fixture"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"log"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/gookit/goutil/errorx"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
 func TestRelaySubscription(t *testing.T) {

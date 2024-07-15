@@ -6,18 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
-	"github.com/gookit/goutil/errorx"
-	"github.com/hashicorp/go-multierror"
-	h2ec "github.com/ice-blockchain/go/src/net/http"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	connectwsupgrader "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
-	"github.com/quic-go/quic-go/quicvarint"
-	"github.com/quic-go/webtransport-go"
 	"io"
 	"log"
 	"net"
@@ -26,13 +14,25 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
+	"github.com/gookit/goutil/errorx"
+	"github.com/hashicorp/go-multierror"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/quic-go/webtransport-go"
+
+	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	connectwsupgrader "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
 )
 
 func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
-	d := webtransport.Dialer{
-		RoundTripper: http3RoundTripper(),
-	}
-	d.TLSClientConfig = localhostTLS()
+	d := webtransport.Dialer{}
+	d.TLSClientConfig = LocalhostTLS()
 	_, conn, err := d.Dial(ctx, url, nil)
 	if err != nil {
 		return nil, errorx.Withf(err, "failed to establish webtransport conn to %v", url)
@@ -66,20 +66,32 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 		URL:    u,
 	}
 	req = req.WithContext(ctx)
-	rt := http3RoundTripper()
-	rsp, err := rt.RoundTripOpt(req, http3.RoundTripOpt{DontCloseRequestStream: true})
+	tlsconf := LocalhostTLS()
+	tlsconf.NextProtos = []string{http3.NextProtoH3}
+	qconn, err := quic.DialAddrEarly(ctx, u.Host, tlsconf, &quic.Config{
+		EnableDatagrams:      true,
+		MaxIdleTimeout:       600 * time.Second,
+		HandshakeIdleTimeout: 600 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rt := http3RoundTripper(qconn)
+	stream, err := rt.OpenRequestStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = stream.SendRequestHeader(req); err != nil {
+		return nil, err
+	}
+	rsp, err := stream.ReadResponse()
 	if err != nil {
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
 		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
 	}
-	stream := rsp.Body.(http3.HTTPStreamer).HTTPStream()
-	streamCreator := rsp.Body.(http3.Hijacker).StreamCreator()
-	if err != nil {
-		return nil, err
-	}
-	conn := connectwsupgrader.NewHttp3Proxy(stream, streamCreator)
+	conn := connectwsupgrader.NewHttp3Proxy(stream, rt.Connection)
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go func() {
 		defer c.Close()
@@ -106,7 +118,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 		Body:   bodyr,
 	}
 	req = req.WithContext(ctx)
-	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: localhostTLS()}
+	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS()}
 	client := h2ec.Client{Transport: rt}
 	rsp, err := client.Do(req)
 	if err != nil {
@@ -139,7 +151,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 		Body:   bodyr,
 	}
 	req = req.WithContext(ctx)
-	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: localhostTLS()}
+	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS()}
 	client := h2ec.Client{Transport: rt}
 	rsp, err := client.Transport.RoundTrip(req)
 	if err != nil {
@@ -165,8 +177,8 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 }
 
 func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
-	dialer := ws.Dialer{TLSConfig: localhostTLS()}
-	dialer.TLSConfig = localhostTLS()
+	dialer := ws.Dialer{TLSConfig: LocalhostTLS()}
+	dialer.TLSConfig = LocalhostTLS()
 	conn, _, _, err := dialer.Dial(ctx, url)
 	if err != nil {
 		return nil, errorx.Withf(err, "failed to establish websocket conn to %v", url)
@@ -179,7 +191,7 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 
 func NewRelayClient(ctx context.Context, url string) (*nostr.Relay, error) {
 	relay := nostr.NewRelay(ctx, url)
-	err := relay.ConnectWithTLS(ctx, localhostTLS())
+	err := relay.ConnectWithTLS(ctx, LocalhostTLS())
 	return relay, err
 }
 
@@ -460,18 +472,21 @@ func (h *http2WebtransportWrapper) SetDeadline(time time.Time) error {
 	return nil
 }
 
-func http3RoundTripper() *http3.RoundTripper {
-	return &http3.RoundTripper{
-		TLSClientConfig: localhostTLS(),
-		QuicConfig: &quic.Config{
-			EnableDatagrams:      true,
-			MaxIdleTimeout:       600 * time.Second,
-			HandshakeIdleTimeout: 600 * time.Second,
+func http3RoundTripper(qconn quic.Connection) *http3.SingleDestinationRoundTripper {
+	rt := &http3.SingleDestinationRoundTripper{
+		Connection:      qconn,
+		EnableDatagrams: true,
+		StreamHijacker: func(ft http3.FrameType, connTracingID quic.ConnectionTracingID, str quic.Stream, e error) (hijacked bool, err error) {
+			return true, nil
+		},
+		UniStreamHijacker: func(st http3.StreamType, connTracingID quic.ConnectionTracingID, str quic.ReceiveStream, err error) (hijacked bool) {
+			return true
 		},
 	}
+	return rt
 }
 
-func localhostTLS() *tls.Config {
+func LocalhostTLS() *tls.Config {
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM([]byte(localhostCrt)); !ok {
 		log.Panic(errorx.New("failed to append localhost tls to cert pool"))

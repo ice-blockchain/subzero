@@ -3,15 +3,16 @@
 package connectwsupgrader
 
 import (
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
 	"net"
 	"strings"
 	stdlibtime "time"
+
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 )
 
-func NewHttp3Proxy(stream http3.Stream, sc http3.StreamCreator) net.Conn {
-	return &http3StreamProxy{stream: stream, streamCreator: sc}
+func NewHttp3Proxy(stream quic.Stream, conn quic.Connection) net.Conn {
+	return &http3StreamProxy{stream: stream, connection: conn}
 }
 func (h *http3StreamProxy) Read(b []byte) (n int, err error) {
 	return h.stream.Read(b) //nolint:wrapcheck // Proxy.
@@ -31,11 +32,11 @@ func (h *http3StreamProxy) Close() error {
 }
 
 func (h *http3StreamProxy) LocalAddr() net.Addr {
-	return h.streamCreator.LocalAddr()
+	return h.connection.LocalAddr()
 }
 
 func (h *http3StreamProxy) RemoteAddr() net.Addr {
-	return h.streamCreator.RemoteAddr()
+	return h.connection.RemoteAddr()
 }
 
 func (h *http3StreamProxy) SetDeadline(t stdlibtime.Time) error {

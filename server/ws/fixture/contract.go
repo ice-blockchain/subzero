@@ -3,14 +3,16 @@ package fixture
 import (
 	"context"
 	_ "embed"
-	h2ec "github.com/ice-blockchain/go/src/net/http"
-	"github.com/ice-blockchain/subzero/server/ws/internal"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	stdlibtime "time"
+
+	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/server/ws/internal"
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
 var (
@@ -28,6 +30,7 @@ type (
 		handlersMx     sync.Mutex
 		Handlers       map[adapters.WSWriter]struct{}
 		processingFunc func(ctx context.Context, writer adapters.WSWriter, in []byte)
+		nip11Handler   http.Handler
 		ReaderExited   atomic.Uint64
 	}
 	Client interface {

@@ -4,45 +4,54 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"errors"
+	"github.com/gin-gonic/gin"
+	"github.com/gookit/goutil/errorx"
 
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 	"github.com/ice-blockchain/subzero/server/ws/internal/http2"
 	"github.com/ice-blockchain/subzero/server/ws/internal/http3"
-	"log"
 )
 
-func NewWSServer(service WSHandler, cfg *config.Config) Server {
-	s := &srv{cfg: cfg, wsHandler: service}
-	s.h3server = http3.New(s.cfg, s.wsHandler, nil)
-	s.wsServer = http2.New(s.cfg, s.wsHandler, nil)
-
+func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
+	s := &Srv{cfg: cfg, routesSetup: router}
+	gin.SetMode(gin.ReleaseMode)
+	s.router = gin.Default()
+	s.router.Use(gin.Recovery())
+	s.router.RemoteIPHeaders = []string{"cf-connecting-ip", "X-Real-IP", "X-Forwarded-For"}
+	s.router.TrustedPlatform = gin.PlatformCloudflare
+	s.router.HandleMethodNotAllowed = true
+	s.router.RedirectFixedPath = true
+	s.router.RemoveExtraSlash = true
+	s.router.UseRawPath = true
+	s.H3Server = http3.New(s.cfg, s.router)
+	s.H2Server = http2.New(s.cfg, s.router)
+	s.setupRouter()
 	return s
 }
-func NewWSServerWithExtraHandler(service WSHandler, cfg *config.Config, handler http.Handler) Server {
-	s := &srv{cfg: cfg, wsHandler: service}
-	s.h3server = http3.New(s.cfg, s.wsHandler, handler)
-	s.wsServer = http2.New(s.cfg, s.wsHandler, handler)
 
-	return s
+func (s *Srv) setupRouter() {
+	s.routesSetup.RegisterRoutes(s.router)
 }
 
-func (s *srv) ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
-	go s.startServer(ctx, s.h3server)
-	go s.startServer(ctx, s.wsServer)
+func (s *Srv) ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
+	ctx = withServer(ctx, s)
+	go s.startServer(ctx, s.H3Server)
+	go s.startServer(ctx, s.H2Server)
 	s.wait(ctx)
 	s.shutDown() //nolint:contextcheck // Nope, we want to gracefully shutdown on a different context.
 }
 
-func (s *srv) startServer(ctx context.Context, server interface {
+func (s *Srv) startServer(ctx context.Context, server interface {
 	ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
 }) {
 	defer log.Printf("server stopped listening")
@@ -60,7 +69,7 @@ func (s *srv) startServer(ctx context.Context, server interface {
 	}
 }
 
-func (s *srv) wait(ctx context.Context) {
+func (s *Srv) wait(ctx context.Context) {
 	quit := make(chan os.Signal, 1)
 	s.quit = quit
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -71,14 +80,14 @@ func (s *srv) wait(ctx context.Context) {
 	}
 }
 
-func (s *srv) shutDown() {
+func (s *Srv) shutDown() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.shutdownServer(ctx, s.h3server)
-	go s.shutdownServer(ctx, s.wsServer)
+	go s.shutdownServer(ctx, s.H3Server)
+	go s.shutdownServer(ctx, s.H2Server)
 }
 
-func (*srv) shutdownServer(ctx context.Context, server interface {
+func (*Srv) shutdownServer(ctx context.Context, server interface {
 	Shutdown(ctx context.Context) error
 }) {
 	log.Printf("shutting down server...")
@@ -88,4 +97,8 @@ func (*srv) shutdownServer(ctx context.Context, server interface {
 	} else {
 		log.Printf("server shutdown succeeded")
 	}
+}
+
+func withServer(ctx context.Context, srv *Srv) context.Context {
+	return context.WithValue(ctx, adapters.CtxKeyServer, srv)
 }

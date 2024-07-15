@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+
 	"github.com/ice-blockchain/subzero/model"
 )
 

@@ -4,16 +4,21 @@ package http2
 
 import (
 	"context"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"log"
 	"net/http"
 
+	"github.com/gookit/goutil/errorx"
+
 	h2ec "github.com/ice-blockchain/go/src/net/http"
-	"log"
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
 func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) (h2wt adapters.WSWithWriter, ctx context.Context, err error) {
-	if upgrader, ok := writer.(h2ec.WebTransportUpgrader); ok {
+	w := writer
+	if unwrapper, unwrap := w.(Unwrapper); unwrap {
+		w = unwrapper.Unwrap()
+	}
+	if upgrader, ok := w.(h2ec.WebTransportUpgrader); ok {
 		var session h2ec.Session
 		session, err = upgrader.UpgradeWebTransport()
 		if err != nil {

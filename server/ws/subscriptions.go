@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log"
+
 	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
-	"log"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscription) error {

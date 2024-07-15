@@ -2,15 +2,16 @@ package main
 
 import (
 	"context"
+	"log"
+
 	"github.com/gookit/goutil/errorx"
+	"github.com/spf13/cobra"
+
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
-	"github.com/spf13/cobra"
-
-	"log"
 )
 
 var (

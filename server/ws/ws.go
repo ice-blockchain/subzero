@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
+	"github.com/nbd-wtf/go-nostr"
+
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	"github.com/nbd-wtf/go-nostr"
-	"io"
-	"log"
-	"net/http"
 )
 
 var wsEventListener func(context.Context, *model.Event) error
@@ -36,14 +37,13 @@ func NotifySubscriptions(event *model.Event) error {
 
 var hdl *handler
 
-func ListenAndServe(ctx context.Context, cancel context.CancelFunc, cfg *Config) {
+func NewHandler() WSHandler {
 	hdl = new(handler)
-	internal.NewWSServer(hdl, cfg).ListenAndServe(ctx, cancel)
+	return hdl
 }
 
-func New(cfg *Config, httpHandler http.Handler) Server {
-	hdl = new(handler)
-	return internal.NewWSServerWithExtraHandler(hdl, cfg, httpHandler)
+func New(cfg *Config, routes internal.RegisterRoutes) Server {
+	return internal.NewWSServer(routes, cfg)
 }
 
 func (h *handler) Read(ctx context.Context, stream internal.WS) {

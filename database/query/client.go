@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	_ "embed"
-	"github.com/gookit/goutil/errorx"
-	"github.com/jmoiron/sqlx"
 	"strings"
 	"sync"
+
+	"github.com/gookit/goutil/errorx"
+	"github.com/jmoiron/sqlx"
 )
 
 var globalDB *dbClient

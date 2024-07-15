@@ -4,8 +4,10 @@ package connectwsupgrader
 
 import (
 	"errors"
+	"net"
+
 	"github.com/gobwas/httphead"
-	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go"
 )
 
 // Implements PFC 8441.
@@ -27,8 +29,12 @@ const (
 )
 
 type (
+	conn interface {
+		LocalAddr() net.Addr
+		RemoteAddr() net.Addr
+	}
 	http3StreamProxy struct {
-		stream        http3.Stream
-		streamCreator http3.StreamCreator
+		stream     quic.Stream
+		connection conn
 	}
 )

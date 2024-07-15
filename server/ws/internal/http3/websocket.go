@@ -4,12 +4,13 @@ package http3
 
 import (
 	"context"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"log"
 	"net/http"
 
+	"github.com/gookit/goutil/errorx"
+
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
-	"log"
 )
 
 //nolint:gochecknoglobals // We need single instance.

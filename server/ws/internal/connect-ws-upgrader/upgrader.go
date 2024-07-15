@@ -4,15 +4,14 @@ package connectwsupgrader
 
 import (
 	"bufio"
-	"github.com/gookit/goutil/errorx"
+	"log"
 	"net"
 	"net/http"
 
 	"github.com/gobwas/httphead"
 	"github.com/gobwas/ws"
+	"github.com/gookit/goutil/errorx"
 	"github.com/quic-go/quic-go/http3"
-
-	"log"
 )
 
 //nolint:funlen,gocritic,revive // Nope, we're keeping it compatible with 3rd party
@@ -26,8 +25,8 @@ func (u *ConnectUpgrader) Upgrade(req *http.Request, writer http.ResponseWriter)
 	case http.Hijacker:
 		conn, rw, err = w.Hijack()
 	case http3.Hijacker:
-		httpStreamer := req.Body.(http3.HTTPStreamer) //nolint:errcheck,forcetypeassert // Should be fine unless quick change API.
-		conn = &http3StreamProxy{stream: httpStreamer.HTTPStream(), streamCreator: w.StreamCreator()}
+		httpStreamer := writer.(http3.HTTPStreamer) //nolint:errcheck,forcetypeassert // Should be fine unless quick change API.
+		conn = &http3StreamProxy{stream: httpStreamer.HTTPStream(), connection: w.Connection()}
 	default:
 		err = errorx.New("http.ResponseWriter does not support hijack")
 		log.Printf("ERROR:%v", err)

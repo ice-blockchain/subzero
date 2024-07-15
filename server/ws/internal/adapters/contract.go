@@ -63,6 +63,8 @@ type (
 	}
 )
 
+const CtxKeyServer = "ws-server"
+
 type (
 	customCancelContext struct {
 		context.Context //nolint:containedctx // Custom implementation.

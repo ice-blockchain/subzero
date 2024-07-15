@@ -2,10 +2,11 @@ package http
 
 import (
 	"encoding/json"
-	"github.com/gookit/goutil/errorx"
-	"github.com/nbd-wtf/go-nostr/nip11"
 	"log"
 	"net/http"
+
+	"github.com/gookit/goutil/errorx"
+	"github.com/nbd-wtf/go-nostr/nip11"
 )
 
 type (
@@ -22,7 +23,17 @@ func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) 
 		return
 	}
 	writer.Header().Add("Content-Type", "application/json")
-	info := nip11.RelayInformationDocument{
+	info := n.info()
+	bytes, err := json.Marshal(info)
+	if err != nil {
+		err = errorx.Withf(err, "failed to serialize NIP11 json %+v", info)
+		log.Printf("ERROR:%v", err)
+	}
+	writer.Write(bytes)
+}
+
+func (n *nip11handler) info() nip11.RelayInformationDocument {
+	return nip11.RelayInformationDocument{
 		Name:          "subzero",
 		Description:   "subzero",
 		PubKey:        "~",
@@ -30,11 +41,4 @@ func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) 
 		SupportedNIPs: []int{1, 9, 11},
 		Software:      "subzero",
 	}
-	bytes, err := json.Marshal(info)
-	if err != nil {
-		err = errorx.Withf(err, "failed to serialize NIP11 json %+v", info)
-		log.Printf("ERROR:%v", err)
-	}
-	writer.WriteHeader(http.StatusOK)
-	writer.Write(bytes)
 }

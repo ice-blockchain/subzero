@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/model"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func AcceptEvent(ctx context.Context, event *model.Event) error {

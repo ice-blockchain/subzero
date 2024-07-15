@@ -5,13 +5,12 @@ package adapters
 import (
 	"bufio"
 	"context"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/gookit/goutil/errorx"
 	"github.com/quic-go/webtransport-go"
-
-	"log"
-	"time"
 )
 
 func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, stream webtransport.Stream, readTimeout, writeTimeout time.Duration) (WSWithWriter, context.Context) {

@@ -4,18 +4,19 @@ package http2
 
 import (
 	"context"
-	"github.com/gookit/goutil/errorx"
-	"github.com/hashicorp/go-multierror"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"log"
 	"net"
 	"net/http"
+	"time"
 	stdlibtime "time"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/gookit/goutil/errorx"
+	"github.com/hashicorp/go-multierror"
+
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
-	"log"
-	"time"
 )
 
 //nolint:gochecknoglobals,grouper // We need single instance to avoid spending extra mem

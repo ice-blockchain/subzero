@@ -3,18 +3,20 @@ package ws
 import (
 	"context"
 	"fmt"
-	"github.com/gobwas/ws"
-	"github.com/google/uuid"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/server/ws/fixture"
-	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"log"
 	"os"
 	"sync"
 	"testing"
 	stdlibtime "time"
+
+	"github.com/gobwas/ws"
+	"github.com/google/uuid"
+	"github.com/gookit/goutil/errorx"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/server/ws/fixture"
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
 const (
@@ -44,13 +46,13 @@ func TestMain(m *testing.M) {
 		CertPath: certFilePath,
 		KeyPath:  keyFilePath,
 		Port:     9999,
-	}, echoFunc)
+	}, echoFunc, nil)
 	hdl = new(handler)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
 		CertPath: certFilePath,
 		KeyPath:  keyFilePath,
 		Port:     9998,
-	}, hdl.Handle)
+	}, hdl.Handle, nil)
 	m.Run()
 	serverCancel()
 }

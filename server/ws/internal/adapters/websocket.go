@@ -4,20 +4,20 @@ package adapters
 
 import (
 	"context"
-	"github.com/gookit/goutil/errorx"
-	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"errors"
+	"log"
 	"net"
 	"net/http"
 	"strings"
 	"syscall"
+	"time"
 
-	"errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 
-	"log"
-	"time"
+	h2ec "github.com/ice-blockchain/go/src/net/http"
 )
 
 func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration) (WSWithWriter, context.Context) {
