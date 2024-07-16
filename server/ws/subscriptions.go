@@ -16,16 +16,18 @@ import (
 
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscription) error {
 	if wsSubscriptionListener != nil {
-		var mErr *multierror.Error
-		events, err := wsSubscriptionListener(ctx, sub.Subscription)
-		if err != nil {
-			return errorx.Withf(err, "failed to query events for subscription req %+v", sub)
-		}
-		for _, event := range events {
-			mErr = multierror.Append(mErr, h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event}))
-		}
-		if mErr.ErrorOrNil() != nil {
-			return errorx.Withf(mErr, "failed to write events for subscription %+v", sub)
+		fetchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		for value := range wsSubscriptionListener(fetchCtx, sub.Subscription).Stream(fetchCtx) {
+			if value.Err != nil {
+				return errorx.Wrapf(value.Err, "failed to fetch events for subscription %+v", sub)
+			}
+
+			err := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: value.Event.Event})
+			if err != nil {
+				return errorx.Wrapf(err, "failed to write event[%+v]", value)
+			}
 		}
 	} else {
 		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")

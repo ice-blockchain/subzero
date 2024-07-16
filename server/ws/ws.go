@@ -3,7 +3,6 @@ package ws
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 
@@ -13,19 +12,22 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
+type EventGetter func(context.Context, *model.Subscription) query.EventIterator
+
 var wsEventListener func(context.Context, *model.Event) error
-var wsSubscriptionListener func(context.Context, *model.Subscription) ([]*model.Event, error)
+var wsSubscriptionListener EventGetter
 
 func RegisterWSEventListener(listen func(context.Context, *model.Event) error) {
 	wsEventListener = listen
 }
 
-func RegisterWSSubscriptionListener(listen func(context.Context, *model.Subscription) ([]*model.Event, error)) {
+func RegisterWSSubscriptionListener(listen EventGetter) {
 	wsSubscriptionListener = listen
 }
 func NotifySubscriptions(event *model.Event) error {
@@ -56,10 +58,10 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 					closed.Code != ws.StatusGoingAway &&
 					closed.Code != ws.StatusAbnormalClosure &&
 					closed.Code != ws.StatusNoStatusRcvd {
-					log.Printf(fmt.Sprintf("WARN: unexpected close error %v: %v", closed.Code, closed.Code))
+					log.Printf("WARN: unexpected close error %v: %v", closed.Code, closed.Code)
 				}
 			} else if !errors.Is(err, io.EOF) {
-				log.Printf(fmt.Sprintf("WARN: unexpected close error %v: %v", closed.Code, closed.Code))
+				log.Printf("WARN: unexpected close error %v: %v", closed.Code, closed.Code)
 			}
 			break
 		}
@@ -94,14 +96,12 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			}
 		}
 	case *nostr.ReqEnvelope:
-		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{e.Filters}, SubscriptionID: e.SubscriptionID})
+		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{Filters: e.Filters}, SubscriptionID: e.SubscriptionID})
 	case *nostr.CloseEnvelope:
 		subID := string(*e)
 		err = h.CancelSubscription(ctx, respWriter, &subID)
 	default:
-		if input != nil {
-			err = errorx.Errorf("unknown message type %v", input.Label())
-		}
+		err = errorx.Errorf("unknown message type %v", input.Label())
 	}
 	if err != nil {
 		if e, isEvent := input.(*nostr.EventEnvelope); isEvent {

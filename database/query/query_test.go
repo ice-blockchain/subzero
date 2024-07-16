@@ -15,6 +15,24 @@ import (
 
 const testDeadline = 30 * time.Second
 
+func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Context, subscription *model.Subscription) (events []*model.Event, err error) {
+	t.Helper()
+
+	for v := range client.SelectEvents(ctx, subscription).Stream(ctx) {
+		require.NoError(t, v.Err)
+		events = append(events, v.Event)
+	}
+
+	return events, err
+}
+
+func helperGetStoredEventsGlobal(t *testing.T, ctx context.Context, subscription *model.Subscription) ([]*model.Event, error) {
+	t.Helper()
+
+	return helperGetStoredEventsAll(t, globalDB, ctx, subscription)
+
+}
+
 func TestReplaceEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -37,7 +55,7 @@ func TestReplaceEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()) + 1,
 				Kind:      nostr.KindTextNote,
 				Tags:      nostr.Tags{},
 				Content:   "bogus" + uuid.NewString(),
@@ -45,11 +63,11 @@ func TestReplaceEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, AcceptEvent(ctx, expectedEvents[1]))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
-		require.Contains(t, stored, expectedEvents[0])
-		require.Contains(t, stored, expectedEvents[1])
+		require.Equal(t, expectedEvents[0], stored[1])
+		require.Equal(t, expectedEvents[1], stored[0])
 	})
 	t.Run("ephemeral event", func(t *testing.T) {
 		MustInit()
@@ -64,7 +82,7 @@ func TestReplaceEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
 		require.NoError(t, err)
 		require.Empty(t, stored)
 	})
@@ -112,11 +130,9 @@ func TestReplaceEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, AcceptEvent(ctx, expectedEvents[1]))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindContactList}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindContactList}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
-		expectedEvents[0].Tags = nostr.Tags{} // Tags fetching not implemented yet.
-		expectedEvents[1].Tags = nostr.Tags{}
 		require.Contains(t, stored, expectedEvents[0])
 		require.Contains(t, stored, expectedEvents[1])
 	})
@@ -181,12 +197,9 @@ func TestReplaceEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, AcceptEvent(ctx, expectedEvents[2]))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindContactList}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindRepositoryAnnouncement}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 3)
-		expectedEvents[0].Tags = nostr.Tags{} // Tags fetching not implemented yet.
-		expectedEvents[1].Tags = nostr.Tags{}
-		expectedEvents[2].Tags = nostr.Tags{}
 		require.Contains(t, stored, expectedEvents[0])
 		require.Contains(t, stored, expectedEvents[1])
 		require.Contains(t, stored, expectedEvents[2])
@@ -210,7 +223,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}
 		require.NoError(t, AcceptEvent(ctx, publishedEvent))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
@@ -225,7 +238,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err = GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		stored, err = helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
 		require.NoError(t, err)
 		require.Empty(t, stored)
 	})
@@ -243,7 +256,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}
 		require.NoError(t, AcceptEvent(ctx, publishedEvent))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
@@ -258,7 +271,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err = GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		stored, err = helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
 		require.NoError(t, err)
 		require.Empty(t, stored)
 	})
@@ -276,10 +289,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}
 		require.NoError(t, AcceptEvent(ctx, publishedEvent))
-		stored, err := GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindArticle}}}})
+		stored, err := helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindArticle}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 1)
-		publishedEvent.Tags = nostr.Tags{}
 		require.Contains(t, stored, publishedEvent)
 		require.NoError(t, AcceptEvent(ctx, &model.Event{
 			Event: nostr.Event{
@@ -292,8 +304,41 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err = GetStoredEvents(ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		stored, err = helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
 		require.NoError(t, err)
 		require.Empty(t, stored)
+	})
+}
+
+func TestGetEventsIteratorStream(t *testing.T) {
+	t.Parallel()
+
+	helperEnsureDatabase(t)
+
+	t.Run("FilterLimit", func(t *testing.T) {
+		const limit = 500
+
+		it := testDbClient.SelectEvents(context.Background(), &model.Subscription{Filters: nostr.Filters{{Limit: limit}}})
+		require.NotNil(t, it)
+
+		var count int
+		for v := range it.Stream(context.Background()) {
+			require.NoError(t, v.Err)
+			count++
+		}
+
+		require.Equal(t, limit, count)
+	})
+	t.Run("All", func(t *testing.T) {
+		allMap := make(map[string]*model.Event)
+		it := testDbClient.SelectEvents(context.Background(), nil)
+		require.NotNil(t, it)
+
+		for v := range it.Stream(context.Background()) {
+			require.NoError(t, v.Err)
+			allMap[v.Event.ID] = v.Event
+		}
+
+		require.Equal(t, 1000, len(allMap))
 	})
 }
