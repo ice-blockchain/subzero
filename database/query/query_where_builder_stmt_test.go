@@ -3,15 +3,16 @@ package query
 import (
 	"testing"
 
-	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestIsFilterEmpty(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, isFilterEmpty(&nostr.Filter{}))
-	require.False(t, isFilterEmpty(&nostr.Filter{IDs: []string{"1"}}))
+	require.True(t, isFilterEmpty(&model.Filter{}))
+	require.False(t, isFilterEmpty(&model.Filter{IDs: []string{"1"}}))
 }
 
 func TestWhereBuilderEmpty(t *testing.T) {
@@ -36,14 +37,14 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 
 	t.Run("Empty", func(t *testing.T) {
 		builder := newWhereBuilder()
-		builder.Build(nostr.Filter{})
+		builder.Build(model.Filter{})
 		q, params := builder.Build()
 		require.Empty(t, params)
 		require.Equal(t, whereBuilderDefaultWhere, q)
 	})
 	t.Run("WithID", func(t *testing.T) {
 		builder := newWhereBuilder()
-		builder.Build(nostr.Filter{IDs: []string{"123"}})
+		builder.Build(model.Filter{IDs: []string{"123"}})
 		q, params := builder.Build()
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 1)
@@ -51,7 +52,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 	})
 	t.Run("WithMoreIDs", func(t *testing.T) {
 		builder := newWhereBuilder()
-		builder.Build(nostr.Filter{IDs: []string{generateHexString(), "789"}})
+		builder.Build(model.Filter{IDs: []string{generateHexString(), "789"}})
 		q, params := builder.Build()
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 2)
@@ -59,7 +60,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 	})
 	t.Run("WithKind", func(t *testing.T) {
 		builder := newWhereBuilder()
-		builder.Build(nostr.Filter{IDs: []string{generateHexString()}, Kinds: []int{1, generateKind()}})
+		builder.Build(model.Filter{IDs: []string{generateHexString()}, Kinds: []int{1, generateKind()}})
 		q, params := builder.Build()
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 3)
@@ -67,7 +68,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 	})
 	t.Run("WithAuthors", func(t *testing.T) {
 		builder := newWhereBuilder()
-		builder.Build(nostr.Filter{IDs: []string{generateHexString()}, Kinds: []int{1}, Authors: []string{"author1", "author2"}})
+		builder.Build(model.Filter{IDs: []string{generateHexString()}, Kinds: []int{1}, Authors: []string{"author1", "author2"}})
 		q, params := builder.Build()
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 4)
@@ -75,9 +76,9 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 	})
 	t.Run("WithTimeRange", func(t *testing.T) {
 		builder := newWhereBuilder()
-		ts1 := nostr.Timestamp(generateCreatedAt())
-		ts2 := nostr.Timestamp(generateCreatedAt())
-		builder.Build(nostr.Filter{Since: &ts1, Until: &ts2})
+		ts1 := model.Timestamp(generateCreatedAt())
+		ts2 := model.Timestamp(generateCreatedAt())
+		builder.Build(model.Filter{Since: &ts1, Until: &ts2})
 		q, params := builder.Build()
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 2)
@@ -90,7 +91,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 
 	t.Run("OneTag", func(t *testing.T) {
 		builder := newWhereBuilder()
-		q, params := builder.Build(nostr.Filter{
+		q, params := builder.Build(model.Filter{
 			IDs: []string{"123"},
 			Tags: map[string][]string{
 				"#e": {"value1", "value2", "value3", "value4"},
@@ -102,7 +103,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 	})
 	t.Run("TwoTags", func(t *testing.T) {
 		builder := newWhereBuilder()
-		q, params := builder.Build(nostr.Filter{
+		q, params := builder.Build(model.Filter{
 			IDs: []string{"123"},
 			Tags: map[string][]string{
 				"#e": {"value1", "value2", "value3", generateRandomString(4)},
@@ -118,9 +119,9 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 func TestWhereBuilderMulti(t *testing.T) {
 	t.Parallel()
 
-	ts1 := nostr.Timestamp(generateCreatedAt())
-	ts2 := nostr.Timestamp(generateCreatedAt())
-	filters := []nostr.Filter{
+	ts1 := model.Timestamp(generateCreatedAt())
+	ts2 := model.Timestamp(generateCreatedAt())
+	filters := []model.Filter{
 		{
 			IDs:  []string{"123"},
 			Tags: map[string][]string{"#e": {"value1", "value2", "value3", "value4"}},
@@ -146,7 +147,7 @@ func TestWhereBuilderMulti(t *testing.T) {
 func TestWhereBuilderMultiTagsOnly(t *testing.T) {
 	t.Parallel()
 
-	filters := []nostr.Filter{
+	filters := []model.Filter{
 		{
 			Tags: map[string][]string{"#e": {"value1", generateRandomString(3), "value3", "value4"}},
 		},
@@ -165,7 +166,7 @@ func TestWhereBuilderMultiTagsOnly(t *testing.T) {
 func TestWhereBuilderSameElements(t *testing.T) {
 	t.Parallel()
 
-	filters := []nostr.Filter{
+	filters := []model.Filter{
 		{
 			IDs:     []string{"123", "456", "123"},
 			Authors: []string{"111", "222", "222"},

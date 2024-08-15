@@ -28,13 +28,7 @@ var (
 	ddl string
 )
 
-func openDatabase(url ...string) *dbClient {
-	target := ":memory:"
-
-	if len(url) > 0 {
-		target = url[0]
-	}
-
+func openDatabase(target string, runDDL bool) *dbClient {
 	client := &dbClient{
 		DB:          sqlx.MustConnect("sqlite3", target), //TODO impl this properly
 		stmtCacheMx: new(sync.RWMutex),
@@ -54,15 +48,23 @@ func openDatabase(url ...string) *dbClient {
 		return out
 	})
 
-	for _, statement := range strings.Split(ddl, "--------") {
-		client.MustExec(statement)
+	if runDDL {
+		for _, statement := range strings.Split(ddl, "--------") {
+			client.MustExec(statement)
+		}
 	}
 
 	return client
 }
 
 func MustInit(url ...string) {
-	globalDB = openDatabase(url...)
+	target := ":memory:"
+
+	if len(url) > 0 {
+		target = url[0]
+	}
+
+	globalDB = openDatabase(target, true)
 }
 
 func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected int64, err error) {

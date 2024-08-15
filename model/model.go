@@ -1,19 +1,27 @@
 package model
 
 import (
-	"github.com/gookit/goutil/errorx"
+	"errors"
+
 	"github.com/nbd-wtf/go-nostr"
 )
 
 type (
+	Filter    = nostr.Filter
+	Filters   = nostr.Filters
+	TagMap    = nostr.TagMap
+	Tag       = nostr.Tag
+	Tags      = nostr.Tags
+	Timestamp = nostr.Timestamp
+
 	Event struct {
 		nostr.Event
 	}
 	Subscription struct {
-		Filters nostr.Filters
+		Filters Filters
 	}
 	EventReference interface {
-		Filter() nostr.Filter
+		Filter() Filter
 	}
 	ReplaceableEventReference struct {
 		Kind   int
@@ -26,5 +34,5 @@ type (
 )
 
 var (
-	ErrDuplicate = errorx.Errorf("duplicate")
+	ErrDuplicate = errors.New("duplicate")
 )

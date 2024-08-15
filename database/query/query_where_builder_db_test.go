@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	testDbPath = `.testdata/testdb_1K.sqlite3`
+	testDbPath1K = `.testdata/testdb_1K.sqlite3`
 )
 
 var (
@@ -27,13 +27,13 @@ var (
 func helperEnsureDatabase(t *testing.T) {
 	t.Helper()
 
-	if _, err := os.Stat(testDbPath); err != nil {
-		t.Skipf("no test database found at %q", testDbPath)
+	if _, err := os.Stat(testDbPath1K); err != nil {
+		t.Skipf("no test database found at %q", testDbPath1K)
 	}
 
 	testDbOnce.Do(func() {
-		t.Logf("opening test database at %q", testDbPath)
-		testDbClient = openDatabase(testDbPath + "?mode=ro&_foreign_keys=on")
+		t.Logf("opening test database at %q", testDbPath1K)
+		testDbClient = openDatabase(testDbPath1K+"?mode=ro&_foreign_keys=on", true)
 		require.NotNil(t, testDbClient)
 	})
 }
@@ -50,7 +50,59 @@ func generateHexString() string {
 }
 
 func generateKind() int {
-	return rand.Intn(0xFFFF)
+	kinds := []int{
+		nostr.KindProfileMetadata,
+		nostr.KindTextNote,
+		nostr.KindRecommendServer,
+		nostr.KindContactList,
+		nostr.KindEncryptedDirectMessage,
+		nostr.KindDeletion,
+		nostr.KindRepost,
+		nostr.KindReaction,
+		nostr.KindSimpleGroupChatMessage,
+		nostr.KindSimpleGroupThread,
+		nostr.KindSimpleGroupReply,
+		nostr.KindChannelCreation,
+		nostr.KindChannelMetadata,
+		nostr.KindChannelMessage,
+		nostr.KindChannelHideMessage,
+		nostr.KindChannelMuteUser,
+		nostr.KindPatch,
+		nostr.KindFileMetadata,
+		nostr.KindSimpleGroupAddUser,
+		nostr.KindSimpleGroupRemoveUser,
+		nostr.KindSimpleGroupEditMetadata,
+		nostr.KindSimpleGroupAddPermission,
+		nostr.KindSimpleGroupRemovePermission,
+		nostr.KindSimpleGroupDeleteEvent,
+		nostr.KindSimpleGroupEditGroupStatus,
+		nostr.KindSimpleGroupCreateGroup,
+		nostr.KindSimpleGroupJoinRequest,
+		nostr.KindZapRequest,
+		nostr.KindZap,
+		nostr.KindMuteList,
+		nostr.KindPinList,
+		nostr.KindRelayListMetadata,
+		nostr.KindNWCWalletInfo,
+		nostr.KindClientAuthentication,
+		nostr.KindNWCWalletRequest,
+		nostr.KindNWCWalletResponse,
+		nostr.KindNostrConnect,
+		nostr.KindCategorizedPeopleList,
+		nostr.KindCategorizedBookmarksList,
+		nostr.KindProfileBadges,
+		nostr.KindBadgeDefinition,
+		nostr.KindStallDefinition,
+		nostr.KindProductDefinition,
+		nostr.KindArticle,
+		nostr.KindApplicationSpecificData,
+		nostr.KindRepositoryAnnouncement,
+		nostr.KindSimpleGroupMetadata,
+		nostr.KindSimpleGroupAdmins,
+		nostr.KindSimpleGroupMembers,
+	}
+
+	return kinds[rand.Intn(len(kinds))]
 }
 
 func generateRandomString(n int) string {
@@ -84,11 +136,11 @@ func helperGenerateEventWithTags(t *testing.T, db *dbClient) {
 
 	ev.ID = generateHexString()
 	ev.PubKey = generateHexString()
-	ev.CreatedAt = nostr.Timestamp(generateCreatedAt())
+	ev.CreatedAt = model.Timestamp(generateCreatedAt())
 	ev.Kind = generateKind()
 	ev.Content = generateRandomString(rand.Intn(1024))
 
-	ev.Tags = []nostr.Tag{
+	ev.Tags = []model.Tag{
 		{"#e", generateHexString(), generateRandomString(rand.Intn(20)), generateRandomString(rand.Intn(30))},
 		{"#p", generateHexString()},
 		{"#d", generateHexString(), generateRandomString(rand.Intn(10))},
@@ -125,14 +177,14 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 
 	helperEnsureDatabase(t)
 	events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-		Filters: nostr.Filters{
-			nostr.Filter{
+		Filters: model.Filters{
+			model.Filter{
 				Authors: []string{
 					"9b1d14e385b2de2098c11862c4276407afd99b321e86a0125ec64c78a1309947bc01a401ad30acd4a21a3dc16e36178625a36c4dce8479a05c1946e31f53c42e",
 					"4e2371fe2d7ee7b37d6bdb79ec31c36a6a41236b4601839e91636b066119dc9f5014c918b17b91841aa99f06dc169611357c14ac2edf551a83dbbcfa7628384e",
 				},
 			},
-			nostr.Filter{
+			model.Filter{
 				Authors: []string{"5e1ac9750abda30bde2a30a1ad2b4af2fbce5d258a6a8dfdd1cc9f5df4e08c94d3e3425c1bc36325789efd49984f9c2d0cc1c0067e983fe93be0935d98b99a5c"},
 			},
 		},
@@ -146,13 +198,13 @@ func TestWhereBuilderByID(t *testing.T) {
 
 	helperEnsureDatabase(t)
 	events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-		Filters: nostr.Filters{
-			nostr.Filter{
+		Filters: model.Filters{
+			model.Filter{
 				IDs: []string{
 					"0aa556e4b7fea020af4eb40eabae958a0f04337077e6fef09fac969edf71eee0e8f83ec6dcf233098ae6f56936c851daddaf2fca869790990a40d7ca773e3142",
 				},
 			},
-			nostr.Filter{
+			model.Filter{
 				IDs: []string{
 					"0bd34db276ccacaeaaa45760742787523c6670258aac4f2fd959c53459c3840061d54d9a5c70045af6909598c4774baf33eee83a697304410e9c809a72d74196",
 				},
@@ -167,10 +219,10 @@ func TestWhereBuilderByMany(t *testing.T) {
 	t.Parallel()
 
 	helperEnsureDatabase(t)
-	ts2 := nostr.Timestamp(1702743869)
+	ts2 := model.Timestamp(1702743869)
 	events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-		Filters: nostr.Filters{
-			nostr.Filter{
+		Filters: model.Filters{
+			model.Filter{
 				IDs: []string{
 					"231f3b0bc2bbe1669430cdc8c9343db0c69e1fe054625ae47dc3740d6571fd0ef195d507813619cb37c604e70f065c519baac2bb7af6ad00ed61805ddaedd1f2",
 					"bar",
@@ -181,7 +233,7 @@ func TestWhereBuilderByMany(t *testing.T) {
 				},
 				Kinds: []int{35326},
 			},
-			nostr.Filter{
+			model.Filter{
 				IDs: []string{
 					"2588da1670c3281337f31eedf399a990f49c2a7c901777d1d8c3309d59440a2bb113719b036f39b6d95af34bae0e3913adf0f4826068c683dbf4a1afe6ad1774",
 					"123",
@@ -203,7 +255,7 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 	t.Parallel()
 
 	helperEnsureDatabase(t)
-	filter := nostr.Filter{
+	filter := model.Filter{
 		IDs: []string{
 			"000c579336863d330b659b0a4d11ad820e4c48ef22cd34d9ab62314be625759d787f9d703c238fc2d84c8799e5d7d0f7399beb5414a3d5f6b0b4582160c136ff",
 			"bar",
@@ -220,7 +272,7 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 
 	t.Run("Something", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-			Filters: nostr.Filters{filter},
+			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
 		require.Len(t, events, 1)
@@ -233,7 +285,7 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 		x.Tags["#x"] = nil
 
 		events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-			Filters: nostr.Filters{filter},
+			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
 		require.Empty(t, events)
@@ -244,7 +296,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 	t.Parallel()
 
 	helperEnsureDatabase(t)
-	filter := nostr.Filter{
+	filter := model.Filter{
 		IDs: []string{
 			"2176eaf2a4b75accde2fe1547bea34824722d4ef68845ead6d0131568afbda7fda91835703541b157c113bd51e26bf1e0de288e3a5b2c21fa6cfd3140e0caf57",
 		},
@@ -267,7 +319,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 
 	t.Run("Match", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-			Filters: nostr.Filters{filter},
+			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
 		require.Len(t, events, 1)
@@ -276,7 +328,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		filter.Tags["#e"] = append(filter.Tags["#e"], "fooo") // Add 4th value to the tag list, so query will return no results.
 
 		events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-			Filters: nostr.Filters{filter},
+			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
 		require.Empty(t, events)
@@ -287,7 +339,7 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 	t.Parallel()
 
 	helperEnsureDatabase(t)
-	filter := nostr.Filter{
+	filter := model.Filter{
 		Tags: map[string][]string{
 			"#d": {
 				"da312bf00ee7e41467d32c4bc32c65c4841608647ff275cb1bb2571f1faee0783e8851482201b6b9a577a1fd148f416c0ea633c574de8ef0e70121e89b237a50",
@@ -298,7 +350,7 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 
 	t.Run("Match", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-			Filters: nostr.Filters{filter},
+			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
 		require.Len(t, events, 1)
@@ -307,7 +359,7 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 		filter.Tags["#d"] = append(filter.Tags["#d"], "fooo") // Add 3rd value to the tag list, so query will return no results.
 
 		events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-			Filters: nostr.Filters{filter},
+			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
 		require.Empty(t, events)
@@ -319,7 +371,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 
 	helperEnsureDatabase(t)
 	events, err := helperGetStoredEventsAll(t, testDbClient, context.Background(), &model.Subscription{
-		Filters: nostr.Filters{
+		Filters: model.Filters{
 			{
 				Tags: map[string][]string{
 					"#e": {
@@ -343,7 +395,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 func TestGenerateDataInMemory(t *testing.T) {
 	t.Parallel()
 
-	db := openDatabase()
+	db := openDatabase(":memory:", true)
 	require.NotNil(t, db)
 	defer db.Close()
 
@@ -353,13 +405,55 @@ func TestGenerateDataInMemory(t *testing.T) {
 func TestGenerateDataForFile(t *testing.T) {
 	t.Parallel()
 
-	if _, err := os.Stat(testDbPath); err == nil {
-		t.Skipf("test database already exists at %q", testDbPath)
+	if _, err := os.Stat(testDbPath1K); err == nil {
+		t.Skipf("test database already exists at %q", testDbPath1K)
 	}
 
-	db := openDatabase(testDbPath)
+	db := openDatabase(testDbPath1K, true)
 	require.NotNil(t, db)
 	defer db.Close()
 
 	helperFillDatabase(t, db, 1000)
+}
+
+func TestSelectEventsIterator(t *testing.T) {
+	t.Parallel()
+
+	helperEnsureDatabase(t)
+	t.Run("PartialFetch", func(t *testing.T) {
+		for ev, err := range testDbClient.SelectEvents(context.Background(),
+			&model.Subscription{Filters: model.Filters{model.Filter{Limit: 5}}}) {
+			require.NoError(t, err)
+			require.NotNil(t, ev)
+			break
+		}
+	})
+	t.Run("FullFetch", func(t *testing.T) {
+		var count int
+		for ev, err := range testDbClient.SelectEvents(context.Background(),
+			&model.Subscription{Filters: model.Filters{model.Filter{Limit: 10}}}) {
+			require.NoError(t, err)
+			require.NotNil(t, ev)
+			count++
+		}
+		require.Equal(t, 10, count)
+	})
+}
+
+func TestGenerateDataForFile3M(t *testing.T) {
+	const amount = 3_000_000
+
+	t.Skip("this test is too slow")
+
+	const dbPath = `.testdata/testdb_3M.sqlite3`
+
+	if _, err := os.Stat(dbPath); err == nil {
+		t.Skipf("test database already exists at %q", dbPath)
+	}
+
+	db := openDatabase(dbPath+"?_foreign_keys=on&_journal_mode=off&_synchronous=off", true)
+	require.NotNil(t, db)
+	defer db.Close()
+
+	helperFillDatabase(t, db, amount)
 }

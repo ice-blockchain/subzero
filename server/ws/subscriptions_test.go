@@ -18,26 +18,6 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
-type dummyEventIterator struct {
-	events []*model.Event
-}
-
-func (it *dummyEventIterator) Stream(ctx context.Context) <-chan query.StreamedEvent {
-	ch := make(chan query.StreamedEvent, len(it.events))
-	go func() {
-		for i := range it.events {
-			select {
-			case <-ctx.Done():
-				return
-			case ch <- query.StreamedEvent{Event: it.events[i]}:
-			}
-		}
-		close(ch)
-	}()
-
-	return ch
-}
-
 func TestRelaySubscription(t *testing.T) {
 	eventsQueue := []*model.Event{{
 		Event: nostr.Event{
@@ -54,16 +34,22 @@ func TestRelaySubscription(t *testing.T) {
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
 	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) query.EventIterator {
-		it := &dummyEventIterator{events: make([]*model.Event, 0, len(eventsQueue))}
+		events := make([]*model.Event, 0, len(eventsQueue))
 		for _, ev := range eventsQueue {
 			for _, f := range subscription.Filters {
 				if f.Matches(&ev.Event) {
-					it.events = append(it.events, ev)
+					events = append(events, ev)
 				}
 			}
 		}
 
-		return it
+		return func(yield func(*model.Event, error) bool) {
+			for i := range events {
+				if !yield(events[i], nil) {
+					return
+				}
+			}
+		}
 	})
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
@@ -186,7 +172,13 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Content:   "db event",
 	}}}
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
-		return &dummyEventIterator{events: storedEvents}
+		return func(yield func(*model.Event, error) bool) {
+			for i := range storedEvents {
+				if !yield(storedEvents[i], nil) {
+					return
+				}
+			}
+		}
 	})
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {

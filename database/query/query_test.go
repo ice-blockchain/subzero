@@ -18,9 +18,9 @@ const testDeadline = 30 * time.Second
 func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Context, subscription *model.Subscription) (events []*model.Event, err error) {
 	t.Helper()
 
-	for v := range client.SelectEvents(ctx, subscription).Stream(ctx) {
-		require.NoError(t, v.Err)
-		events = append(events, v.Event)
+	for ev, evErr := range client.SelectEvents(ctx, subscription) {
+		require.NoError(t, evErr)
+		events = append(events, ev)
 	}
 
 	return events, err
@@ -307,38 +307,5 @@ func TestNIP09DeleteEvents(t *testing.T) {
 		stored, err = helperGetStoredEventsGlobal(t, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
 		require.NoError(t, err)
 		require.Empty(t, stored)
-	})
-}
-
-func TestGetEventsIteratorStream(t *testing.T) {
-	t.Parallel()
-
-	helperEnsureDatabase(t)
-
-	t.Run("FilterLimit", func(t *testing.T) {
-		const limit = 500
-
-		it := testDbClient.SelectEvents(context.Background(), &model.Subscription{Filters: nostr.Filters{{Limit: limit}}})
-		require.NotNil(t, it)
-
-		var count int
-		for v := range it.Stream(context.Background()) {
-			require.NoError(t, v.Err)
-			count++
-		}
-
-		require.Equal(t, limit, count)
-	})
-	t.Run("All", func(t *testing.T) {
-		allMap := make(map[string]*model.Event)
-		it := testDbClient.SelectEvents(context.Background(), nil)
-		require.NotNil(t, it)
-
-		for v := range it.Stream(context.Background()) {
-			require.NoError(t, v.Err)
-			allMap[v.Event.ID] = v.Event
-		}
-
-		require.Equal(t, 1000, len(allMap))
 	})
 }

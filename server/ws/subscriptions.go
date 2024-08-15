@@ -19,14 +19,14 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 		fetchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		for value := range wsSubscriptionListener(fetchCtx, sub.Subscription).Stream(fetchCtx) {
-			if value.Err != nil {
-				return errorx.Wrapf(value.Err, "failed to fetch events for subscription %+v", sub)
+		for event, err := range wsSubscriptionListener(fetchCtx, sub.Subscription) {
+			if err != nil {
+				return errorx.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 			}
 
-			err := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: value.Event.Event})
+			err := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event})
 			if err != nil {
-				return errorx.Wrapf(err, "failed to write event[%+v]", value)
+				return errorx.Wrapf(err, "failed to write event[%+v]", event)
 			}
 		}
 	} else {

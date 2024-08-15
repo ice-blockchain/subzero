@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"strconv"
 	"time"
 
@@ -15,20 +16,13 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type StreamedEvent struct {
-	Event *model.Event
-	Err   error
-}
-
 type databaseEvent struct {
 	model.Event
 	SystemCreatedAt int64
 	Jtags           string
 }
 
-type EventIterator interface {
-	Stream(ctx context.Context) <-chan StreamedEvent
-}
+type EventIterator iter.Seq2[*model.Event, error]
 
 func AcceptEvent(ctx context.Context, event *model.Event) error {
 	isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
@@ -40,7 +34,7 @@ func AcceptEvent(ctx context.Context, event *model.Event) error {
 		if err != nil {
 			return errorx.Withf(err, "failed to detect events for delete")
 		}
-		filters := nostr.Filters{}
+		filters := model.Filters{}
 		for _, r := range refs {
 			filters = append(filters, r.Filter())
 		}
@@ -78,12 +72,14 @@ values
 	return nil
 }
 
+var errEventIteratorInterrupted = errorx.New("interrupted")
+
 type eventIterator struct {
 	fetch   func(pivot int64) (*sqlx.Rows, error)
 	oneShot bool
 }
 
-func (*eventIterator) decodeTags(jtags string) (tags nostr.Tags, err error) {
+func (*eventIterator) decodeTags(jtags string) (tags model.Tags, err error) {
 	if len(jtags) == 0 {
 		return
 	}
@@ -124,7 +120,7 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 	return &ev, nil
 }
 
-func (it *eventIterator) scanBatch(ctx context.Context, ch chan StreamedEvent, pivot int64) (int64, error) {
+func (it *eventIterator) scanBatch(ctx context.Context, fn func(*model.Event) error, pivot int64) (int64, error) {
 	rows, err := it.fetch(pivot)
 	if err != nil {
 		return -1, errorx.With(err, "failed to get events")
@@ -141,59 +137,44 @@ func (it *eventIterator) scanBatch(ctx context.Context, ch chan StreamedEvent, p
 			pivot = event.SystemCreatedAt
 		}
 
-		select {
-		case ch <- StreamedEvent{Event: &event.Event}:
-		case <-ctx.Done():
-			return pivot, ctx.Err()
+		err = fn(&event.Event)
+		if err != nil {
+			return -1, errorx.With(err, "failed to process event")
 		}
 	}
 
 	return pivot, nil
 }
 
-func (it *eventIterator) scanner(ctx context.Context, ch chan StreamedEvent) {
+func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) error {
 	var pivot int64
 
 	for ctx.Err() == nil {
-		newPivot, err := it.scanBatch(ctx, ch, pivot)
+		newPivot, err := it.scanBatch(ctx, fn, pivot)
 		if err != nil {
-			select {
-			case ch <- StreamedEvent{Err: errorx.With(err, "failed to get events")}:
-			case <-ctx.Done():
-			}
-
-			return
+			return err
 		}
 
 		if pivot == newPivot || it.oneShot {
-			return
+			return nil
 		}
 
 		pivot = newPivot
 	}
+
+	return ctx.Err()
 }
 
-func (it *eventIterator) Stream(ctx context.Context) <-chan StreamedEvent {
-	ch := make(chan StreamedEvent, 10)
-
-	go func() {
-		it.scanner(ctx, ch)
-		close(ch)
-	}()
-
-	return ch
-}
-
-func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) (it EventIterator) {
+func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
 	const defBatchSize = 1000
-	var limit int64 = defBatchSize
 
+	limit := int64(defBatchSize)
 	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
 	if hasLimitFilter {
 		limit = int64(subscription.Filters[0].Limit)
 	}
 
-	return &eventIterator{
+	it := &eventIterator{
 		oneShot: hasLimitFilter,
 		fetch: func(pivot int64) (*sqlx.Rows, error) {
 			sql, params := generateSelectEventsSQL(subscription, pivot, limit)
@@ -210,6 +191,20 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 
 			return rows, err
 		}}
+
+	return func(yield func(*model.Event, error) bool) {
+		err := it.Each(ctx, func(event *model.Event) error {
+			if !yield(event, nil) {
+				return errEventIteratorInterrupted
+			}
+
+			return nil
+		})
+
+		if err != nil && !errorx.Is(err, errEventIteratorInterrupted) {
+			yield(nil, errorx.With(err, "failed to iterate events"))
+		}
+	}
 }
 
 func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) error {

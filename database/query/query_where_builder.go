@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nbd-wtf/go-nostr"
+	"github.com/ice-blockchain/subzero/model"
 )
 
 const (
@@ -105,7 +105,7 @@ func (w *whereBuilder) maybeOR() {
 	w.WriteString(" OR ")
 }
 
-func (w *whereBuilder) applyFilterTags(filterID string, ids []string, tags nostr.TagMap) {
+func (w *whereBuilder) applyFilterTags(filterID string, ids []string, tags model.TagMap) {
 	const valuesMax = 4
 
 	if len(tags) == 0 {
@@ -147,7 +147,7 @@ func (w *whereBuilder) applyFilterTags(filterID string, ids []string, tags nostr
 	}
 }
 
-func isFilterEmpty(filter *nostr.Filter) bool {
+func isFilterEmpty(filter *model.Filter) bool {
 	return len(filter.IDs) == 0 &&
 		len(filter.Kinds) == 0 &&
 		len(filter.Authors) == 0 &&
@@ -156,7 +156,7 @@ func isFilterEmpty(filter *nostr.Filter) bool {
 		filter.Until == nil
 }
 
-func (w *whereBuilder) applyFilter(idx int, filter *nostr.Filter) {
+func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) {
 	if isFilterEmpty(filter) {
 		return
 	}
@@ -185,7 +185,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *nostr.Filter) {
 	w.WriteRune(')') // End the filter section.
 }
 
-func (w *whereBuilder) Build(filters ...nostr.Filter) (sql string, params map[string]any) {
+func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any) {
 	for idx := range filters {
 		w.maybeOR()
 		w.applyFilter(idx, &filters[idx])
