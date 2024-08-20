@@ -16,7 +16,25 @@ where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
 --------
 create unique index if not exists parameterized_replaceable_event_uk on events(pubkey, kind, d_tag)
 where 30000 <= kind AND kind < 40000;
--- TODO add more indexes
+
+-- Where order:
+--   system_created_at
+--   id
+--   kind
+--   pubkey
+--   created_at
+-- Order by:
+--   system_created_at DESC
+
+CREATE INDEX IF NOT EXISTS idx_events_kind_system_created_at                      ON events(kind, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_system_created_at                    ON events(pubkey, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_system_created_at               ON events(kind, pubkey, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_system_created_at                   ON events(id, kind, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_created_at_system_created_at             ON events(id, created_at, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_system_created_at                 ON events(id, pubkey, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_system_created_at ON events(id, kind, pubkey, created_at, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at);
+
 --------
 CREATE TABLE IF NOT EXISTS event_tags
 (

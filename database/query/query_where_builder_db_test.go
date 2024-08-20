@@ -129,7 +129,7 @@ func generateCreatedAt() int64 {
 	return rand.Int63n(end-start) + start
 }
 
-func helperGenerateEventWithTags(t *testing.T, db *dbClient) {
+func helperGenerateEvent(t *testing.T, db *dbClient, withTags bool) string {
 	t.Helper()
 
 	var ev model.Event
@@ -140,14 +140,18 @@ func helperGenerateEventWithTags(t *testing.T, db *dbClient) {
 	ev.Kind = generateKind()
 	ev.Content = generateRandomString(rand.Intn(1024))
 
-	ev.Tags = []model.Tag{
-		{"#e", generateHexString(), generateRandomString(rand.Intn(20)), generateRandomString(rand.Intn(30))},
-		{"#p", generateHexString()},
-		{"#d", generateHexString(), generateRandomString(rand.Intn(10))},
+	if withTags {
+		ev.Tags = []model.Tag{
+			{"#e", generateHexString(), generateRandomString(rand.Intn(20)), generateRandomString(rand.Intn(30))},
+			{"#p", generateHexString()},
+			{"#d", generateHexString(), generateRandomString(rand.Intn(10))},
+		}
 	}
 
 	err := db.SaveEvent(context.Background(), &ev)
 	require.NoError(t, err)
+
+	return ev.ID
 }
 
 func helperFillDatabase(t *testing.T, db *dbClient, size int) {
@@ -168,7 +172,7 @@ func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 	bar := progressbar.Default(int64(need), "generating events")
 	for range need {
 		bar.Add(1) //nolint:errcheck
-		helperGenerateEventWithTags(t, db)
+		helperGenerateEvent(t, db, true)
 	}
 }
 
@@ -440,17 +444,41 @@ func TestSelectEventsIterator(t *testing.T) {
 	})
 }
 
+func TestSelectEventNoTags(t *testing.T) {
+	t.Parallel()
+
+	db := openDatabase(":memory:", true)
+	require.NotNil(t, db)
+
+	id := helperGenerateEvent(t, db, false)
+	require.NotEmpty(t, id)
+
+	filter := model.Filter{IDs: []string{id}}
+	for ev, err := range db.SelectEvents(context.Background(), &model.Subscription{Filters: model.Filters{filter}}) {
+		require.NoError(t, err)
+		require.NotNil(t, ev)
+		t.Logf("event: %+v", ev)
+		require.Equal(t, id, ev.ID)
+		require.Empty(t, ev.Tags)
+	}
+
+	require.NoError(t, db.Close())
+}
+
 func TestGenerateDataForFile3M(t *testing.T) {
 	const amount = 3_000_000
 
-	t.Skip("this test is too slow")
-
-	const dbPath = `.testdata/testdb_3M.sqlite3`
-
-	if _, err := os.Stat(dbPath); err == nil {
-		t.Skipf("test database already exists at %q", dbPath)
+	if os.Getenv("GENDB") != "yes" {
+		t.Skip("skipping test; to enable, set GENDB=yes")
 	}
 
+	dbPath := `.testdata/testdb_3M.sqlite3`
+	if n := os.Getenv("TESTDB"); n != "" {
+		t.Logf("using custom database path %q from env (TESTDB)", n)
+		dbPath = n
+	}
+
+	t.Logf("generating test database at %q with %d event(s)", dbPath, amount)
 	db := openDatabase(dbPath+"?_foreign_keys=on&_journal_mode=off&_synchronous=off", true)
 	require.NotNil(t, db)
 	defer db.Close()

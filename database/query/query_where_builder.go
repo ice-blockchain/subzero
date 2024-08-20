@@ -5,12 +5,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/ice-blockchain/subzero/model"
 )
 
 const (
 	whereBuilderDefaultWhere = "1=1"
 )
+
+var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
 type whereBuilder struct {
 	Params map[string]any
@@ -156,9 +160,39 @@ func isFilterEmpty(filter *model.Filter) bool {
 		filter.Until == nil
 }
 
-func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) {
+func (w *whereBuilder) applyTimeRange(filterID string, since, until *model.Timestamp) error {
+	if since != nil && until != nil {
+		if *since == *until {
+			w.maybeAND()
+			w.WriteString("created_at = :")
+			w.WriteString(w.addParam(filterID, "timestamp", *since))
+
+			return nil
+		} else if *since > *until {
+			return errors.Wrapf(ErrWhereBuilderInvalidTimeRange, "since [%d] is greater than until [%d]", *since, *until)
+		}
+	}
+
+	// If a filter includes the `since` property, events with `created_at` greater than or equal to since are considered to match the filter.
+	if since != nil && *since > 0 {
+		w.maybeAND()
+		w.WriteString("created_at >= :")
+		w.WriteString(w.addParam(filterID, "since", *since))
+	}
+
+	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
+	if until != nil && *until > 0 {
+		w.maybeAND()
+		w.WriteString("created_at <= :")
+		w.WriteString(w.addParam(filterID, "until", *until))
+	}
+
+	return nil
+}
+
+func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
 	if isFilterEmpty(filter) {
-		return
+		return nil
 	}
 
 	filterID := "filter" + strconv.Itoa(idx) + "_"
@@ -166,35 +200,28 @@ func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) {
 	buildFromSlice(w, filterID, filter.IDs, "id")
 	buildFromSlice(w, filterID, filter.Kinds, "kind")
 	buildFromSlice(w, filterID, filter.Authors, "pubkey")
+	if err := w.applyTimeRange(filterID, filter.Since, filter.Until); err != nil {
+		return err
+	}
 	w.applyFilterTags(filterID, filter.IDs, filter.Tags)
 
-	// If a filter includes the `since` property, events with `created_at` greater than or equal to since are considered to match the filter.
-	if filter.Since != nil {
-		w.maybeAND()
-		w.WriteString("created_at >= :")
-		w.WriteString(w.addParam(filterID, "since", *filter.Since))
-	}
-
-	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
-	if filter.Until != nil {
-		w.maybeAND()
-		w.WriteString("created_at <= :")
-		w.WriteString(w.addParam(filterID, "until", *filter.Until))
-	}
-
 	w.WriteRune(')') // End the filter section.
+
+	return nil
 }
 
-func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any) {
+func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	for idx := range filters {
 		w.maybeOR()
-		w.applyFilter(idx, &filters[idx])
+		if err := w.applyFilter(idx, &filters[idx]); err != nil {
+			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
+		}
 	}
 
 	// If there are no filters, return the default WHERE clause.
 	if w.Len() == 0 {
-		return whereBuilderDefaultWhere, w.Params
+		return whereBuilderDefaultWhere, w.Params, nil
 	}
 
-	return w.String(), w.Params
+	return w.String(), w.Params, nil
 }

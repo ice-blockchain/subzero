@@ -48,13 +48,18 @@ func AcceptEvent(ctx context.Context, event *model.Event) error {
 }
 
 func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
+	var jtags = []byte("[]")
+
 	const stmt = `
 insert or replace into events
 	(kind, created_at, system_created_at, id, pubkey, sig, content, temp_tags, d_tag)
 values
 	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, (select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1))`
 
-	jtags, _ := json.Marshal(event.Tags)
+	if len(event.Tags) > 0 {
+		jtags, _ = json.Marshal(event.Tags)
+	}
+
 	dbEvent := &databaseEvent{
 		Event:           *event,
 		SystemCreatedAt: time.Now().UnixNano(),
@@ -177,7 +182,10 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 	it := &eventIterator{
 		oneShot: hasLimitFilter,
 		fetch: func(pivot int64) (*sqlx.Rows, error) {
-			sql, params := generateSelectEventsSQL(subscription, pivot, limit)
+			sql, params, err := generateSelectEventsSQL(subscription, pivot, limit)
+			if err != nil {
+				return nil, err
+			}
 
 			stmt, err := db.prepare(ctx, sql, hashSQL(sql))
 			if err != nil {
@@ -208,7 +216,11 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 }
 
 func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) error {
-	where, params := generateEventsWhereClause(subscription)
+	where, params, err := generateEventsWhereClause(subscription)
+	if err != nil {
+		return errorx.With(err, "failed to generate events where clause")
+	}
+
 	params["owner_pub_key"] = ownerPubKey
 	rowsAffected, err := db.exec(ctx, fmt.Sprintf(`delete from events where %v AND pubkey = :owner_pub_key`, where), params)
 	if err != nil {
@@ -225,8 +237,11 @@ func GetStoredEvents(ctx context.Context, subscription *model.Subscription) Even
 	return globalDB.SelectEvents(ctx, subscription)
 }
 
-func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any) {
-	where, params := generateEventsWhereClause(subscription)
+func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
+	where, params, err := generateEventsWhereClause(subscription)
+	if err != nil {
+		return "", nil, errorx.With(err, "failed to generate events where clause")
+	}
 
 	var systemCreatedAtFilter string
 	if systemCreatedAtPivot != 0 {
@@ -249,22 +264,16 @@ select
 	e.sig,
 	e.content,
 	'[]' as tags,
-	json_group_array(
-		json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)
-	) filter (where event_tag_key != '') as jtags
+	(select json_group_array(json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)) from event_tags where event_id = e.id) as jtags
 from
 	events e
-left join event_tags on
-	event_id = id
 where ` + systemCreatedAtFilter + `(` + where + `)
-group by
-	id
 order by
 	system_created_at desc
-` + limitQuery, params
+` + limitQuery, params, nil
 }
 
-func generateEventsWhereClause(subscription *model.Subscription) (clause string, params map[string]any) {
+func generateEventsWhereClause(subscription *model.Subscription) (clause string, params map[string]any, err error) {
 	builder := newWhereBuilder()
 
 	if subscription != nil {

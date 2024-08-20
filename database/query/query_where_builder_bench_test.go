@@ -35,14 +35,18 @@ func helperBenchEnsureDatabase(t interface {
 }) *dbClient {
 	t.Helper()
 
-	dbPath := os.Getenv("BENCH_DB_PATH")
+	if os.Getenv("BENCHDB") != "yes" {
+		t.Skip("BENCHDB is not set to 'yes'")
+	}
+
+	dbPath := os.Getenv("TESTDB")
 	if dbPath == "" {
-		t.Skip("BENCH_DB_PATH is not set")
+		t.Skip("TESTDB env is not set")
 	}
 
 	db := openDatabase(dbPath+"?_foreign_keys=on", false)
 	benchData.Do(func() {
-		t.Logf("loading test data")
+		t.Logf("loading test data from %q", dbPath)
 		benchData.Events = helperBenchPreloadDataForFilter(t, db)
 		t.Logf("loaded %d event(s)", len(benchData.Events))
 
@@ -92,7 +96,7 @@ func helperBenchReportMetrics(
 	t.ReportMetric(float64(metric.Time.P95.Milliseconds()), "p95-ms/op")
 
 	db.stmtCacheMx.RLock()
-	t.ReportMetric(float64(len(db.stmtCache)), "stmt-cache-len")
+	t.ReportMetric(float64(len(db.stmtCache)), "stmt-cache-size")
 	db.stmtCacheMx.RUnlock()
 }
 
@@ -112,15 +116,9 @@ func helperBenchPreloadDataForFilter(
 	e.sig,
 	e.content,
 	'[]' as tags,
-	json_group_array(
-		json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)
-	) filter (where event_tag_key != '') as jtags
+	(select json_group_array(json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)) from event_tags where event_id = e.id) as jtags
 from
 	events e
-left join event_tags on
-	event_id = id
-group by
-	id
 order by
 	random()
 limit 1000`
@@ -206,20 +204,29 @@ func BenchmarkSelectByAuthor(b *testing.B) {
 	helperBenchReportMetrics(b, db, meter)
 }
 
-func BenchmarkSelectByCreatedAt(b *testing.B) {
+func helperBenchEnsureValidRange(t interface{ Helper() }, f *model.Filter) {
+	t.Helper()
+
+	if *f.Since > *f.Until {
+		f.Since, f.Until = f.Until, f.Since
+	}
+}
+
+func BenchmarkSelectByCreatedAtRange(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{}}
 		for pb.Next() {
 			filters[0].Since = &helperRandomEvent(b).CreatedAt
 			filters[0].Until = &helperRandomEvent(b).CreatedAt
+			helperBenchEnsureValidRange(b, &filters[0])
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
 }
 
-func BenchmarkSelectByKindAndCreatedAt(b *testing.B) {
+func BenchmarkSelectByKindAndCreatedAtRange(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{}}
@@ -227,6 +234,7 @@ func BenchmarkSelectByKindAndCreatedAt(b *testing.B) {
 			filters[0].Kinds = []int{generateKind()}
 			filters[0].Since = &helperRandomEvent(b).CreatedAt
 			filters[0].Until = &helperRandomEvent(b).CreatedAt
+			helperBenchEnsureValidRange(b, &filters[0])
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
