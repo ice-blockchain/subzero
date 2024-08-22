@@ -15,7 +15,7 @@ require (
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mattn/go-sqlite3 v1.14.22
-	github.com/nbd-wtf/go-nostr v0.34.5
+	github.com/nbd-wtf/go-nostr v0.34.10
 	github.com/pkg/errors v0.9.1
 	github.com/quic-go/quic-go v0.45.1
 	github.com/quic-go/webtransport-go v0.8.0
