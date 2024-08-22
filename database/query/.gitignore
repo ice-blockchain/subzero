@@ -1,2 +1,2 @@
-benchdb_current.txt
 .testdata/testdb_3M.sqlite3
+.testdata/testdb.sqlite3

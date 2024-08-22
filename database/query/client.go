@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gookit/goutil/errorx"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -22,8 +22,6 @@ type (
 )
 
 var (
-	globalDB *dbClient
-
 	//go:embed DDL.sql
 	ddl string
 )
@@ -57,16 +55,6 @@ func openDatabase(target string, runDDL bool) *dbClient {
 	return client
 }
 
-func MustInit(url ...string) {
-	target := ":memory:"
-
-	if len(url) > 0 {
-		target = url[0]
-	}
-
-	globalDB = openDatabase(target, true)
-}
-
 func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected int64, err error) {
 	var (
 		hash = hashSQL(sql)
@@ -74,15 +62,15 @@ func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected
 
 	stmt, err := db.prepare(ctx, sql, hash)
 	if err != nil {
-		return 0, errorx.Withf(err, "failed to prepare exec sql: `%v`", sql)
+		return 0, errors.Wrapf(err, "failed to prepare exec sql: `%v`", sql)
 	}
 
 	result, err := stmt.ExecContext(ctx, arg)
 	if err != nil {
-		return 0, errorx.Withf(err, "failed to exec prepared sql: `%v`", sql)
+		return 0, errors.Wrapf(err, "failed to exec prepared sql: `%v`", sql)
 	}
 	if rowsAffected, err = result.RowsAffected(); err != nil {
-		return 0, errorx.Withf(err, "failed to process rows affected for exec prepared sql: `%v`", sql)
+		return 0, errors.Wrapf(err, "failed to process rows affected for exec prepared sql: `%v`", sql)
 	}
 
 	return rowsAffected, nil

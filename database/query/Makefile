@@ -10,16 +10,3 @@ benchdb: $(TESTDB)
 
 test:
 	go test -v -timeout=10h
-
-.PHONY: benchdb_current.txt
-benchdb_current.txt:
-	@if [ ! -e $@ ]; then \
-		echo "No benchmark results found"; \
-		echo "Please run 'make benchdb' to generate test database and run benchmarks"; \
-		false; \
-	fi
-
-# https://pkg.go.dev/golang.org/x/perf/cmd/benchstat
-benchcompare: .testdata/bench_results.txt benchdb_current.txt
-	@echo "Comparing current benchmark results with previous results ($<)"
-	benchstat $^

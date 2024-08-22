@@ -2,16 +2,14 @@ package query
 
 import (
 	"context"
-	"math/rand/v2"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/gookit/goutil/errorx"
 	"github.com/jamiealquiza/tachymeter"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
+	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -47,7 +45,7 @@ func helperBenchEnsureDatabase(t interface {
 	db := openDatabase(dbPath+"?_foreign_keys=on", false)
 	benchData.Do(func() {
 		t.Logf("loading test data from %q", dbPath)
-		benchData.Events = helperBenchPreloadDataForFilter(t, db)
+		benchData.Events = helperPreloadDataForFilter(t, db)
 		t.Logf("loaded %d event(s)", len(benchData.Events))
 
 		db.stmtCacheMx.Lock()
@@ -58,10 +56,10 @@ func helperBenchEnsureDatabase(t interface {
 	return db
 }
 
-func helperRandomEvent(t interface{ Helper() }) *model.Event {
+func helperBenchRandomEvent(t interface{ Helper() }) *model.Event {
 	t.Helper()
 
-	return benchData.Events[rand.IntN(len(benchData.Events))]
+	return benchData.Events[rand.Int31n(int32(len(benchData.Events)))]
 }
 
 func helperBenchSelectBy(t interface{ Helper() }, db *dbClient, meter *tachymeter.Tachymeter, filters []model.Filter) {
@@ -100,51 +98,6 @@ func helperBenchReportMetrics(
 	db.stmtCacheMx.RUnlock()
 }
 
-func helperBenchPreloadDataForFilter(
-	t interface {
-		Helper()
-		require.TestingT
-	},
-	db *dbClient,
-) (events []*model.Event) {
-	const stmt = `select
-	e.kind,
-	e.created_at,
-	e.system_created_at,
-	e.id,
-	e.pubkey,
-	e.sig,
-	e.content,
-	'[]' as tags,
-	(select json_group_array(json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)) from event_tags where event_id = e.id) as jtags
-from
-	events e
-order by
-	random()
-limit 1000`
-
-	it := &eventIterator{
-		oneShot: true,
-		fetch: func(int64) (*sqlx.Rows, error) {
-			stmt, err := db.prepare(context.TODO(), stmt, hashSQL(stmt))
-			if err != nil {
-				return nil, errorx.Withf(err, "failed to prepare query sql: %v", stmt)
-			}
-
-			return stmt.QueryxContext(context.TODO(), map[string]any{})
-		}}
-
-	err := it.Each(context.TODO(), func(ev *model.Event) error {
-		events = append(events, ev)
-
-		return nil
-	})
-	require.NoError(t, err)
-	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })
-
-	return events
-}
-
 func helperBenchPrepare(b *testing.B) (*dbClient, *tachymeter.Tachymeter) {
 	b.Helper()
 
@@ -170,6 +123,7 @@ func BenchmarkSelectByKind(b *testing.B) {
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByID(b *testing.B) {
@@ -181,11 +135,12 @@ func BenchmarkSelectByID(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{IDs: []string{""}}}
 		for pb.Next() {
-			filters[0].IDs[0] = helperRandomEvent(b).ID
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByAuthor(b *testing.B) {
@@ -197,11 +152,12 @@ func BenchmarkSelectByAuthor(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{Authors: []string{""}}}
 		for pb.Next() {
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func helperBenchEnsureValidRange(t interface{ Helper() }, f *model.Filter) {
@@ -217,13 +173,14 @@ func BenchmarkSelectByCreatedAtRange(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{}}
 		for pb.Next() {
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
-			filters[0].Until = &helperRandomEvent(b).CreatedAt
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
+			filters[0].Until = &helperBenchRandomEvent(b).CreatedAt
 			helperBenchEnsureValidRange(b, &filters[0])
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndCreatedAtRange(b *testing.B) {
@@ -232,13 +189,14 @@ func BenchmarkSelectByKindAndCreatedAtRange(b *testing.B) {
 		filters := model.Filters{model.Filter{}}
 		for pb.Next() {
 			filters[0].Kinds = []int{generateKind()}
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
-			filters[0].Until = &helperRandomEvent(b).CreatedAt
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
+			filters[0].Until = &helperBenchRandomEvent(b).CreatedAt
 			helperBenchEnsureValidRange(b, &filters[0])
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndID(b *testing.B) {
@@ -247,11 +205,12 @@ func BenchmarkSelectByKindAndID(b *testing.B) {
 		filters := model.Filters{model.Filter{IDs: []string{""}}}
 		for pb.Next() {
 			filters[0].Kinds = []int{generateKind()}
-			filters[0].IDs[0] = helperRandomEvent(b).ID
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndAuthor(b *testing.B) {
@@ -260,11 +219,12 @@ func BenchmarkSelectByKindAndAuthor(b *testing.B) {
 		filters := model.Filters{model.Filter{Authors: []string{""}}}
 		for pb.Next() {
 			filters[0].Kinds = []int{generateKind()}
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByCreatedAtAndID(b *testing.B) {
@@ -272,12 +232,13 @@ func BenchmarkSelectByCreatedAtAndID(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{IDs: []string{""}}}
 		for pb.Next() {
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
-			filters[0].IDs[0] = helperRandomEvent(b).ID
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByCreatedAtAndAuthor(b *testing.B) {
@@ -285,12 +246,13 @@ func BenchmarkSelectByCreatedAtAndAuthor(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{Authors: []string{""}}}
 		for pb.Next() {
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByAuthorAndID(b *testing.B) {
@@ -298,12 +260,13 @@ func BenchmarkSelectByAuthorAndID(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}}}
 		for pb.Next() {
-			filters[0].IDs[0] = helperRandomEvent(b).ID
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndCreatedAtAndID(b *testing.B) {
@@ -311,13 +274,14 @@ func BenchmarkSelectByKindAndCreatedAtAndID(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{IDs: []string{""}}}
 		for pb.Next() {
-			filters[0].IDs[0] = helperRandomEvent(b).ID
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			filters[0].Kinds = []int{generateKind()}
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndCreatedAtAndAuthor(b *testing.B) {
@@ -325,13 +289,14 @@ func BenchmarkSelectByKindAndCreatedAtAndAuthor(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{Authors: []string{""}}}
 		for pb.Next() {
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			filters[0].Kinds = []int{generateKind()}
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndAuthorAndID(b *testing.B) {
@@ -339,13 +304,14 @@ func BenchmarkSelectByKindAndAuthorAndID(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}}}
 		for pb.Next() {
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
-			filters[0].IDs[0] = helperRandomEvent(b).ID
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			filters[0].Kinds = []int{generateKind()}
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByCreatedAtAndAuthorAndID(b *testing.B) {
@@ -353,13 +319,14 @@ func BenchmarkSelectByCreatedAtAndAuthorAndID(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}}}
 		for pb.Next() {
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
-			filters[0].IDs[0] = helperRandomEvent(b).ID
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
 
 func BenchmarkSelectByKindAndCreatedAtAndAuthorAndID(b *testing.B) {
@@ -368,11 +335,12 @@ func BenchmarkSelectByKindAndCreatedAtAndAuthorAndID(b *testing.B) {
 		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}, Kinds: []int{0}}}
 		for pb.Next() {
 			filters[0].Kinds[0] = generateKind()
-			filters[0].Authors[0] = helperRandomEvent(b).PubKey
-			filters[0].IDs[0] = helperRandomEvent(b).ID
-			filters[0].Since = &helperRandomEvent(b).CreatedAt
+			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
+			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
+			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
 			helperBenchSelectBy(b, db, meter, filters)
 		}
 	})
 	helperBenchReportMetrics(b, db, meter)
+	db.Close()
 }
