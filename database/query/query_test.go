@@ -52,8 +52,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestReplaceEvents(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
