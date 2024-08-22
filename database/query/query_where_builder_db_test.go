@@ -230,6 +230,8 @@ func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 }
 
 func TestWhereBuilderByAuthor(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
@@ -250,6 +252,8 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 }
 
 func TestWhereBuilderByID(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
@@ -271,6 +275,8 @@ func TestWhereBuilderByID(t *testing.T) {
 }
 
 func TestWhereBuilderByMany(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	ev1 := ev.Random(t)
@@ -307,6 +313,8 @@ func TestWhereBuilderByMany(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
@@ -343,6 +351,8 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsSingle(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
@@ -374,6 +384,8 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
@@ -402,6 +414,8 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
+	t.Parallel()
+
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	ev1 := ev.Random(t)
@@ -425,6 +439,8 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 }
 
 func TestSelectEventNoTags(t *testing.T) {
+	t.Parallel()
+
 	db := helperNewDatabase(t)
 	defer db.Close()
 

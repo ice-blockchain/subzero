@@ -25,6 +25,8 @@ func helperSelectEventsN(t *testing.T, db *dbClient, limit int) (events map[stri
 }
 
 func TestIteratorSelectEvents(t *testing.T) {
+	t.Parallel()
+
 	db := helperNewDatabase(t)
 	helperFillDatabase(t, db, 3000)
 
