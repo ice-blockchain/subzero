@@ -3,7 +3,6 @@ package query
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -35,20 +34,7 @@ func helperNewDatabase(t *testing.T) *dbClient {
 }
 
 func TestMain(m *testing.M) {
-	exitCode := m.Run()
-
-	if testDB.Ready {
-		testDB.Client.Close()
-	}
-
-	if exitCode == 0 {
-		if err := goleak.Find(); err != nil {
-			fmt.Fprintf(os.Stderr, "goleak: errors on successful test run: %v\n", err)
-			exitCode = 1
-		}
-	}
-
-	os.Exit(exitCode)
+	goleak.VerifyTestMain(m)
 }
 
 func TestReplaceEvents(t *testing.T) {

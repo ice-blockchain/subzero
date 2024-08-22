@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -17,34 +16,25 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-var (
-	testDB struct {
-		sync.Mutex
-		Ready  bool
-		Client *dbClient
-		Events []*model.Event
-	}
-)
+type testEvents struct {
+	Events []*model.Event
+}
 
-func helperEnsureDatabase(t *testing.T) {
+func (te *testEvents) Random(h interface{ Helper() }) *model.Event {
+	h.Helper()
+
+	return helperRandomEvent(h, te.Events)
+}
+
+func helperEnsureDatabase(t *testing.T) (*dbClient, *testEvents) {
 	t.Helper()
 
-	const (
-		eventCount = 1000
-		dbPath     = ".testdata/testdb.sqlite3"
-	)
+	const eventCount = 100
 
-	testDB.Lock()
-	defer testDB.Unlock()
+	db := helperNewDatabase(t)
+	helperFillDatabase(t, db, eventCount)
 
-	if testDB.Ready {
-		return
-	}
-
-	testDB.Client = openDatabase(dbPath+"?_synchronous=off&cache=shared", true)
-	helperFillDatabase(t, testDB.Client, eventCount)
-	testDB.Events = helperPreloadDataForFilter(t, testDB.Client)
-	testDB.Ready = true
+	return db, &testEvents{Events: helperPreloadDataForFilter(t, db)}
 }
 
 func helperPreloadDataForFilter(
@@ -92,10 +82,10 @@ limit 1000`
 	return events
 }
 
-func helperRandomEvent(t interface{ Helper() }) *model.Event {
+func helperRandomEvent(t interface{ Helper() }, events []*model.Event) *model.Event {
 	t.Helper()
 
-	return testDB.Events[rand.Int31n(int32(len(testDB.Events)))]
+	return events[rand.Int31n(int32(len(events)))]
 }
 
 func generateHexString() string {
@@ -240,17 +230,18 @@ func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 }
 
 func TestWhereBuilderByAuthor(t *testing.T) {
-	helperEnsureDatabase(t)
-	events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
 				Authors: []string{
-					helperRandomEvent(t).PubKey,
-					helperRandomEvent(t).PubKey,
+					ev.Random(t).PubKey,
+					ev.Random(t).PubKey,
 				},
 			},
 			model.Filter{
-				Authors: []string{helperRandomEvent(t).PubKey},
+				Authors: []string{ev.Random(t).PubKey},
 			},
 		},
 	})
@@ -259,17 +250,18 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 }
 
 func TestWhereBuilderByID(t *testing.T) {
-	helperEnsureDatabase(t)
-	events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
 				IDs: []string{
-					helperRandomEvent(t).ID,
+					ev.Random(t).ID,
 				},
 			},
 			model.Filter{
 				IDs: []string{
-					helperRandomEvent(t).ID,
+					ev.Random(t).ID,
 				},
 			},
 		},
@@ -279,10 +271,11 @@ func TestWhereBuilderByID(t *testing.T) {
 }
 
 func TestWhereBuilderByMany(t *testing.T) {
-	helperEnsureDatabase(t)
-	ev1 := helperRandomEvent(t)
-	ev2 := helperRandomEvent(t)
-	events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	ev1 := ev.Random(t)
+	ev2 := ev.Random(t)
+	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
 				IDs: []string{
@@ -314,11 +307,12 @@ func TestWhereBuilderByMany(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
-	helperEnsureDatabase(t)
-	ev := helperRandomEvent(t)
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	event := ev.Random(t)
 	filter := model.Filter{
-		IDs:     []string{ev.ID, "bar"},
-		Authors: []string{ev.PubKey},
+		IDs:     []string{event.ID, "bar"},
+		Authors: []string{event.PubKey},
 		Tags: map[string][]string{
 			"#e": nil,
 			"#p": nil,
@@ -327,7 +321,7 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 	}
 
 	t.Run("Something", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
@@ -340,7 +334,7 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 		// Add additional tag to the filter, so query will return no results because all 4 tags MUST be present.
 		x.Tags["#x"] = nil
 
-		events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
@@ -349,19 +343,20 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsSingle(t *testing.T) {
-	helperEnsureDatabase(t)
-	ev := helperRandomEvent(t)
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	event := ev.Random(t)
 	filter := model.Filter{
-		IDs:  []string{ev.ID},
+		IDs:  []string{event.ID},
 		Tags: map[string][]string{},
 	}
 
-	for _, tag := range ev.Tags {
+	for _, tag := range event.Tags {
 		filter.Tags[tag[0]] = tag[1:]
 	}
 
 	t.Run("Match", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
@@ -370,7 +365,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		filter.Tags["#e"] = append(filter.Tags["#e"], "fooo") // Add 4th value to the tag list, so query will return no results.
 
-		events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
@@ -379,16 +374,17 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
-	helperEnsureDatabase(t)
-	ev := helperRandomEvent(t)
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	event := ev.Random(t)
 	filter := model.Filter{
 		Tags: map[string][]string{
-			ev.Tags[0][0]: ev.Tags[0][1:],
+			event.Tags[0][0]: event.Tags[0][1:],
 		},
 	}
 
 	t.Run("Match", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
@@ -397,7 +393,7 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		filter.Tags["#d"] = append(filter.Tags["#d"], "fooo") // Add 3rd value to the tag list, so query will return no results.
 
-		events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
 		})
 		require.NoError(t, err)
@@ -406,10 +402,11 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
-	helperEnsureDatabase(t)
-	ev1 := helperRandomEvent(t)
-	ev2 := helperRandomEvent(t)
-	events, err := helperGetStoredEventsAll(t, testDB.Client, context.Background(), &model.Subscription{
+	db, ev := helperEnsureDatabase(t)
+	defer db.Close()
+	ev1 := ev.Random(t)
+	ev2 := ev.Random(t)
+	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
 			{
 				Tags: map[string][]string{
