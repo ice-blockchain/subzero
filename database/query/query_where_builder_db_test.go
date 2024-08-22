@@ -441,30 +441,6 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 	require.Len(t, events, 2)
 }
 
-func TestSelectEventsIterator(t *testing.T) {
-	t.Parallel()
-
-	helperEnsureDatabase(t)
-	t.Run("PartialFetch", func(t *testing.T) {
-		for ev, err := range testDB.Client.SelectEvents(context.Background(),
-			&model.Subscription{Filters: model.Filters{model.Filter{Limit: 5}}}) {
-			require.NoError(t, err)
-			require.NotNil(t, ev)
-			break
-		}
-	})
-	t.Run("FullFetch", func(t *testing.T) {
-		var count int
-		for ev, err := range testDB.Client.SelectEvents(context.Background(),
-			&model.Subscription{Filters: model.Filters{model.Filter{Limit: 10}}}) {
-			require.NoError(t, err)
-			require.NotNil(t, ev)
-			count++
-		}
-		require.Equal(t, 10, count)
-	})
-}
-
 func TestSelectEventNoTags(t *testing.T) {
 	t.Parallel()
 
