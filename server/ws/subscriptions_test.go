@@ -19,7 +19,10 @@ import (
 )
 
 func TestRelaySubscription(t *testing.T) {
-	eventsQueue := []*model.Event{{
+	var eventsQueue []*model.Event
+
+	privkey := nostr.GeneratePrivateKey()
+	ev := model.Event{
 		Event: nostr.Event{
 			ID:        uuid.NewString(),
 			PubKey:    uuid.NewString(),
@@ -29,10 +32,11 @@ func TestRelaySubscription(t *testing.T) {
 			Content:   uuid.NewString(),
 			Sig:       uuid.NewString(),
 		},
-	}}
-	privkey := nostr.GeneratePrivateKey()
-	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
-	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
+	}
+	ev.SetExtra("extra", uuid.NewString())
+	require.NoError(t, ev.Sign(privkey))
+	eventsQueue = append(eventsQueue, &ev)
+
 	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) query.EventIterator {
 		events := make([]*model.Event, 0, len(eventsQueue))
 		for _, ev := range eventsQueue {
@@ -51,6 +55,7 @@ func TestRelaySubscription(t *testing.T) {
 			}
 		}
 	})
+
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
@@ -75,25 +80,24 @@ func TestRelaySubscription(t *testing.T) {
 	if err != nil {
 		log.Panic(err)
 	}
-	eventsCount := 0
+
+	var receivedEvents []*model.Event
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for ev := range sub.Events {
-			assert.Equal(t, eventsQueue[eventsCount].ID, ev.ID)
-			assert.Equal(t, eventsQueue[eventsCount].Tags, ev.Tags)
-			assert.Equal(t, eventsQueue[eventsCount].CreatedAt, ev.CreatedAt)
-			assert.Equal(t, eventsQueue[eventsCount].Sig, ev.Sig)
-			assert.Equal(t, eventsQueue[eventsCount].Kind, ev.Kind)
-			assert.Equal(t, eventsQueue[eventsCount].PubKey, ev.PubKey)
-			assert.Equal(t, eventsQueue[eventsCount].Content, ev.Content, eventsCount)
-			eventsCount += 1
-		}
-		assert.Equal(t, 4, eventsCount)
-	}()
+	{
+		t.Logf("subscribed to %v", sub.GetID())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ev := range sub.Events {
+				t.Logf("received event %v", ev)
+				receivedEvents = append(receivedEvents, &model.Event{Event: *ev})
+			}
+		}()
+	}
+
 	select {
 	case <-sub.EndOfStoredEvents:
+		t.Logf("received EOS")
 	case <-ctx.Done():
 		log.Panic(errorx.Withf(ctx.Err(), "EOS not received"))
 	}
@@ -163,6 +167,8 @@ func TestRelaySubscription(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	wg.Wait()
+	require.Equal(t, eventsQueue, receivedEvents)
 }
 func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
