@@ -171,7 +171,7 @@ func TestRelaySubscription(t *testing.T) {
 
 	if len(receivedEvents) > len(eventsQueue) {
 		t.Logf("FIXME: received more events than expected")
-		receivedEvents = receivedEvents[:len(storedEvents)]
+		receivedEvents = receivedEvents[:len(eventsQueue)]
 	}
 	require.Equal(t, eventsQueue, receivedEvents)
 }
