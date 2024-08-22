@@ -41,7 +41,7 @@ func helperEnsureDatabase(t *testing.T) {
 		return
 	}
 
-	testDB.Client = openDatabase(dbPath+"?_synchronous=off", true)
+	testDB.Client = openDatabase(dbPath+"?_synchronous=off&cache=shared", true)
 	helperFillDatabase(t, testDB.Client, eventCount)
 	testDB.Events = helperPreloadDataForFilter(t, testDB.Client)
 	testDB.Ready = true
