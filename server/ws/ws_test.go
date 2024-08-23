@@ -128,12 +128,14 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 				if ctx.Err() == nil {
 					require.NoError(t, err)
 				}
+				_ = sendMsgs
 			}
 			assert.GreaterOrEqual(t, len(receivedBackOnClient), 0)
 		}(i)
 	}
 	wg.Wait()
-	shutdownCtx, _ := context.WithTimeout(context.Background(), testDeadline)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
 	for echoServer.ReaderExited.Load() != uint64(conns) {
 		if shutdownCtx.Err() != nil {
 			log.Panic(errorx.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))

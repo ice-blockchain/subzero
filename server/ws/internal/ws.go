@@ -5,7 +5,6 @@ package internal
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -55,7 +54,7 @@ func (s *Srv) startServer(ctx context.Context, server interface {
 	ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
 }) {
 	defer log.Printf("server stopped listening")
-	log.Printf(fmt.Sprintf("server started listening on %v...", s.cfg.Port))
+	log.Printf("server started listening on %v...", s.cfg.Port)
 
 	isUnexpectedError := func(err error) bool {
 		return err != nil &&
