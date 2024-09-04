@@ -1,0 +1,80 @@
+package fixture
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io"
+	"os"
+	"time"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/gookit/goutil/errorx"
+)
+
+func WaitForFile(ctx context.Context, watchPath, expectedPath string, expectedSize int64) (hash string, err error) {
+	skipWatch := false
+	fileInfo, err := os.Stat(expectedPath)
+	if err == nil && fileInfo.Size() == expectedSize {
+		skipWatch = true
+	}
+	if !skipWatch {
+		if err = watchFile(ctx, watchPath, expectedPath, expectedSize); err != nil {
+			return "", errorx.Withf(err, "failed to monitor file %v", expectedPath)
+		}
+	}
+	f, err := os.Open(expectedPath)
+	if err != nil {
+		return "", errorx.Withf(err, "failed to open %v to check hash", expectedPath)
+	}
+	defer f.Close()
+	hashCalc := sha256.New()
+	if _, err = io.Copy(hashCalc, f); err != nil {
+		return "", errorx.Withf(err, "failed to calc hash of %v", expectedPath)
+	}
+	return hex.EncodeToString(hashCalc.Sum(nil)), nil
+}
+
+func watchFile(ctx context.Context, monitorPath, expectedPath string, expectedSize int64) error {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return errorx.Withf(err, "failed to create fsnotify watcher %s", expectedPath)
+	}
+	defer watcher.Close()
+	err = watcher.Add(monitorPath)
+	if err != nil {
+		return errorx.Withf(err, "failed to monitor expectedPath %s", expectedPath)
+	}
+loop:
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Op == fsnotify.Write && event.Name == expectedPath {
+				fileInfo, err := os.Stat(expectedPath)
+				if err != nil {
+					return errorx.Withf(err, "failed to stat file %s", expectedPath)
+				}
+				if fileInfo.Size() == expectedSize {
+					break loop
+				}
+			}
+		case <-time.After(1 * time.Second):
+			fileInfo, err := os.Stat(expectedPath)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue loop
+				}
+				return errorx.Withf(err, "failed to stat file %s", expectedPath)
+			}
+			if fileInfo.Size() == expectedSize {
+				break loop
+			}
+		case err = <-watcher.Errors:
+			return errorx.Withf(err, "got error from fsnotify")
+		case <-ctx.Done():
+			return errors.New("timeout")
+		}
+	}
+	return nil
+}
