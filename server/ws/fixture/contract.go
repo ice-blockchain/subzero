@@ -13,6 +13,7 @@ import (
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
 var (
@@ -29,7 +30,7 @@ type (
 		closedMx       sync.Mutex
 		handlersMx     sync.Mutex
 		Handlers       map[adapters.WSWriter]struct{}
-		processingFunc func(ctx context.Context, writer adapters.WSWriter, in []byte)
+		processingFunc func(ctx context.Context, writer adapters.WSWriter, in []byte, cfg *config.Config)
 		nip11Handler   http.Handler
 		ReaderExited   atomic.Uint64
 	}

@@ -23,10 +23,9 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 			if err != nil {
 				return errorx.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 			}
-
-			err := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event})
-			if err != nil {
-				return errorx.Wrapf(err, "failed to write event[%+v]", event)
+			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event})
+			if wErr != nil {
+				return errorx.Wrapf(wErr, "failed to write event[%+v]", event)
 			}
 		}
 	} else {
@@ -47,14 +46,15 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 		h.subListeners[respWriter] = subsFromCurrConnection
 	}
 	subsFromCurrConnection[sub.SubscriptionID] = sub
+
 	return err
 }
-func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err error) {
-	if err = h.validateIncomingEvent(event); err != nil {
+
+func (h *handler) handleEvent(ctx context.Context, event *model.Event, cfg *Config) (err error) {
+	if err = h.validateIncomingEvent(event, cfg); err != nil {
 		return errorx.Withf(err, "invalid: event is invalid")
 	}
-	isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
-	if !isEphemeralEvent {
+	if event.EventType() != model.EphemeralEventType {
 		if wsEventListener == nil {
 			log.Panic(errorx.Errorf("wsEventListener to store events not set"))
 		}
@@ -73,7 +73,7 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event) (err erro
 	return nil
 }
 
-func (h *handler) validateIncomingEvent(evt *model.Event) (err error) {
+func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err error) {
 	hash := sha256.Sum256(evt.Serialize())
 	if id := hex.EncodeToString(hash[:]); id != evt.ID {
 		return errorx.New("event id is invalid")
@@ -84,6 +84,13 @@ func (h *handler) validateIncomingEvent(evt *model.Event) (err error) {
 	} else if !ok {
 		return errorx.New("invalid event signature")
 	}
+	if evt.Kind < 0 || evt.Kind > 65535 {
+		return errorx.New("wrong kind value")
+	}
+	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {
+		return errorx.Withf(cErr, "wrong event difficulty")
+	}
+
 	return nil
 }
 
@@ -99,6 +106,7 @@ func (h *handler) notifyListenersAboutNewEvent(ev *model.Event) error {
 			}
 		}
 	}
+
 	return err.ErrorOrNil()
 }
 
@@ -108,16 +116,17 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 	if subs, found := h.subListeners[respWriter]; found {
 		if subID == nil {
 			delete(h.subListeners, respWriter)
-		} else {
-			delete(h.subListeners[respWriter], *subID)
-			if len(subs) == 0 {
-				delete(h.subListeners, respWriter)
-			}
-			if err := h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}); err != nil {
-				return errorx.Withf(err, "failed to write CLOSED message")
-			}
+
 			return nil
 		}
+		delete(h.subListeners[respWriter], *subID)
+		if len(subs) == 0 {
+			delete(h.subListeners, respWriter)
+		}
+		if err := h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}); err != nil {
+			return errorx.Withf(err, "failed to write CLOSED message")
+		}
 	}
+
 	return nil
 }

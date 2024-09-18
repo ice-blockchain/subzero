@@ -30,10 +30,12 @@ func RegisterWSEventListener(listen func(context.Context, *model.Event) error) {
 func RegisterWSSubscriptionListener(listen EventGetter) {
 	wsSubscriptionListener = listen
 }
+
 func NotifySubscriptions(event *model.Event) error {
 	if hdl == nil {
 		log.Panic("Server is not started")
 	}
+
 	return hdl.notifyListenersAboutNewEvent(event)
 }
 
@@ -41,6 +43,7 @@ var hdl *handler
 
 func NewHandler() WSHandler {
 	hdl = new(handler)
+
 	return hdl
 }
 
@@ -48,7 +51,7 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func (h *handler) Read(ctx context.Context, stream internal.WS) {
+func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 	for {
 		t, msgBytes, err := stream.ReadMessage()
 		if err != nil {
@@ -66,7 +69,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 			break
 		}
 		if len(msgBytes) > 0 && ws.OpCode(t) == ws.OpText {
-			h.Handle(ctx, stream, msgBytes)
+			h.Handle(ctx, stream, msgBytes, cfg)
 		}
 	}
 	if err := h.CancelSubscription(ctx, stream, nil); err != nil {
@@ -74,18 +77,19 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 	}
 }
 
-func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte) {
+func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
 	input := nostr.ParseMessage(msgBytes)
 	if input == nil {
 		err := errorx.New("failed to parse input")
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
+
 		return
 	}
 	var err error
 	switch e := input.(type) {
 	case *nostr.EventEnvelope:
-		err = h.handleEvent(ctx, &model.Event{Event: e.Event})
+		err = h.handleEvent(ctx, &model.Event{Event: e.Event}, cfg)
 		if err == nil {
 			if err = h.writeResponse(respWriter, &nostr.OKEnvelope{
 				EventID: e.ID,
@@ -111,6 +115,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				OK:      false,
 				Reason:  err.Error(),
 			})).ErrorOrNil())
+
 			return
 		}
 		err = errorx.Withf(err, "error: failed to handle %v %+v", input.Label(), input)
@@ -124,5 +129,6 @@ func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Env
 	if err != nil {
 		return errorx.Withf(err, "failed to serialize %+v into json", envelope)
 	}
+
 	return respWriter.WriteMessage(int(ws.OpText), b)
 }

@@ -69,7 +69,7 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 				}
 			}()
 			go wsocket.Write(ctx)
-			wsHandler.Read(ctx, wsocket)
+			wsHandler.Read(ctx, wsocket, s.cfg)
 		}()
 
 		return

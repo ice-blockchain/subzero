@@ -29,8 +29,7 @@ type databaseEvent struct {
 type EventIterator iter.Seq2[*model.Event, error]
 
 func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
-	isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
-	if isEphemeralEvent {
+	if event.EventType() == model.EphemeralEventType {
 		return nil
 	}
 	if event.Kind == nostr.KindDeletion {
@@ -45,6 +44,7 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 		if err = db.DeleteEvents(ctx, &model.Subscription{Filters: filters}, event.PubKey); err != nil {
 			return errors.Wrapf(err, "failed to delete events %+v", filters)
 		}
+
 		return nil
 	}
 
