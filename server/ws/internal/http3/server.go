@@ -52,6 +52,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil {
 		return errorx.With(err, "failed to start http3/udp server")
 	}
+
 	return nil
 }
 
@@ -79,8 +80,8 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 				}
 
 			}()
-			go ws.Write(ctx)        //nolint:contextcheck // It is new context.
-			wsHandler.Read(ctx, ws) //nolint:contextcheck // It is new context.
+			go ws.Write(ctx)               //nolint:contextcheck // It is new context.
+			wsHandler.Read(ctx, ws, s.cfg) //nolint:contextcheck // It is new context.
 		}()
 		return
 	} else if handler != nil {
@@ -95,5 +96,6 @@ func (s *srv) Shutdown(_ context.Context) error {
 	if err := s.server.Close(); err != nil {
 		return errorx.With(err, "failed to close http3 server")
 	}
+
 	return nil
 }

@@ -26,13 +26,14 @@ func ParseEventReference(tags nostr.Tags) ([]EventReference, error) {
 			refs = append(refs, &ReplaceableEventReference{
 				Kind:   int(kind),
 				PubKey: val[1],
-				dTag:   val[2],
+				DTag:   val[2],
 			})
 		}
 	}
 	if len(plainEvents) > 0 {
 		refs = append(refs, &PlainEventReference{EventIDs: plainEvents})
 	}
+
 	return refs, nil
 }
 
@@ -47,8 +48,8 @@ func (e *ReplaceableEventReference) Filter() nostr.Filter {
 		Kinds:   []int{e.Kind},
 		Authors: []string{e.PubKey},
 	}
-	if e.dTag != "" {
-		f.Tags = nostr.TagMap{"d": {e.dTag}}
+	if e.DTag != "" {
+		f.Tags = nostr.TagMap{"d": {e.DTag}}
 	}
 	return f
 }

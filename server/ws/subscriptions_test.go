@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip13"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,11 +19,13 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
+const minTestLeadingZeroBits = 20
+
 func TestRelaySubscription(t *testing.T) {
 	var eventsQueue []*model.Event
 
 	privkey := nostr.GeneratePrivateKey()
-	ev := model.Event{
+	ev := &model.Event{
 		Event: nostr.Event{
 			ID:        uuid.NewString(),
 			PubKey:    uuid.NewString(),
@@ -33,9 +36,14 @@ func TestRelaySubscription(t *testing.T) {
 			Sig:       uuid.NewString(),
 		},
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
 	ev.SetExtra("extra", uuid.NewString())
+
 	require.NoError(t, ev.Sign(privkey))
-	eventsQueue = append(eventsQueue, &ev)
+	require.NoError(t, ev.GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, ev.Sign(privkey))
+	eventsQueue = append(eventsQueue, ev)
 
 	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) query.EventIterator {
 		events := make([]*model.Event, 0, len(eventsQueue))
@@ -59,10 +67,11 @@ func TestRelaySubscription(t *testing.T) {
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
+
 		return nil
 	})
 	pubsubServer.Reset()
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	ctx, cancel = context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	if err != nil {
@@ -104,17 +113,23 @@ func TestRelaySubscription(t *testing.T) {
 
 	eventsQueue = append(eventsQueue, &model.Event{
 		Event: nostr.Event{
+			ID:        uuid.NewString(),
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{},
+			PubKey:    uuid.NewString(),
 			Content:   "realtime event matching filter" + uuid.NewString(),
 		},
 	})
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
+
 	require.NoError(t, relay.Publish(ctx, eventsQueue[len(eventsQueue)-1].Event))
 
 	eventBy3rdParty := &model.Event{Event: nostr.Event{
+		ID:        uuid.NewString(),
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindTextNote,
 		Tags:      nostr.Tags{},
@@ -123,6 +138,8 @@ func TestRelaySubscription(t *testing.T) {
 	eventsQueue = append(eventsQueue, eventBy3rdParty)
 	storedEvents = append(storedEvents, eventBy3rdParty)
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, minTestLeadingZeroBits))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
 	require.NoError(t, NotifySubscriptions(eventBy3rdParty))
 
@@ -133,6 +150,8 @@ func TestRelaySubscription(t *testing.T) {
 		Content:   "realtime event NOT matching filter" + uuid.NewString(),
 	}}
 	notMatchingEvent.SetExtra("extra", uuid.NewString())
+	require.NoError(t, notMatchingEvent.Sign(privkey))
+	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
 	require.NoError(t, notMatchingEvent.Sign(privkey))
 	require.NoError(t, relay.Publish(ctx, notMatchingEvent.Event))
 	assert.Equal(t, append(eventsQueue, notMatchingEvent), storedEvents)
@@ -148,11 +167,12 @@ func TestRelaySubscription(t *testing.T) {
 		Tags:      nostr.Tags{},
 		Content:   "event matching replaced filter" + uuid.NewString(),
 	}}
+	eventMatchingReplacedSub.SetExtra("extra", uuid.NewString())
+	require.NoError(t, eventMatchingReplacedSub.Sign(privkey))
+	require.NoError(t, eventMatchingReplacedSub.GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, eventMatchingReplacedSub.Sign(privkey))
+	require.NoError(t, relay.Publish(ctx, eventMatchingReplacedSub.Event))
 	eventsQueue = append(eventsQueue, eventMatchingReplacedSub)
-	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
-	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
-
-	require.NoError(t, relay.Publish(ctx, eventsQueue[len(eventsQueue)-1].Event))
 
 	sub.Close()
 	require.Empty(t, <-sub.ClosedReason)
@@ -175,7 +195,10 @@ func TestRelaySubscription(t *testing.T) {
 	}
 	require.Equal(t, eventsQueue, receivedEvents)
 }
+
 func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -192,6 +215,8 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		}
 	})
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
+	require.NoError(t, storedEvents[len(storedEvents)-1].GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
 		return nil
@@ -199,8 +224,6 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	pubsubServer.Reset()
 	connsCount := 10
 	subsPerConnectionCount := 10
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
 	subs := make(map[*nostr.Relay]map[*nostr.Subscription]struct{}, 0)
 	subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer subCancel()
@@ -231,6 +254,10 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Content: "new realtime event",
 	}
 	newRealtimeEvent.SetExtra("extra", uuid.NewString())
+	require.NoError(t, newRealtimeEvent.Sign(privkey))
+	tag, err := nip13.DoWork(ctx, newRealtimeEvent, minTestLeadingZeroBits)
+	require.NoError(t, err)
+	newRealtimeEvent.Tags = append(newRealtimeEvent.Tags, tag)
 	require.NoError(t, newRealtimeEvent.Sign(privkey))
 	var wg sync.WaitGroup
 	eosCh := make(chan struct{})
@@ -341,6 +368,8 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("valid event", func(t *testing.T) {
 		validEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
 	})
 	t.Run("invalid event id", func(t *testing.T) {
@@ -353,6 +382,8 @@ func TestPublishingEvents(t *testing.T) {
 		}}
 		invalidID.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidID.Sign(privkey))
+		require.NoError(t, invalidID.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidID.Sign(privkey))
 		invalidID.ID = uuid.NewString()
 		require.Error(t, relay.Publish(ctx, invalidID.Event))
 	})
@@ -363,8 +394,10 @@ func TestPublishingEvents(t *testing.T) {
 			Tags:      nil,
 			Content:   "invalidSignature",
 			Sig:       uuid.NewString(),
+			PubKey:    uuid.NewString(),
 		}}
 		invalidSignature.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidSignature.GenerateNIP13(ctx, minTestLeadingZeroBits))
 		require.Error(t, relay.Publish(ctx, invalidSignature.Event))
 	})
 	t.Run("duplicated event", func(t *testing.T) {
@@ -377,8 +410,11 @@ func TestPublishingEvents(t *testing.T) {
 			Content:   "bogus",
 		}
 		require.NoError(t, ephemeralEvent.Sign(privkey))
+		tag, err := nip13.DoWork(ctx, ephemeralEvent, minTestLeadingZeroBits)
+		require.NoError(t, err)
+		ephemeralEvent.Tags = append(ephemeralEvent.Tags, tag)
+		require.NoError(t, ephemeralEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, ephemeralEvent))
-
 	})
 
 	require.NoError(t, relay.Close())

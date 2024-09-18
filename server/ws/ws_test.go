@@ -17,14 +17,16 @@ import (
 
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
 const (
-	connCountTCP = 100
-	connCountUDP = 100
-	testDeadline = 15 * stdlibtime.Second
-	certPath     = "%v/fixture/.testdata/localhost.crt"
-	keyPath      = "%v/fixture/.testdata/localhost.key"
+	connCountTCP            = 100
+	connCountUDP            = 100
+	testDeadline            = 15 * stdlibtime.Second
+	certPath                = "%v/fixture/.testdata/localhost.crt"
+	keyPath                 = "%v/fixture/.testdata/localhost.key"
+	nIP13MinLeadingZeroBits = 20
 )
 
 var echoServer *fixture.MockService
@@ -33,7 +35,7 @@ var pubsubServer *fixture.MockService
 func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*stdlibtime.Minute)
 	defer serverCancel()
-	echoFunc := func(_ context.Context, w Writer, in []byte) {
+	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
 		}
@@ -49,9 +51,10 @@ func TestMain(m *testing.M) {
 	}, echoFunc, nil)
 	hdl = new(handler)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath: certFilePath,
-		KeyPath:  keyFilePath,
-		Port:     9998,
+		CertPath:                certFilePath,
+		KeyPath:                 keyFilePath,
+		Port:                    9998,
+		NIP13MinLeadingZeroBits: nIP13MinLeadingZeroBits,
 	}, hdl.Handle, nil)
 	m.Run()
 	serverCancel()

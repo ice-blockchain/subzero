@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-func TestReplaceEvents(t *testing.T) {
+func TestReplaceableEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
@@ -72,8 +72,8 @@ func TestReplaceEvents(t *testing.T) {
 		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
-		require.Equal(t, expectedEvents[0], stored[1])
-		require.Equal(t, expectedEvents[1], stored[0])
+		require.EqualValues(t, expectedEvents[1], stored[0])
+		require.EqualValues(t, expectedEvents[0], stored[1])
 	})
 	t.Run("ephemeral event", func(t *testing.T) {
 		db := helperNewDatabase(t)
@@ -81,12 +81,12 @@ func TestReplaceEvents(t *testing.T) {
 
 		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
 			Event: nostr.Event{
-				ID:        "normal" + uuid.NewString(),
+				ID:        "normal, 1st event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindClientAuthentication,
+				Kind:      nostr.KindProfileMetadata,
 				Tags:      nostr.Tags{},
-				Content:   "bogus" + uuid.NewString(),
+				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
@@ -94,6 +94,29 @@ func TestReplaceEvents(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, stored)
 	})
+	t.Run("normal, replaceable event with user metadata", func(t *testing.T) {
+		MustInit()
+		expectedEvents := []*model.Event{}
+		expectedEvents = append(expectedEvents, &model.Event{})
+		require.NoError(t, AcceptEvent(ctx, expectedEvents[0]))
+		expectedEvents = append(expectedEvents, &model.Event{
+			Event: nostr.Event{
+				ID:        "normal, 2nd event" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindProfileMetadata,
+				Tags:      nostr.Tags{},
+				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		})
+		require.NoError(t, AcceptEvent(ctx, expectedEvents[1]))
+		stored, err := helperGetStoredEventsAll(t, globalDB.Client, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 2)
+		require.EqualValues(t, stored[0], expectedEvents[1])
+	})
+
 	t.Run("replaceable event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
@@ -146,6 +169,11 @@ func TestReplaceEvents(t *testing.T) {
 		require.Contains(t, stored, expectedEvents[0])
 		require.Contains(t, stored, expectedEvents[1])
 	})
+}
+
+func TestParametrizedReplaceableEvents(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
 	t.Run("param replaceable event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
@@ -214,6 +242,30 @@ func TestReplaceEvents(t *testing.T) {
 		require.Contains(t, stored, expectedEvents[0])
 		require.Contains(t, stored, expectedEvents[1])
 		require.Contains(t, stored, expectedEvents[2])
+	})
+}
+
+func TestEphemeralEvents(t *testing.T) {
+	t.Run("ephemeral event", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+		defer cancel()
+		db := helperNewDatabase(t)
+		defer db.Close()
+
+		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "ephemeral" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindClientAuthentication,
+				Tags:      nostr.Tags{},
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		require.NoError(t, err)
+		require.Empty(t, stored)
 	})
 }
 

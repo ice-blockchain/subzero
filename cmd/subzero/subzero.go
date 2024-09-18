@@ -15,30 +15,39 @@ import (
 )
 
 var (
-	port    int16
-	cert    string
-	key     string
-	subzero = &cobra.Command{
+	minLeadingZeroBits int
+	port               uint16
+	cert               string
+	key                string
+	subzero            = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, args []string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			query.MustInit()
 			server.ListenAndServe(ctx, cancel, &server.Config{
-				CertPath: cert,
-				KeyPath:  key,
-				Port:     uint16(port),
+				CertPath:                cert,
+				KeyPath:                 key,
+				Port:                    port,
+				NIP13MinLeadingZeroBits: minLeadingZeroBits,
 			})
 		},
 	}
 	initFlags = func() {
 		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
 		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().Int16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
-		subzero.MarkFlagRequired("cert")
-		subzero.MarkFlagRequired("key")
-		subzero.MarkFlagRequired("port")
+		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
+		subzero.Flags().IntVar(&minLeadingZeroBits, "minLeadingZeroBits", 0, "min leading zero bits according NIP-13")
+		if err := subzero.MarkFlagRequired("cert"); err != nil {
+			log.Print(err)
+		}
+		if err := subzero.MarkFlagRequired("key"); err != nil {
+			log.Print(err)
+		}
+		if err := subzero.MarkFlagRequired("port"); err != nil {
+			log.Print(err)
+		}
 	}
 )
 
@@ -51,6 +60,7 @@ func init() {
 		if err := query.AcceptEvent(ctx, event); err != nil {
 			return errorx.Withf(err, "failed to query.AcceptEvent(%#v)", event)
 		}
+
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)

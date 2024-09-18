@@ -9,7 +9,7 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
-func NewTestServer(ctx context.Context, cancel context.CancelFunc, cfg *config.Config, processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte), nonWsHandler http.Handler) *MockService {
+func NewTestServer(ctx context.Context, cancel context.CancelFunc, cfg *config.Config, processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config), nonWsHandler http.Handler) *MockService {
 	service := newMockService(processingFunc, nonWsHandler)
 	server := internal.NewWSServer(service, cfg)
 	service.server = server
@@ -17,7 +17,8 @@ func NewTestServer(ctx context.Context, cancel context.CancelFunc, cfg *config.C
 
 	return service
 }
-func newMockService(processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte), nip11Handler http.Handler) *MockService {
+
+func newMockService(processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config), nip11Handler http.Handler) *MockService {
 	return &MockService{processingFunc: processingFunc, Handlers: make(map[adapters.WSWriter]struct{}), nip11Handler: nip11Handler}
 }
 
@@ -28,9 +29,9 @@ func (m *MockService) Reset() {
 	}
 	m.ReaderExited.Store(uint64(0))
 	m.handlersMx.Unlock()
-
 }
-func (m *MockService) Read(ctx context.Context, w internal.WS) {
+
+func (m *MockService) Read(ctx context.Context, w internal.WS, cfg *config.Config) {
 	defer func() {
 		m.ReaderExited.Add(1)
 	}()
@@ -43,10 +44,11 @@ func (m *MockService) Read(ctx context.Context, w internal.WS) {
 			m.handlersMx.Lock()
 			m.Handlers[w] = struct{}{}
 			m.handlersMx.Unlock()
-			m.processingFunc(ctx, w, msg)
+			m.processingFunc(ctx, w, msg, cfg)
 		}
 	}
 }
+
 func (m *MockService) RegisterRoutes(r *internal.Router) {
 	r.Any("/", internal.WithWS(m, m.nip11Handler))
 }
