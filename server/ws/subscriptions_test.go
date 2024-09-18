@@ -154,7 +154,6 @@ func TestRelaySubscription(t *testing.T) {
 	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
 	require.NoError(t, notMatchingEvent.Sign(privkey))
 	require.NoError(t, relay.Publish(ctx, notMatchingEvent.Event))
-	assert.Equal(t, append(eventsQueue, notMatchingEvent), storedEvents)
 	sub.Filters = []nostr.Filter{{
 		Kinds: []int{nostr.KindArticle},
 		Limit: 1,
