@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 
+	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
 	nip13 "github.com/nbd-wtf/go-nostr/nip13"
 )
@@ -45,7 +46,8 @@ type (
 )
 
 var (
-	ErrDuplicate = errors.New("duplicate")
+	ErrDuplicate        = errors.New("duplicate")
+	ErrWrongEventParams = errors.New("wrong event params")
 )
 
 func (e *Event) EventType() EventType {
@@ -87,6 +89,25 @@ func (e *Event) GenerateNIP13(ctx context.Context, minLeadingZeroBits int) error
 		return err
 	}
 	e.Tags = append(e.Tags, tag)
+
+	return nil
+}
+
+func (e *Event) Validate() error {
+	if e.Kind < 0 || e.Kind > 65535 {
+		return errorx.New("wrong kind value")
+	}
+	switch e.Kind {
+	case nostr.KindContactList:
+		if len(e.Tags) == 0 || len(e.Tags.GetAll([]string{"p"})) == 0 || e.Content != "" {
+			return errorx.Withf(ErrWrongEventParams, "wrong nip-02 params: %+v", e)
+		}
+		for _, tag := range e.Tags {
+			if tag.Key() == "p" && tag.Value() == "" {
+				return errorx.Withf(ErrWrongEventParams, "wrong nip-02 params, no required pubkey %+v", e)
+			}
+		}
+	}
 
 	return nil
 }

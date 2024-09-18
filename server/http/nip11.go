@@ -38,7 +38,7 @@ func (n *nip11handler) info() nip11.RelayInformationDocument {
 		Description:   "subzero",
 		PubKey:        "~",
 		Contact:       "~",
-		SupportedNIPs: []int{1, 9, 11, 13},
+		SupportedNIPs: []int{1, 2, 9, 11, 13},
 		Software:      "subzero",
 	}
 }

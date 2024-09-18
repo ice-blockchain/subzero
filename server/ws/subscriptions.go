@@ -84,8 +84,8 @@ func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err erro
 	} else if !ok {
 		return errorx.New("invalid event signature")
 	}
-	if evt.Kind < 0 || evt.Kind > 65535 {
-		return errorx.New("wrong kind value")
+	if err := evt.Validate(); err != nil {
+		return errorx.Withf(err, "wrong event parameters")
 	}
 	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {
 		return errorx.Withf(cErr, "wrong event difficulty")

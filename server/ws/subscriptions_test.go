@@ -154,12 +154,37 @@ func TestRelaySubscription(t *testing.T) {
 	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
 	require.NoError(t, notMatchingEvent.Sign(privkey))
 	require.NoError(t, relay.Publish(ctx, notMatchingEvent.Event))
-	sub.Filters = []nostr.Filter{{
+
+	// Replacing of subscription by another subscription with another filter: smth broken from go-nostr v0.36.0 to write the message to change filters directly.
+	sub.Close()
+	require.Empty(t, <-sub.ClosedReason)
+
+	sub, err = relay.Subscribe(subCtx, []nostr.Filter{{
 		Kinds: []int{nostr.KindArticle},
 		Limit: 1,
-	}}
-	replacedSubEnvelope, _ := (nostr.ReqEnvelope{SubscriptionID: sub.GetID(), Filters: sub.Filters}).MarshalJSON()
-	relay.Write(replacedSubEnvelope)
+	}})
+	if err != nil {
+		log.Panic(err)
+	}
+	{
+		t.Logf("subscribed to %v", sub.GetID())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ev := range sub.Events {
+				t.Logf("received event %v", ev)
+				receivedEvents = append(receivedEvents, &model.Event{Event: *ev})
+			}
+		}()
+	}
+
+	select {
+	case <-sub.EndOfStoredEvents:
+		t.Logf("received EOS")
+	case <-ctx.Done():
+		log.Panic(errorx.Withf(ctx.Err(), "EOS not received"))
+	}
+
 	eventMatchingReplacedSub := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindArticle,
@@ -415,6 +440,50 @@ func TestPublishingEvents(t *testing.T) {
 		require.NoError(t, ephemeralEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, ephemeralEvent))
 	})
+	t.Run("wrong kind 03 follow list tag parameters", func(t *testing.T) {
+		inValidKind03Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindContactList,
+			Tags:      nil,
+		}}
+		inValidKind03Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, inValidKind03Event.Sign(privkey))
+		require.NoError(t, inValidKind03Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind03Event.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
+	})
+	t.Run("wrong kind 03 follow list content", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p"})
+		tags = append(tags, nostr.Tag{"p"})
+		inValidKind03Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindContactList,
+			Tags:      tags,
+			Content:   "invalidEvent",
+		}}
+		inValidKind03Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, inValidKind03Event.Sign(privkey))
+		require.NoError(t, inValidKind03Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind03Event.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
+	})
+	var validKind03Event *model.Event
+	t.Run("valid kind 03 follow list event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "wss://alicerelay.com/", "alice"})
+		tags = append(tags, nostr.Tag{"p", "wss://bobrelay.com/nostr", "bob"})
+		validKind03Event = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindContactList,
+			Tags:      tags,
+		}}
+		validKind03Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validKind03Event.Sign(privkey))
+		require.NoError(t, validKind03Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind03Event.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validKind03Event.Event))
+	})
 
 	require.NoError(t, relay.Close())
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
@@ -426,5 +495,5 @@ func TestPublishingEvents(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
-	require.Equal(t, []*model.Event{validEvent}, storedEvents)
+	require.Equal(t, []*model.Event{validEvent, validKind03Event}, storedEvents)
 }

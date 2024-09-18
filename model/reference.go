@@ -51,5 +51,6 @@ func (e *ReplaceableEventReference) Filter() nostr.Filter {
 	if e.DTag != "" {
 		f.Tags = nostr.TagMap{"d": {e.DTag}}
 	}
+
 	return f
 }
