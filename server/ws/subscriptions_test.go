@@ -497,3 +497,115 @@ func TestPublishingEvents(t *testing.T) {
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validEvent, validKind03Event}, storedEvents)
 }
+
+func TestPublishingNIP10Events(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
+		assert.False(t, isEphemeralEvent)
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	t.Run("kind 1 (NIP-10): e tags required params", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e"})
+		inValidKind01Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+		}}
+		inValidKind01Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
+	})
+
+	t.Run("kind 1 (NIP-10): invalid reply marker for e tags ", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "", "relay", "invalid marker"})
+		inValidKind01Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+		}}
+		inValidKind01Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
+	})
+	t.Run("kind 1 (NIP-10): invalid p tag usage: no e tags", func(t *testing.T) {
+		var tags nostr.Tags
+		// tags = append(tags, nostr.Tag{"e", "", "relay", "reply"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1", "pubkey2"})
+		inValidKind01Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+		}}
+		inValidKind01Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
+	})
+	t.Run("kind 1 (NIP-10): invalid p tag usage: empty tag values", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "", "relay", "reply"})
+		tags = append(tags, nostr.Tag{"p"})
+		inValidKind01Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+		}}
+		inValidKind01Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
+	})
+
+	var validKind01NIP10Event *model.Event
+	t.Run("kind 1 (NIP-10): valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "", "relay", "reply"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1", "pubkey2"})
+		validKind01NIP10Event = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+		}}
+		validKind01NIP10Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validKind01NIP10Event.Sign(privkey))
+		require.NoError(t, validKind01NIP10Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind01NIP10Event.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validKind01NIP10Event.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validKind01NIP10Event}, storedEvents)
+}

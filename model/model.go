@@ -15,6 +15,10 @@ const (
 	ReplaceableEventType              EventType = "replaceable"
 	EphemeralEventType                EventType = "ephemeral"
 	ParameterizedReplaceableEventType EventType = "parameterized_replaceable"
+
+	TagMarkerReply   string = "reply"
+	TagMarkerRoot    string = "root"
+	TagMarkerMention string = "mention"
 )
 
 type (
@@ -98,6 +102,31 @@ func (e *Event) Validate() error {
 		return errorx.New("wrong kind value")
 	}
 	switch e.Kind {
+	case nostr.KindTextNote:
+		pTags := e.Tags.GetAll([]string{"p"})
+		eTags := e.Tags.GetAll([]string{"e"})
+		if len(eTags) > 0 {
+			for _, tag := range eTags {
+				if len(tag) < 2 {
+					return errorx.Withf(ErrWrongEventParams, "wrong nip-10: no tag required param: %+v", e)
+				}
+				if len(tag) >= 3 {
+					if tag[3] != TagMarkerRoot && tag[3] != TagMarkerReply && tag[3] != TagMarkerMention {
+						return errorx.Withf(ErrWrongEventParams, "wrong nip-10: wrong tag marker param: %+v", e)
+					}
+				}
+			}
+		}
+		if len(pTags) > 0 {
+			if len(eTags) == 0 {
+				return errorx.Withf(ErrWrongEventParams, "wrong nip-10: no e tags while p tag exist: %+v", e)
+			}
+			for _, tag := range pTags {
+				if len(tag) == 1 {
+					return errorx.Withf(ErrWrongEventParams, "wrong nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
+				}
+			}
+		}
 	case nostr.KindContactList:
 		if len(e.Tags) == 0 || len(e.Tags.GetAll([]string{"p"})) == 0 || e.Content != "" {
 			return errorx.Withf(ErrWrongEventParams, "wrong nip-02 params: %+v", e)
