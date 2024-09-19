@@ -2,7 +2,9 @@ package model
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/gookit/goutil/errorx"
@@ -19,6 +21,8 @@ const (
 	TagMarkerReply   string = "reply"
 	TagMarkerRoot    string = "root"
 	TagMarkerMention string = "mention"
+
+	KindGenericRepost int = 16
 )
 
 type (
@@ -126,6 +130,36 @@ func (e *Event) Validate() error {
 					return errorx.Withf(ErrWrongEventParams, "wrong nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
 				}
 			}
+		}
+	case nostr.KindRepost, KindGenericRepost:
+		if !json.Valid([]byte(e.Content)) {
+			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: content field should be stringified json: %+v", e)
+		}
+		var parsedContent struct {
+			ID     string `json:"id" example:"abcde"`
+			Kind   int    `json:"kind" example:"1"`
+			PubKey string `json:"pubkey" example:"pubkey"`
+		}
+		if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
+			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: wrong json fields for: %+v", e)
+		}
+		if e.Kind == nostr.KindRepost {
+			if parsedContent.Kind != nostr.KindTextNote {
+				return errorx.Withf(ErrWrongEventParams, "wrong nip-18: wrong kind of repost event: %+v", e)
+			}
+		} else if e.Kind == KindGenericRepost {
+			kTag := e.Tags.GetFirst([]string{"k"})
+			if kTag == nil || kTag.Value() != fmt.Sprint(parsedContent.Kind) {
+				return errorx.Withf(ErrWrongEventParams, "wrong nip-18: wrong kind of reposted event: %+v", e)
+			}
+		}
+		eTag := e.Tags.GetFirst([]string{"e"})
+		if eTag == nil || len(*eTag) < 3 || eTag.Value() != parsedContent.ID {
+			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: repost must include e tag with id of the note and relay value: %+v", e)
+		}
+		pTag := e.Tags.GetFirst([]string{"p"})
+		if pTag == nil || len(*pTag) < 2 || pTag.Value() != parsedContent.PubKey {
+			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: repost must include p tag with pubkey of the event being reposted: %+v", e)
 		}
 	case nostr.KindContactList:
 		if len(e.Tags) == 0 || len(e.Tags.GetAll([]string{"p"})) == 0 || e.Content != "" {
