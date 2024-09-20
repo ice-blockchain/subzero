@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
@@ -53,6 +54,22 @@ type (
 	PlainEventReference struct {
 		EventIDs []string
 	}
+
+	ProfileMetadataContent struct {
+		Name        string `json:"name" example:"username"`
+		About       string `json:"about" example:"about"`
+		Picture     string `json:"picture" example:"https://example.com/pic.jpg"`
+		DisplayName string `json:"display_name" example:"John Deer"`
+		Website     string `json:"website" example:"https://ice.io"`
+		Banner      string `json:"banner" example:"https://example.com/banner.jpg"`
+		Bot         bool   `json:"bot" example:"false"`
+	}
+
+	RepostContent struct {
+		ID     string `json:"id" example:"abcde"`
+		PubKey string `json:"pubkey" example:"pubkey"`
+		Kind   int    `json:"kind" example:"1"`
+	}
 )
 
 var (
@@ -61,13 +78,14 @@ var (
 	ErrUnsupportedTag   = errors.New("unsupported tag")
 
 	KindSupportedTags = map[Kind][]string{
-		nostr.KindTextNote:    {"e", "p", "q"},
-		nostr.KindContactList: {"p"},
-		nostr.KindDeletion:    {"a", "e", "k"},
-		nostr.KindRepost:      {"e", "p"},
-		KindGenericRepost:     {"k", "e", "p"},
-		nostr.KindArticle:     {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
-		KindBlogPost:          {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+		nostr.KindProfileMetadata: {"e", "p", "a", "alt"},
+		nostr.KindTextNote:        {"e", "p", "q"},
+		nostr.KindContactList:     {"p"},
+		nostr.KindDeletion:        {"a", "e", "k"},
+		nostr.KindRepost:          {"e", "p"},
+		KindGenericRepost:         {"k", "e", "p"},
+		nostr.KindArticle:         {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+		KindBlogPost:              {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
 	}
 )
 
@@ -121,18 +139,33 @@ func (e *Event) Validate() error {
 	if !areTagsSupported(e) {
 		return errorx.Withf(ErrUnsupportedTag, "unsupported tag for this event kind: %+v", e)
 	}
+	e.normalizeTags()
 	switch e.Kind {
+	case nostr.KindProfileMetadata:
+		if !json.Valid([]byte(e.Content)) {
+			return errorx.Withf(ErrWrongEventParams, "nip-01: content field should be stringified json: %+v", e)
+		}
+		var parsedContent ProfileMetadataContent
+		if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
+			return errorx.Withf(ErrWrongEventParams, "nip-01,nip-24: wrong json fields for: %+v", e)
+		}
+		if parsedContent.Name == "" || parsedContent.About == "" || parsedContent.Picture == "" {
+			return errorx.Withf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
+		}
 	case nostr.KindTextNote:
+		if json.Valid([]byte(e.Content)) {
+			return errorx.Withf(ErrWrongEventParams, "nip-01: content field should be plain text: %+v", e)
+		}
 		pTags := e.Tags.GetAll([]string{"p"})
 		eTags := e.Tags.GetAll([]string{"e"})
 		if len(eTags) > 0 {
 			for _, tag := range eTags {
 				if len(tag) < 2 {
-					return errorx.Withf(ErrWrongEventParams, "wrong nip-10: no tag required param: %+v", e)
+					return errorx.Withf(ErrWrongEventParams, "nip-10: no tag required param: %+v", e)
 				}
 				if len(tag) >= 3 {
 					if tag[3] != TagMarkerRoot && tag[3] != TagMarkerReply && tag[3] != TagMarkerMention {
-						return errorx.Withf(ErrWrongEventParams, "wrong nip-10: wrong tag marker param: %+v", e)
+						return errorx.Withf(ErrWrongEventParams, "nip-10: wrong tag marker param: %+v", e)
 					}
 				}
 			}
@@ -143,52 +176,48 @@ func (e *Event) Validate() error {
 			}
 			for _, tag := range pTags {
 				if len(tag) == 1 {
-					return errorx.Withf(ErrWrongEventParams, "wrong nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
+					return errorx.Withf(ErrWrongEventParams, "nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
 				}
 			}
 		}
 	case nostr.KindRepost, KindGenericRepost:
 		if !json.Valid([]byte(e.Content)) {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: content field should be stringified json: %+v", e)
+			return errorx.Withf(ErrWrongEventParams, "nip-18: content field should be stringified json: %+v", e)
 		}
-		var parsedContent struct {
-			ID     string `json:"id" example:"abcde"`
-			Kind   int    `json:"kind" example:"1"`
-			PubKey string `json:"pubkey" example:"pubkey"`
-		}
+		var parsedContent RepostContent
 		if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: wrong json fields for: %+v", e)
+			return errorx.Withf(ErrWrongEventParams, "nip-18: wrong json fields for: %+v", e)
 		}
 		if e.Kind == nostr.KindRepost {
 			if parsedContent.Kind != nostr.KindTextNote {
-				return errorx.Withf(ErrWrongEventParams, "wrong nip-18: wrong kind of repost event: %+v", e)
+				return errorx.Withf(ErrWrongEventParams, "nip-18: wrong kind of repost event: %+v", e)
 			}
-		} else if e.Kind == KindGenericRepost {
+		} else {
 			kTag := e.Tags.GetFirst([]string{"k"})
 			if kTag == nil || kTag.Value() != fmt.Sprint(parsedContent.Kind) {
-				return errorx.Withf(ErrWrongEventParams, "wrong nip-18: wrong kind of reposted event: %+v", e)
+				return errorx.Withf(ErrWrongEventParams, "nip-18: wrong kind of reposted event: %+v", e)
 			}
 		}
 		eTag := e.Tags.GetFirst([]string{"e"})
 		if eTag == nil || len(*eTag) < 3 || eTag.Value() != parsedContent.ID {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: repost must include e tag with id of the note and relay value: %+v", e)
+			return errorx.Withf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note and relay value: %+v", e)
 		}
 		pTag := e.Tags.GetFirst([]string{"p"})
 		if pTag == nil || len(*pTag) < 2 || pTag.Value() != parsedContent.PubKey {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-18: repost must include p tag with pubkey of the event being reposted: %+v", e)
+			return errorx.Withf(ErrWrongEventParams, "nip-18: repost must include p tag with pubkey of the event being reposted: %+v", e)
 		}
 	case nostr.KindContactList:
 		if len(e.Tags) == 0 || len(e.Tags.GetAll([]string{"p"})) == 0 || e.Content != "" {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-02 params: %+v", e)
+			return errorx.Withf(ErrWrongEventParams, "nip-02 params: %+v", e)
 		}
 		for _, tag := range e.Tags {
 			if tag.Key() == "p" && tag.Value() == "" {
-				return errorx.Withf(ErrWrongEventParams, "wrong nip-02 params, no required pubkey %+v", e)
+				return errorx.Withf(ErrWrongEventParams, "nip-02 params, no required pubkey %+v", e)
 			}
 		}
 	case nostr.KindArticle, KindBlogPost:
 		if e.Content == "" || json.Valid([]byte(e.Content)) {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-23: this kind should have text markdown content: %+v", e)
+			return errorx.Withf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
 		}
 	}
 
@@ -215,4 +244,15 @@ next:
 	}
 
 	return true
+}
+
+func (e *Event) normalizeTags() {
+	for _, tag := range e.Tags {
+		switch tag.Key() {
+		case "t":
+			if len(tag) > 1 {
+				tag[1] = strings.ToLower(tag.Value()) // NIP-24.
+			}
+		}
+	}
 }

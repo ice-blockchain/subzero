@@ -374,8 +374,7 @@ func TestPublishingEvents(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
-		assert.False(t, isEphemeralEvent)
+		assert.False(t, event.EventType() == model.EphemeralEventType)
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -475,13 +474,10 @@ func TestPublishingEvents(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
 	})
 	t.Run("wrong kind 03 follow list content", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"p"})
-		tags = append(tags, nostr.Tag{"p"})
 		inValidKind03Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindContactList,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"p"}, []string{"p"}},
 			Content:   "invalidEvent",
 		}}
 		inValidKind03Event.SetExtra("extra", uuid.NewString())
@@ -492,13 +488,10 @@ func TestPublishingEvents(t *testing.T) {
 	})
 	var validKind03Event *model.Event
 	t.Run("valid kind 03 follow list event", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"p", "wss://alicerelay.com/", "alice"})
-		tags = append(tags, nostr.Tag{"p", "wss://bobrelay.com/nostr", "bob"})
 		validKind03Event = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindContactList,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"p", "wss://alicerelay.com/", "alice"}, []string{"p", "wss://bobrelay.com/nostr", "bob"}},
 		}}
 		validKind03Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind03Event.Sign(privkey))
@@ -529,8 +522,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
-		assert.False(t, isEphemeralEvent)
+		assert.False(t, event.EventType() == model.EphemeralEventType)
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -543,12 +535,10 @@ func TestPublishingNIP10Events(t *testing.T) {
 	}
 
 	t.Run("kind 1 (NIP-10): e tags required params", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e"})
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e"}},
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
@@ -558,12 +548,10 @@ func TestPublishingNIP10Events(t *testing.T) {
 	})
 
 	t.Run("kind 1 (NIP-10): invalid reply marker for e tags ", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", "", "relay", "invalid marker"})
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "invalid marker"}},
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
@@ -572,13 +560,10 @@ func TestPublishingNIP10Events(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
 	t.Run("kind 1 (NIP-10): invalid p tag usage: no e tags", func(t *testing.T) {
-		var tags nostr.Tags
-		// tags = append(tags, nostr.Tag{"e", "", "relay", "reply"})
-		tags = append(tags, nostr.Tag{"p", "pubkey1", "pubkey2"})
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}},
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
@@ -587,13 +572,10 @@ func TestPublishingNIP10Events(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
 	t.Run("kind 1 (NIP-10): invalid p tag usage: empty tag values", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", "", "relay", "reply"})
-		tags = append(tags, nostr.Tag{"p"})
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p"}},
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
@@ -604,13 +586,10 @@ func TestPublishingNIP10Events(t *testing.T) {
 
 	var validKind01NIP10Event *model.Event
 	t.Run("kind 1 (NIP-10): valid", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", "", "relay", "reply"})
-		tags = append(tags, nostr.Tag{"p", "pubkey1", "pubkey2"})
 		validKind01NIP10Event = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}},
 		}}
 		validKind01NIP10Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind01NIP10Event.Sign(privkey))
@@ -641,29 +620,25 @@ func TestPublishingNIP18Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
-		assert.False(t, isEphemeralEvent)
+		assert.False(t, event.EventType() == model.EphemeralEventType)
 		storedEvents = append(storedEvents, event)
+
 		return nil
 	})
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
+
 	var validKind06NIP18Event *model.Event
 	t.Run("kind 6 (NIP-18): valid event", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
-		tags = append(tags, nostr.Tag{"p", pubKeyOfRepostedNote})
 		validKind06NIP18Event = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", pubKeyOfRepostedNote}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		validKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -675,12 +650,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, no e tags", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"p", pubKeyOfRepostedNote})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"p", pubKeyOfRepostedNote}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -692,12 +665,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, no p tags", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -709,13 +680,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, no enough e tag parameters", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID})
-		tags = append(tags, nostr.Tag{"p", pubKeyOfRepostedNote})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID}, []string{"p", pubKeyOfRepostedNote}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -727,13 +695,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, no enough p tag parameters", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
-		tags = append(tags, nostr.Tag{"p"})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -745,13 +710,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, wrong p tag pubkey != reposted note pubkey", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
-		tags = append(tags, nostr.Tag{"p", "wrong pubkey"})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", "wrong pubkey"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -763,13 +725,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, wrong content value: != 1", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
-		tags = append(tags, nostr.Tag{"p", "wrong pubkey"})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", "wrong pubkey"}},
 			Content:   fmt.Sprintf(`{"kind":16,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -781,13 +740,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 	t.Run("kind 6 (NIP-18): invalid event, wrong content id value: != e tag repost id value", func(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", "wrong id value", "relay"})
-		tags = append(tags, nostr.Tag{"p", "wrong pubkey"})
 		invalidKind06NIP18Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", "wrong id value", "relay"}, []string{"p", "wrong pubkey"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
@@ -802,14 +758,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
 		repostedKind := nostr.KindReaction
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
-		tags = append(tags, nostr.Tag{"p", pubKeyOfRepostedNote})
-		tags = append(tags, nostr.Tag{"k", fmt.Sprint(repostedKind)})
 		validKind16NIP18GenericRepostEvent = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      model.KindGenericRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
 			Content:   fmt.Sprintf(`{"kind":%v,"id":"%v","pubkey":"%v"}`, repostedKind, repostID, pubKeyOfRepostedNote),
 		}}
 		validKind16NIP18GenericRepostEvent.SetExtra("extra", uuid.NewString())
@@ -823,14 +775,10 @@ func TestPublishingNIP18Events(t *testing.T) {
 		repostID := uuid.NewString()
 		pubKeyOfRepostedNote := "pubkey1"
 		repostedKind := nostr.KindReaction
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"e", repostID, "relay"})
-		tags = append(tags, nostr.Tag{"p", pubKeyOfRepostedNote})
-		tags = append(tags, nostr.Tag{"k", "invalid k tag kind"})
 		invalidKind16NIP18GenericRepostEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      model.KindGenericRepost,
-			Tags:      tags,
+			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", "invalid k tag kind"}},
 			Content:   fmt.Sprintf(`{"kind":%v,"id":"%v","pubkey":"%v"}`, repostedKind, repostID, pubKeyOfRepostedNote),
 		}}
 		invalidKind16NIP18GenericRepostEvent.SetExtra("extra", uuid.NewString())
@@ -862,8 +810,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
-		assert.False(t, isEphemeralEvent)
+		assert.False(t, event.EventType() == model.EphemeralEventType)
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -871,9 +818,8 @@ func TestPublishingNIP23Events(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
+
 	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
 	t.Run("kind 30023 (Article) (NIP-23): valid event", func(t *testing.T) {
 		var tags nostr.Tags
@@ -984,4 +930,130 @@ func TestPublishingNIP23Events(t *testing.T) {
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle}, storedEvents)
+}
+
+func TestPublishingNIP01NIP24Events(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.EventType() == model.EphemeralEventType)
+		storedEvents = append(storedEvents, event)
+
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validEventNIP01, validEventNIP24 *model.Event
+	t.Run("kind 0 (ProfileMetadata) (NIP-01): valid event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"alt", "reply"})
+		validEventNIP01 = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      tags,
+			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
+		}}
+		validEventNIP01.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventNIP01.Sign(privkey))
+		require.NoError(t, validEventNIP01.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP01.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventNIP01.Event))
+	})
+	t.Run("kind 0 (ProfileMetadata) (NIP-24): valid event with NIP-24 extra fields", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"alt", "reply"})
+		validEventNIP24 = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      tags,
+			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg","display_name":"qqq","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
+		}}
+		validEventNIP24.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventNIP24.Sign(privkey))
+		require.NoError(t, validEventNIP24.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP24.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventNIP24.Event))
+	})
+	t.Run("kind 0 (ProfileMetadata) (NIP-24): invalid event: empty obligatory fields", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"alt", "reply"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      tags,
+			Content:   `{"display_name":"qqq","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 0 (ProfileMetadata) (NIP-24): invalid event: content is not JSON", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"alt", "reply"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      tags,
+			Content:   `plain text`,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 0 (ProfileMetadata) (NIP-24): invalid event: unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"alt", "reply"})
+		tags = append(tags, nostr.Tag{"unsupported", "value"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      tags,
+			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validEventNIP01, validEventNIP24}, storedEvents)
 }
