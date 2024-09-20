@@ -852,3 +852,136 @@ func TestPublishingNIP18Events(t *testing.T) {
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validKind06NIP18Event, validKind16NIP18GenericRepostEvent}, storedEvents)
 }
+
+func TestPublishingNIP23Events(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		isEphemeralEvent := (20000 <= event.Kind && event.Kind < 30000)
+		assert.False(t, isEphemeralEvent)
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	if err != nil {
+		log.Panic(err)
+	}
+	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
+	t.Run("kind 30023 (Article) (NIP-23): valid event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"t", "placeholder"})
+		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
+		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
+		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
+		validEventKindArticle = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindArticle,
+			Tags:      tags,
+			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
+		}}
+		validEventKindArticle.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventKindArticle.Sign(privkey))
+		require.NoError(t, validEventKindArticle.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventKindArticle.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventKindArticle.Event))
+	})
+	t.Run("kind 30024 (Blog post) (NIP-23): valid event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"t", "placeholder"})
+		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
+		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
+		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
+		validEventKindBlogPost = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBlogPost,
+			Tags:      tags,
+			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
+		}}
+		validEventKindBlogPost.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventKindBlogPost.Sign(privkey))
+		require.NoError(t, validEventKindBlogPost.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventKindBlogPost.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventKindBlogPost.Event))
+	})
+
+	t.Run("kind 30023 (Article) (NIP-23): valid event no tags", func(t *testing.T) {
+		var tags nostr.Tags
+		validEventNoTagsKindArticle = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindArticle,
+			Tags:      tags,
+			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
+		}}
+		validEventNoTagsKindArticle.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventNoTagsKindArticle.Sign(privkey))
+		require.NoError(t, validEventNoTagsKindArticle.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNoTagsKindArticle.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventNoTagsKindArticle.Event))
+	})
+
+	t.Run("kind 30023 (Article) (NIP-23): unsupported tag for this type of event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"t", "placeholder"})
+		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
+		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
+		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
+		tags = append(tags, nostr.Tag{"p", "pubkey"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindArticle,
+			Tags:      tags,
+			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	t.Run("kind 30023 (Article) (NIP-23): unsupported content type:JSON", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"t", "placeholder"})
+		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
+		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
+		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindArticle,
+			Tags:      tags,
+			Content:   `{"id":"qwerty"}`,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle}, storedEvents)
+}

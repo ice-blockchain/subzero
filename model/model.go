@@ -23,6 +23,7 @@ const (
 	TagMarkerMention string = "mention"
 
 	KindGenericRepost int = 16
+	KindBlogPost      int = 30024
 )
 
 type (
@@ -33,6 +34,7 @@ type (
 	Tags      = nostr.Tags
 	Timestamp = nostr.Timestamp
 	EventType = string
+	Kind      = int
 
 	Event struct {
 		nostr.Event
@@ -56,6 +58,17 @@ type (
 var (
 	ErrDuplicate        = errors.New("duplicate")
 	ErrWrongEventParams = errors.New("wrong event params")
+	ErrUnsupportedTag   = errors.New("unsupported tag")
+
+	KindSupportedTags = map[Kind][]string{
+		nostr.KindTextNote:    {"e", "p", "q"},
+		nostr.KindContactList: {"p"},
+		nostr.KindDeletion:    {"a", "e", "k"},
+		nostr.KindRepost:      {"e", "p"},
+		KindGenericRepost:     {"k", "e", "p"},
+		nostr.KindArticle:     {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+		KindBlogPost:          {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+	}
 )
 
 func (e *Event) EventType() EventType {
@@ -104,6 +117,9 @@ func (e *Event) GenerateNIP13(ctx context.Context, minLeadingZeroBits int) error
 func (e *Event) Validate() error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errorx.New("wrong kind value")
+	}
+	if !areTagsSupported(e) {
+		return errorx.Withf(ErrUnsupportedTag, "unsupported tag for this event kind: %+v", e)
 	}
 	switch e.Kind {
 	case nostr.KindTextNote:
@@ -170,7 +186,33 @@ func (e *Event) Validate() error {
 				return errorx.Withf(ErrWrongEventParams, "wrong nip-02 params, no required pubkey %+v", e)
 			}
 		}
+	case nostr.KindArticle, KindBlogPost:
+		if e.Content == "" || json.Valid([]byte(e.Content)) {
+			return errorx.Withf(ErrWrongEventParams, "wrong nip-23: this kind should have text markdown content: %+v", e)
+		}
 	}
 
 	return nil
+}
+
+func areTagsSupported(e *Event) bool {
+	supportedTags, ok := KindSupportedTags[e.Kind]
+	if !ok {
+		return true
+	}
+next:
+	for _, tag := range e.Tags {
+		if tag.Key() == "nonce" {
+			continue next
+		}
+		for _, supportedTag := range supportedTags {
+			if tag.Key() == supportedTag {
+				continue next
+			}
+		}
+
+		return false
+	}
+
+	return true
 }
