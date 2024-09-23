@@ -95,10 +95,12 @@ func TestReplaceableEvents(t *testing.T) {
 		require.Empty(t, stored)
 	})
 	t.Run("normal, replaceable event with user metadata", func(t *testing.T) {
-		MustInit()
+		db := helperNewDatabase(t)
+		defer db.Close()
+
 		expectedEvents := []*model.Event{}
-		expectedEvents = append(expectedEvents, &model.Event{})
-		require.NoError(t, AcceptEvent(ctx, expectedEvents[0]))
+		expectedEvents = append(expectedEvents, &model.Event{Event: nostr.Event{Tags: nostr.Tags{}}})
+		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -110,11 +112,12 @@ func TestReplaceableEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, AcceptEvent(ctx, expectedEvents[1]))
-		stored, err := helperGetStoredEventsAll(t, globalDB.Client, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[1]))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
 		require.EqualValues(t, stored[0], expectedEvents[1])
+		require.EqualValues(t, stored[1], expectedEvents[0])
 	})
 
 	t.Run("replaceable event", func(t *testing.T) {
@@ -127,7 +130,7 @@ func TestReplaceableEvents(t *testing.T) {
 				ID:        "replaceable " + uuid.NewString(),
 				PubKey:    "bogus",
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindContactList,
+				Kind:      nostr.KindFollowList,
 				Tags: nostr.Tags{
 					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
 				},
@@ -140,7 +143,7 @@ func TestReplaceableEvents(t *testing.T) {
 				ID:        "replaceable " + uuid.NewString(),
 				PubKey:    "bogus",
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindContactList,
+				Kind:      nostr.KindFollowList,
 				Tags: nostr.Tags{
 					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
 				},
@@ -154,7 +157,7 @@ func TestReplaceableEvents(t *testing.T) {
 				ID:        "replaceable " + uuid.NewString(),
 				PubKey:    "another bogus",
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindContactList,
+				Kind:      nostr.KindFollowList,
 				Tags: nostr.Tags{
 					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
 				},
@@ -163,7 +166,7 @@ func TestReplaceableEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[1]))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindContactList}}}})
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindFollowList}}}})
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
 		require.Contains(t, stored, expectedEvents[0])
@@ -374,6 +377,234 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}))
 		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		require.NoError(t, err)
+		require.Empty(t, stored)
+	})
+}
+
+func TestNIP25ReactionEvents(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	t.Run("reaction to non-replaceable event", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		publishedEvent := &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}
+		require.NoError(t, db.AcceptEvent(ctx, publishedEvent))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+		require.Contains(t, stored, publishedEvent)
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "first"}, nostr.Tag{"e", "second"}, nostr.Tag{"e", publishedEvent.ID})
+		tags = append(tags, nostr.Tag{"p", "first"}, nostr.Tag{"p", "second"}, nostr.Tag{"p", publishedEvent.PubKey})
+		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "reaction event" + uuid.NewString(),
+				PubKey:    publishedEvent.PubKey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindReaction,
+				Tags:      tags,
+				Content:   "+",
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindReaction}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+	})
+	t.Run("reaction to non-replaceable event with k tag", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		publishedEvent := &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}
+		require.NoError(t, db.AcceptEvent(ctx, publishedEvent))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+		require.Contains(t, stored, publishedEvent)
+		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "reaction event" + uuid.NewString(),
+				PubKey:    publishedEvent.PubKey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindReaction,
+				Tags:      nostr.Tags{}.AppendUnique(nostr.Tag{"e", publishedEvent.ID}).AppendUnique(nostr.Tag{"p", publishedEvent.PubKey}).AppendUnique(nostr.Tag{"k", fmt.Sprint(nostr.KindTextNote)}),
+				Content:   "+",
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindReaction}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+	})
+	t.Run("reaction to replaceable event with a tag", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		dTag := "dummy"
+		publishedEvent := &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindProfileMetadata,
+				Tags:      nostr.Tags{}.AppendUnique(nostr.Tag{"d", dTag}),
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}
+		require.NoError(t, db.AcceptEvent(ctx, publishedEvent))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+		require.Contains(t, stored, publishedEvent)
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "first"}, nostr.Tag{"e", "second"}, nostr.Tag{"e", publishedEvent.ID})
+		tags = append(tags, nostr.Tag{"p", "first"}, nostr.Tag{"p", "second"}, nostr.Tag{"p", publishedEvent.PubKey})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", nostr.KindProfileMetadata, publishedEvent.PubKey, dTag)})
+		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "reaction event" + uuid.NewString(),
+				PubKey:    publishedEvent.PubKey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindReaction,
+				Tags:      tags,
+				Content:   "+",
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindReaction}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+	})
+	t.Run("invalid: reaction to normal event e tag", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		publishedEvent := &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}
+		require.NoError(t, db.AcceptEvent(ctx, publishedEvent))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+		require.Contains(t, stored, publishedEvent)
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", publishedEvent.ID}, nostr.Tag{"e", "first"}, nostr.Tag{"e", "second"})
+		tags = append(tags, nostr.Tag{"p", "first"}, nostr.Tag{"p", "second"}, nostr.Tag{"p", publishedEvent.PubKey})
+		require.Error(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "reaction event" + uuid.NewString(),
+				PubKey:    publishedEvent.PubKey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindReaction,
+				Tags:      tags,
+				Content:   "+",
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindReaction}}}})
+		require.NoError(t, err)
+		require.Empty(t, stored)
+	})
+	t.Run("invalid: reaction to normal event p tag", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		publishedEvent := &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}
+		require.NoError(t, db.AcceptEvent(ctx, publishedEvent))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindTextNote}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+		require.Contains(t, stored, publishedEvent)
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "first"}, nostr.Tag{"e", "second"}, nostr.Tag{"e", publishedEvent.ID})
+		tags = append(tags, nostr.Tag{"p", publishedEvent.PubKey}, nostr.Tag{"p", "first"}, nostr.Tag{"p", "second"})
+		require.Error(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "reaction event" + uuid.NewString(),
+				PubKey:    publishedEvent.PubKey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindReaction,
+				Tags:      tags,
+				Content:   "+",
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindReaction}}}})
+		require.NoError(t, err)
+		require.Empty(t, stored)
+	})
+	t.Run("invalid: reaction to replaceable event with wrong a tag", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		dTag := "dummy"
+		publishedEvent := &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindProfileMetadata,
+				Tags:      nostr.Tags{}.AppendUnique(nostr.Tag{"d", dTag}),
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}
+		require.NoError(t, db.AcceptEvent(ctx, publishedEvent))
+		stored, err := helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindProfileMetadata}}}})
+		require.NoError(t, err)
+		require.Len(t, stored, 1)
+		require.Contains(t, stored, publishedEvent)
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "first"}, nostr.Tag{"e", "second"}, nostr.Tag{"e", publishedEvent.ID})
+		tags = append(tags, nostr.Tag{"p", "first"}, nostr.Tag{"p", "second"}, nostr.Tag{"p", publishedEvent.PubKey})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", nostr.KindProfileMetadata, publishedEvent.PubKey, "wrong d tag")})
+		require.Error(t, db.AcceptEvent(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "reaction event" + uuid.NewString(),
+				PubKey:    publishedEvent.PubKey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindReaction,
+				Tags:      tags,
+				Content:   "+",
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+		stored, err = helperGetStoredEventsAll(t, db, ctx, &model.Subscription{Filters: []nostr.Filter{{Kinds: []int{nostr.KindReaction}}}})
 		require.NoError(t, err)
 		require.Empty(t, stored)
 	})

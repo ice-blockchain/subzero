@@ -104,7 +104,7 @@ func generateKind() int {
 		nostr.KindProfileMetadata,
 		nostr.KindTextNote,
 		nostr.KindRecommendServer,
-		nostr.KindContactList,
+		nostr.KindFollowList,
 		nostr.KindEncryptedDirectMessage,
 		nostr.KindDeletion,
 		nostr.KindRepost,

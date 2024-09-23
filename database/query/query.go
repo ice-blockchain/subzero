@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	ErrUnexpectedRowsAffected   = errors.New("unexpected rows affected")
-	errEventIteratorInterrupted = errors.New("interrupted")
+	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
+	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
+	errEventIteratorInterrupted    = errors.New("interrupted")
 )
 
 type databaseEvent struct {
@@ -29,10 +30,11 @@ type databaseEvent struct {
 type EventIterator iter.Seq2[*model.Event, error]
 
 func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
-	if event.EventType() == model.EphemeralEventType {
+	if event.IsEphemeral() {
 		return nil
 	}
-	if event.Kind == nostr.KindDeletion {
+	switch event.Kind {
+	case nostr.KindDeletion:
 		refs, err := model.ParseEventReference(event.Tags)
 		if err != nil {
 			return errors.Wrap(err, "failed to detect events for delete")
@@ -46,9 +48,43 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 		}
 
 		return nil
+	case nostr.KindReaction:
+		if ev, err := getReactionTargetEvent(ctx, db, event); err != nil || ev == nil {
+			return errors.Wrap(ErrTargetReactionEventNotFound, "can't find target event for reaction kind")
+		}
 	}
 
 	return db.SaveEvent(ctx, event)
+}
+
+func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
+	refs, err := model.ParseEventReference(event.Tags)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to detect events for delete")
+	}
+	filters := model.Filters{}
+	for _, r := range refs {
+		filters = append(filters, r.Filter())
+	}
+	eLastTag := event.Tags.GetLast([]string{"e"})
+	pLastTag := event.Tags.GetLast([]string{"p"})
+	aTag := event.Tags.GetFirst([]string{"a"})
+	kTag := event.Tags.GetFirst([]string{"k"})
+	for ev, evErr := range db.SelectEvents(ctx, &model.Subscription{Filters: filters}) {
+		if evErr != nil {
+			return nil, errors.Wrapf(evErr, "can't select reaction events for:%+v", ev)
+		}
+		if ev == nil || (ev.IsReplaceable() && aTag.Value() != fmt.Sprintf("%v:%v:%v", ev.Kind, ev.PubKey, ev.Tags.GetD())) {
+			continue
+		}
+		if ev.ID != eLastTag.Value() || ev.PubKey != pLastTag.Value() || (kTag != nil && kTag.Value() != fmt.Sprint(ev.Kind)) {
+			continue
+		}
+
+		return ev, nil
+	}
+
+	return
 }
 
 func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {

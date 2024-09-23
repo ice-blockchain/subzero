@@ -54,7 +54,7 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event, cfg *Conf
 	if err = h.validateIncomingEvent(event, cfg); err != nil {
 		return errorx.Withf(err, "invalid: event is invalid")
 	}
-	if event.EventType() != model.EphemeralEventType {
+	if !event.IsEphemeral() {
 		if wsEventListener == nil {
 			log.Panic(errorx.Errorf("wsEventListener to store events not set"))
 		}
@@ -70,6 +70,7 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event, cfg *Conf
 	if err = h.notifyListenersAboutNewEvent(event); err != nil {
 		return errorx.Withf(err, "failed to notify subscribers about new event: %+v", event)
 	}
+
 	return nil
 }
 
@@ -84,7 +85,7 @@ func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err erro
 	} else if !ok {
 		return errorx.New("invalid event signature")
 	}
-	if err := evt.Validate(); err != nil {
+	if vErr := evt.Validate(); vErr != nil {
 		return errorx.Withf(err, "wrong event parameters")
 	}
 	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {

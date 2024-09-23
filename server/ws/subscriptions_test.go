@@ -374,7 +374,7 @@ func TestPublishingEvents(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		assert.False(t, event.EventType() == model.EphemeralEventType)
+		assert.False(t, event.IsEphemeral())
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -464,7 +464,7 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("wrong kind 03 follow list tag parameters", func(t *testing.T) {
 		inValidKind03Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindContactList,
+			Kind:      nostr.KindFollowList,
 			Tags:      nil,
 		}}
 		inValidKind03Event.SetExtra("extra", uuid.NewString())
@@ -476,7 +476,7 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("wrong kind 03 follow list content", func(t *testing.T) {
 		inValidKind03Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindContactList,
+			Kind:      nostr.KindFollowList,
 			Tags:      nostr.Tags{[]string{"p"}, []string{"p"}},
 			Content:   "invalidEvent",
 		}}
@@ -490,7 +490,7 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("valid kind 03 follow list event", func(t *testing.T) {
 		validKind03Event = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindContactList,
+			Kind:      nostr.KindFollowList,
 			Tags:      nostr.Tags{[]string{"p", "wss://alicerelay.com/", "alice"}, []string{"p", "wss://bobrelay.com/nostr", "bob"}},
 		}}
 		validKind03Event.SetExtra("extra", uuid.NewString())
@@ -522,7 +522,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		assert.False(t, event.EventType() == model.EphemeralEventType)
+		assert.False(t, event.IsEphemeral())
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -620,7 +620,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		assert.False(t, event.EventType() == model.EphemeralEventType)
+		assert.False(t, event.IsEphemeral())
 		storedEvents = append(storedEvents, event)
 
 		return nil
@@ -810,7 +810,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		assert.False(t, event.EventType() == model.EphemeralEventType)
+		assert.False(t, event.IsEphemeral())
 		storedEvents = append(storedEvents, event)
 		return nil
 	})
@@ -941,7 +941,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 				return model.ErrDuplicate
 			}
 		}
-		assert.False(t, event.EventType() == model.EphemeralEventType)
+		assert.False(t, event.IsEphemeral())
 		storedEvents = append(storedEvents, event)
 
 		return nil
@@ -1056,4 +1056,159 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validEventNIP01, validEventNIP24}, storedEvents)
+}
+
+func TestPublishingNIP24ReactionEvents(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validUpvoteEvent, validReactionToWebsiteEvent, validUpvoteEmptyContentEvent, validDownvoteEvent *model.Event
+	t.Run("kind 7 (Reactions) (NIP-25): valid upvote event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		validUpvoteEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags:      tags,
+			Content:   "+",
+		}}
+		validUpvoteEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validUpvoteEvent.Sign(privkey))
+		require.NoError(t, validUpvoteEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validUpvoteEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validUpvoteEvent.Event))
+	})
+	t.Run("kind 7 (Reactions) (NIP-25): valid upvote with empty content event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		validUpvoteEmptyContentEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags:      tags,
+		}}
+		validUpvoteEmptyContentEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validUpvoteEmptyContentEvent.Sign(privkey))
+		require.NoError(t, validUpvoteEmptyContentEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validUpvoteEmptyContentEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validUpvoteEmptyContentEvent.Event))
+	})
+	t.Run("kind 7 (Reactions) (NIP-25): valid downvote event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		validDownvoteEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags:      tags,
+			Content:   "-",
+		}}
+		validDownvoteEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validDownvoteEvent.Sign(privkey))
+		require.NoError(t, validDownvoteEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validDownvoteEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validDownvoteEvent.Event))
+	})
+	t.Run("kind 7 (Reactions) (NIP-25): valid upvote reaction to website event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"r", "https://example.com/"})
+		validReactionToWebsiteEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReactionToWebsite,
+			Tags:      tags,
+			Content:   "+",
+		}}
+		validReactionToWebsiteEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validReactionToWebsiteEvent.Sign(privkey))
+		require.NoError(t, validReactionToWebsiteEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReactionToWebsiteEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validReactionToWebsiteEvent.Event))
+	})
+	t.Run("kind 7 (Reactions) (NIP-25): invalid event, wrong e tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags:      tags,
+			Content:   "+",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 7 (Reactions) (NIP-25): invalid event, wrong p tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags:      tags,
+			Content:   "+",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 7 (Reactions) (NIP-25): invalid event, wrong a tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"p", "pubkey1"})
+		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags:      tags,
+			Content:   "+",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validUpvoteEvent, validUpvoteEmptyContentEvent, validDownvoteEvent, validReactionToWebsiteEvent}, storedEvents)
 }
