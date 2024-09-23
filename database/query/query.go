@@ -65,6 +65,26 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 	return db.saveEvent(ctx, event)
 }
 
+func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
+	var originalEvent model.Event
+
+	err := json.Unmarshal([]byte(event.Content), &originalEvent)
+	if err != nil {
+		return errors.Wrap(err, "failed to unmarshal original event")
+	}
+
+	// Clear the content and signature of the original event, as it's not needed.
+	originalEvent.Content = ""
+	originalEvent.Sig = ""
+
+	err = db.SaveEvent(ctx, &originalEvent)
+	if err != nil {
+		return errors.Wrap(err, "failed to save original event")
+	}
+
+	return db.SaveEvent(ctx, event)
+}
+
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
 	refs, err := model.ParseEventReference(event.Tags)
 	if err != nil {

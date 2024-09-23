@@ -101,7 +101,7 @@ func (h *handler) notifyListenersAboutNewEvent(ev *model.Event) error {
 	var err *multierror.Error
 	for writer, subs := range h.subListeners {
 		for _, sub := range subs {
-			if sub.Filters.Match(&ev.Event) {
+			if sub.Filters.Match(ev) {
 				err = multierror.Append(
 					err,
 					h.writeResponse(writer, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: ev.Event}),
