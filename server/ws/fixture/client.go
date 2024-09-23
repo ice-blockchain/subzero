@@ -306,7 +306,7 @@ func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) er
 			return errorx.Withf(err, "client: failed to write data to websocket")
 		}
 
-		if flusher, ok := w.conn.(http.Flusher); err == nil && ok {
+		if flusher, ok := w.conn.(http.Flusher); ok {
 			flusher.Flush()
 		}
 		return nil
@@ -425,17 +425,16 @@ func (h *http2WebtransportWrapper) Close() error {
 	b := make([]byte, 0, 4+4)
 	b = quicvarint.Append(b, uint64(h.streamID))
 	b = quicvarint.Append(b, uint64(0))
-	http3.WriteCapsule(h.conn, http3.CapsuleType(wtCapsuleCloseWebtransportSession), b)
-	return h.conn.Close()
+	err := http3.WriteCapsule(h.conn, http3.CapsuleType(wtCapsuleCloseWebtransportSession), b)
+
+	return multierror.Append(err, h.conn.Close()).ErrorOrNil()
 }
 
 func (h *http2WebtransportWrapper) StreamID() quic.StreamID {
 	return 0 // Not used on client.
 }
 
-func (h *http2WebtransportWrapper) CancelWrite(code webtransport.StreamErrorCode) {
-	return
-}
+func (h *http2WebtransportWrapper) CancelWrite(code webtransport.StreamErrorCode) {}
 
 func (h *http2WebtransportWrapper) SetWriteDeadline(time time.Time) error {
 	return nil
@@ -443,6 +442,9 @@ func (h *http2WebtransportWrapper) SetWriteDeadline(time time.Time) error {
 
 func (h *http2WebtransportWrapper) Read(p []byte) (n int, err error) {
 	cType, data, err := http3.ParseCapsule(quicvarint.NewReader(h.conn))
+	if err != nil {
+		return 0, errorx.Withf(err, "failed to parse capsule")
+	}
 	cData := bufio.NewReader(data)
 	if cType == wtCapsuleStream || cType == wtCapsuleStreamFin {
 		var sID uint64
@@ -462,17 +464,9 @@ func (h *http2WebtransportWrapper) Read(p []byte) (n int, err error) {
 	return 0, nil
 }
 
-func (h *http2WebtransportWrapper) CancelRead(code webtransport.StreamErrorCode) {
-	return
-}
-
-func (h *http2WebtransportWrapper) SetReadDeadline(time time.Time) error {
-	return nil
-}
-
-func (h *http2WebtransportWrapper) SetDeadline(time time.Time) error {
-	return nil
-}
+func (*http2WebtransportWrapper) CancelRead(code webtransport.StreamErrorCode) {}
+func (*http2WebtransportWrapper) SetReadDeadline(time time.Time) error         { return nil }
+func (*http2WebtransportWrapper) SetDeadline(time time.Time) error             { return nil }
 
 func http3RoundTripper(qconn quic.Connection) *http3.SingleDestinationRoundTripper {
 	rt := &http3.SingleDestinationRoundTripper{

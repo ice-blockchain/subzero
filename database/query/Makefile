@@ -1,6 +1,8 @@
 export TESTDB := .testdata/testdb_3M.sqlite3
 
-.PHONY: test gendb benchdb benchcompare
+.PHONY: test gendb benchdb benchcompare all
+
+all: test
 
 gendb:
 	GENDB=yes go test -v -timeout=10h -run 'TestGenerateDataForFile3M'

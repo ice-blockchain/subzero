@@ -28,8 +28,6 @@ var (
 type (
 	MockService struct {
 		server         internal.Server
-		closed         bool
-		closedMx       sync.Mutex
 		handlersMx     sync.Mutex
 		Handlers       map[adapters.WSWriter]struct{}
 		processingFunc func(ctx context.Context, writer adapters.WSWriter, in []byte, cfg *config.Config)

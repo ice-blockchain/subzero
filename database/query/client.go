@@ -11,6 +11,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 )
 

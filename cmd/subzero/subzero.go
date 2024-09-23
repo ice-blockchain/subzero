@@ -21,13 +21,21 @@ var (
 	port               uint16
 	cert               string
 	key                string
+	databasePath       string
 	subzero            = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
 		Run: func(_ *cobra.Command, args []string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			query.MustInit()
+
+			if databasePath == ":memory:" {
+				log.Print("using in-memory database")
+			} else {
+				log.Print("using database at ", databasePath)
+			}
+			query.MustInit(databasePath)
+
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				CertPath:                cert,
 				KeyPath:                 key,
@@ -37,6 +45,7 @@ var (
 		},
 	}
 	initFlags = func() {
+		subzero.Flags().StringVar(&databasePath, "database", ":memory:", "path to the database")
 		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
 		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
 		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")

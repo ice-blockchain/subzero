@@ -184,7 +184,7 @@ func generateCreatedAt() int64 {
 func helperGenerateEvent(t interface {
 	require.TestingT
 	Helper()
-}, db *dbClient, withTags bool) string {
+}, db *dbClient, withTags bool) model.Event {
 	t.Helper()
 
 	var ev model.Event
@@ -206,7 +206,7 @@ func helperGenerateEvent(t interface {
 	err := db.SaveEvent(context.Background(), &ev)
 	require.NoError(t, err)
 
-	return ev.ID
+	return ev
 }
 
 func helperFillDatabase(t *testing.T, db *dbClient, size int) {
@@ -238,15 +238,15 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 	defer db.Close()
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
-			model.Filter{
-				Authors: []string{
+			helperNewFilter(func(apply *model.Filter) {
+				apply.Authors = []string{
 					ev.Random(t).PubKey,
 					ev.Random(t).PubKey,
-				},
-			},
-			model.Filter{
-				Authors: []string{ev.Random(t).PubKey},
-			},
+				}
+			}),
+			helperNewFilter(func(apply *model.Filter) {
+				apply.Authors = []string{ev.Random(t).PubKey}
+			}),
 		},
 	})
 	require.NoError(t, err)
@@ -260,16 +260,12 @@ func TestWhereBuilderByID(t *testing.T) {
 	defer db.Close()
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
-			model.Filter{
-				IDs: []string{
-					ev.Random(t).ID,
-				},
-			},
-			model.Filter{
-				IDs: []string{
-					ev.Random(t).ID,
-				},
-			},
+			helperNewFilter(func(apply *model.Filter) {
+				apply.IDs = []string{ev.Random(t).ID}
+			}),
+			helperNewFilter(func(apply *model.Filter) {
+				apply.IDs = []string{ev.Random(t).ID}
+			}),
 		},
 	})
 	require.NoError(t, err)
@@ -285,29 +281,18 @@ func TestWhereBuilderByMany(t *testing.T) {
 	ev2 := ev.Random(t)
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
-			model.Filter{
-				IDs: []string{
-					ev1.ID,
-					"bar",
-				},
-				Authors: []string{
-					ev1.PubKey,
-					"fooo",
-				},
-				Kinds: []int{ev1.Kind},
-			},
-			model.Filter{
-				IDs: []string{
-					ev2.ID,
-					"123",
-				},
-				Authors: []string{
-					ev2.PubKey,
-				},
-				Kinds: []int{ev2.Kind, 1, 2, 3},
-				Since: &ev2.CreatedAt,
-				Until: &ev2.CreatedAt,
-			},
+			helperNewFilter(func(apply *model.Filter) {
+				apply.IDs = []string{ev1.ID, "bar"}
+				apply.Authors = []string{ev1.PubKey, "fooo"}
+				apply.Kinds = []int{ev1.Kind}
+			}),
+			helperNewFilter(func(apply *model.Filter) {
+				apply.IDs = []string{ev2.ID, "123"}
+				apply.Authors = []string{ev2.PubKey}
+				apply.Kinds = []int{ev2.Kind, 1, 2, 3}
+				apply.Since = &ev2.CreatedAt
+				apply.Until = &ev2.CreatedAt
+			}),
 		},
 	})
 	require.NoError(t, err)
@@ -320,15 +305,15 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
-	filter := model.Filter{
-		IDs:     []string{event.ID, "bar"},
-		Authors: []string{event.PubKey},
-		Tags: map[string][]string{
+	filter := helperNewFilter(func(apply *model.Filter) {
+		apply.IDs = []string{event.ID}
+		apply.Authors = []string{event.PubKey}
+		apply.Tags = model.TagMap{
 			"#e": nil,
 			"#p": nil,
 			"#d": nil,
-		},
-	}
+		}
+	})
 
 	t.Run("Something", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
@@ -358,10 +343,11 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
-	filter := model.Filter{
-		IDs:  []string{event.ID},
-		Tags: map[string][]string{},
-	}
+
+	filter := helperNewFilter(func(apply *model.Filter) {
+		apply.IDs = []string{event.ID}
+		apply.Tags = map[string][]string{}
+	})
 
 	for _, tag := range event.Tags {
 		filter.Tags[tag[0]] = tag[1:]
@@ -391,11 +377,12 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
-	filter := model.Filter{
-		Tags: map[string][]string{
+
+	filter := helperNewFilter(func(apply *model.Filter) {
+		apply.Tags = model.TagMap{
 			event.Tags[0][0]: event.Tags[0][1:],
-		},
-	}
+		}
+	})
 
 	t.Run("Match", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
@@ -424,16 +411,16 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 	ev2 := ev.Random(t)
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
-			{
-				Tags: map[string][]string{
+			helperNewFilter(func(apply *model.Filter) {
+				apply.Tags = model.TagMap{
 					ev1.Tags[1][0]: ev1.Tags[1][1:],
-				},
-			},
-			{
-				Tags: map[string][]string{
+				}
+			}),
+			helperNewFilter(func(apply *model.Filter) {
+				apply.Tags = model.TagMap{
 					ev2.Tags[1][0]: ev2.Tags[1][1:],
-				},
-			},
+				}
+			}),
 		},
 	})
 	require.NoError(t, err)
@@ -446,10 +433,12 @@ func TestSelectEventNoTags(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	id := helperGenerateEvent(t, db, false)
+	id := helperGenerateEvent(t, db, false).ID
 	require.NotEmpty(t, id)
 
-	filter := model.Filter{IDs: []string{id}}
+	filter := helperNewFilter(func(apply *model.Filter) {
+		apply.IDs = []string{id}
+	})
 	for ev, err := range db.SelectEvents(context.Background(), &model.Subscription{Filters: model.Filters{filter}}) {
 		require.NoError(t, err)
 		require.NotNil(t, ev)

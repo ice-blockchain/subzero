@@ -12,14 +12,20 @@ import (
 )
 
 type (
-	Filter    = nostr.Filter
-	Filters   = nostr.Filters
 	TagMap    = nostr.TagMap
 	Tag       = nostr.Tag
 	Tags      = nostr.Tags
 	Timestamp = nostr.Timestamp
 	Kind      = int
-
+	Filter    struct {
+		nostr.Filter
+		Expiration *bool
+		Videos     *bool
+		Images     *bool
+		Quotes     *bool
+		References *bool
+	}
+	Filters []Filter
 	Event struct {
 		nostr.Event
 	}

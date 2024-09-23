@@ -118,7 +118,9 @@ func BenchmarkSelectByKind(b *testing.B) {
 	b.ReportAllocs()
 	b.SetParallelism(benchParallelism)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Kinds: []int{0}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Kinds = []int{0}
+		})
 		for pb.Next() {
 			filters[0].Kinds[0] = generateKind()
 			helperBenchSelectBy(b, db, meter, filters)
@@ -135,7 +137,9 @@ func BenchmarkSelectByID(b *testing.B) {
 	b.ReportAllocs()
 	b.SetParallelism(benchParallelism)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			helperBenchSelectBy(b, db, meter, filters)
@@ -152,7 +156,9 @@ func BenchmarkSelectByAuthor(b *testing.B) {
 	b.ReportAllocs()
 	b.SetParallelism(benchParallelism)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			helperBenchSelectBy(b, db, meter, filters)
@@ -204,7 +210,9 @@ func BenchmarkSelectByKindAndCreatedAtRange(b *testing.B) {
 func BenchmarkSelectByKindAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Kinds = []int{generateKind()}
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
@@ -218,7 +226,9 @@ func BenchmarkSelectByKindAndID(b *testing.B) {
 func BenchmarkSelectByKindAndAuthor(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Kinds = []int{generateKind()}
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
@@ -232,7 +242,9 @@ func BenchmarkSelectByKindAndAuthor(b *testing.B) {
 func BenchmarkSelectByCreatedAtAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
@@ -246,7 +258,9 @@ func BenchmarkSelectByCreatedAtAndID(b *testing.B) {
 func BenchmarkSelectByCreatedAtAndAuthor(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Since = &helperBenchRandomEvent(b).CreatedAt
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
@@ -260,7 +274,10 @@ func BenchmarkSelectByCreatedAtAndAuthor(b *testing.B) {
 func BenchmarkSelectByAuthorAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
@@ -274,7 +291,9 @@ func BenchmarkSelectByAuthorAndID(b *testing.B) {
 func BenchmarkSelectByKindAndCreatedAtAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
 			filters[0].Kinds = []int{generateKind()}
@@ -289,7 +308,9 @@ func BenchmarkSelectByKindAndCreatedAtAndID(b *testing.B) {
 func BenchmarkSelectByKindAndCreatedAtAndAuthor(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			filters[0].Kinds = []int{generateKind()}
@@ -304,7 +325,10 @@ func BenchmarkSelectByKindAndCreatedAtAndAuthor(b *testing.B) {
 func BenchmarkSelectByKindAndAuthorAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
@@ -319,7 +343,10 @@ func BenchmarkSelectByKindAndAuthorAndID(b *testing.B) {
 func BenchmarkSelectByCreatedAtAndAuthorAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+			apply.IDs = []string{""}
+		})
 		for pb.Next() {
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey
 			filters[0].IDs[0] = helperBenchRandomEvent(b).ID
@@ -334,7 +361,11 @@ func BenchmarkSelectByCreatedAtAndAuthorAndID(b *testing.B) {
 func BenchmarkSelectByKindAndCreatedAtAndAuthorAndID(b *testing.B) {
 	db, meter := helperBenchPrepare(b)
 	b.RunParallel(func(pb *testing.PB) {
-		filters := model.Filters{model.Filter{Authors: []string{""}, IDs: []string{""}, Kinds: []int{0}}}
+		filters := helperNewSingleFilter(func(apply *model.Filter) {
+			apply.Authors = []string{""}
+			apply.IDs = []string{""}
+			apply.Kinds = []int{0}
+		})
 		for pb.Next() {
 			filters[0].Kinds[0] = generateKind()
 			filters[0].Authors[0] = helperBenchRandomEvent(b).PubKey

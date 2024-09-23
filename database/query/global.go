@@ -35,3 +35,7 @@ func AcceptEvent(ctx context.Context, event *model.Event) error {
 func GetStoredEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
 	return globalDB.Client.SelectEvents(ctx, subscription)
 }
+
+func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {
+	return globalDB.Client.CountEvents(ctx, subscription)
+}

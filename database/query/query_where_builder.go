@@ -112,7 +112,7 @@ func (w *whereBuilder) maybeOR() {
 }
 
 func (w *whereBuilder) applyFilterTags(filterID string, ids []string, tags model.TagMap) {
-	const valuesMax = 4
+	const valuesMax = 21
 
 	if len(tags) == 0 {
 		return
@@ -159,7 +159,12 @@ func isFilterEmpty(filter *model.Filter) bool {
 		len(filter.Authors) == 0 &&
 		len(filter.Tags) == 0 &&
 		filter.Since == nil &&
-		filter.Until == nil
+		filter.Until == nil &&
+		filter.Expiration == nil &&
+		filter.Videos == nil &&
+		filter.Quotes == nil &&
+		filter.References == nil &&
+		filter.Images == nil
 }
 
 func (w *whereBuilder) applyTimeRange(filterID string, since, until *model.Timestamp) error {

@@ -7,10 +7,9 @@ import (
 	"strings"
 
 	"github.com/gookit/goutil/errorx"
-	"github.com/nbd-wtf/go-nostr"
 )
 
-func ParseEventReference(tags nostr.Tags) ([]EventReference, error) {
+func ParseEventReference(tags Tags) ([]EventReference, error) {
 	plainEvents := make([]string, 0, len(tags))
 	refs := []EventReference{}
 	for _, tag := range tags {
@@ -39,19 +38,18 @@ func ParseEventReference(tags nostr.Tags) ([]EventReference, error) {
 	return refs, nil
 }
 
-func (e *PlainEventReference) Filter() nostr.Filter {
-	return nostr.Filter{
-		IDs: e.EventIDs,
-	}
+func (e *PlainEventReference) Filter() (f Filter) {
+	f.IDs = e.EventIDs
+
+	return f
 }
 
-func (e *ReplaceableEventReference) Filter() nostr.Filter {
-	f := nostr.Filter{
-		Kinds:   []int{e.Kind},
-		Authors: []string{e.PubKey},
-	}
+func (e *ReplaceableEventReference) Filter() (f Filter) {
+	f.Kinds = []int{e.Kind}
+	f.Authors = []string{e.PubKey}
+
 	if e.DTag != "" {
-		f.Tags = nostr.TagMap{"d": {e.DTag}}
+		f.Tags = TagMap{"d": {e.DTag}}
 	}
 
 	return f
