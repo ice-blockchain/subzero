@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/gookit/goutil/errorx"
 	"github.com/xssnick/tonutils-storage/storage"
@@ -60,6 +61,7 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 		return errorx.Withf(err, "failed to find existing bag for user %s", user)
 	}
 	if existingBagForUser != nil {
+		existingBagForUser.Stop()
 		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
 			return errorx.Withf(err, "failed to replace bag for user %s", user)
 		}
@@ -83,7 +85,7 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 	if tor == nil {
 		tor = storage.NewTorrent(c.rootStoragePath, c.progressStorage, c.conn)
 		tor.BagID = bag
-		if err = tor.Start(true, true, false); err != nil {
+		if err = tor.Start(false, true, false); err != nil {
 			return errorx.Withf(err, "failed to start new torrent %v", bagID)
 		}
 		if bootstrap != nil && *bootstrap != "" {
@@ -91,6 +93,7 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 				log.Printf("failed to connect to bootstrap node, waiting for DHT: %v", err)
 			}
 		}
+		go c.startUploadAfterDownloadingHeader(tor)
 		if err = c.saveTorrent(tor, user); err != nil {
 			return errorx.Withf(err, "failed to store new torrent %v", bagID)
 		}
@@ -136,4 +139,20 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey string) error {
 		return errorx.With(err, "failed to save userID:bag mapping")
 	}
 	return nil
+}
+
+func (c *client) startUploadAfterDownloadingHeader(tor *storage.Torrent) {
+	for {
+		select {
+		case <-time.After(1 * time.Second):
+			if _, isUplActive := tor.IsActive(); isUplActive {
+				return
+			}
+			if tor.Header == nil {
+				continue
+			}
+			tor.Start(true, true, false)
+			return
+		}
+	}
 }

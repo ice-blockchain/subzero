@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 				return "", "", errorx.Withf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
+		existingBagForUser.Stop()
 		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
 			return "", "", errorx.Withf(err, "failed to replace bag for user %s", userPubkey)
 		}
@@ -78,7 +80,6 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 		delete(headerMD.FileMetadata, relativePath)
 		delete(headerMD.FileHash, hash)
 	}
-
 	c.newFilesMx.RLock()
 	for key, value := range c.newFiles[user] {
 		headerMD.FileMetadata[key] = value
@@ -90,6 +91,7 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 	if err != nil {
 		return "", nil, errorx.With(err, "failed to put file hashes")
 	}
+	log.Println("UPLOAD META FOR ", relativePath, string(headerMDSerialized))
 	header := &storage.TorrentHeader{
 		DirNameSize:   uint32(len(user)),
 		DirName:       []byte(user),
