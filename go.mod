@@ -4,7 +4,7 @@ go 1.23.0
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
-	github.com/xssnick/tonutils-storage => github.com/ice-cronus/tonutils-storage v0.0.0-20240923131001-35b67f016acf
+	github.com/xssnick/tonutils-storage => github.com/ice-cronus/tonutils-storage v0.0.0-20240924150703-eb2225c54ef2
 )
 
 require (

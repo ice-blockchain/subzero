@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -46,26 +45,30 @@ func TestNIP96(t *testing.T) {
 	}()
 	user1 := nostr.GeneratePrivateKey()
 	var tagsToBroadcast nostr.Tags
+	var contentToBroadcast string
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
-		var wg sync.WaitGroup
-		wg.Add(2)
 		var responses chan *nip96.UploadResponse
 		responses = make(chan *nip96.UploadResponse, 2)
-		go upload(t, ctx, user1, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
+		upload(t, ctx, user1, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
 			responses <- resp
-			wg.Done()
 		})
-		go upload(t, ctx, user1, ".testdata/image.jpg", "ice.jpg", "ice logo", func(resp *nip96.UploadResponse) {
+		upload(t, ctx, user1, ".testdata/image.jpg", "ice.jpg", "ice logo", func(resp *nip96.UploadResponse) {
 			responses <- resp
-			wg.Done()
 		})
-		wg.Wait()
 		close(responses)
+		var latest uint64
 		for resp := range responses {
-			if resp.Nip94Event.Content == "ice logo" {
-				tagsToBroadcast = resp.Nip94Event.Tags
+			var createdAt uint64
+			if createdAtTag := resp.Nip94Event.Tags.GetFirst([]string{"createdAt"}); createdAtTag != nil && len(*createdAtTag) > 1 {
+				var err error
+				createdAt, err = strconv.ParseUint(createdAtTag.Value(), 10, 64)
+				require.NoError(t, err)
+				if createdAt > latest {
+					latest = createdAt
+					tagsToBroadcast = resp.Nip94Event.Tags
+					contentToBroadcast = resp.Nip94Event.Content
+				}
 			}
-
 			verifyFile(t, resp.Nip94Event.Content, resp.Nip94Event.Tags)
 		}
 	})
@@ -76,6 +79,7 @@ func TestNIP96(t *testing.T) {
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindFileMetadata,
 			Tags:      tagsToBroadcast,
+			Content:   contentToBroadcast,
 		}}
 		require.NoError(t, nip94EventToSign.Sign(user1))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
@@ -84,23 +88,25 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, storage.AcceptEvent(ctx, nip94EventToSign))
 		pk, err := nostr.GetPublicKey(user1)
 		require.NoError(t, err)
-		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, pk, "image/profile.png"), int64(182744))
+		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, pk, "image/profile.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
 		require.NoError(t, err)
 		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
-		downloadedLogoHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, pk, "image/ice.jpg"), int64(415939))
+		downloadedLogoHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, pk, "image/ice.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
 		require.NoError(t, err)
 		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
 	})
 
 	t.Run("download endpoint redirects to same download url over ton storage", func(t *testing.T) {
 		expected := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice logo").Nip94Event.Tags})
-		_, location := download(t, ctx, user1, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218")
+		status, location := download(t, ctx, user1, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218")
+		require.Equal(t, http.StatusFound, status)
 		require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expected.Summary), location)
 
 		expected = nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice profile pic").Nip94Event.Tags})
-		_, location = download(t, ctx, user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292")
+		status, location = download(t, ctx, user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292")
+		require.Equal(t, http.StatusFound, status)
 		require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expected.Summary), location)
-		status, _ := download(t, ctx, user1, "non_valid_hash")
+		status, _ = download(t, ctx, user1, "non_valid_hash")
 		require.Equal(t, http.StatusNotFound, status)
 	})
 	t.Run("list files responds with up to all files for the user when total is less than page", func(t *testing.T) {
@@ -130,11 +136,18 @@ func TestNIP96(t *testing.T) {
 		}
 	})
 	t.Run("delete file", func(t *testing.T) {
-		status := deleteFile(t, ctx, user1, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218")
+		fileHash := ""
+		if xTag := nip94EventToSign.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
+			fileHash = xTag.Value()
+		} else {
+			t.Fatalf("malformed x tag in nip94 event %v", nip94EventToSign.ID)
+		}
+		status := deleteFile(t, ctx, user1, fileHash)
+		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94EventToSign.Content).Nip94Event.Tags}).Summary
 		require.Equal(t, http.StatusOK, status)
 		pk, err := nostr.GetPublicKey(user1)
 		require.NoError(t, err)
-		require.NoFileExists(t, filepath.Join(storageRoot, pk, "image/ice.jpg"))
+		require.NoFileExists(t, filepath.Join(storageRoot, pk, fileName))
 		deletionEventToSign := &model.Event{nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindDeletion,
@@ -145,7 +158,7 @@ func TestNIP96(t *testing.T) {
 		}}
 		require.NoError(t, deletionEventToSign.Sign(user1))
 		require.NoError(t, storage.AcceptEvent(ctx, deletionEventToSign))
-		require.NoFileExists(t, filepath.Join(newStorageRoot, pk, "image/ice.jpg"))
+		require.NoFileExists(t, filepath.Join(newStorageRoot, pk, fileName))
 	})
 
 }
@@ -181,6 +194,9 @@ func upload(t *testing.T, ctx context.Context, sk, path, filename, caption strin
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
+	jResp, err := json.Marshal(resp)
+	require.NoError(t, err)
+	log.Println(filename, string(jResp))
 	result(resp)
 }
 
@@ -203,6 +219,7 @@ func download(t *testing.T, ctx context.Context, sk, fileHash string) (status in
 }
 
 func list(t *testing.T, ctx context.Context, sk string, page, limit uint32) *listedFiles {
+	t.Helper()
 	resp := authorizedReq(t, ctx, sk, "GET", fmt.Sprintf("https://localhost:9997/media?page=%v&count=%v", page, limit))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var files listedFiles
@@ -213,6 +230,7 @@ func list(t *testing.T, ctx context.Context, sk string, page, limit uint32) *lis
 }
 
 func deleteFile(t *testing.T, ctx context.Context, sk string, fileHash string) int {
+	t.Helper()
 	resp := authorizedReq(t, ctx, sk, "DELETE", fmt.Sprintf("https://localhost:9997/media/%v", fileHash))
 	if resp.StatusCode == http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
@@ -230,9 +248,10 @@ func deleteFile(t *testing.T, ctx context.Context, sk string, fileHash string) i
 }
 
 func authorizedReq(t *testing.T, ctx context.Context, sk, method, url string) *http.Response {
+	t.Helper()
 	uploadReq, err := http.NewRequest(method, url, nil)
 	require.NoError(t, err)
-	auth, err := generateAuthHeader(sk, url, method)
+	auth, err := generateAuthHeader(t, sk, url, method)
 	require.NoError(t, err)
 	uploadReq.Header.Set("Authorization", auth)
 	resp, err := http.DefaultClient.Do(uploadReq.WithContext(ctx))
@@ -296,11 +315,13 @@ func initStorage(ctx context.Context, path string) {
 	}
 	wd, _ := os.Getwd()
 	rootStorage := filepath.Join(wd, path)
-	storage.MustInit(ctx, nodeKey, storage.DefaultConfigUrl, rootStorage, net.ParseIP("127.0.0.1"), int(storagePort.Int64())+1024)
+	port := int(storagePort.Int64()) + 1024
+	storage.MustInit(ctx, nodeKey, storage.DefaultConfigUrl, rootStorage, net.ParseIP("127.0.0.1"), port)
 	http.DefaultClient.Transport = transportOverride
 }
 
-func generateAuthHeader(sk, url, method string) (string, error) {
+func generateAuthHeader(t *testing.T, sk, url, method string) (string, error) {
+	t.Helper()
 	pk, err := nostr.GetPublicKey(sk)
 	if err != nil {
 		return "", fmt.Errorf("nostr.GetPublicKey: %w", err)
@@ -315,7 +336,7 @@ func generateAuthHeader(sk, url, method string) (string, error) {
 			nostr.Tag{"method", method},
 		},
 	}
-	event.Sign(sk)
+	require.NoError(t, event.Sign(sk))
 
 	b, err := json.Marshal(event)
 	if err != nil {

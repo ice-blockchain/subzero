@@ -43,9 +43,10 @@ type (
 		FileHash     map[string]string    `json:"fh"`
 	}
 	FileMeta struct {
-		Hash    []byte `json:"h"`
-		Caption string `json:"c"`
-		Alt     string `json:"a"`
+		Hash      []byte `json:"h"`
+		Caption   string `json:"c"`
+		Alt       string `json:"a"`
+		CreatedAt uint64 `json:"cAt"`
 	}
 	client struct {
 		conn            *storage.Connector
@@ -135,7 +136,10 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 	for i, f := range files[startOffset:endOffset] {
 		idx := page*limit + uint32(i)
 		fileInfo, _ := bag.GetFileOffsets(f)
-		md := metadata.FileMetadata[fileInfo.Name]
+		md, hasMD := metadata.FileMetadata[fileInfo.Name]
+		if !hasMD {
+			continue
+		}
 		url, _ := c.buildUrl(hex.EncodeToString(bag.BagID), f, []*Bootstrap{bs})
 		res = append(res, &nip94.FileMetadata{
 			Size:            strconv.FormatUint(uint64(fileInfo.Size), 10),

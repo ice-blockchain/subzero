@@ -20,10 +20,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/gookit/goutil/errorx"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/nbd-wtf/go-nostr/nip96"
-
 	"github.com/ice-blockchain/subzero/storage"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 type (
@@ -60,8 +58,16 @@ type (
 		ContentType string `form:"content_type" formMultipart:"content_type"`
 		NoTransform string `form:"no_transform" formMultipart:"no_transform"`
 	}
-	fileUploadResponse = nip96.UploadResponse
-	listedFiles        struct {
+	fileUploadResponse struct {
+		Status        string `json:"status"`
+		Message       string `json:"message"`
+		ProcessingURL string `json:"processing_url"`
+		Nip94Event    struct {
+			Tags    nostr.Tags `json:"tags"`
+			Content string     `json:"content"`
+		} `json:"nip94_event"`
+	}
+	listedFiles struct {
 		Total uint32 `json:"total"`
 		Page  uint32 `json:"page"`
 		Files []struct {
@@ -148,10 +154,12 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			os.Remove(uploadingFilePath)
 			return
 		}
+		now := time.Now().In(time.UTC)
 		bagID, url, err := s.storageClient.StartUpload(ctx, token.PubKey(), relativePath, hex.EncodeToString(hash), &storage.FileMeta{
-			Hash:    hash,
-			Caption: upload.Caption,
-			Alt:     upload.Alt,
+			Hash:      hash,
+			Caption:   upload.Caption,
+			Alt:       upload.Alt,
+			CreatedAt: uint64(now.UnixNano()),
 		})
 
 		if err != nil {
@@ -175,6 +183,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 					nostr.Tag{"i", bagID},
 					nostr.Tag{"alt", upload.Alt},
 					nostr.Tag{"size", strconv.FormatUint(uint64(upload.File.Size), 10)},
+					nostr.Tag{"createdAt", strconv.FormatUint(uint64(now.UnixNano()), 10)},
 				},
 				Content: upload.Caption,
 			},

@@ -13,7 +13,10 @@ import (
 	"github.com/gookit/goutil/errorx"
 )
 
-func WaitForFile(ctx context.Context, watchPath, expectedPath string, expectedSize int64) (hash string, err error) {
+func WaitForFile(ctx context.Context, watchPath, expectedPath, expectedHash string, expectedSize int64) (hash string, err error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	skipWatch := false
 	fileInfo, err := os.Stat(expectedPath)
 	if err == nil && fileInfo.Size() == expectedSize {
@@ -30,10 +33,18 @@ func WaitForFile(ctx context.Context, watchPath, expectedPath string, expectedSi
 	}
 	defer f.Close()
 	hashCalc := sha256.New()
-	if _, err = io.Copy(hashCalc, f); err != nil {
+	var n int64
+	if n, err = io.Copy(hashCalc, f); err != nil {
 		return "", errorx.Withf(err, "failed to calc hash of %v", expectedPath)
 	}
-	return hex.EncodeToString(hashCalc.Sum(nil)), nil
+	if n != expectedSize {
+		return WaitForFile(ctx, watchPath, expectedPath, expectedHash, expectedSize)
+	}
+	hash = hex.EncodeToString(hashCalc.Sum(nil))
+	if hash != expectedHash {
+		return WaitForFile(ctx, watchPath, expectedPath, expectedHash, expectedSize)
+	}
+	return hash, nil
 }
 
 func watchFile(ctx context.Context, monitorPath, expectedPath string, expectedSize int64) error {
