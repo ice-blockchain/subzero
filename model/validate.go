@@ -15,9 +15,14 @@ const (
 	TagMarkerRoot    string = "root"
 	TagMarkerMention string = "mention"
 
+	UserGeneratedContentNamespace string = "ugc"
+
 	KindGenericRepost     int = 16
 	KindReactionToWebsite int = 17
+	KindLabeling          int = 1985
 	KindBlogPost          int = 30024
+
+	maxLabelSymbolLength int = 100
 )
 
 type (
@@ -44,13 +49,14 @@ var (
 
 	KindSupportedTags = map[Kind][]string{
 		nostr.KindProfileMetadata: {"e", "p", "a", "alt"},
-		nostr.KindTextNote:        {"e", "p", "q"},
+		nostr.KindTextNote:        {"e", "p", "q", "l", "L"},
 		nostr.KindFollowList:      {"p"},
 		nostr.KindDeletion:        {"a", "e", "k"},
 		nostr.KindRepost:          {"e", "p"},
 		nostr.KindReaction:        {"e", "p", "a", "k"},
 		KindReactionToWebsite:     {"r"},
 		KindGenericRepost:         {"k", "e", "p"},
+		KindLabeling:              {"L", "l", "e", "p", "a", "r", "t"},
 		nostr.KindArticle:         {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
 		KindBlogPost:              {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
 	}
@@ -89,10 +95,43 @@ func (e *Event) Validate() error {
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
 			return errorx.Withf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
+	case KindLabeling:
+		return validateKindLabelingEvent(e)
 	case nostr.KindArticle, KindBlogPost:
 		if e.Content == "" || json.Valid([]byte(e.Content)) {
 			return errorx.Withf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
 		}
+	}
+
+	return nil
+}
+
+func validateKindLabelingEvent(e *Event) error {
+	if e.Tags.GetFirst([]string{"e"}) == nil && e.Tags.GetFirst([]string{"p"}) == nil && e.Tags.GetFirst([]string{"a"}) == nil &&
+		e.Tags.GetFirst([]string{"r"}) == nil && e.Tags.GetFirst([]string{"t"}) == nil {
+		return errorx.Withf(ErrWrongEventParams, "nip-32, missing one of required tags: %+v", e)
+	}
+
+	return validateLabelTags(e)
+}
+
+func validateLabelTags(e *Event) error {
+	labelTag := e.Tags.GetFirst([]string{"l"})
+	labelNamespaceTag := e.Tags.GetFirst([]string{"L"})
+	if labelTag == nil && labelNamespaceTag == nil && e.Kind != KindLabeling {
+		return nil
+	}
+	if labelTag == nil || len(*labelTag) < 3 {
+		return errorx.Withf(ErrWrongEventParams, "nip-32, wrong l: %+v", e)
+	}
+	if len(labelTag.Value()) > maxLabelSymbolLength {
+		return errorx.Withf(ErrWrongEventParams, "nip-32, l tag should be shorter than %d symbols: %+v", maxLabelSymbolLength, e)
+	}
+	if labelNamespaceTag == nil && (*labelTag)[2] != UserGeneratedContentNamespace {
+		return errorx.Withf(ErrWrongEventParams, "nip-32, empty L tag, namespace of l tag should be ugc: %+v", e)
+	}
+	if labelNamespaceTag != nil && (*labelTag)[2] != (*labelNamespaceTag)[1] {
+		return errorx.Withf(ErrWrongEventParams, "nip-32, l -> L tag values mismatch: %+v", e)
 	}
 
 	return nil
@@ -116,6 +155,9 @@ func validateKindProfileMetadataEvent(e *Event) error {
 func validateKindTextNoteEvent(e *Event) error {
 	if json.Valid([]byte(e.Content)) {
 		return errorx.Withf(ErrWrongEventParams, "nip-01: content field should be plain text: %+v", e)
+	}
+	if err := validateLabelTags(e); err != nil {
+		return errorx.Withf(ErrWrongEventParams, "nip-32: label tags are invalid for event: %+v", e)
 	}
 	pTags := e.Tags.GetAll([]string{"p"})
 	eTags := e.Tags.GetAll([]string{"e"})
@@ -144,7 +186,6 @@ func validateKindTextNoteEvent(e *Event) error {
 
 	return nil
 }
-
 func validateKindRepostEvent(e *Event) error {
 	if !json.Valid([]byte(e.Content)) {
 		return errorx.Withf(ErrWrongEventParams, "nip-18: content field should be stringified json: %+v", e)
