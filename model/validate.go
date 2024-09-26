@@ -15,10 +15,19 @@ const (
 	TagMarkerRoot    string = "root"
 	TagMarkerMention string = "mention"
 
+	TagReportTypeNudity        string = "nudity"
+	TagReportTypeMalware       string = "malware"
+	TagReportTypeProfanity     string = "profanity"
+	TagReportTypeIllegal       string = "illegal"
+	TagReportTypeSpam          string = "spam"
+	TagReportTypeImpersonation string = "impersonation"
+	TagReportTypeOther         string = "other"
+
 	UserGeneratedContentNamespace string = "ugc"
 
 	KindGenericRepost     int = 16
 	KindReactionToWebsite int = 17
+	KindReport            int = 1984
 	KindLabeling          int = 1985
 	KindBlogPost          int = 30024
 
@@ -75,6 +84,8 @@ func (e *Event) Validate() error {
 		return validateKindProfileMetadataEvent(e)
 	case nostr.KindTextNote:
 		return validateKindTextNoteEvent(e)
+	case nostr.KindDeletion:
+		return validateKindDeletionEvent(e)
 	case nostr.KindRepost, KindGenericRepost:
 		return validateKindRepostEvent(e)
 	case nostr.KindFollowList:
@@ -95,6 +106,8 @@ func (e *Event) Validate() error {
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
 			return errorx.Withf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
+	case KindReport:
+		return validateKindReportEvent(e)
 	case KindLabeling:
 		return validateKindLabelingEvent(e)
 	case nostr.KindArticle, KindBlogPost:
@@ -104,6 +117,44 @@ func (e *Event) Validate() error {
 	}
 
 	return nil
+}
+
+func validateKindDeletionEvent(e *Event) error {
+	eTags := e.Tags.GetAll([]string{"e"})
+	aTags := e.Tags.GetAll([]string{"a"})
+	if len(eTags) == 0 && len(aTags) == 0 {
+		return errorx.Withf(ErrWrongEventParams, "nip-09, no required e/a tags: %+v", e)
+	}
+	if len(eTags) != 0 && len(eTags) != len(e.Tags.GetAll([]string{"k"})) {
+		return errorx.Withf(ErrWrongEventParams, "nip-09, deletion request should include k tag for the kind of each event being requested for deletion: %+v", e)
+	}
+
+	return nil
+}
+
+func validateKindReportEvent(e *Event) error {
+	if err := validateLabelTags(e); err != nil {
+		return errorx.Withf(ErrWrongEventParams, "nip-56, wrong label tags: %+v", e)
+	}
+	pTag := e.Tags.GetFirst([]string{"p"})
+	if pTag == nil || pTag.Value() == "" {
+		return errorx.Withf(ErrWrongEventParams, "nip-56, missing p tag: %+v", e)
+	}
+	eTag := e.Tags.GetFirst([]string{"e"})
+	if eTag != nil && (len(*eTag) < 3 || !reportTypeSupported((*eTag)[2]) || len(*pTag) > 2) {
+		return errorx.Withf(ErrWrongEventParams, "nip-56, wrong e tag report type value/wrong p tag report type value: %+v", e)
+	}
+	if eTag == nil && (len(*pTag) < 3 || !reportTypeSupported((*pTag)[2])) {
+		return errorx.Withf(ErrWrongEventParams, "nip-56, wrong p tag report type value:%+v", e)
+	}
+
+	return nil
+}
+
+func reportTypeSupported(reportType string) bool {
+	return reportType == "" || reportType == TagReportTypeNudity || reportType == TagReportTypeMalware ||
+		reportType == TagReportTypeProfanity || reportType == TagReportTypeIllegal || reportType == TagReportTypeSpam ||
+		reportType == TagReportTypeImpersonation || reportType == TagReportTypeOther
 }
 
 func validateKindLabelingEvent(e *Event) error {

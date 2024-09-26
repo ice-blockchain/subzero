@@ -513,6 +513,118 @@ func TestPublishingEvents(t *testing.T) {
 	require.Equal(t, []*model.Event{validEvent, validKind03Event}, storedEvents)
 }
 
+func TestPublishingNIP09Events(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validEventNIP09WithEKTags, validEventNIP09AllTags *model.Event
+	t.Run("kind 5 (Deletion) (NIP-05): valid event with e/k tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		validEventNIP09WithEKTags = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		validEventNIP09WithEKTags.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventNIP09WithEKTags.Sign(privkey))
+		require.NoError(t, validEventNIP09WithEKTags.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP09WithEKTags.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventNIP09WithEKTags.Event))
+	})
+	t.Run("kind 5 (Deletion) (NIP-05): valid event with all tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		validEventNIP09AllTags = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		validEventNIP09AllTags.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEventNIP09AllTags.Sign(privkey))
+		require.NoError(t, validEventNIP09AllTags.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP09AllTags.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validEventNIP09AllTags.Event))
+	})
+	t.Run("kind 5 (Deletion) (NIP-05): invalid event, no required tags", func(t *testing.T) {
+		var tags nostr.Tags
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 5 (Deletion) (NIP-05): invalid event, mismatch e -> k tags", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 5 (Deletion) (NIP-05): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"r", "1"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validEventNIP09WithEKTags, validEventNIP09AllTags}, storedEvents)
+}
+
 func TestPublishingNIP10Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
@@ -1402,4 +1514,167 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validLabelingEvent, validUGCLabelingEvent, validKind01EventWithLabels}, storedEvents)
+}
+
+func TestPublishingNIP56(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validReportEventWithPTagOnly *model.Event
+	t.Run("kind 1984 (Report) (NIP-56): valid report event with p tag only", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", model.TagReportTypeNudity})
+		validReportEventWithPTagOnly = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		validReportEventWithPTagOnly.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validReportEventWithPTagOnly.Sign(privkey))
+		require.NoError(t, validReportEventWithPTagOnly.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReportEventWithPTagOnly.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validReportEventWithPTagOnly.Event))
+	})
+	var validReportEventWithBothTags *model.Event
+	t.Run("kind 1984 (Report) (NIP-56): valid report event with both e and p tags", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
+		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
+		validReportEventWithBothTags = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		validReportEventWithBothTags.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validReportEventWithBothTags.Sign(privkey))
+		require.NoError(t, validReportEventWithBothTags.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReportEventWithBothTags.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validReportEventWithBothTags.Event))
+	})
+	var validReportEventWithLabel *model.Event
+	t.Run("kind 1984 (Report) (NIP-56): valid report event with labels", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
+		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
+		tags = append(tags, nostr.Tag{"l", "permies", "#t"})
+		tags = append(tags, nostr.Tag{"L", "#t"})
+		validReportEventWithLabel = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		validReportEventWithLabel.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validReportEventWithLabel.Sign(privkey))
+		require.NoError(t, validReportEventWithLabel.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReportEventWithLabel.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validReportEventWithLabel.Event))
+	})
+	t.Run("kind 1984 (Report) (NIP-56): invalid report with no p tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 1984 (Report) (NIP-56): invalid report with wrong p tag while e tag is added", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", model.TagReportTypeNudity})
+		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 1984 (Report) (NIP-56): invalid report with wrong p tag when no e tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 1984 (Report) (NIP-56): invalid report with e tag when both tags represented", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
+		tags = append(tags, nostr.Tag{"e", "event id"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 1984 (Report) (NIP-56): invalid report with not supported report type", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
+		tags = append(tags, nostr.Tag{"e", "event id", "unsupported report type"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReport,
+			Tags:      tags,
+			Content:   "Report description",
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validReportEventWithPTagOnly, validReportEventWithBothTags, validReportEventWithLabel}, storedEvents)
 }
