@@ -8,8 +8,12 @@ import (
 )
 
 const (
+	// Tags/values for `imeta`.
 	tagValueURL      = `event_tag_value1` // `url <actual url>`
 	tagValueMimeType = `event_tag_value2` // `m <actual mime type>`
+
+	// Tags/values for `expiration`.
+	tagValueExpiration = `event_tag_value1`
 )
 
 // tagsMarshalIndexes is a map of tag names to their indexes in the marshaled tags.

@@ -69,7 +69,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 	t.Run("WithKind", func(t *testing.T) {
 		q, params, err := newWhereBuilder().Build(helperNewFilter(func(apply *model.Filter) {
 			apply.IDs = []string{generateHexString()}
-			apply.Kinds = []int{1, generateKind()}
+			apply.Kinds = []int{1, 2}
 		}))
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
@@ -226,4 +226,22 @@ func TestWhereBuilderSameElements(t *testing.T) {
 	t.Logf("params: %+v", params)
 	require.Len(t, params, 4)
 	helperEnsureParams(t, q, params)
+}
+
+func TestWhereBuilderMimeType(t *testing.T) {
+	t.Parallel()
+
+	filters := helperNewSingleFilter(func(apply *model.Filter) {
+		x := true
+		y := false
+		apply.Videos = &x
+		apply.Images = &y
+	})
+
+	builder := newWhereBuilder()
+	q, params, err := builder.Build(filters...)
+	require.NoError(t, err)
+	t.Logf("stmt: %s (%+v)", q, params)
+	t.Logf("params: %+v", params)
+	require.Len(t, params, 0)
 }

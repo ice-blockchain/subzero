@@ -4,9 +4,12 @@ package query
 
 import (
 	"log"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/pkg/errors"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -23,6 +26,32 @@ type whereBuilder struct {
 	strings.Builder
 }
 
+type filterBuilder struct {
+	Name           string
+	EventIds       []string
+	EventIdsString string
+	sync.Once
+}
+
+func (f *filterBuilder) HasEvents() bool {
+	return len(f.EventIds) > 0
+}
+
+func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
+	f.Do(func() {
+		f.EventIdsString = buildFromSlice(
+			&whereBuilder{
+				Params: w.Params,
+			},
+			f.Name,
+			f.EventIds,
+			"event_id",
+		).String()
+	})
+
+	return f.EventIdsString
+}
+
 func newWhereBuilder() *whereBuilder {
 	return &whereBuilder{
 		Params: make(map[string]any),
@@ -37,10 +66,6 @@ func (w *whereBuilder) addParam(filterID, name string, value any) (key string) {
 }
 
 func deduplicateSlice[T comparable](s []T) []T {
-	if len(s) == 0 {
-		return s
-	}
-
 	seen := make(map[T]struct{}, len(s))
 	j := 0
 	for _, v := range s {
@@ -55,9 +80,9 @@ func deduplicateSlice[T comparable](s []T) []T {
 	return s[:j]
 }
 
-func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T, name string) {
+func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T, name string) *whereBuilder {
 	if len(s) == 0 {
-		return
+		return builder
 	}
 
 	builder.maybeAND()
@@ -68,7 +93,7 @@ func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T,
 		builder.WriteString(" = :")
 		builder.WriteString(builder.addParam(filterID, name, s[0]))
 
-		return
+		return builder
 	}
 
 	// X in (:X_name0, :X_name1, ...).
@@ -81,18 +106,18 @@ func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T,
 	builder.WriteRune(':')
 	builder.WriteString(builder.addParam(filterID, name+strconv.Itoa(len(s)-1), s[len(s)-1]))
 	builder.WriteRune(')')
+
+	return builder
 }
 
 func (w *whereBuilder) isOnBegin() bool {
 	if w.Len() == 1 && w.String() == "(" {
 		return true
-	} else if w.Len() > 1 {
-		s := w.String()
-
-		return s[len(s)-1] == '(' || s[len(s)-2:] == "( "
 	}
 
-	return false
+	s := w.String()
+
+	return s[len(s)-1] == '(' || s[len(s)-2:] == "( "
 }
 
 func (w *whereBuilder) maybeAND() {
@@ -111,15 +136,12 @@ func (w *whereBuilder) maybeOR() {
 	w.WriteString(" OR ")
 }
 
-func (w *whereBuilder) applyFilterTags(filterID string, ids []string, tags model.TagMap) {
+func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap) {
 	const valuesMax = 21
 
 	if len(tags) == 0 {
 		return
 	}
-
-	idsBuilder := &whereBuilder{Params: w.Params}
-	buildFromSlice(idsBuilder, filterID, ids, "event_id")
 
 	tagID := 0
 	for tag, values := range tags {
@@ -130,24 +152,24 @@ func (w *whereBuilder) applyFilterTags(filterID string, ids []string, tags model
 		}
 
 		tagID++
-		if idsBuilder.Len() > 0 {
+		if filter.HasEvents() {
 			// We already have some IDs, so we need to check if they have the tag.
 			w.WriteString("EXISTS (select 42 from event_tags where ")
-			w.WriteString(idsBuilder.String())
+			w.WriteString(filter.BuildEvents(w))
 			w.maybeAND()
 		} else {
 			// No IDs, so select all events that belong to the given tag.
 			w.WriteString("id IN (select event_id from event_tags where ")
 		}
 		w.WriteString("event_tag_key = :")
-		w.WriteString(w.addParam(filterID, "tag"+strconv.Itoa(tagID), tag))
+		w.WriteString(w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tag))
 
 		for i, value := range values {
 			w.WriteString(" AND ")
 			w.WriteString("event_tag_value")
 			w.WriteString(strconv.Itoa(i + 1))
 			w.WriteString(" = :")
-			w.WriteString(w.addParam(filterID, "tagvalue"+strconv.Itoa(tagID<<8|i+1), value))
+			w.WriteString(w.addParam(filter.Name, "tagvalue"+strconv.Itoa(tagID<<8|i+1), value))
 		}
 		w.WriteRune(')')
 	}
@@ -167,12 +189,12 @@ func isFilterEmpty(filter *model.Filter) bool {
 		filter.Images == nil
 }
 
-func (w *whereBuilder) applyTimeRange(filterID string, since, until *model.Timestamp) error {
+func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model.Timestamp) error {
 	if since != nil && until != nil {
 		if *since == *until {
 			w.maybeAND()
 			w.WriteString("created_at = :")
-			w.WriteString(w.addParam(filterID, "timestamp", *since))
+			w.WriteString(w.addParam(filter.Name, "timestamp", *since))
 
 			return nil
 		} else if *since > *until {
@@ -184,17 +206,81 @@ func (w *whereBuilder) applyTimeRange(filterID string, since, until *model.Times
 	if since != nil && *since > 0 {
 		w.maybeAND()
 		w.WriteString("created_at >= :")
-		w.WriteString(w.addParam(filterID, "since", *since))
+		w.WriteString(w.addParam(filter.Name, "since", *since))
 	}
 
 	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
 	if until != nil && *until > 0 {
 		w.maybeAND()
 		w.WriteString("created_at <= :")
-		w.WriteString(w.addParam(filterID, "until", *until))
+		w.WriteString(w.addParam(filter.Name, "until", *until))
 	}
 
 	return nil
+}
+
+func filterHasExtensions(filter *model.Filter) (positive, negative bool) {
+	for _, val := range []*bool{filter.Quotes, filter.References, filter.Images, filter.Videos, filter.Expiration} {
+		if val == nil {
+			continue
+		}
+
+		positive = positive || *val
+		negative = negative || !*val
+	}
+
+	return
+}
+
+func (w *whereBuilder) applyFilterForExtensions(filter *model.Filter, builder *filterBuilder, include bool) {
+	separator := w.maybeOR
+	w.WriteString("select event_id from event_tags where ")
+	if include && builder.HasEvents() {
+		w.WriteString(builder.BuildEvents(w))
+		w.maybeAND()
+	}
+
+	w.WriteRune('(')
+	if filter.Quotes != nil && *filter.Quotes == include {
+		separator()
+		w.WriteString("(event_tag_key = 'q')")
+	}
+	if filter.References != nil && *filter.References == include {
+		separator()
+		w.WriteString("(event_tag_key = 'e')")
+	}
+	if filter.Images != nil && *filter.Images == include {
+		separator()
+		w.WriteString("(event_tag_key = 'imeta' AND substr(")
+		w.WriteString(tagValueMimeType)
+		w.WriteString(", 3, 5) = 'image')")
+	}
+	if filter.Videos != nil && *filter.Videos == include {
+		separator()
+		w.WriteString("(event_tag_key = 'imeta' AND substr(")
+		w.WriteString(tagValueMimeType)
+		w.WriteString(", 3, 5) = 'video')")
+	}
+	if filter.Expiration != nil {
+		separator()
+		if *filter.Expiration {
+			w.WriteRune('(')
+		}
+		w.WriteString("(event_tag_key = 'expiration')")
+		if *filter.Expiration {
+			w.WriteString(" AND cast(")
+			w.WriteString(tagValueExpiration)
+			w.WriteString(" as integer) > unixepoch())")
+		}
+	}
+	w.WriteRune(')')
+}
+
+func (w *whereBuilder) filterCheck(filter *model.Filter) {
+	if filter.References != nil && slices.Contains(filter.Kinds, nostr.KindRepost) {
+		// Not allowed.
+		filter.References = nil
+	}
 }
 
 func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
@@ -202,15 +288,34 @@ func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
 		return nil
 	}
 
-	filterID := "filter" + strconv.Itoa(idx) + "_"
+	w.filterCheck(filter)
+
+	builder := &filterBuilder{
+		Name:     "filter" + strconv.Itoa(idx) + "_",
+		EventIds: filter.IDs,
+	}
+	positiveExtensions, negativeExtensions := filterHasExtensions(filter)
 	w.WriteRune('(') // Begin the filter section.
-	buildFromSlice(w, filterID, filter.IDs, "id")
-	buildFromSlice(w, filterID, filter.Kinds, "kind")
-	buildFromSlice(w, filterID, filter.Authors, "pubkey")
-	if err := w.applyTimeRange(filterID, filter.Since, filter.Until); err != nil {
+	if positiveExtensions {
+		w.WriteString("id IN (")
+		w.applyFilterForExtensions(filter, builder, true)
+		w.WriteRune(')')
+	} else {
+		buildFromSlice(w, builder.Name, filter.IDs, "id")
+	}
+	if negativeExtensions {
+		w.maybeAND()
+		w.WriteString("(id NOT IN (")
+		w.applyFilterForExtensions(filter, builder, false)
+		w.WriteString("))")
+	}
+
+	buildFromSlice(w, builder.Name, filter.Kinds, "kind")
+	buildFromSlice(w, builder.Name, filter.Authors, "pubkey")
+	if err := w.applyTimeRange(builder, filter.Since, filter.Until); err != nil {
 		return err
 	}
-	w.applyFilterTags(filterID, filter.IDs, filter.Tags)
+	w.applyFilterTags(builder, filter.Tags)
 
 	w.WriteRune(')') // End the filter section.
 

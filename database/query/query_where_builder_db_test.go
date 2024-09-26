@@ -6,7 +6,10 @@ import (
 	"context"
 	"encoding/hex"
 	"os"
+	"slices"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/nbd-wtf/go-nostr"
@@ -25,7 +28,11 @@ type testEvents struct {
 func (te *testEvents) Random(h interface{ Helper() }) *model.Event {
 	h.Helper()
 
-	return helperRandomEvent(h, te.Events)
+	idx := int(rand.Int31n(int32(len(te.Events))))
+	ev := te.Events[idx]
+	te.Events = slices.Delete(te.Events, idx, idx+1)
+
+	return ev
 }
 
 func helperEnsureDatabase(t *testing.T) (*dbClient, *testEvents) {
@@ -82,12 +89,6 @@ limit 1000`
 	rand.ShuffleSlice(nil, events)
 
 	return events
-}
-
-func helperRandomEvent(t interface{ Helper() }, events []*model.Event) *model.Event {
-	t.Helper()
-
-	return events[rand.Int31n(int32(len(events)))]
 }
 
 func generateHexString() string {
@@ -181,10 +182,14 @@ func generateCreatedAt() int64 {
 	return rand.Int63n(end-start) + start
 }
 
-func helperGenerateEvent(t interface {
-	require.TestingT
-	Helper()
-}, db *dbClient, withTags bool) model.Event {
+func helperGenerateEvent(
+	t interface {
+		require.TestingT
+		Helper()
+	},
+	db *dbClient,
+	withTags bool,
+) model.Event {
 	t.Helper()
 
 	var ev model.Event
@@ -340,18 +345,31 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 func TestWhereBuilderByTagsSingle(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db := helperNewDatabase(t)
 	defer db.Close()
-	event := ev.Random(t)
 
-	filter := helperNewFilter(func(apply *model.Filter) {
-		apply.IDs = []string{event.ID}
-		apply.Tags = map[string][]string{}
+	t.Run("Fill", func(t *testing.T) {
+		helperFillDatabase(t, db, 10)
+
+		var event model.Event
+		event.Kind = nostr.KindTextNote
+		event.ID = "1"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"e", "etag"}, {"p", "ptag"}, {"d", "dtag"}, {"imeta", "m video/fooo"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
 	})
 
-	for _, tag := range event.Tags {
-		filter.Tags[tag[0]] = tag[1:]
-	}
+	filter := helperNewFilter(func(apply *model.Filter) {
+		apply.IDs = []string{"1"}
+		apply.Tags = model.TagMap{
+			"e": {"etag"},
+			"p": {"ptag"},
+			"d": {"dtag"},
+		}
+	})
 
 	t.Run("Match", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
@@ -361,7 +379,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		require.Len(t, events, 1)
 	})
 	t.Run("Empty", func(t *testing.T) {
-		filter.Tags["#e"] = append(filter.Tags["#e"], "fooo") // Add 4th value to the tag list, so query will return no results.
+		filter.Tags["e"] = append(filter.Tags["e"], "fooo") // Add 4th value to the tag list, so query will return no results.
 
 		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 			Filters: model.Filters{filter},
@@ -405,20 +423,42 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db := helperNewDatabase(t)
 	defer db.Close()
-	ev1 := ev.Random(t)
-	ev2 := ev.Random(t)
+
+	t.Run("Fill", func(t *testing.T) {
+		helperFillDatabase(t, db, 10)
+
+		var event model.Event
+		event.Kind = nostr.KindTextNote
+		event.ID = "1"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"e", "etag"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+
+		event.Kind = nostr.KindTextNote
+		event.ID = "2"
+		event.PubKey = "2"
+		event.Tags = model.Tags{{"p", "ptag"}}
+		event.CreatedAt = 2
+
+		err = db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+
 	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
 		Filters: model.Filters{
 			helperNewFilter(func(apply *model.Filter) {
 				apply.Tags = model.TagMap{
-					ev1.Tags[1][0]: ev1.Tags[1][1:],
+					"e": {"etag"},
 				}
 			}),
 			helperNewFilter(func(apply *model.Filter) {
 				apply.Tags = model.TagMap{
-					ev2.Tags[1][0]: ev2.Tags[1][1:],
+					"p": {"ptag"},
 				}
 			}),
 		},
@@ -469,4 +509,362 @@ func TestGenerateDataForFile3M(t *testing.T) {
 	defer db.Close()
 
 	helperFillDatabase(t, db, amount)
+}
+
+func TestSelectByMimeType(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Fill", func(t *testing.T) {
+		helperFillDatabase(t, db, 100)
+
+		var event model.Event
+		event.Kind = nostr.KindTextNote
+		event.ID = "1"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"imeta", "m video/foo"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+
+		event.Kind = nostr.KindTextNote
+		event.ID = "2"
+		event.PubKey = "2"
+		event.Tags = model.Tags{{"imeta", "m image/png"}}
+		event.CreatedAt = 2
+
+		err = db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("QueryNoImeta", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			f := false
+			apply.Videos = &f
+			apply.Images = &f
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(100), count)
+	})
+	t.Run("Image", func(t *testing.T) {
+		for ev, err := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Images = &x
+		})) {
+			require.NoError(t, err)
+			t.Logf("event: %+v", ev)
+			require.NotNil(t, ev)
+			require.Equal(t, "2", ev.ID)
+		}
+	})
+	t.Run("Video", func(t *testing.T) {
+		for ev, err := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Videos = &x
+		})) {
+			require.NoError(t, err)
+			t.Logf("event: %+v", ev)
+			require.NotNil(t, ev)
+			require.Equal(t, "1", ev.ID)
+		}
+	})
+	t.Run("VideoByID", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Videos = &x
+			apply.IDs = []string{"1"}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("NoVideo", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Videos = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(101), count)
+	})
+}
+
+func TestSelectQuotesReferences(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Fill", func(t *testing.T) {
+		helperFillDatabase(t, db, 100)
+
+		var event model.Event
+		event.Kind = nostr.KindTextNote
+		event.ID = "1"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"q", "fooo"}, {"bar", "foo"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+
+		event.Kind = nostr.KindTextNote
+		event.ID = "2"
+		event.PubKey = "2"
+		event.Tags = model.Tags{{"e", "fooo"}, {"foo", "bar"}}
+		event.CreatedAt = 1
+
+		err = db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("SelectQuotes", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Quotes = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("SelectReferences", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.References = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("SelectReferencesAndQuotes", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.References = &x
+			apply.Quotes = &x
+			apply.IDs = []string{"1", "2"}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(2), count)
+	})
+	t.Run("SelectReferencesAndQuotesUnknownID", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.References = &x
+			apply.Quotes = &x
+			apply.IDs = []string{"5", "6"}
+		}))
+		require.NoError(t, err)
+		require.Zero(t, count)
+	})
+	t.Run("SelectQuotesByID", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Quotes = &x
+			apply.IDs = []string{"1", "2"}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("SelectNonQuotes", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Quotes = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(101), count)
+	})
+	t.Run("SelectNonQuoteByID", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Quotes = &x
+			apply.IDs = []string{"1"}
+		}))
+		require.NoError(t, err)
+		require.Zero(t, count)
+	})
+	t.Run("SelectAll", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
+		require.NoError(t, err)
+		require.Equal(t, int64(102), count)
+	})
+}
+
+func TestSelectEventsExpiration(t *testing.T) {
+	t.Parallel()
+
+	db, events := helperEnsureDatabase(t)
+	defer db.Close()
+
+	t.Run("Fill", func(t *testing.T) {
+		var event model.Event
+		event.Kind = nostr.KindTextNote
+		event.ID = "expired"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+
+		event.Kind = nostr.KindTextNote
+		event.ID = "alive"
+		event.PubKey = "2"
+		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
+		event.CreatedAt = 1
+
+		err = db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("All", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
+		require.NoError(t, err)
+		require.Equal(t, int64(102), count)
+	})
+	t.Run("WithoutExpiration", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Expiration = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(100), count)
+	})
+	t.Run("WithoutExpirationByID", func(t *testing.T) {
+		ev := events.Random(t)
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Expiration = &x
+			apply.IDs = []string{ev.ID}
+			apply.Authors = []string{ev.PubKey}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("Expired", func(t *testing.T) {
+		for ev, er := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Expiration = &x
+			apply.IDs = []string{"expired"}
+		})) {
+			require.NoError(t, er)
+			t.Logf("expired event: %+v", ev)
+		}
+
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.Expiration = &x
+			apply.IDs = []string{"expired"}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(0), count)
+	})
+	t.Run("NotExpired", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Expiration = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("NotExpiredByID", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Kinds = []int{nostr.KindTextNote}
+			apply.Expiration = &x
+			apply.IDs = []string{"alive"}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+}
+
+func TestSelectWithExtensions(t *testing.T) {
+	t.Parallel()
+
+	db, events := helperEnsureDatabase(t)
+	defer db.Close()
+
+	t.Run("Fill", func(t *testing.T) {
+		var event model.Event
+		event.Kind = nostr.KindTextNote
+		event.ID = "expired"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+
+		event.Kind = nostr.KindTextNote
+		event.ID = "alive"
+		event.PubKey = "2"
+		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
+		event.CreatedAt = 1
+
+		err = db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("AliveAndE", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.IDs = []string{"alive"}
+			apply.References = &x
+			apply.Expiration = &x
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("ExpiredAndQ", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			on := true
+			off := false
+			apply.Quotes = &on
+			apply.Expiration = &off
+		}))
+		require.NoError(t, err)
+		require.Zero(t, count)
+	})
+	t.Run("NoEAndNoQ", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			off := false
+			apply.Quotes = &off
+			apply.References = &off
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(100), count)
+	})
+	t.Run("IdNoTags", func(t *testing.T) {
+		ev := events.Random(t)
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			on := true
+			apply.IDs = []string{ev.ID}
+			apply.Quotes = &on
+		}))
+		require.NoError(t, err)
+		require.Zero(t, count)
+	})
+}
+
+func TestSelectRepostWithReference(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Fill", func(t *testing.T) {
+		var event model.Event
+		event.Kind = nostr.KindRepost
+		event.ID = "1"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"e", "fooo"}, {"bar", "foo"}}
+		event.CreatedAt = 1
+
+		err := db.SaveEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("SelectRepost", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			x := false
+			apply.References = &x
+			apply.Kinds = []int{nostr.KindRepost}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
 }
