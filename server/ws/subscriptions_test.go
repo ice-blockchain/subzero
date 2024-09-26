@@ -1678,3 +1678,219 @@ func TestPublishingNIP56(t *testing.T) {
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validReportEventWithPTagOnly, validReportEventWithBothTags, validReportEventWithLabel}, storedEvents)
 }
+
+func TestPublishingNIP58Badges(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent *model.Event
+	t.Run("kind 30009 (Badge defenition) (NIP-56): valid badge definition event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", "bravery"})
+		tags = append(tags, nostr.Tag{"name", "Medal of Bravery"})
+		tags = append(tags, nostr.Tag{"description", "Awarded to users demonstrating bravery"})
+		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
+		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
+		validBadgeDefinitionEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags:      tags,
+		}}
+		validBadgeDefinitionEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validBadgeDefinitionEvent.Sign(privkey))
+		require.NoError(t, validBadgeDefinitionEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validBadgeDefinitionEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validBadgeDefinitionEvent.Event))
+	})
+	t.Run("kind 8 (Badge award) (NIP-56): valid badge award event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "30009:alice:bravery"})
+		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
+		tags = append(tags, nostr.Tag{"p", "charlie", "wss://relay"})
+		validBadgeAwardEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBadgeAward,
+			Tags:      tags,
+		}}
+		validBadgeAwardEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validBadgeAwardEvent.Sign(privkey))
+		require.NoError(t, validBadgeAwardEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validBadgeAwardEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validBadgeAwardEvent.Event))
+	})
+	t.Run("kind 3008 (Profile badges) (NIP-56): valid profile badges event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
+		tags = append(tags, nostr.Tag{"a", "30009:alice:bravery"})
+		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
+		tags = append(tags, nostr.Tag{"a", "30009:alice:honor"})
+		tags = append(tags, nostr.Tag{"e", "<honor badge award event id>", "wss://nostr.academy"})
+		validProfileBadgesEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileBadges,
+			Tags:      tags,
+		}}
+		validProfileBadgesEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validProfileBadgesEvent.Sign(privkey))
+		require.NoError(t, validProfileBadgesEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validProfileBadgesEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validProfileBadgesEvent.Event))
+	})
+
+	t.Run("kind 30009 (Badge defenition) (NIP-56): invalid, no d tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"name", "Medal of Bravery"})
+		tags = append(tags, nostr.Tag{"description", "Awarded to users demonstrating bravery"})
+		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
+		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 30009 (Badge defenition) (NIP-56): not supported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"profile", "bogus"})
+		tags = append(tags, nostr.Tag{"name", "Medal of Bravery"})
+		tags = append(tags, nostr.Tag{"description", "Awarded to users demonstrating bravery"})
+		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
+		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 8 (Badge award) (NIP-56): invalid, no a tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBadgeAward,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 8 (Badge award) (NIP-56): invalid, a tag refers to wrong kind", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "1:alice:bravery"})
+		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBadgeAward,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 8 (Badge award) (NIP-56): invalid, no at least one p tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", "3009:alice:bravery"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBadgeAward,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 3008 (Profile badges) (NIP-56): invalid d tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", "bogus"})
+		tags = append(tags, nostr.Tag{"a", "30009:alice:bravery"})
+		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
+		tags = append(tags, nostr.Tag{"a", "30009:alice:honor"})
+		tags = append(tags, nostr.Tag{"e", "<honor badge award event id>", "wss://nostr.academy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileBadges,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 3008 (Profile badges) (NIP-56): invalid a tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
+		tags = append(tags, nostr.Tag{"a", "1:alice:bravery"})
+		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileBadges,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 3008 (Profile badges) (NIP-56): e/a tags mismatch", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
+		tags = append(tags, nostr.Tag{"a", "3009:alice:bravery"})
+		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
+		tags = append(tags, nostr.Tag{"a", "3009:alice:honor"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileBadges,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent}, storedEvents)
+}

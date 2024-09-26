@@ -24,7 +24,9 @@ const (
 	TagReportTypeOther         string = "other"
 
 	UserGeneratedContentNamespace string = "ugc"
+	ProfileBadgesIdentifier       string = "profile_badges"
 
+	KindBadgeAward        int = 8
 	KindGenericRepost     int = 16
 	KindReactionToWebsite int = 17
 	KindReport            int = 1984
@@ -63,9 +65,12 @@ var (
 		nostr.KindDeletion:        {"a", "e", "k"},
 		nostr.KindRepost:          {"e", "p"},
 		nostr.KindReaction:        {"e", "p", "a", "k"},
+		KindBadgeAward:            {"a", "p"},
 		KindReactionToWebsite:     {"r"},
 		KindGenericRepost:         {"k", "e", "p"},
 		KindLabeling:              {"L", "l", "e", "p", "a", "r", "t"},
+		nostr.KindProfileBadges:   {"d", "a", "e"},
+		nostr.KindBadgeDefinition: {"d", "name", "image", "description", "thumb"},
 		nostr.KindArticle:         {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
 		KindBlogPost:              {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
 	}
@@ -99,6 +104,8 @@ func (e *Event) Validate() error {
 		}
 	case nostr.KindReaction:
 		return validateKindReactionEvent(e)
+	case KindBadgeAward:
+		return validateKindBadgeAwardEvent(e)
 	case KindReactionToWebsite:
 		if e.Content != "+" && e.Content != "-" && e.Content != "" {
 			return errorx.Withf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
@@ -110,10 +117,51 @@ func (e *Event) Validate() error {
 		return validateKindReportEvent(e)
 	case KindLabeling:
 		return validateKindLabelingEvent(e)
+	case nostr.KindProfileBadges:
+		return validateKindProfileBadgesEvent(e)
+	case nostr.KindBadgeDefinition:
+		return validateKindBadgeDefinitionEvent(e)
+
 	case nostr.KindArticle, KindBlogPost:
 		if e.Content == "" || json.Valid([]byte(e.Content)) {
 			return errorx.Withf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
 		}
+	}
+
+	return nil
+}
+func validateKindBadgeDefinitionEvent(e *Event) error {
+	if dTag := e.Tags.GetD(); dTag == "" {
+		return errorx.Withf(ErrWrongEventParams, "nip-58, no required d tag: %+v", e)
+	}
+
+	return nil
+}
+
+func validateKindBadgeAwardEvent(e *Event) error {
+	if aTag := e.Tags.GetFirst([]string{"a"}); aTag == nil || aTag.Value() == "" ||
+		len(strings.Split(aTag.Value(), ":")) != 3 || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindBadgeDefinition) {
+		return errorx.Withf(ErrWrongEventParams, "nip-58, no required a tag: %+v", e)
+	}
+	if pTags := e.Tags.GetAll([]string{"p"}); len(pTags) == 0 {
+		return errorx.Withf(ErrWrongEventParams, "nip-58, no required p tags: %+v", e)
+	}
+
+	return nil
+}
+
+func validateKindProfileBadgesEvent(e *Event) error {
+	if dTag := e.Tags.GetD(); dTag != ProfileBadgesIdentifier {
+		return errorx.Withf(ErrWrongEventParams, "nip-58, no required d tag/wrong value: %+v", e)
+	}
+	aTags := e.Tags.GetAll([]string{"a"})
+	for _, aTag := range aTags {
+		if aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3 || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindBadgeDefinition) {
+			return errorx.Withf(ErrWrongEventParams, "nip-58, wrong a tag: %+v", e)
+		}
+	}
+	if len(aTags) != len(e.Tags.GetAll([]string{"e"})) {
+		return errorx.Withf(ErrWrongEventParams, "nip-58, e/a tag mismatch: %+v", e)
 	}
 
 	return nil
