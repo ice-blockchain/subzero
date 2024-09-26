@@ -69,6 +69,32 @@ func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
 	return f.EventIdsString
 }
 
+type filterBuilder struct {
+	Name           string
+	EventIds       []string
+	EventIdsString string
+	sync.Once
+}
+
+func (f *filterBuilder) HasEvents() bool {
+	return len(f.EventIds) > 0
+}
+
+func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
+	f.Do(func() {
+		f.EventIdsString = buildFromSlice(
+			&whereBuilder{
+				Params: w.Params,
+			},
+			f.Name,
+			f.EventIds,
+			"event_id",
+		).String()
+	})
+
+	return f.EventIdsString
+}
+
 func newWhereBuilder() *whereBuilder {
 	return &whereBuilder{
 		Params: make(map[string]any),
