@@ -26,7 +26,7 @@ const (
 	testDeadline            = 15 * stdlibtime.Second
 	certPath                = "%v/fixture/.testdata/localhost.crt"
 	keyPath                 = "%v/fixture/.testdata/localhost.key"
-	nIP13MinLeadingZeroBits = 20
+	NIP13MinLeadingZeroBits = 5
 )
 
 var echoServer *fixture.MockService
@@ -54,7 +54,7 @@ func TestMain(m *testing.M) {
 		CertPath:                certFilePath,
 		KeyPath:                 keyFilePath,
 		Port:                    9998,
-		NIP13MinLeadingZeroBits: nIP13MinLeadingZeroBits,
+		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl.Handle, nil)
 	m.Run()
 	serverCancel()
