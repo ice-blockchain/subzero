@@ -21,7 +21,7 @@ NIPs | latest commit hash implemented | comments
 [40](https://github.com/nostr-protocol/nips/blob/master/40.md) | |
 [45](https://github.com/nostr-protocol/nips/blob/master/45.md) | |
 [50](https://github.com/nostr-protocol/nips/blob/master/50.md) | |
-[51](https://github.com/nostr-protocol/nips/blob/master/51.md) | |
+[51](https://github.com/nostr-protocol/nips/blob/master/51.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
 [56](https://github.com/nostr-protocol/nips/blob/master/56.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
 [58](https://github.com/nostr-protocol/nips/blob/master/58.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
 [65](https://github.com/nostr-protocol/nips/blob/master/65.md) | |

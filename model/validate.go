@@ -23,15 +23,39 @@ const (
 	TagReportTypeImpersonation string = "impersonation"
 	TagReportTypeOther         string = "other"
 
+	RelayListReadMarker  = "read"
+	RelayListWriteMarker = "write"
+
 	UserGeneratedContentNamespace string = "ugc"
 	ProfileBadgesIdentifier       string = "profile_badges"
 
-	KindBadgeAward        int = 8
-	KindGenericRepost     int = 16
-	KindReactionToWebsite int = 17
-	KindReport            int = 1984
-	KindLabeling          int = 1985
-	KindBlogPost          int = 30024
+	KindBadgeAward           int = 8
+	KindGenericRepost        int = 16
+	KindReactionToWebsite    int = 17
+	KindReport               int = 1984
+	KindLabeling             int = 1985
+	KindBookmarks            int = 10003
+	KindCommunities          int = 10004
+	KindPublicChats          int = 10005
+	KindBlockedRelays        int = 10006
+	KindSearchRelay          int = 10007
+	KindSimpleGroups         int = 10009
+	KindInterests            int = 10015
+	KindEmojis               int = 10030
+	KindDMRelays             int = 10050
+	KindGoodWikiAuthors      int = 10101
+	KindGoodWikiRelays       int = 10102
+	KindRelaySets            int = 30002
+	KindBookmarksSets        int = 30003
+	KindCurationSets1        int = 30004
+	KindCurationSets2        int = 30005
+	KindMuteSets             int = 30007
+	KindInterestSets         int = 30015
+	KindEmojiSets            int = 30030
+	KindReleaseArtefactSets  int = 30063
+	KindBlogPost             int = 30024
+	KindVideo                int = 34235
+	KindCommunityDefinitions int = 34550
 
 	maxLabelSymbolLength int = 100
 )
@@ -59,20 +83,43 @@ var (
 	ErrUnsupportedTag   = errors.New("unsupported tag")
 
 	KindSupportedTags = map[Kind][]string{
-		nostr.KindProfileMetadata: {"e", "p", "a", "alt"},
-		nostr.KindTextNote:        {"e", "p", "q", "l", "L"},
-		nostr.KindFollowList:      {"p"},
-		nostr.KindDeletion:        {"a", "e", "k"},
-		nostr.KindRepost:          {"e", "p"},
-		nostr.KindReaction:        {"e", "p", "a", "k"},
-		KindBadgeAward:            {"a", "p"},
-		KindReactionToWebsite:     {"r"},
-		KindGenericRepost:         {"k", "e", "p"},
-		KindLabeling:              {"L", "l", "e", "p", "a", "r", "t"},
-		nostr.KindProfileBadges:   {"d", "a", "e"},
-		nostr.KindBadgeDefinition: {"d", "name", "image", "description", "thumb"},
-		nostr.KindArticle:         {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
-		KindBlogPost:              {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+		nostr.KindProfileMetadata:       {"e", "p", "a", "alt"},
+		nostr.KindTextNote:              {"e", "p", "q", "l", "L"},
+		nostr.KindFollowList:            {"p"},
+		nostr.KindDeletion:              {"a", "e", "k"},
+		nostr.KindRepost:                {"e", "p"},
+		nostr.KindReaction:              {"e", "p", "a", "k"},
+		KindBadgeAward:                  {"a", "p"},
+		KindGenericRepost:               {"k", "e", "p"},
+		KindReactionToWebsite:           {"r"},
+		nostr.KindMuteList:              {"p", "t", "word", "e"},
+		nostr.KindPinList:               {"e"},
+		KindBookmarks:                   {"e", "a", "t", "r"},
+		KindCommunities:                 {"a"},
+		KindPublicChats:                 {"e"},
+		KindBlockedRelays:               {"relay"},
+		KindSearchRelay:                 {"relay"},
+		KindSimpleGroups:                {"group"},
+		KindInterests:                   {"t", "a"},
+		KindEmojis:                      {"emoji", "a"},
+		KindDMRelays:                    {"relay"},
+		KindGoodWikiAuthors:             {"p"},
+		KindGoodWikiRelays:              {"relay"},
+		nostr.KindCategorizedPeopleList: {"p", "d", "title", "image", "description"},
+		KindRelaySets:                   {"relay", "d", "title", "image", "description"},
+		KindBookmarksSets:               {"e", "a", "t", "r", "d", "title", "image", "description"},
+		KindCurationSets1:               {"a", "e", "d", "title", "image", "description"},
+		KindCurationSets2:               {"a", "d", "title", "image", "description"},
+		KindMuteSets:                    {"p", "d", "title", "image", "description"},
+		KindInterestSets:                {"t", "d", "title", "image", "description"},
+		KindEmojiSets:                   {"emoji", "d", "title", "image", "description"},
+		KindReleaseArtefactSets:         {"e", "i", "version", "d", "title", "image", "description"},
+		KindLabeling:                    {"L", "l", "e", "p", "a", "r", "t"},
+		nostr.KindRelayListMetadata:     {"r"},
+		nostr.KindProfileBadges:         {"d", "a", "e"},
+		nostr.KindBadgeDefinition:       {"d", "name", "image", "description", "thumb"},
+		nostr.KindArticle:               {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+		KindBlogPost:                    {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
 	}
 )
 
@@ -113,10 +160,54 @@ func (e *Event) Validate() error {
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
 			return errorx.Withf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
+	case KindBookmarks:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindArticle) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
+	case KindCommunities:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindCommunityDefinitions) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
+	case KindInterests:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindInterestSets) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
+	case KindEmojis:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindEmojiSets) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
+	case KindBookmarksSets:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindArticle) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
+	case KindCurationSets1:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindTextNote) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
+	case KindCurationSets2:
+		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindVideo) {
+				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+			}
+		}
 	case KindReport:
 		return validateKindReportEvent(e)
 	case KindLabeling:
 		return validateKindLabelingEvent(e)
+	case nostr.KindRelayListMetadata:
+		return validateKindRelayListMetadataEvent(e)
 	case nostr.KindProfileBadges:
 		return validateKindProfileBadgesEvent(e)
 	case nostr.KindBadgeDefinition:
@@ -130,6 +221,24 @@ func (e *Event) Validate() error {
 
 	return nil
 }
+
+func validateKindRelayListMetadataEvent(e *Event) error {
+	rTags := e.Tags.GetAll([]string{"r"})
+	if len(rTags) == 0 {
+		return errorx.Withf(ErrWrongEventParams, "nip-65, no required r tags: %+v", e)
+	}
+	if e.Content != "" {
+		return errorx.Withf(ErrWrongEventParams, "nip-65, content is not used: %+v", e)
+	}
+	for _, tag := range rTags {
+		if len(tag) < 2 || (len(tag) > 2 && (tag[2] != "" && tag[2] != RelayListReadMarker && tag[2] != RelayListWriteMarker)) {
+			return errorx.Withf(ErrWrongEventParams, "nip-65, wrong read/write marker for r tag: %+v", e)
+		}
+	}
+
+	return nil
+}
+
 func validateKindBadgeDefinitionEvent(e *Event) error {
 	if dTag := e.Tags.GetD(); dTag == "" {
 		return errorx.Withf(ErrWrongEventParams, "nip-58, no required d tag: %+v", e)

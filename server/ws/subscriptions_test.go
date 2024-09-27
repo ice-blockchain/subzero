@@ -20,8 +20,6 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
-const minTestLeadingZeroBits = 20
-
 func TestRelaySubscription(t *testing.T) {
 	var eventsQueue []*model.Event
 
@@ -42,7 +40,7 @@ func TestRelaySubscription(t *testing.T) {
 	ev.SetExtra("extra", uuid.NewString())
 
 	require.NoError(t, ev.Sign(privkey))
-	require.NoError(t, ev.GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, ev.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, ev.Sign(privkey))
 	eventsQueue = append(eventsQueue, ev)
 
@@ -124,7 +122,7 @@ func TestRelaySubscription(t *testing.T) {
 	})
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
-	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Sign(privkey))
 
 	require.NoError(t, relay.Publish(ctx, eventsQueue[len(eventsQueue)-1].Event))
@@ -140,7 +138,7 @@ func TestRelaySubscription(t *testing.T) {
 	storedEvents = append(storedEvents, eventBy3rdParty)
 	eventsQueue[len(eventsQueue)-1].SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
-	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
 	require.NoError(t, NotifySubscriptions(eventBy3rdParty))
 
@@ -154,7 +152,7 @@ func TestRelaySubscription(t *testing.T) {
 	}}
 	notMatchingEvent.SetExtra("extra", uuid.NewString())
 	require.NoError(t, notMatchingEvent.Sign(privkey))
-	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, notMatchingEvent.Sign(privkey))
 	require.NoError(t, relay.Publish(ctx, notMatchingEvent.Event))
 
@@ -196,7 +194,7 @@ func TestRelaySubscription(t *testing.T) {
 	}}
 	eventMatchingReplacedSub.SetExtra("extra", uuid.NewString())
 	require.NoError(t, eventMatchingReplacedSub.Sign(privkey))
-	require.NoError(t, eventMatchingReplacedSub.GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, eventMatchingReplacedSub.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, eventMatchingReplacedSub.Sign(privkey))
 	require.NoError(t, relay.Publish(ctx, eventMatchingReplacedSub.Event))
 	eventsQueue = append(eventsQueue, eventMatchingReplacedSub)
@@ -242,7 +240,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		}
 	})
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
-	require.NoError(t, storedEvents[len(storedEvents)-1].GenerateNIP13(ctx, minTestLeadingZeroBits))
+	require.NoError(t, storedEvents[len(storedEvents)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
 	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		storedEvents = append(storedEvents, event)
@@ -282,7 +280,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	}
 	newRealtimeEvent.SetExtra("extra", uuid.NewString())
 	require.NoError(t, newRealtimeEvent.Sign(privkey))
-	tag, err := nip13.DoWork(ctx, newRealtimeEvent, minTestLeadingZeroBits)
+	tag, err := nip13.DoWork(ctx, newRealtimeEvent, NIP13MinLeadingZeroBits)
 	require.NoError(t, err)
 	newRealtimeEvent.Tags = append(newRealtimeEvent.Tags, tag)
 	require.NoError(t, newRealtimeEvent.Sign(privkey))
@@ -394,7 +392,7 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("valid event", func(t *testing.T) {
 		validEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEvent.Sign(privkey))
-		require.NoError(t, validEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
 	})
@@ -407,13 +405,13 @@ func TestPublishingEvents(t *testing.T) {
 		}}
 		invalidKindEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKindEvent.Sign(privkey))
-		require.NoError(t, invalidKindEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKindEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKindEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKindEvent.Event))
 
 		invalidKindEvent.Kind = 65536
 		require.NoError(t, invalidKindEvent.Sign(privkey))
-		require.NoError(t, invalidKindEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKindEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKindEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKindEvent.Event))
 	})
@@ -427,7 +425,7 @@ func TestPublishingEvents(t *testing.T) {
 		}}
 		invalidID.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidID.Sign(privkey))
-		require.NoError(t, invalidID.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidID.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidID.Sign(privkey))
 		invalidID.ID = uuid.NewString()
 		require.Error(t, relay.Publish(ctx, invalidID.Event))
@@ -442,7 +440,7 @@ func TestPublishingEvents(t *testing.T) {
 			PubKey:    uuid.NewString(),
 		}}
 		invalidSignature.SetExtra("extra", uuid.NewString())
-		require.NoError(t, invalidSignature.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidSignature.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.Error(t, relay.Publish(ctx, invalidSignature.Event))
 	})
 	t.Run("duplicated event", func(t *testing.T) {
@@ -455,7 +453,7 @@ func TestPublishingEvents(t *testing.T) {
 			Content:   "bogus",
 		}
 		require.NoError(t, ephemeralEvent.Sign(privkey))
-		tag, err := nip13.DoWork(ctx, ephemeralEvent, minTestLeadingZeroBits)
+		tag, err := nip13.DoWork(ctx, ephemeralEvent, NIP13MinLeadingZeroBits)
 		require.NoError(t, err)
 		ephemeralEvent.Tags = append(ephemeralEvent.Tags, tag)
 		require.NoError(t, ephemeralEvent.Sign(privkey))
@@ -469,7 +467,7 @@ func TestPublishingEvents(t *testing.T) {
 		}}
 		inValidKind03Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind03Event.Sign(privkey))
-		require.NoError(t, inValidKind03Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind03Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, inValidKind03Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
 	})
@@ -482,7 +480,7 @@ func TestPublishingEvents(t *testing.T) {
 		}}
 		inValidKind03Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind03Event.Sign(privkey))
-		require.NoError(t, inValidKind03Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind03Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, inValidKind03Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
 	})
@@ -495,7 +493,7 @@ func TestPublishingEvents(t *testing.T) {
 		}}
 		validKind03Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind03Event.Sign(privkey))
-		require.NoError(t, validKind03Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind03Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validKind03Event.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validKind03Event.Event))
 	})
@@ -546,7 +544,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 		}}
 		validEventNIP09WithEKTags.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventNIP09WithEKTags.Sign(privkey))
-		require.NoError(t, validEventNIP09WithEKTags.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP09WithEKTags.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventNIP09WithEKTags.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventNIP09WithEKTags.Event))
 	})
@@ -563,7 +561,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 		}}
 		validEventNIP09AllTags.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventNIP09AllTags.Sign(privkey))
-		require.NoError(t, validEventNIP09AllTags.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP09AllTags.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventNIP09AllTags.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventNIP09AllTags.Event))
 	})
@@ -577,7 +575,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -592,7 +590,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -607,7 +605,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -654,7 +652,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
-		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, inValidKind01Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -667,7 +665,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
-		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, inValidKind01Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -679,7 +677,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
-		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, inValidKind01Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -691,7 +689,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))
-		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, inValidKind01Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -705,7 +703,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		}}
 		validKind01NIP10Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind01NIP10Event.Sign(privkey))
-		require.NoError(t, validKind01NIP10Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind01NIP10Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validKind01NIP10Event.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validKind01NIP10Event.Event))
 	})
@@ -755,7 +753,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		validKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind06NIP18Event.Sign(privkey))
-		require.NoError(t, validKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validKind06NIP18Event.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validKind06NIP18Event.Event))
 	})
@@ -770,7 +768,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -785,7 +783,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -800,7 +798,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -815,7 +813,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -830,7 +828,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -845,7 +843,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -860,7 +858,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind06NIP18Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
-		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind06NIP18Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind06NIP18Event.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -878,7 +876,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		validKind16NIP18GenericRepostEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind16NIP18GenericRepostEvent.Sign(privkey))
-		require.NoError(t, validKind16NIP18GenericRepostEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind16NIP18GenericRepostEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validKind16NIP18GenericRepostEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validKind16NIP18GenericRepostEvent.Event))
 	})
@@ -895,7 +893,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		}}
 		invalidKind16NIP18GenericRepostEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidKind16NIP18GenericRepostEvent.Sign(privkey))
-		require.NoError(t, invalidKind16NIP18GenericRepostEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidKind16NIP18GenericRepostEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidKind16NIP18GenericRepostEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidKind16NIP18GenericRepostEvent.Event))
 	})
@@ -949,7 +947,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		}}
 		validEventKindArticle.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventKindArticle.Sign(privkey))
-		require.NoError(t, validEventKindArticle.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventKindArticle.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventKindArticle.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventKindArticle.Event))
 	})
@@ -969,7 +967,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		}}
 		validEventKindBlogPost.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventKindBlogPost.Sign(privkey))
-		require.NoError(t, validEventKindBlogPost.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventKindBlogPost.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventKindBlogPost.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventKindBlogPost.Event))
 	})
@@ -984,7 +982,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		}}
 		validEventNoTagsKindArticle.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventNoTagsKindArticle.Sign(privkey))
-		require.NoError(t, validEventNoTagsKindArticle.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNoTagsKindArticle.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventNoTagsKindArticle.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventNoTagsKindArticle.Event))
 	})
@@ -1006,7 +1004,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1027,7 +1025,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1079,7 +1077,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		}}
 		validEventNIP01.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventNIP01.Sign(privkey))
-		require.NoError(t, validEventNIP01.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP01.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventNIP01.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventNIP01.Event))
 	})
@@ -1097,7 +1095,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		}}
 		validEventNIP24.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validEventNIP24.Sign(privkey))
-		require.NoError(t, validEventNIP24.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validEventNIP24.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validEventNIP24.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validEventNIP24.Event))
 	})
@@ -1115,7 +1113,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1133,7 +1131,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1152,7 +1150,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1205,7 +1203,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		validUpvoteEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validUpvoteEvent.Sign(privkey))
-		require.NoError(t, validUpvoteEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validUpvoteEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validUpvoteEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validUpvoteEvent.Event))
 	})
@@ -1222,7 +1220,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		validUpvoteEmptyContentEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validUpvoteEmptyContentEvent.Sign(privkey))
-		require.NoError(t, validUpvoteEmptyContentEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validUpvoteEmptyContentEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validUpvoteEmptyContentEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validUpvoteEmptyContentEvent.Event))
 	})
@@ -1240,7 +1238,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		validDownvoteEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validDownvoteEvent.Sign(privkey))
-		require.NoError(t, validDownvoteEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validDownvoteEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validDownvoteEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validDownvoteEvent.Event))
 	})
@@ -1255,7 +1253,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		validReactionToWebsiteEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validReactionToWebsiteEvent.Sign(privkey))
-		require.NoError(t, validReactionToWebsiteEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReactionToWebsiteEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validReactionToWebsiteEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validReactionToWebsiteEvent.Event))
 	})
@@ -1272,7 +1270,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1289,7 +1287,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1307,7 +1305,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1358,7 +1356,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		validLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validLabelingEvent.Sign(privkey))
-		require.NoError(t, validLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validLabelingEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validLabelingEvent.Event))
 	})
@@ -1374,7 +1372,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		validUGCLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validUGCLabelingEvent.Sign(privkey))
-		require.NoError(t, validUGCLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validUGCLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validUGCLabelingEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validUGCLabelingEvent.Event))
 	})
@@ -1390,7 +1388,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
-		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1406,7 +1404,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
-		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1423,7 +1421,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
-		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1440,7 +1438,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
-		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1456,7 +1454,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
-		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1473,7 +1471,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidLabelingEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
-		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidLabelingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidLabelingEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1485,7 +1483,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1498,7 +1496,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		}}
 		validKind01EventWithLabels.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validKind01EventWithLabels.Sign(privkey))
-		require.NoError(t, validKind01EventWithLabels.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validKind01EventWithLabels.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validKind01EventWithLabels.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validKind01EventWithLabels.Event))
 	})
@@ -1547,7 +1545,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		validReportEventWithPTagOnly.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validReportEventWithPTagOnly.Sign(privkey))
-		require.NoError(t, validReportEventWithPTagOnly.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReportEventWithPTagOnly.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validReportEventWithPTagOnly.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validReportEventWithPTagOnly.Event))
 	})
@@ -1564,7 +1562,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		validReportEventWithBothTags.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validReportEventWithBothTags.Sign(privkey))
-		require.NoError(t, validReportEventWithBothTags.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReportEventWithBothTags.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validReportEventWithBothTags.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validReportEventWithBothTags.Event))
 	})
@@ -1583,7 +1581,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		validReportEventWithLabel.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validReportEventWithLabel.Sign(privkey))
-		require.NoError(t, validReportEventWithLabel.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validReportEventWithLabel.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validReportEventWithLabel.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validReportEventWithLabel.Event))
 	})
@@ -1598,7 +1596,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1614,7 +1612,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1629,7 +1627,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1645,7 +1643,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1661,7 +1659,7 @@ func TestPublishingNIP56(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1713,7 +1711,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		validBadgeDefinitionEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validBadgeDefinitionEvent.Sign(privkey))
-		require.NoError(t, validBadgeDefinitionEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validBadgeDefinitionEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validBadgeDefinitionEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validBadgeDefinitionEvent.Event))
 	})
@@ -1729,7 +1727,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		validBadgeAwardEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validBadgeAwardEvent.Sign(privkey))
-		require.NoError(t, validBadgeAwardEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validBadgeAwardEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validBadgeAwardEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validBadgeAwardEvent.Event))
 	})
@@ -1747,7 +1745,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		validProfileBadgesEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, validProfileBadgesEvent.Sign(privkey))
-		require.NoError(t, validProfileBadgesEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, validProfileBadgesEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, validProfileBadgesEvent.Sign(privkey))
 		require.NoError(t, relay.Publish(ctx, validProfileBadgesEvent.Event))
 	})
@@ -1765,7 +1763,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1783,7 +1781,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1797,7 +1795,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1812,7 +1810,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1826,7 +1824,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1844,7 +1842,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1860,7 +1858,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1877,7 +1875,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		}}
 		invalidEvent.SetExtra("extra", uuid.NewString())
 		require.NoError(t, invalidEvent.Sign(privkey))
-		require.NoError(t, invalidEvent.GenerateNIP13(ctx, minTestLeadingZeroBits))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.NoError(t, invalidEvent.Sign(privkey))
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1893,4 +1891,1027 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	}
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, []*model.Event{validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent}, storedEvents)
+}
+
+func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validRelayListEvent *model.Event
+	t.Run("kind 10002 (Relay list) (NIP-65): valid relay list", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"r", "wss://alicerelay.example.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://brando-relay.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://expensive-relay.example2.com", "write"})
+		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
+		validRelayListEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags:      tags,
+		}}
+		validRelayListEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validRelayListEvent.Sign(privkey))
+		require.NoError(t, validRelayListEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validRelayListEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validRelayListEvent.Event))
+	})
+	t.Run("kind 10002 (Relay list) (NIP-65): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"r", "wss://alicerelay.example.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://brando-relay.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://expensive-relay.example2.com", "write"})
+		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 10002 (Relay list) (NIP-65): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"r", "wss://alicerelay.example.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://brando-relay.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://expensive-relay.example2.com", "write"})
+		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("kind 10002 (Relay list) (NIP-65): wrong marker", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"r", "wss://alicerelay.example.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://brando-relay.com"})
+		tags = append(tags, nostr.Tag{"r", "wss://expensive-relay.example2.com", "write"})
+		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
+		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "wrong"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, []*model.Event{validRelayListEvent}, storedEvents)
+}
+
+func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validEvents []*model.Event
+	t.Run("Kind 10000 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "pubkey"})
+		tags = append(tags, nostr.Tag{"t", "hash"})
+		tags = append(tags, nostr.Tag{"e", "event"})
+		tags = append(tags, nostr.Tag{"word", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindMuteList,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10000 (NIP-51) mute lists: unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "pubkey"})
+		tags = append(tags, nostr.Tag{"t", "hash"})
+		tags = append(tags, nostr.Tag{"e", "event"})
+		tags = append(tags, nostr.Tag{"word", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindMuteList,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10001 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "event"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindPinList,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10001 (NIP-51) pin lists: unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "event"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindPinList,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	t.Run("Kind 10003 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "event"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindArticle)})
+		tags = append(tags, nostr.Tag{"t", "hash"})
+		tags = append(tags, nostr.Tag{"r", "hash"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBookmarks,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10003 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "event"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindArticle)})
+		tags = append(tags, nostr.Tag{"t", "hash"})
+		tags = append(tags, nostr.Tag{"r", "hash"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBookmarks,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10003 (NIP-51): wrong a tag kind", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "event"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		tags = append(tags, nostr.Tag{"t", "hash"})
+		tags = append(tags, nostr.Tag{"r", "hash"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBookmarks,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10004 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindCommunityDefinitions)})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCommunities,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10003 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindCommunityDefinitions)})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCommunities,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10003 (NIP-51): wrong a tag kind", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCommunities,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10005 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindPublicChats,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10005 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindPublicChats,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10006 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBlockedRelays,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10006 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBlockedRelays,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10007 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindSearchRelay,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10007 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindSearchRelay,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10007 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"group", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindSimpleGroups,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10007 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"group", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindSimpleGroups,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10015 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindInterestSets)})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindInterests,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10015 (NIP-51): unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy,dummy", model.KindInterestSets)})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindInterests,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10015 (NIP-51): wrong a tag kind", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindInterests,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	t.Run("Kind 10030 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"emoji", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindEmojiSets)})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindEmojis,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10030 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"emoji", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindEmojiSets)})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindEmojis,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10030 (NIP-51) wrong a tag kind", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"emoji", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindEmojis,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10050 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindDMRelays,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10050 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindDMRelays,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10101 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindGoodWikiAuthors,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10101 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindGoodWikiAuthors,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 10102 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindGoodWikiRelays,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 10102 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindGoodWikiRelays,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30000 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindCategorizedPeopleList,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30000 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindCategorizedPeopleList,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30002 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindRelaySets,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30002 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"relay", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindCategorizedPeopleList,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30003 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindArticle)})
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"r", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindBookmarksSets,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30003 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindArticle)})
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"r", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindCategorizedPeopleList,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30003 (NIP-51) wrong a tag value", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"r", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindCategorizedPeopleList,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30004 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindTextNote)})
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCurationSets1,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30004 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindTextNote)})
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCurationSets1,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30004 (NIP-51) wrong a tag value", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCurationSets1,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30005 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindVideo)})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCurationSets2,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30005 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.KindVideo)})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCurationSets2,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30005 (NIP-51) wrong a tag value", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindCurationSets2,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30007 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindMuteSets,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30007 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"p", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindMuteSets,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30015 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindInterestSets,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30015 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"t", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindInterestSets,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30030 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"emoji", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindEmojiSets,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30030 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"emoji", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindEmojiSets,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+	t.Run("Kind 30063 (NIP-51) valid", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"i", "dummy"})
+		tags = append(tags, nostr.Tag{"version", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		validEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReleaseArtefactSets,
+			Tags:      tags,
+		}}
+		validEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validEvent.Sign(privkey))
+		require.NoError(t, validEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validEvent.Sign(privkey))
+		validEvents = append(validEvents, validEvent)
+		require.NoError(t, relay.Publish(ctx, validEvent.Event))
+	})
+	t.Run("Kind 30063 (NIP-51) unsupported tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "dummy"})
+		tags = append(tags, nostr.Tag{"i", "dummy"})
+		tags = append(tags, nostr.Tag{"version", "dummy"})
+		tags = append(tags, nostr.Tag{"d", "dummy"})
+		tags = append(tags, nostr.Tag{"title", "dummy"})
+		tags = append(tags, nostr.Tag{"image", "dummy"})
+		tags = append(tags, nostr.Tag{"description", "dummy"})
+		tags = append(tags, nostr.Tag{"wrong", "dummy"})
+		invalidEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.KindReleaseArtefactSets,
+			Tags:      tags,
+		}}
+		invalidEvent.SetExtra("extra", uuid.NewString())
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.NoError(t, invalidEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, invalidEvent.Sign(privkey))
+		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+	})
+
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServer.ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
+	require.Equal(t, validEvents, storedEvents)
 }
