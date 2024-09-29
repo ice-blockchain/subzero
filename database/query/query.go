@@ -66,23 +66,23 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 }
 
 func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
-	var originalEvent model.Event
+	var childEvent model.Event
 
-	err := json.Unmarshal([]byte(event.Content), &originalEvent)
+	err := json.Unmarshal([]byte(event.Content), &childEvent)
 	if err != nil {
 		return errors.Wrap(err, "failed to unmarshal original event")
 	}
 
-	// Clear the content and signature of the original event, as it's not needed.
-	originalEvent.Content = ""
-	originalEvent.Sig = ""
-
-	err = db.SaveEvent(ctx, &originalEvent)
+	err = db.SaveEvent(ctx, &childEvent)
 	if err != nil {
 		return errors.Wrap(err, "failed to save original event")
 	}
 
-	return db.SaveEvent(ctx, event)
+	// Link the repost event to the original event.
+	dbEvent := eventToDatabaseEvent(event)
+	dbEvent.ChildEvent = sql.NullString{String: childEvent.ID, Valid: true}
+
+	return db.SaveDatabaseEvent(ctx, dbEvent)
 }
 
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
@@ -141,6 +141,19 @@ values
 	}
 
 	return nil
+}
+
+func eventToDatabaseEvent(event *model.Event) *databaseEvent {
+	jtags, _ := marshalTags(event.Tags)
+
+	return &databaseEvent{
+		Event: *event,
+		Jtags: string(jtags),
+	}
+}
+
+func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
+	return db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(event))
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
