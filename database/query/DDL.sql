@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS events
     sig               text    not null,
     content           text    not null,
     d_tag             text    not null DEFAULT '',
+    child_event       text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     temp_tags         text
 ) strict, WITHOUT ROWID;
 --------
@@ -36,6 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_events_id_created_at_system_created_at           
 CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_system_created_at                 ON events(id, pubkey, system_created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_system_created_at ON events(id, kind, pubkey, created_at DESC, system_created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_child_event_system_created_at               ON events(child_event, system_created_at DESC);
 
 --------
 CREATE TABLE IF NOT EXISTS event_tags
