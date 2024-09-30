@@ -80,7 +80,7 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 
 	// Link the repost event to the original event.
 	dbEvent := eventToDatabaseEvent(event)
-	dbEvent.ChildEvent = sql.NullString{String: childEvent.ID, Valid: true}
+	dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
 
 	return db.SaveDatabaseEvent(ctx, dbEvent)
 }
