@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/ice-blockchain/subzero/storage/statistics"
 	"io"
 	"os"
 	"path/filepath"
@@ -59,6 +60,7 @@ type (
 		rootStoragePath string
 		newFiles        map[string]map[string]*FileMeta
 		newFilesMx      *sync.RWMutex
+		stats           statistics.Statistics
 	}
 )
 
@@ -178,6 +180,9 @@ func (c *client) Close() error {
 	c.dht.Close()
 	if gClose := c.gateway.Close(); gClose != nil {
 		err = multierror.Append(err, errorx.Withf(gClose, "failed to stop gateway"))
+	}
+	if sClose := c.stats.Close(); sClose != nil {
+		err = multierror.Append(err, errorx.Withf(sClose, "failed to close stats file"))
 	}
 	if dErr := c.db.Close(); dErr != nil {
 		err = multierror.Append(err, errorx.Withf(dErr, "failed to close db"))

@@ -30,6 +30,7 @@ var (
 	storageRootDir     string
 	globalConfigUrl    string
 	adnlNodeKey        []byte
+	debug              bool
 	subzero            = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
@@ -37,7 +38,7 @@ var (
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			query.MustInit()
-			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort))
+			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				CertPath:                cert,
 				KeyPath:                 key,
@@ -62,6 +63,7 @@ var (
 			}
 			return nodeKey
 		}(), "adnl node key in hex")
+		subzero.Flags().BoolVar(&debug, "debug", false, "enable debugging info")
 		if err := subzero.MarkFlagRequired("cert"); err != nil {
 			log.Print(err)
 		}

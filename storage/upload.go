@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	gomime "github.com/cubewise-code/go-mime"
 	"log"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -31,16 +33,24 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 				return "", "", errorx.Withf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
-		existingBagForUser.Stop()
-		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
-			return "", "", errorx.Withf(err, "failed to replace bag for user %s", userPubkey)
-		}
 	}
+
 	var bs []*Bootstrap
-	bagID, bs, err = c.upload(ctx, userPubkey, relativePathToFileForUrl, hash, newFile, &existingHD)
+	var bag *storage.Torrent
+	bag, bs, err = c.upload(ctx, userPubkey, relativePathToFileForUrl, hash, newFile, &existingHD)
 	if err != nil {
 		return "", "", errorx.Withf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
+	bagID = hex.EncodeToString(bag.BagID)
+	if newFile != nil {
+		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
+		if err != nil {
+			return "", "", errorx.Withf(err, "failed to get just created file from new bag")
+		}
+		fullFilePath := filepath.Join(c.rootStoragePath, userPubkey, relativePathToFileForUrl)
+		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
+	}
+
 	url, err = c.buildUrl(bagID, relativePathToFileForUrl, bs)
 	if err != nil {
 		return "", "", errorx.Withf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
@@ -48,7 +58,7 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 	return bagID, url, err
 }
 
-func (c *client) upload(ctx context.Context, user, relativePath, hash string, fileMeta *FileMeta, headerMetadata *headerData) (bagID string, bootstrap []*Bootstrap, err error) {
+func (c *client) upload(ctx context.Context, user, relativePath, hash string, fileMeta *FileMeta, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
 	if fileMeta != nil {
 		c.newFilesMx.Lock()
 		if userNewFiles, hasNewFiles := c.newFiles[user]; !hasNewFiles || userNewFiles == nil {
@@ -60,7 +70,7 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 	rootUserPath, _ := c.BuildUserPath(user, "")
 	refs, err := c.progressStorage.GetAllFilesRefsInDir(rootUserPath)
 	if err != nil {
-		return "", nil, errorx.With(err, "failed to detect shareable files")
+		return nil, nil, errorx.With(err, "failed to detect shareable files")
 	}
 	headerMD := &headerData{
 		User:         user,
@@ -89,7 +99,7 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 	var headerMDSerialized []byte
 	headerMDSerialized, err = json.Marshal(headerMD)
 	if err != nil {
-		return "", nil, errorx.With(err, "failed to put file hashes")
+		return nil, nil, errorx.With(err, "failed to put file hashes")
 	}
 	log.Println("UPLOAD META FOR ", relativePath, string(headerMDSerialized))
 	header := &storage.TorrentHeader{
@@ -106,22 +116,22 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 		}
 	})
 	if err != nil {
-		return "", nil, errorx.With(err, "failed to initialize bag")
+		return nil, nil, errorx.With(err, "failed to initialize bag")
 	}
 	err = tr.Start(true, true, false)
 	if err != nil {
-		return "", nil, errorx.With(err, "failed to start bag upload")
+		return nil, nil, errorx.With(err, "failed to start bag upload")
 	}
 	wg.Wait()
 	err = c.saveUploadTorrent(tr, user)
 	if err != nil {
-		return "", nil, errorx.With(err, "failed to save updated bag")
+		return nil, nil, errorx.With(err, "failed to save updated bag")
 	}
 	bootstrapNode, err := c.buildBootstrapNodeInfo(tr)
 	if err != nil {
-		return "", nil, errorx.With(err, "failed to build bootstrap node info")
+		return nil, nil, errorx.With(err, "failed to build bootstrap node info")
 	}
-	return hex.EncodeToString(tr.BagID), []*Bootstrap{bootstrapNode}, nil
+	return tr, []*Bootstrap{bootstrapNode}, nil
 }
 
 func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error) {

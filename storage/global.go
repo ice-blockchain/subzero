@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ice-blockchain/subzero/storage/statistics"
 	"log"
 	"net"
 	"net/url"
@@ -106,7 +107,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	return nil
 }
 
-func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int) {
+func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int, debug bool) {
 	storage.Logger = log.Println
 	var lsCfg *liteclient.GlobalConfig
 	u, err := url.Parse(tonConfigUrl)
@@ -161,6 +162,7 @@ func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 		rootStoragePath: rootStorage,
 		newFiles:        make(map[string]map[string]*FileMeta),
 		newFilesMx:      &sync.RWMutex{},
+		stats:           statistics.NewStatistics(rootStorage, debug),
 	}
 	progressStorage, err := db.NewStorage(progressDb, conn, true, globalClient.events)
 	if err != nil {
