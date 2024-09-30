@@ -27,6 +27,14 @@ const (
 	extensionReferences
 )
 
+const (
+	extensionExpiration = 1 << iota
+	extensionVideos
+	extensionImages
+	extensionQuotes
+	extensionReferences
+)
+
 var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
 type (
