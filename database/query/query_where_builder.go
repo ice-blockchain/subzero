@@ -19,6 +19,14 @@ const (
 	whereBuilderDefaultWhere = "1=1"
 )
 
+const (
+	extensionExpiration = 1 << iota
+	extensionVideos
+	extensionImages
+	extensionQuotes
+	extensionReferences
+)
+
 var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
 type whereBuilder struct {
@@ -219,14 +227,28 @@ func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model
 	return nil
 }
 
-func filterHasExtensions(filter *model.Filter) (positive, negative bool) {
-	for _, val := range []*bool{filter.Quotes, filter.References, filter.Images, filter.Videos, filter.Expiration} {
-		if val == nil {
+func filterHasExtensions(filter *model.Filter) (positive, negative int) {
+	var values = []struct {
+		val *bool
+		bit int
+	}{
+		{filter.Expiration, extensionExpiration},
+		{filter.Videos, extensionVideos},
+		{filter.Images, extensionImages},
+		{filter.Quotes, extensionQuotes},
+		{filter.References, extensionReferences},
+	}
+
+	for _, v := range values {
+		if v.val == nil {
 			continue
 		}
 
-		positive = positive || *val
-		negative = negative || !*val
+		if *v.val {
+			positive |= v.bit
+		} else {
+			negative |= v.bit
+		}
 	}
 
 	return
@@ -276,11 +298,38 @@ func (w *whereBuilder) applyFilterForExtensions(filter *model.Filter, builder *f
 	w.WriteRune(')')
 }
 
-func (w *whereBuilder) filterCheck(filter *model.Filter) {
-	if filter.References != nil && slices.Contains(filter.Kinds, nostr.KindRepost) {
-		// Not allowed.
-		filter.References = nil
+func (w *whereBuilder) applyRepostFilter(filter *model.Filter, builder *filterBuilder, positiveExtensions, negativeExtensions *int) (applied bool) {
+	if (*positiveExtensions + *negativeExtensions) == 0 {
+		// No extensions in the filter.
+		return
 	}
+
+	repostIdx := slices.Index(filter.Kinds, nostr.KindRepost)
+	if repostIdx == -1 {
+		// No reposts in the filter.
+		return
+	}
+
+	// Not allowed.
+	filter.References = nil
+	*positiveExtensions &= ^extensionReferences
+	*negativeExtensions &= ^extensionReferences
+
+	if *positiveExtensions > 0 {
+		w.maybeAND()
+		w.WriteString("(id IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
+		w.applyFilterForExtensions(filter, builder, true)
+		w.WriteString(")))")
+	}
+
+	if *negativeExtensions > 0 {
+		w.maybeAND()
+		w.WriteString("(id NOT IN (select e.id from events subev where subev.id = e.reference_id and and subev.kind = 1 and exists (")
+		w.applyFilterForExtensions(filter, builder, false)
+		w.WriteString(")))")
+	}
+
+	return (*positiveExtensions + *negativeExtensions) > 0
 }
 
 func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
@@ -288,28 +337,29 @@ func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
 		return nil
 	}
 
-	w.filterCheck(filter)
-
 	builder := &filterBuilder{
 		Name:     "filter" + strconv.Itoa(idx) + "_",
 		EventIds: filter.IDs,
 	}
 	positiveExtensions, negativeExtensions := filterHasExtensions(filter)
 	w.WriteRune('(') // Begin the filter section.
-	if positiveExtensions {
-		w.WriteString("id IN (")
-		w.applyFilterForExtensions(filter, builder, true)
-		w.WriteRune(')')
-	} else {
+	if w.applyRepostFilter(filter, builder, &positiveExtensions, &negativeExtensions) {
 		buildFromSlice(w, builder.Name, filter.IDs, "id")
+	} else {
+		if positiveExtensions > 0 {
+			w.WriteString("id IN (")
+			w.applyFilterForExtensions(filter, builder, true)
+			w.WriteRune(')')
+		} else {
+			buildFromSlice(w, builder.Name, filter.IDs, "id")
+		}
+		if negativeExtensions > 0 {
+			w.maybeAND()
+			w.WriteString("(id NOT IN (")
+			w.applyFilterForExtensions(filter, builder, false)
+			w.WriteString("))")
+		}
 	}
-	if negativeExtensions {
-		w.maybeAND()
-		w.WriteString("(id NOT IN (")
-		w.applyFilterForExtensions(filter, builder, false)
-		w.WriteString("))")
-	}
-
 	buildFromSlice(w, builder.Name, filter.Kinds, "kind")
 	buildFromSlice(w, builder.Name, filter.Authors, "pubkey")
 	if err := w.applyTimeRange(builder, filter.Since, filter.Until); err != nil {

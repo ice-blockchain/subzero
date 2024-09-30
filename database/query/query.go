@@ -223,7 +223,7 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 		return -1, errors.Wrap(err, "failed to generate events where clause")
 	}
 
-	sql := `select count(id) from events where ` + where
+	sql := `select count(id) from events e where ` + where
 
 	stmt, err := db.prepare(ctx, sql, hashSQL(sql))
 	if err != nil {

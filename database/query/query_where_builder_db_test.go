@@ -868,3 +868,45 @@ func TestSelectRepostWithReference(t *testing.T) {
 		require.Equal(t, int64(1), count)
 	})
 }
+
+func TestSelectFilterKind6AsKind1(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Fill", func(t *testing.T) {
+		helperFillDatabase(t, db, 10)
+
+		var event model.Event
+		event.Kind = nostr.KindRepost
+		event.ID = "2"
+		event.PubKey = "2"
+		event.Tags = model.Tags{{"e", "2"}}
+		event.CreatedAt = 2
+		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
+
+		err := db.AcceptEvent(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("SelectRepost", func(t *testing.T) {
+		filter := helperNewFilterSubscription(func(apply *model.Filter) {
+			x := true
+			apply.Images = &x
+			apply.Kinds = []int{nostr.KindRepost}
+		})
+		t.Run("Count", func(t *testing.T) {
+			count, err := db.CountEvents(context.TODO(), filter)
+			require.NoError(t, err)
+			require.Equal(t, int64(1), count)
+		})
+		t.Run("Select", func(t *testing.T) {
+			for ev, err := range db.SelectEvents(context.TODO(), filter) {
+				require.NoError(t, err)
+				require.NotNil(t, ev)
+				t.Logf("event: %+v", ev)
+				require.Equal(t, "2", ev.ID)
+			}
+		})
+	})
+}
