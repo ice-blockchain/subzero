@@ -42,8 +42,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "created_at"
 		case "systemcreatedat":
 			out = "system_created_at"
-		case "childevent":
-			out = "child_event"
+		case "referenceid":
+			out = "reference_id"
 		default:
 			out = n
 		}

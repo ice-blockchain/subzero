@@ -748,7 +748,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 
 		t.Run("CheckEventLink", func(t *testing.T) {
 			var id sql.NullString
-			err := db.QueryRow("SELECT child_event FROM events WHERE id = $1", event.ID).Scan(&id)
+			err := db.QueryRow("SELECT reference_id FROM events WHERE id = $1", event.ID).Scan(&id)
 			require.NoError(t, err)
 			require.True(t, id.Valid)
 			require.Equal(t, "3", id.String)

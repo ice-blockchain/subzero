@@ -26,7 +26,7 @@ var (
 type databaseEvent struct {
 	model.Event
 	SystemCreatedAt int64
-	ChildEvent      sql.NullString
+	ReferenceID     sql.NullString
 	Jtags           string
 }
 
@@ -79,7 +79,7 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 
 	// Link the repost event to the original event.
 	dbEvent := eventToDatabaseEvent(event)
-	dbEvent.ChildEvent = sql.NullString{String: childEvent.ID, Valid: true}
+	dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
 
 	return db.SaveDatabaseEvent(ctx, dbEvent)
 }
@@ -117,9 +117,9 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 func (db *dbClient) SaveDatabaseEvent(ctx context.Context, event *databaseEvent) error {
 	const stmt = `
 insert or replace into events
-	(kind, created_at, system_created_at, id, pubkey, sig, content, temp_tags, d_tag, child_event)
+	(kind, created_at, system_created_at, id, pubkey, sig, content, temp_tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, (select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), :child_event)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, (select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), :reference_id)`
 
 	event.SystemCreatedAt = time.Now().UnixNano()
 	rowsAffected, err := db.exec(ctx, stmt, event)
