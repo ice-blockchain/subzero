@@ -40,6 +40,7 @@ func TestNIP96(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	defer func() {
+		require.NoError(t, storage.Client().Close())
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
 		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
 	}()
@@ -316,7 +317,7 @@ func initStorage(ctx context.Context, path string) {
 	wd, _ := os.Getwd()
 	rootStorage := filepath.Join(wd, path)
 	port := int(storagePort.Int64()) + 1024
-	storage.MustInit(ctx, nodeKey, storage.DefaultConfigUrl, rootStorage, net.ParseIP("127.0.0.1"), port)
+	storage.MustInit(ctx, nodeKey, storage.DefaultConfigUrl, rootStorage, net.ParseIP("127.0.0.1"), port, true)
 	http.DefaultClient.Transport = transportOverride
 }
 

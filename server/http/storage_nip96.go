@@ -94,7 +94,6 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
-		//token := &nostrToken{ev: nostr.Event{PubKey: "test"}}
 		var upload fileUpload
 		if err := gCtx.ShouldBindWith(&upload, binding.FormMultipart); err != nil {
 			log.Printf("ERROR: failed to bind multipart form: %v", errorx.With(err, "failed to bind multipart form"))
