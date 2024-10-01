@@ -324,7 +324,7 @@ func (w *whereBuilder) applyRepostFilter(filter *model.Filter, builder *filterBu
 
 	if *negativeExtensions > 0 {
 		w.maybeAND()
-		w.WriteString("(id NOT IN (select e.id from events subev where subev.id = e.reference_id and and subev.kind = 1 and exists (")
+		w.WriteString("(id NOT IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
 		w.applyFilterForExtensions(filter, builder, false)
 		w.WriteString(")))")
 	}
