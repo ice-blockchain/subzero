@@ -1,16 +1,20 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package statistics
 
 import (
 	"fmt"
-	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
-	"github.com/rcrowley/go-metrics"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/gookit/goutil/errorx"
+	"github.com/rcrowley/go-metrics"
+
+	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
 )
 
 type (

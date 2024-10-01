@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package http
 
 import (
@@ -20,8 +22,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/gookit/goutil/errorx"
-	"github.com/ice-blockchain/subzero/storage"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/ice-blockchain/subzero/storage"
 )
 
 type (

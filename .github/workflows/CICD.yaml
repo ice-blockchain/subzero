@@ -158,6 +158,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
+      - name: Install libvips and ffmpeg for meta extraction
+        run: sudo apt-get install -y libvips-dev ffmpeg
       - name: Build all
         run: make build-all@ci/cd
       - name: Slack Notification For Failure/Cancellation
@@ -193,6 +195,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
+      - name: Install libvips and ffmpeg for meta extraction
+        run: sudo apt-get install -y libvips-dev ffmpeg
       - name: Test ${{ matrix.package }}
 #TODO enable coverage
         run: |

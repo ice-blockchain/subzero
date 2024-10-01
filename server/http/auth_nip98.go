@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package http
 
 import (
+	"encoding/base64"
 	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
-
-	"github.com/ice-blockchain/go/src/encoding/base64"
 )
 
 type (
