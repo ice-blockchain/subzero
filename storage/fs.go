@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package storage
 
 import (
-	"github.com/xssnick/tonutils-storage/storage"
 	"io"
 	"os"
+
+	"github.com/xssnick/tonutils-storage/storage"
 )
 
 func init() {

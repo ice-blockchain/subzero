@@ -25,6 +25,5 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/media", uploader.ListFiles()).
 		GET("/media/:file", uploader.Download()).
 		DELETE("/media/:file", uploader.Delete()).
-		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info()) //.
-	//GET("/self.json", uploader.SelfDHT())
+		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info())
 }

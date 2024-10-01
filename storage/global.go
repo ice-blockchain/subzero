@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package storage
 
 import (
@@ -6,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ice-blockchain/subzero/storage/statistics"
 	"log"
 	"net"
 	"net/url"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
 var globalClient *client

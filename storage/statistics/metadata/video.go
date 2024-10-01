@@ -1,12 +1,15 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package metadata
 
 import (
 	"encoding/json"
-	"github.com/gookit/goutil/errorx"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"log"
 	"path/filepath"
 	"strings"
+
+	"github.com/gookit/goutil/errorx"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 type videoMetaExtractor struct{}

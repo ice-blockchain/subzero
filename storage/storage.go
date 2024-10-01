@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package storage
 
 import (
@@ -5,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/ice-blockchain/subzero/storage/statistics"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,6 +24,8 @@ import (
 	"github.com/xssnick/tonutils-go/adnl/overlay"
 	"github.com/xssnick/tonutils-storage/db"
 	"github.com/xssnick/tonutils-storage/storage"
+
+	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
 type (

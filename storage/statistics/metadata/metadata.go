@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package metadata
 
 import (
-	"github.com/gookit/goutil/errorx"
-	"github.com/hashicorp/go-multierror"
 	"io"
 	"strings"
+
+	"github.com/gookit/goutil/errorx"
+	"github.com/hashicorp/go-multierror"
 )
 
 type Extractor interface {

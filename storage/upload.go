@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package storage
 
 import (
@@ -7,12 +9,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	gomime "github.com/cubewise-code/go-mime"
 	"log"
 	"path/filepath"
 	"sync"
 	"time"
 
+	gomime "github.com/cubewise-code/go-mime"
 	"github.com/gookit/goutil/errorx"
 	"github.com/xssnick/tonutils-go/adnl"
 	"github.com/xssnick/tonutils-go/adnl/dht"

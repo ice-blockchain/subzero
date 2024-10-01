@@ -1,10 +1,12 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package metadata
 
 import (
+	"path/filepath"
+
 	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/gookit/goutil/errorx"
-
-	"path/filepath"
 )
 
 type imageMetaExtractor struct{}
