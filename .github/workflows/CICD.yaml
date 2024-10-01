@@ -194,8 +194,8 @@ jobs:
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
       - name: Test ${{ matrix.package }}
-        run: |
 #TODO enable coverage
+        run: |
           make -f ${{ github.workspace }}/Makefile test@ci/cd
 #          make -f ${{ github.workspace }}/Makefile coverage
       - name: Slack Notification For Failure/Cancellation
