@@ -196,6 +196,7 @@ jobs:
       - name: Test ${{ matrix.package }}
 #TODO enable coverage
         run: |
+          cd ${{ matrix.package }}
           make -f ${{ github.workspace }}/Makefile test@ci/cd
 #          make -f ${{ github.workspace }}/Makefile coverage
       - name: Slack Notification For Failure/Cancellation
@@ -234,6 +235,7 @@ jobs:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
       - name: Benchmark ${{ matrix.package }}
         run: |
+          cd ${{ matrix.package }}
           make -f ${{ github.workspace }}/Makefile benchmark@ci/cd
       - name: Slack Notification For Failure/Cancellation
         if: ${{ github.event_name == 'push' && (failure() || cancelled()) }}
