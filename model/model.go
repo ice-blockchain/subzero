@@ -26,7 +26,7 @@ type (
 		References *bool
 	}
 	Filters []Filter
-	Event struct {
+	Event   struct {
 		nostr.Event
 	}
 	Subscription struct {
