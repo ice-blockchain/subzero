@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.23
+go 1.23.0
 
 replace filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 
