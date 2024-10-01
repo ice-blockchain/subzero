@@ -171,6 +171,10 @@ func BenchmarkSelectByAuthor(b *testing.B) {
 func helperBenchEnsureValidRange(t interface{ Helper() }, f *model.Filter) {
 	t.Helper()
 
+	if f.Since == nil || f.Until == nil {
+		return
+	}
+
 	if *f.Since > *f.Until {
 		f.Since, f.Until = f.Until, f.Since
 	}
