@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: ice License 1.0
+
 # Generate a new ecdsa key/cert for local development of WebTransport
 HOST="localhost"
 CRT="$HOST.crt"
