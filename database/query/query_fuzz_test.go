@@ -54,7 +54,7 @@ func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *filterEleme
 			s := helperParseFilterStruct(t, field.Type, el)
 			fields = append(fields, s...)
 
-		case reflect.Slice, reflect.Ptr, reflect.Int:
+		case reflect.Slice, reflect.Ptr, reflect.Int, reflect.Map:
 			el := parent.Clone()
 			el.Name = append(el.Name, field.Name)
 			el.Addr = append(el.Addr, field.Index...)
@@ -91,6 +91,16 @@ func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Fi
 		case "Filter.Kinds":
 			k := []int{generateKind()}
 			value.Set(reflect.ValueOf(k))
+
+		case "Filter.Tags":
+			values := []string{}
+			for range rand.Intn(3) {
+				values = append(values, generateHexString())
+			}
+			m := model.TagMap{
+				"e": values,
+			}
+			value.Set(reflect.ValueOf(m))
 
 		case "Filter.Limit":
 			l := int(rand.Int63n(100))
