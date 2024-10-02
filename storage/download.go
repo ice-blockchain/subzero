@@ -95,7 +95,7 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 				log.Printf("failed to connect to bootstrap node, waiting for DHT: %v", err)
 			}
 		}
-		go c.startUploadAfterDownloadingHeader(tor)
+		go c.startUploadAfterDownloadingHeader(tor, user)
 		if err = c.saveTorrent(tor, user); err != nil {
 			return errorx.Withf(err, "failed to store new torrent %v", bagID)
 		}
@@ -143,7 +143,7 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey string) error {
 	return nil
 }
 
-func (c *client) startUploadAfterDownloadingHeader(tor *storage.Torrent) {
+func (c *client) startUploadAfterDownloadingHeader(tor *storage.Torrent, user string) {
 	for {
 		select {
 		case <-time.After(1 * time.Second):
@@ -153,7 +153,12 @@ func (c *client) startUploadAfterDownloadingHeader(tor *storage.Torrent) {
 			if tor.Header == nil {
 				continue
 			}
-			tor.Start(true, true, false)
+			if err := tor.Start(true, true, false); err != nil {
+				log.Printf("ERROR: failed to start torrent upload after downloading header: %v", err)
+			}
+			if err := c.saveTorrent(tor, user); err != nil {
+				log.Printf("ERROR: failed save torrent upload state after downloading header: %v", err)
+			}
 			return
 		}
 	}
