@@ -21,6 +21,9 @@ type fd struct {
 func (f *fd) Get() io.ReaderAt {
 	return f.f
 }
+func (f *fd) Close() error {
+	return f.f.Close()
+}
 
 func newFS() storage.FSController {
 	return &fs{}
@@ -35,5 +38,5 @@ func (f *fs) Acquire(path string) (storage.FDesc, error) {
 }
 
 func (fs *fs) Free(f storage.FDesc) {
-	f.(*fd).f.Close()
+	f.Close()
 }

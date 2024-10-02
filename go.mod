@@ -6,7 +6,7 @@ toolchain go1.23.1
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
-	github.com/xssnick/tonutils-storage => github.com/ice-cronus/tonutils-storage v0.0.0-20240924150703-eb2225c54ef2
+	github.com/xssnick/tonutils-storage => github.com/ice-cronus/tonutils-storage v0.0.0-20241002084114-26ca96c9efc7
 )
 
 require (
@@ -92,7 +92,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/tidwall/gjson v1.17.3 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
