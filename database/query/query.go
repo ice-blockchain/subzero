@@ -17,6 +17,10 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+const (
+	selectDefaultBatchLimit = 100
+)
+
 var (
 	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
 	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
@@ -147,22 +151,20 @@ func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
-	const batchSize = 1000
-
-	limit := int64(batchSize)
+	limit := int64(selectDefaultBatchLimit)
 	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
 	if hasLimitFilter {
 		limit = int64(subscription.Filters[0].Limit)
 	}
 
 	it := &eventIterator{
-		oneShot: hasLimitFilter && limit <= batchSize,
+		oneShot: hasLimitFilter && limit <= selectDefaultBatchLimit,
 		fetch: func(pivot int64) (*sqlx.Rows, error) {
 			if limit <= 0 {
 				return nil, nil
 			}
 
-			sql, params, err := generateSelectEventsSQL(subscription, pivot, min(batchSize, limit))
+			sql, params, err := generateSelectEventsSQL(subscription, pivot, min(selectDefaultBatchLimit, limit))
 			if err != nil {
 				return nil, err
 			}
@@ -178,7 +180,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 			}
 
 			if hasLimitFilter && err == nil {
-				limit -= batchSize
+				limit -= selectDefaultBatchLimit
 			}
 
 			return rows, err

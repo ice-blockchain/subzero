@@ -67,9 +67,8 @@ func helperBenchRandomEvent(t interface{ Helper() }) *model.Event {
 func helperBenchSelectBy(t interface{ Helper() }, db *dbClient, meter *tachymeter.Tachymeter, filters []model.Filter) {
 	t.Helper()
 
-	const limiter = 2500
 	if len(filters) > 0 {
-		filters[0].Limit = limiter
+		filters[0].Limit = selectDefaultBatchLimit
 	}
 
 	start := time.Now()
