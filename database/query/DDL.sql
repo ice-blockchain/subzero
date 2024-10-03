@@ -68,8 +68,13 @@ CREATE TABLE IF NOT EXISTS event_tags
     primary key (event_id, event_tag_key, event_tag_value1)
 ) strict, WITHOUT ROWID;
 --------
-create index if not exists event_tags_lookup1_ix on event_tags(event_tag_key,event_tag_value1);
--- TODO add more indexes
+create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1);
+create index if not exists idx_event_tags_key_value2                  on event_tags(event_tag_key, event_tag_value2);
+create index if not exists idx_event_tags_key_value3                  on event_tags(event_tag_key, event_tag_value3);
+create index if not exists idx_event_tags_id_key_value2               on event_tags(event_id, event_tag_key, event_tag_value2);
+create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2);
+create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
+create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
 --------
 create trigger if not exists generate_event_tags
     after insert

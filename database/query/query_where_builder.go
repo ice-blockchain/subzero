@@ -94,9 +94,12 @@ func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T,
 	}
 
 	builder.maybeAND()
+	if len(s) > 1 && (name == "id" || name == "pubkey") {
+		builder.WriteRune('+')
+	}
 	builder.WriteString(name)
 	s = deduplicateSlice(s)
-	if len(s) == 1 {
+	if len(s) == 1 && name != "kind" {
 		// X = :X_name.
 		builder.WriteString(" = :")
 		builder.WriteString(builder.addParam(filterID, name, s[0]))
@@ -167,7 +170,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 			w.maybeAND()
 		} else {
 			// No IDs, so select all events that belong to the given tag.
-			w.WriteString("id IN (select event_id from event_tags where ")
+			w.WriteString("+id IN (select event_id from event_tags where ")
 		}
 		w.WriteString("event_tag_key = :")
 		w.WriteString(w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tag))
@@ -317,14 +320,14 @@ func (w *whereBuilder) applyRepostFilter(filter *model.Filter, builder *filterBu
 
 	if *positiveExtensions > 0 {
 		w.maybeAND()
-		w.WriteString("(id IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
+		w.WriteString("(+id IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
 		w.applyFilterForExtensions(filter, builder, true)
 		w.WriteString(")))")
 	}
 
 	if *negativeExtensions > 0 {
 		w.maybeAND()
-		w.WriteString("(id NOT IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
+		w.WriteString("(+id NOT IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
 		w.applyFilterForExtensions(filter, builder, false)
 		w.WriteString(")))")
 	}
@@ -347,7 +350,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
 		buildFromSlice(w, builder.Name, filter.IDs, "id")
 	} else {
 		if positiveExtensions > 0 {
-			w.WriteString("id IN (")
+			w.WriteString("+id IN (")
 			w.applyFilterForExtensions(filter, builder, true)
 			w.WriteRune(')')
 		} else {
@@ -355,7 +358,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
 		}
 		if negativeExtensions > 0 {
 			w.maybeAND()
-			w.WriteString("(id NOT IN (")
+			w.WriteString("(+id NOT IN (")
 			w.applyFilterForExtensions(filter, builder, false)
 			w.WriteString("))")
 		}
