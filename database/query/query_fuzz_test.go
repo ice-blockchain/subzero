@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -144,6 +145,80 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 			filter := helperNewFilterFromElements(t, set)
 			_, err := db.CountEvents(context.TODO(), &model.Subscription{Filters: model.Filters{filter}})
 			require.NoErrorf(t, err, "failed to count events for set #%d (%#v)", i+1, filter)
+		}
+	})
+}
+
+func TestQueryFuzzNoUseTempBTREE(t *testing.T) {
+	t.Parallel()
+
+	var sets [][]*filterElement
+	t.Run("PrepareSets", func(t *testing.T) {
+		var filter model.Filter
+
+		fields := helperParseFilterStruct(t, reflect.TypeOf(filter), nil)
+		sets = combinations.All(fields)
+		t.Logf("found %d total combination(s)", len(sets))
+		slices.SortStableFunc(sets, func(i, j []*filterElement) int {
+			if len(i) < len(j) {
+				return -1
+			}
+			if len(i) > len(j) {
+				return 1
+			}
+			return 0
+		})
+	})
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+	helperFillDatabase(t, db, 100)
+
+	op := make(map[string]int)
+
+	t.Run("Fuzz", func(t *testing.T) {
+		for i, set := range sets {
+			sql, params, err := generateSelectEventsSQL(&model.Subscription{Filters: model.Filters{helperNewFilterFromElements(t, set)}}, 0, 100)
+			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
+
+			sql = "EXPLAIN QUERY PLAN " + sql
+			stmt, err := db.prepare(context.Background(), sql, hashSQL(sql))
+			require.NoError(t, err)
+
+			rows, err := stmt.QueryContext(context.Background(), params)
+			require.NoError(t, err)
+			for rows.Next() {
+				var s1, s2, s3, s4 string
+				err := rows.Scan(&s1, &s2, &s3, &s4)
+				require.NoError(t, err)
+				op[s4]++
+				if s4 == "USE TEMP B-TREE FOR ORDER BY" {
+					t.Logf("set #%d: %s (%+v)", i+1, sql, params)
+					t.Log(s1, s2, s3, s4)
+					t.FailNow()
+				}
+			}
+			rows.Close()
+		}
+	})
+
+	t.Run("OpSummary", func(t *testing.T) {
+		keys := make([]string, 0, len(op))
+		for k := range op {
+			keys = append(keys, k)
+		}
+		slices.SortStableFunc(keys, func(i, j string) int {
+			if op[i] > op[j] {
+				return -1
+			}
+			if op[i] < op[j] {
+				return 1
+			}
+			return 0
+		})
+		t.Log("Operations Summary:")
+		for _, k := range keys {
+			t.Logf("%s: %d", k, op[k])
 		}
 	})
 }
