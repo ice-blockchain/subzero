@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/tls"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,11 +25,13 @@ import (
 
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/gookit/goutil/errorx"
+	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip94"
 	"github.com/nbd-wtf/go-nostr/nip96"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -59,20 +63,10 @@ func TestNIP96(t *testing.T) {
 			responses <- resp
 		})
 		close(responses)
-		var latest uint64
 		for resp := range responses {
-			var createdAt uint64
-			if createdAtTag := resp.Nip94Event.Tags.GetFirst([]string{"createdAt"}); createdAtTag != nil && len(*createdAtTag) > 1 {
-				var err error
-				createdAt, err = strconv.ParseUint(createdAtTag.Value(), 10, 64)
-				require.NoError(t, err)
-				if createdAt > latest {
-					latest = createdAt
-					tagsToBroadcast = resp.Nip94Event.Tags
-					contentToBroadcast = resp.Nip94Event.Content
-				}
-			}
 			verifyFile(t, resp.Nip94Event.Content, resp.Nip94Event.Tags)
+			tagsToBroadcast = resp.Nip94Event.Tags
+			contentToBroadcast = resp.Nip94Event.Content
 		}
 	})
 	const newStorageRoot = "./../../.test-uploads2"
@@ -254,7 +248,7 @@ func authorizedReq(t *testing.T, ctx context.Context, sk, method, url string) *h
 	t.Helper()
 	uploadReq, err := http.NewRequest(method, url, nil)
 	require.NoError(t, err)
-	auth, err := generateAuthHeader(t, sk, url, method)
+	auth, err := generateAuthHeader(t, sk, method, uploadReq.URL)
 	require.NoError(t, err)
 	uploadReq.Header.Set("Authorization", auth)
 	resp, err := http.DefaultClient.Do(uploadReq.WithContext(ctx))
@@ -323,7 +317,7 @@ func initStorage(ctx context.Context, path string) {
 	http.DefaultClient.Transport = transportOverride
 }
 
-func generateAuthHeader(t *testing.T, sk, url, method string) (string, error) {
+func generateAuthHeader(t *testing.T, sk, method string, urlValue *url.URL) (string, error) {
 	t.Helper()
 	pk, err := nostr.GetPublicKey(sk)
 	if err != nil {
@@ -335,7 +329,7 @@ func generateAuthHeader(t *testing.T, sk, url, method string) (string, error) {
 		PubKey:    pk,
 		CreatedAt: nostr.Now(),
 		Tags: nostr.Tags{
-			nostr.Tag{"u", url},
+			nostr.Tag{"u", urlValue.String()},
 			nostr.Tag{"method", method},
 		},
 	}
@@ -349,4 +343,72 @@ func generateAuthHeader(t *testing.T, sk, url, method string) (string, error) {
 	payload := base64.StdEncoding.EncodeToString(b)
 
 	return fmt.Sprintf("Nostr %s", payload), nil
+}
+
+const benchParallelism = 100
+
+func BenchmarkUploadFiles(b *testing.B) {
+	if os.Getenv("CI") != "" {
+		b.Skip()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: &tls.Config{}}
+	meter := tachymeter.New(&tachymeter.Config{Size: b.N})
+	b.ResetTimer()
+	b.ReportAllocs()
+	fmt.Println(b.N)
+	b.SetParallelism(benchParallelism)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			sk := nostr.GeneratePrivateKey()
+			img, _ := testdata.Open(".testdata/image2.png")
+			defer img.Close()
+			start := time.Now()
+			resp, err := nip96.Upload(ctx, nip96.UploadRequest{
+				Host:        "https://localhost:9997/media",
+				File:        img,
+				Filename:    "profile.png",
+				Caption:     "ice profile pic",
+				ContentType: "image/png",
+				SK:          sk,
+				SignPayload: true,
+			})
+			require.NoError(b, err)
+			meter.AddTime(time.Since(start))
+			nip94Event := &model.Event{nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindFileMetadata,
+				Tags:      resp.Nip94Event.Tags,
+			}}
+			require.NoError(b, nip94Event.Sign(sk))
+
+			relay := nostr.NewRelay(ctx, "wss://localhost:9998/")
+			err = relay.ConnectWithTLS(ctx, &tls.Config{})
+			if err = nip94Event.Sign(sk); err != nil {
+				log.Panic(err)
+			}
+			if err = relay.Publish(ctx, nip94Event.Event); err != nil {
+				log.Panic(err)
+			}
+			b.Log(nip94Event)
+		}
+	})
+	helperBenchReportMetrics(b, meter)
+}
+
+func helperBenchReportMetrics(
+	t interface {
+		Helper()
+		ReportMetric(float64, string)
+	},
+	meter *tachymeter.Tachymeter,
+) {
+	t.Helper()
+
+	metric := meter.Calc()
+	t.ReportMetric(float64(metric.Time.Avg.Milliseconds()), "avg-ms/op")
+	t.ReportMetric(float64(metric.Time.StdDev.Milliseconds()), "stddev-ms/op")
+	t.ReportMetric(float64(metric.Time.P50.Milliseconds()), "p50-ms/op")
+	t.ReportMetric(float64(metric.Time.P95.Milliseconds()), "p95-ms/op")
 }

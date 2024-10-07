@@ -4,7 +4,7 @@ package http
 
 import (
 	"encoding/base64"
-	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +34,11 @@ const (
 	nostrHttpAuthKind     = 27235
 )
 
+var (
+	ErrTokenExpired = errorx.New("expired token")
+	ErrTokenInvalid = errorx.New("invalid token")
+)
+
 func NewAuth() AuthClient {
 	return &authNostr{}
 }
@@ -51,35 +56,45 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string) (Token, error) 
 	if ok, err = event.CheckSignature(); err != nil {
 		return nil, errorx.Withf(err, "invalid token signature")
 	} else if !ok {
-		return nil, errorx.New("invalid token signature")
+		return nil, errorx.Wrapf(ErrTokenInvalid, "invalid token signature")
 	}
 	if event.Kind != nostrHttpAuthKind {
-		return nil, errorx.Newf("invalid token event kind %v", event.Kind)
+		return nil, errorx.Wrapf(ErrTokenInvalid, "invalid token event kind %v", event.Kind)
 	}
 	now := time.Now()
 	if event.CreatedAt.Time().After(now) || (event.CreatedAt.Time().Before(now) && now.Sub(event.CreatedAt.Time()) > tokenExpirationWindow) {
-		return nil, errorx.New("expired token")
+		return nil, ErrTokenExpired
 	}
 	if urlTag := event.Tags.GetFirst([]string{"u"}); urlTag != nil && len(*urlTag) > 1 {
-		url := (*urlTag)[1]
-		fullReqUrl := fmt.Sprintf("https://%v%v", gCtx.Request.Host, gCtx.Request.RequestURI)
-		if url != fullReqUrl {
-			return nil, errorx.Newf("invalid token: url mismatch token>%v url>%v", url, fullReqUrl)
+		var urlValue *url.URL
+		urlValue, err = url.Parse(urlTag.Value())
+		if err != nil {
+			return nil, errorx.Wrapf(ErrTokenInvalid, "failed to parse url tag with %v", urlTag.Value())
+		}
+		fullReqUrl := (&url.URL{
+			Scheme:   "https",
+			Host:     gCtx.Request.Host,
+			Path:     gCtx.Request.URL.Path,
+			RawQuery: gCtx.Request.URL.RawQuery,
+			Fragment: gCtx.Request.URL.Fragment,
+		})
+		if urlValue.String() != fullReqUrl.String() {
+			return nil, errorx.Wrapf(ErrTokenInvalid, "url mismatch token>%v url>%v", urlValue, fullReqUrl)
 		}
 	} else {
-		return nil, errorx.Newf("invalid token: malformed u tag %v", urlTag)
+		return nil, errorx.Wrapf(ErrTokenInvalid, "malformed u tag %v", urlTag)
 	}
 	if methodTag := event.Tags.GetFirst([]string{"method"}); methodTag != nil && len(*methodTag) > 1 {
-		method := (*methodTag)[1]
+		method := methodTag.Value()
 		if method != gCtx.Request.Method {
-			return nil, errorx.Newf("invalid token: method mismatch token>%v url>%v", method, gCtx.Request.Method)
+			return nil, errorx.Wrapf(ErrTokenInvalid, "method mismatch token>%v url>%v", method, gCtx.Request.Method)
 		}
 	} else {
-		return nil, errorx.Newf("invalid token: malformed method tag %v", methodTag)
+		return nil, errorx.Wrapf(ErrTokenInvalid, "malformed method tag %v", methodTag)
 	}
 	expectedHash := ""
 	if payloadTag := event.Tags.GetFirst([]string{"payload"}); payloadTag != nil && len(*payloadTag) > 1 {
-		expectedHash = (*payloadTag)[1]
+		expectedHash = payloadTag.Value()
 	}
 	return &nostrToken{ev: event, expectedHash: expectedHash}, nil
 }
