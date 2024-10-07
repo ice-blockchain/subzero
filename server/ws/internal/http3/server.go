@@ -42,7 +42,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 			},
 		},
 	}
-	if /*s.cfg.Development*/ true {
+	if s.cfg.Debug {
 		noCors := func(_ *http.Request) bool {
 			return true
 		}
