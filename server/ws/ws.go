@@ -79,7 +79,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
-	input := nostr.ParseMessage(msgBytes)
+	input := parseMessage(msgBytes)
 	if input == nil {
 		err := errors.New("failed to parse input")
 		notice := nostr.NoticeEnvelope(err.Error())
@@ -138,7 +138,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	}
 }
 
-func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Envelope) error {
+func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope model.Envelope) error {
 	b, err := envelope.MarshalJSON()
 	if err != nil {
 		return errors.Wrapf(err, "failed to serialize %+v into json", envelope)

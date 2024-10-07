@@ -73,7 +73,7 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 		return errors.Wrap(err, "failed to unmarshal original event")
 	}
 
-	err = db.SaveEvent(ctx, &childEvent)
+	err = db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(&childEvent), false)
 	if err != nil {
 		return errors.Wrap(err, "failed to save original event")
 	}
@@ -82,7 +82,7 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 	dbEvent := eventToDatabaseEvent(event)
 	dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
 
-	return db.SaveDatabaseEvent(ctx, dbEvent)
+	return db.SaveDatabaseEvent(ctx, dbEvent, true)
 }
 
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
@@ -136,7 +136,7 @@ values
 	if err != nil {
 		return errors.Wrap(err, "failed to exec insert event sql")
 	}
-	if rowsAffected == 0 {
+	if rowsAffected == 0 && replace {
 		return ErrUnexpectedRowsAffected
 	}
 
@@ -153,7 +153,7 @@ func eventToDatabaseEvent(event *model.Event) *databaseEvent {
 }
 
 func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
-	return db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(event))
+	return db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(event), true)
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
