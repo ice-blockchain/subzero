@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
@@ -47,6 +48,8 @@ type storageHandler struct {
 
 const mediaEndpointTimeout = 60 * time.Second
 const maxUploadSize = 100 * 1024 * 1024
+const mediaTypeAvatar = "avatar"
+const mediaTypeBanner = "banner"
 
 type (
 	fileUpload struct {
@@ -110,6 +113,10 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		}
 		if upload.File == nil {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("file required"))
+			return
+		}
+		if upload.MediaType != "" && upload.MediaType != mediaTypeAvatar && upload.MediaType != mediaTypeBanner {
+			gCtx.JSON(http.StatusBadRequest, uploadErr(fmt.Sprintf("unsupported media type %v", upload.MediaType)))
 			return
 		}
 		if upload.ContentType == "" {
@@ -234,7 +241,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 		}
 		file := gCtx.Param("file")
 		if strings.TrimSpace(file) == "" {
-			gCtx.JSON(http.StatusUnprocessableEntity, uploadErr("filehash is required"))
+			gCtx.JSON(http.StatusBadRequest, uploadErr("filehash is required"))
 			return
 		}
 		if err := s.storageClient.Delete(token.PubKey(), file); err != nil {
