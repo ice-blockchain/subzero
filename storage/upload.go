@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -23,31 +22,42 @@ import (
 	"github.com/xssnick/tonutils-storage/storage"
 )
 
-func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFileForUrl, hash string, newFile *FileMeta) (bagID, url string, err error) {
+func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
 	existingBagForUser, err := c.bagByUser(userPubkey)
 	if err != nil {
-		return "", "", errorx.Withf(err, "failed to find existing bag for user %s", userPubkey)
+		return "", "", false, errorx.Withf(err, "failed to find existing bag for user %s", userPubkey)
 	}
 	var existingHD headerData
 	if existingBagForUser != nil {
 		if len(existingBagForUser.Header.Data) > 0 {
 			if err = json.Unmarshal(existingBagForUser.Header.Data, &existingHD); err != nil {
-				return "", "", errorx.Withf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
+				return "", "", false, errorx.Withf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
 	}
+	_, existed = existingHD.FileHash[hash]
+	if existed {
+		if existingBagForUser != nil {
+			url, err = c.DownloadUrl(userPubkey, hash)
+			if err != nil {
+				return "", "", false,
+					errorx.Withf(err, "failed to build download url for already existing file %v/%v(%v)", userPubkey, relativePathToFileForUrl, hash)
+			}
+			return hex.EncodeToString(existingBagForUser.BagID), url, existed, nil
+		}
 
+	}
 	var bs []*Bootstrap
 	var bag *storage.Torrent
 	bag, bs, err = c.upload(ctx, userPubkey, relativePathToFileForUrl, hash, newFile, &existingHD)
 	if err != nil {
-		return "", "", errorx.Withf(err, "failed to start upload of %v", relativePathToFileForUrl)
+		return "", "", false, errorx.Withf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
 	bagID = hex.EncodeToString(bag.BagID)
 	if newFile != nil {
 		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
 		if err != nil {
-			return "", "", errorx.Withf(err, "failed to get just created file from new bag")
+			return "", "", false, errorx.Withf(err, "failed to get just created file from new bag")
 		}
 		fullFilePath := filepath.Join(c.rootStoragePath, userPubkey, relativePathToFileForUrl)
 		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
@@ -55,16 +65,16 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 
 	url, err = c.buildUrl(bagID, relativePathToFileForUrl, bs)
 	if err != nil {
-		return "", "", errorx.Withf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
+		return "", "", false, errorx.Withf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
-	return bagID, url, err
+	return bagID, url, existed, err
 }
 
-func (c *client) upload(ctx context.Context, user, relativePath, hash string, fileMeta *FileMeta, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
+func (c *client) upload(ctx context.Context, user, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
 	if fileMeta != nil {
 		c.newFilesMx.Lock()
 		if userNewFiles, hasNewFiles := c.newFiles[user]; !hasNewFiles || userNewFiles == nil {
-			c.newFiles[user] = make(map[string]*FileMeta)
+			c.newFiles[user] = make(map[string]*FileMetaInput)
 		}
 		c.newFiles[user][relativePath] = fileMeta
 		c.newFilesMx.Unlock()
@@ -83,7 +93,7 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 		headerMD.FileHash = make(map[string]string)
 	}
 	if headerMD.FileMetadata == nil {
-		headerMD.FileMetadata = make(map[string]*FileMeta)
+		headerMD.FileMetadata = make(map[string]*FileMetaInput)
 	}
 	if fileMeta != nil {
 		headerMD.FileMetadata[relativePath] = fileMeta
@@ -103,7 +113,6 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 	if err != nil {
 		return nil, nil, errorx.With(err, "failed to put file hashes")
 	}
-	log.Println("UPLOAD META FOR ", relativePath, string(headerMDSerialized))
 	header := &storage.TorrentHeader{
 		DirNameSize:   uint32(len(user)),
 		DirName:       []byte(user),
@@ -116,11 +125,11 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 		if done == max {
 			wg.Done()
 		}
-	})
+	}, false)
 	if err != nil {
 		return nil, nil, errorx.With(err, "failed to initialize bag")
 	}
-	err = tr.Start(true, true, false)
+	err = tr.Start(true, false, false)
 	if err != nil {
 		return nil, nil, errorx.With(err, "failed to start bag upload")
 	}
@@ -175,7 +184,7 @@ func (c *client) buildUrl(bagID, relativePath string, bs []*Bootstrap) (string, 
 }
 
 func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string) error {
-	if err := c.saveTorrent(tr, userPubKey); err != nil {
+	if err := c.saveTorrent(tr, &userPubKey, nil); err != nil {
 		return errorx.With(err, "failed to save upload torrent into storage")
 	}
 	c.newFilesMx.Lock()

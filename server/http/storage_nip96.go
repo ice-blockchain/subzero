@@ -74,8 +74,9 @@ type (
 		Total uint32 `json:"total"`
 		Page  uint32 `json:"page"`
 		Files []struct {
-			Tags    nostr.Tags `json:"tags"`
-			Content string     `json:"content"`
+			Tags      nostr.Tags `json:"tags"`
+			Content   string     `json:"content"`
+			CreatedAt uint64     `json:"created_at"`
 		}
 	}
 )
@@ -152,12 +153,12 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		hashHex := hex.EncodeToString(hash)
 		if hashHex != token.ExpectedHash() {
 			log.Printf("ERROR: endpoint authentification failed: %v", errorx.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash()))
-			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
+			gCtx.JSON(http.StatusForbidden, uploadErr("Unauthorized"))
 			os.Remove(uploadingFilePath)
 			return
 		}
-		now := time.Now().In(time.UTC)
-		bagID, url, err := s.storageClient.StartUpload(ctx, token.PubKey(), relativePath, hex.EncodeToString(hash), &storage.FileMeta{
+		now := time.Now()
+		bagID, url, existed, err := s.storageClient.StartUpload(ctx, token.PubKey(), relativePath, hex.EncodeToString(hash), &storage.FileMetaInput{
 			Hash:      hash,
 			Caption:   upload.Caption,
 			Alt:       upload.Alt,
@@ -169,8 +170,11 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
 			return
 		}
-
-		gCtx.JSON(200, fileUploadResponse{
+		resStatus := http.StatusCreated
+		if existed {
+			resStatus = http.StatusOK
+		}
+		gCtx.JSON(resStatus, fileUploadResponse{
 			Status:  "success",
 			Message: "Upload successful.",
 			Nip94Event: struct {
@@ -185,7 +189,6 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 					nostr.Tag{"i", bagID},
 					nostr.Tag{"alt", upload.Alt},
 					nostr.Tag{"size", strconv.FormatUint(uint64(upload.File.Size), 10)},
-					nostr.Tag{"createdAt", strconv.FormatUint(uint64(now.UnixNano()), 10)},
 				},
 				Content: upload.Caption,
 			},
@@ -204,7 +207,7 @@ func (s *storageHandler) Download() gin.HandlerFunc {
 		}
 		file := gCtx.Param("file")
 		if strings.TrimSpace(file) == "" {
-			gCtx.JSON(http.StatusUnprocessableEntity, uploadErr("filename is required"))
+			gCtx.JSON(http.StatusBadRequest, uploadErr("filename is required"))
 			return
 		}
 		url, err := s.storageClient.DownloadUrl(token.PubKey(), file)
@@ -278,15 +281,17 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 			Total: total,
 			Page:  params.Page,
 			Files: []struct {
-				Tags    nostr.Tags `json:"tags"`
-				Content string     `json:"content"`
+				Tags      nostr.Tags `json:"tags"`
+				Content   string     `json:"content"`
+				CreatedAt uint64     `json:"created_at"`
 			}{},
 		}
 		for _, f := range filesList {
 			res.Files = append(res.Files, struct {
-				Tags    nostr.Tags `json:"tags"`
-				Content string     `json:"content"`
-			}{Tags: f.ToTags(), Content: f.Content})
+				Tags      nostr.Tags `json:"tags"`
+				Content   string     `json:"content"`
+				CreatedAt uint64     `json:"created_at"`
+			}{Tags: f.ToTags(), Content: f.Content, CreatedAt: f.CreatedAt})
 		}
 		gCtx.JSON(http.StatusOK, res)
 	}

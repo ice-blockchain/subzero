@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: ice License 1.0
-
 package storage
 
 import (
@@ -13,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -36,15 +35,19 @@ var globalClient *client
 
 const DefaultConfigUrl = "https://ton.org/global.config.json"
 
+var ConcurrentBagsDownloading = runtime.NumCPU() * 10
+
+const threadsPerBagForDownloading = 1
+
 func Client() StorageClient {
 	return globalClient
 }
 
 func AcceptEvent(ctx context.Context, event *model.Event) error {
-	if !(event.Kind == nostr.KindFileMetadata || event.Kind == nostr.KindDeletion) {
-		return nil
-	}
-	if event.Kind == nostr.KindDeletion {
+	switch event.Kind {
+	case nostr.KindFileMetadata:
+		return acceptNewBag(ctx, event)
+	case nostr.KindDeletion:
 		matchKTag := false
 		if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
 			if kTag.Value() == strconv.FormatInt(int64(nostr.KindFileMetadata), 10) {
@@ -55,9 +58,11 @@ func AcceptEvent(ctx context.Context, event *model.Event) error {
 			return acceptDeletion(ctx, event)
 		}
 		return nil
+	default:
+		return nil
 	}
-	return acceptNewBag(ctx, event)
 }
+
 func acceptDeletion(ctx context.Context, event *model.Event) error {
 	refs, err := model.ParseEventReference(event.Tags)
 	if err != nil {
@@ -103,14 +108,22 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errorx.Withf(err, "failed to delete file %v", file)
 	}
-	if _, _, err := globalClient.StartUpload(ctx, event.PubKey, file, fileHash, nil); err != nil {
+	if _, _, _, err := globalClient.StartUpload(ctx, event.PubKey, file, fileHash, nil); err != nil {
 		return errorx.Withf(err, "failed to rebuild bag with deleted file")
 	}
 	return nil
 }
 
 func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int, debug bool) {
-	storage.Logger = log.Println
+	globalClient = mustInit(ctx, nodeKey, tonConfigUrl, rootStorage, externalAddress, port, debug)
+}
+
+func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int, debug bool) *client {
+	if debug {
+		storage.Logger = log.Println
+	}
+	storage.DownloadThreads = threadsPerBagForDownloading
+	adnl.Logger = func(v ...any) {}
 	var lsCfg *liteclient.GlobalConfig
 	u, err := url.Parse(tonConfigUrl)
 	if err != nil {
@@ -154,22 +167,50 @@ func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 	if err != nil {
 		log.Panic(errorx.Wrapf(err, "failed to open leveldb"))
 	}
-	globalClient = &client{
-		conn:            conn,
-		db:              progressDb,
-		server:          srv,
-		gateway:         gate,
-		dht:             dhtClient,
-		events:          make(chan db.Event),
-		rootStoragePath: rootStorage,
-		newFiles:        make(map[string]map[string]*FileMeta),
-		newFilesMx:      &sync.RWMutex{},
-		stats:           statistics.NewStatistics(rootStorage, debug),
+	cl := &client{
+		conn:              conn,
+		db:                progressDb,
+		server:            srv,
+		gateway:           gate,
+		dht:               dhtClient,
+		rootStoragePath:   rootStorage,
+		newFiles:          make(map[string]map[string]*FileMetaInput),
+		newFilesMx:        &sync.RWMutex{},
+		stats:             statistics.NewStatistics(rootStorage, debug),
+		downloadQueue:     make(chan queueItem, 1000000),
+		activeDownloads:   make(map[string]bool),
+		activeDownloadsMx: &sync.RWMutex{},
 	}
-	progressStorage, err := db.NewStorage(progressDb, conn, true, globalClient.events)
+	loadMonitoringCh := make(chan *db.Event, 1000000)
+	go func() {
+		for ev := range loadMonitoringCh {
+			if ev.Event == db.EventTorrentLoaded {
+				if ev.Torrent != nil {
+					if _, uploading := ev.Torrent.IsActive(); !uploading {
+						if downloading := ev.Torrent.IsDownloadAll(); !downloading {
+							bs, bsErr := cl.bootstrapForBag(ev.Torrent.BagID)
+							if bsErr != nil {
+								log.Printf("WARN: failed to find stored bootstrap for bag %v: %v", hex.EncodeToString(ev.Torrent.BagID), bsErr)
+							}
+							cl.downloadQueue <- queueItem{
+								tor:       ev.Torrent,
+								bootstrap: &bs,
+								user:      nil,
+							}
+						}
+					}
+				}
+			}
+		}
+	}()
+	progressStorage, err := db.NewStorage(progressDb, conn, true, loadMonitoringCh)
 	if err != nil {
 		log.Panic(errorx.Wrapf(err, "failed to open storage"))
 	}
-	globalClient.progressStorage = progressStorage
-	globalClient.server.SetStorage(progressStorage)
+	cl.progressStorage = progressStorage
+	cl.server.SetStorage(progressStorage)
+	cl.progressStorage.SetNotifier(nil)
+	close(loadMonitoringCh)
+	go cl.startDownloadsFromQueue()
+	return cl
 }

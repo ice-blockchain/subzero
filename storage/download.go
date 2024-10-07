@@ -38,12 +38,12 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 	var fileUrl *url.URL
 	var err error
 	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {
-		infohash = (*iTag)[1]
+		infohash = iTag.Value()
 	} else {
 		return errorx.Newf("malformed i tag %v", iTag)
 	}
 	if urlTag := event.Tags.GetFirst([]string{"url"}); urlTag != nil && len(*urlTag) > 1 {
-		fileUrl, err = url.Parse((*urlTag)[1])
+		fileUrl, err = url.Parse(urlTag.Value())
 		if err != nil {
 			return errorx.Withf(err, "malformed url in url tag %v", *urlTag)
 		}
@@ -87,16 +87,12 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 	if tor == nil {
 		tor = storage.NewTorrent(c.rootStoragePath, c.progressStorage, c.conn)
 		tor.BagID = bag
-		if err = tor.Start(false, true, false); err != nil {
-			return errorx.Withf(err, "failed to start new torrent %v", bagID)
+		c.downloadQueue <- queueItem{
+			tor:       tor,
+			bootstrap: bootstrap,
+			user:      &user,
 		}
-		if bootstrap != nil && *bootstrap != "" {
-			if err = c.connectToBootstrap(ctx, tor, *bootstrap); err != nil {
-				log.Printf("failed to connect to bootstrap node, waiting for DHT: %v", err)
-			}
-		}
-		go c.startUploadAfterDownloadingHeader(tor, user)
-		if err = c.saveTorrent(tor, user); err != nil {
+		if err = c.saveTorrent(tor, &user, bootstrap); err != nil {
 			return errorx.Withf(err, "failed to store new torrent %v", bagID)
 		}
 	} else {
@@ -105,6 +101,32 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 		}
 	}
 	return nil
+}
+
+func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(event storage.Event) {
+	return func(event storage.Event) {
+		switch event.Name {
+		case storage.EventDone:
+			tor.Stop()
+			if pErr := tor.Start(true, false, false); pErr != nil {
+				log.Printf("ERROR: failed to stop torrent upload after downloading data: %v", pErr)
+			}
+			c.activeDownloadsMx.Lock()
+			delete(c.activeDownloads, hex.EncodeToString(tor.BagID))
+			c.activeDownloadsMx.Unlock()
+
+		case storage.EventBagResolved:
+			if _, isUplActive := tor.IsActive(); !isUplActive {
+				if pErr := tor.StartWithCallback(true, true, false, c.torrentStateCallback(tor, user)); pErr != nil {
+					log.Printf("ERROR: failed to start torrent upload after downloading header: %v", pErr)
+				}
+			}
+		}
+		if pErr := c.saveTorrent(tor, user, nil); pErr != nil {
+			log.Printf("ERROR: failed save torrent with stopped download after downloading: %v", pErr)
+		}
+
+	}
 }
 
 func (c *client) connectToBootstrap(ctx context.Context, torrent *storage.Torrent, bootstrap string) error {
@@ -130,36 +152,66 @@ func (c *client) connectToBootstrap(ctx context.Context, torrent *storage.Torren
 	return nil
 }
 
-func (c *client) saveTorrent(tr *storage.Torrent, userPubKey string) error {
+func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string) error {
 	if err := c.progressStorage.SetTorrent(tr); err != nil {
 		return errorx.With(err, "failed to save torrent into storage")
 	}
-	k := make([]byte, 5+64)
-	copy(k, "desc:")
-	copy(k[5:], userPubKey)
-	if err := c.db.Put(k, tr.BagID, nil); err != nil {
-		return errorx.With(err, "failed to save userID:bag mapping")
+	if userPubKey != nil {
+		k := make([]byte, 3+64)
+		copy(k, "ub:")
+		copy(k[3:], *userPubKey)
+		if err := c.db.Put(k, tr.BagID, nil); err != nil {
+			return errorx.Withf(err, "failed to save userID:bag mapping for bag %v", hex.EncodeToString(tr.BagID))
+		}
 	}
+	if bs != nil {
+		k := make([]byte, 3+32)
+		copy(k, "bs:")
+		copy(k[3:], tr.BagID)
+		if err := c.db.Put(k, []byte(*bs), nil); err != nil {
+			return errorx.Withf(err, "failed to save bootstrap node for bag %v", hex.EncodeToString(tr.BagID))
+		}
+	}
+
 	return nil
 }
 
-func (c *client) startUploadAfterDownloadingHeader(tor *storage.Torrent, user string) {
+func (c *client) startDownloadsFromQueue() {
+outerLoop:
 	for {
-		select {
-		case <-time.After(1 * time.Second):
-			if _, isUplActive := tor.IsActive(); isUplActive {
-				return
+		c.activeDownloadsMx.RLock()
+		l := len(c.activeDownloads)
+		c.activeDownloadsMx.RUnlock()
+		for l < ConcurrentBagsDownloading {
+			select {
+			case q := <-c.downloadQueue:
+				tor := q.tor
+				if downloading, _ := tor.IsActive(); downloading {
+					continue
+				}
+				if err := tor.StartWithCallback(false, true, false, c.torrentStateCallback(tor, q.user)); err != nil {
+					log.Printf("ERROR: %v", errorx.Withf(err, "failed to start new torrent %v", q.tor.BagID))
+				}
+				if q.bootstrap != nil && *q.bootstrap != "" {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					if err := c.connectToBootstrap(ctx, tor, *q.bootstrap); err != nil {
+						log.Printf("failed to connect to bootstrap node for bag %v, waiting for DHT: %v", hex.EncodeToString(q.tor.BagID), err)
+					}
+					cancel()
+				}
+				if err := c.saveTorrent(tor, q.user, q.bootstrap); err != nil {
+					log.Printf("failed save updated upload / download torrrent state %v: %v", hex.EncodeToString(q.tor.BagID), err)
+				}
+				c.activeDownloadsMx.Lock()
+				c.activeDownloads[hex.EncodeToString(tor.BagID)] = true
+				c.activeDownloadsMx.Unlock()
+				l += 1
+			default:
+				time.Sleep(100 * time.Millisecond)
+				continue outerLoop
 			}
-			if tor.Header == nil {
-				continue
-			}
-			if err := tor.Start(true, true, false); err != nil {
-				log.Printf("ERROR: failed to start torrent upload after downloading header: %v", err)
-			}
-			if err := c.saveTorrent(tor, user); err != nil {
-				log.Printf("ERROR: failed save torrent upload state after downloading header: %v", err)
-			}
-			return
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
+
 }
