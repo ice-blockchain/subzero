@@ -60,18 +60,28 @@ func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *filterEleme
 			el.Name = append(el.Name, field.Name)
 			el.Addr = append(el.Addr, field.Index...)
 			fields = append(fields, el)
+
+		case reflect.String:
+			for _, v := range []string{"Images", "Quotes", "References", "Videos", "Expiration"} {
+				el := parent.Clone()
+				el.Name = append(el.Name, v)
+				el.Addr = append(el.Addr, field.Index...)
+				fields = append(fields, el)
+			}
 		}
 	}
 
 	return fields
 }
 
-func helperRandomBool(t *testing.T) *bool {
+func helperRandomBool(t *testing.T) string {
 	t.Helper()
 
-	val := rand.Int63n(100)%2 == 0
+	if rand.Int63n(100)%2 == 0 {
+		return "true"
+	}
 
-	return &val
+	return "false"
 }
 
 func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Filter {
@@ -81,7 +91,7 @@ func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Fi
 	for _, field := range fields {
 		value := reflect.ValueOf(&f).Elem().FieldByIndex(field.GetAddress())
 		switch field.GetName() {
-		case "Filter.Authors", "Filter.IDs":
+		case "Authors", "IDs":
 			n := rand.Int31n(4)
 			vals := make([]string, n)
 			for i := range n {
@@ -89,11 +99,11 @@ func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Fi
 			}
 			value.Set(reflect.ValueOf(vals))
 
-		case "Filter.Kinds":
+		case "Kinds":
 			k := []int{generateKind()}
 			value.Set(reflect.ValueOf(k))
 
-		case "Filter.Tags":
+		case "Tags":
 			values := []string{}
 			for range rand.Intn(3) {
 				values = append(values, generateHexString())
@@ -103,16 +113,21 @@ func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Fi
 			}
 			value.Set(reflect.ValueOf(m))
 
-		case "Filter.Limit":
+		case "Limit":
 			l := int(rand.Int63n(100))
 			value.Set(reflect.ValueOf(l))
 
-		case "Filter.Until", "Filter.Since":
+		case "Until", "Since":
 			ts := model.Timestamp(generateCreatedAt())
 			value.Set(reflect.ValueOf(&ts))
 
 		case "Expiration", "Videos", "Images", "Quotes", "References":
-			value.Set(reflect.ValueOf(helperRandomBool(t)))
+			val := value.String()
+			if val != "" {
+				val += " "
+			}
+			val += field.GetName() + ":" + helperRandomBool(t)
+			value.Set(reflect.ValueOf(val))
 
 		default:
 			t.Fatalf("unknown field: %s", field.GetName())

@@ -29,17 +29,26 @@ const (
 
 var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
-type whereBuilder struct {
-	Params map[string]any
-	strings.Builder
-}
-
-type filterBuilder struct {
-	Name           string
-	EventIds       []string
-	EventIdsString string
-	sync.Once
-}
+type (
+	whereBuilder struct {
+		Params map[string]any
+		strings.Builder
+	}
+	databaseFilter struct {
+		nostr.Filter
+		Expiration *bool
+		Videos     *bool
+		Images     *bool
+		Quotes     *bool
+		References *bool
+	}
+	filterBuilder struct {
+		Name           string
+		EventIds       []string
+		EventIdsString string
+		sync.Once
+	}
+)
 
 func (f *filterBuilder) HasEvents() bool {
 	return len(f.EventIds) > 0
@@ -186,7 +195,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 	}
 }
 
-func isFilterEmpty(filter *model.Filter) bool {
+func isFilterEmpty(filter *databaseFilter) bool {
 	return len(filter.IDs) == 0 &&
 		len(filter.Kinds) == 0 &&
 		len(filter.Authors) == 0 &&
@@ -230,7 +239,7 @@ func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model
 	return nil
 }
 
-func filterHasExtensions(filter *model.Filter) (positive, negative int) {
+func filterHasExtensions(filter *databaseFilter) (positive, negative int) {
 	var values = []struct {
 		val *bool
 		bit int
@@ -257,7 +266,7 @@ func filterHasExtensions(filter *model.Filter) (positive, negative int) {
 	return
 }
 
-func (w *whereBuilder) applyFilterForExtensions(filter *model.Filter, builder *filterBuilder, include bool) {
+func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilter, builder *filterBuilder, include bool) {
 	separator := w.maybeOR
 	w.WriteString("select event_id from event_tags where ")
 	if include && builder.HasEvents() {
@@ -301,7 +310,7 @@ func (w *whereBuilder) applyFilterForExtensions(filter *model.Filter, builder *f
 	w.WriteRune(')')
 }
 
-func (w *whereBuilder) applyRepostFilter(filter *model.Filter, builder *filterBuilder, positiveExtensions, negativeExtensions *int) (applied bool) {
+func (w *whereBuilder) applyRepostFilter(filter *databaseFilter, builder *filterBuilder, positiveExtensions, negativeExtensions *int) (applied bool) {
 	if (*positiveExtensions + *negativeExtensions) == 0 {
 		// No extensions in the filter.
 		return
@@ -335,7 +344,7 @@ func (w *whereBuilder) applyRepostFilter(filter *model.Filter, builder *filterBu
 	return (*positiveExtensions + *negativeExtensions) > 0
 }
 
-func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
+func (w *whereBuilder) applyFilter(idx int, filter *databaseFilter) error {
 	if isFilterEmpty(filter) {
 		return nil
 	}
@@ -375,10 +384,59 @@ func (w *whereBuilder) applyFilter(idx int, filter *model.Filter) error {
 	return nil
 }
 
+func parseNostrFilter(filter model.Filter) *databaseFilter {
+	f := databaseFilter{
+		Filter: filter,
+	}
+	flags := []struct {
+		Name string
+		Flag **bool
+	}{
+		{"expiration", &f.Expiration},
+		{"videos", &f.Videos},
+		{"images", &f.Images},
+		{"quotes", &f.Quotes},
+		{"references", &f.References},
+	}
+
+	for idx := range flags {
+		flagStart := strings.Index(strings.ToLower(f.Search), flags[idx].Name+":")
+		if flagStart == -1 {
+			continue
+		}
+
+		flagEnd := strings.Index(f.Search[flagStart:], " ")
+		if flagEnd == -1 {
+			flagEnd = len(f.Search)
+		} else {
+			flagEnd += flagStart
+		}
+
+		value := strings.ToLower(f.Search[flagStart+len(flags[idx].Name)+1 : flagEnd])
+		if value == "true" || value == "1" || value == "on" || value == "yes" {
+			on := true
+			*flags[idx].Flag = &on
+		} else if value == "false" || value == "0" || value == "off" || value == "no" {
+			off := false
+			*flags[idx].Flag = &off
+		} else {
+			// Do not now how to parse the value.
+			continue
+		}
+
+		// Remove flag:value from the search string.
+		f.Search = strings.TrimSpace(f.Search[:flagStart] + f.Search[flagEnd:])
+	}
+
+	f.Search = strings.TrimSpace(f.Search)
+
+	return &f
+}
+
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	for idx := range filters {
 		w.maybeOR()
-		if err := w.applyFilter(idx, &filters[idx]); err != nil {
+		if err := w.applyFilter(idx, parseNostrFilter(filters[idx])); err != nil {
 			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
 		}
 	}

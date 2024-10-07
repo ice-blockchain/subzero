@@ -13,12 +13,12 @@ import (
 func TestIsFilterEmpty(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, isFilterEmpty(&model.Filter{}))
+	require.True(t, isFilterEmpty(&databaseFilter{}))
 
 	f := helperNewFilter(func(apply *model.Filter) {
 		apply.IDs = []string{"123"}
 	})
-	require.False(t, isFilterEmpty(&f))
+	require.False(t, isFilterEmpty(parseNostrFilter(f)))
 }
 
 func TestWhereBuilderEmpty(t *testing.T) {
@@ -232,10 +232,7 @@ func TestWhereBuilderMimeType(t *testing.T) {
 	t.Parallel()
 
 	filters := helperNewSingleFilter(func(apply *model.Filter) {
-		x := true
-		y := false
-		apply.Videos = &x
-		apply.Images = &y
+		apply.Search = "images:true videos:false"
 	})
 
 	builder := newWhereBuilder()
@@ -244,4 +241,66 @@ func TestWhereBuilderMimeType(t *testing.T) {
 	t.Logf("stmt: %s (%+v)", q, params)
 	t.Logf("params: %+v", params)
 	require.Len(t, params, 0)
+}
+
+func TestParseNostrFilter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Empty", func(t *testing.T) {
+		f := parseNostrFilter(model.Filter{})
+		require.Empty(t, f.Filter)
+		require.Nil(t, f.Quotes)
+		require.Nil(t, f.Images)
+	})
+	t.Run("Images", func(t *testing.T) {
+		f := parseNostrFilter(model.Filter{
+			Search: "images:true",
+		})
+		require.Empty(t, f.Filter)
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+	})
+	t.Run("ImagesWithQuotes", func(t *testing.T) {
+		f := parseNostrFilter(model.Filter{
+			Search: "images:true quoteS:off",
+		})
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+		require.NotNil(t, f.Quotes)
+		require.False(t, *f.Quotes)
+		require.Empty(t, f.Filter)
+	})
+	t.Run("ImagesWithQuotesWithRef", func(t *testing.T) {
+		f := parseNostrFilter(model.Filter{
+			Search: "images:true quoteS:off references:yes",
+		})
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+		require.NotNil(t, f.Quotes)
+		require.False(t, *f.Quotes)
+		require.NotNil(t, f.References)
+		require.True(t, *f.References)
+		require.Empty(t, f.Filter)
+	})
+	t.Run("ImagesWithUnknownValue", func(t *testing.T) {
+		f := parseNostrFilter(model.Filter{
+			Search: "images:true quoteS:foo",
+		})
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+		require.Nil(t, f.Quotes)
+		require.Equal(t, "quoteS:foo", f.Filter.Search)
+	})
+	t.Run("ImagesWithQuotesWithRefWithContent", func(t *testing.T) {
+		f := parseNostrFilter(model.Filter{
+			Search: "images:true quoteS:off some content here references:yes",
+		})
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+		require.NotNil(t, f.Quotes)
+		require.False(t, *f.Quotes)
+		require.NotNil(t, f.References)
+		require.True(t, *f.References)
+		require.Equal(t, "some content here", f.Filter.Search)
+	})
 }

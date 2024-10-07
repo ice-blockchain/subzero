@@ -80,7 +80,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
-	input := parseMessage(msgBytes)
+	input := nostr.ParseMessage(msgBytes)
 	if input == nil {
 		err := errorx.New("failed to parse input")
 		notice := nostr.NoticeEnvelope(err.Error())
@@ -101,9 +101,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				log.Printf("ERROR:%v", err)
 			}
 		}
-	case *model.ReqEnvelope:
+	case *nostr.ReqEnvelope:
 		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{Filters: e.Filters}, SubscriptionID: e.SubscriptionID})
-	case *model.CountEnvelope:
+	case *nostr.CountEnvelope:
 		err = h.handleCount(ctx, e)
 		if err != nil {
 			defer respWriter.Close()
@@ -139,7 +139,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	}
 }
 
-func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope model.Envelope) error {
+func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Envelope) error {
 	b, err := envelope.MarshalJSON()
 	if err != nil {
 		return errorx.Withf(err, "failed to serialize %+v into json", envelope)

@@ -17,16 +17,9 @@ type (
 	Tags      = nostr.Tags
 	Timestamp = nostr.Timestamp
 	Kind      = int
-	Filter    struct {
-		nostr.Filter
-		Expiration *bool
-		Videos     *bool
-		Images     *bool
-		Quotes     *bool
-		References *bool
-	}
-	Filters []Filter
-	Event   struct {
+	Filter    = nostr.Filter
+	Filters   = nostr.Filters
+	Event     struct {
 		nostr.Event
 	}
 	Subscription struct {
