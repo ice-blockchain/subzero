@@ -135,8 +135,8 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 	return nil
 }
 
-func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
-	count, err := query.CountEvents(ctx, &model.Subscription{Filters: model.FromNostrFilters(envelope.Filters)})
+func (h *handler) handleCount(ctx context.Context, envelope *model.CountEnvelope) error {
+	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
 	if err == nil {
 		envelope.Count = &count
 	}

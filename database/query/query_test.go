@@ -753,5 +753,19 @@ func TestSaveEventWithRepost(t *testing.T) {
 			require.True(t, id.Valid)
 			require.Equal(t, "3", id.String)
 		})
+
+		t.Run("NoOverrideRepost", func(t *testing.T) {
+			var event model.Event
+
+			event.Kind = nostr.KindRepost
+			event.ID = generateHexString()
+			event.PubKey = "2"
+			event.Tags = model.Tags{{"e", "2"}}
+			event.CreatedAt = 2
+			event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
+
+			err := db.AcceptEvent(context.TODO(), &event)
+			require.NoError(t, err)
+		})
 	})
 }

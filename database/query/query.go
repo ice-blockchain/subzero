@@ -76,7 +76,7 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 		return errors.Wrap(err, "failed to unmarshal original event")
 	}
 
-	err = db.SaveEvent(ctx, &childEvent)
+	err = db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(&childEvent), false)
 	if err != nil {
 		return errors.Wrap(err, "failed to save original event")
 	}
@@ -85,7 +85,7 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 	dbEvent := eventToDatabaseEvent(event)
 	dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
 
-	return db.SaveDatabaseEvent(ctx, dbEvent)
+	return db.SaveDatabaseEvent(ctx, dbEvent, true)
 }
 
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
@@ -118,19 +118,24 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
-func (db *dbClient) SaveDatabaseEvent(ctx context.Context, event *databaseEvent) error {
-	const stmt = `
-insert or replace into events
+func (db *dbClient) SaveDatabaseEvent(ctx context.Context, event *databaseEvent, replace bool) error {
+	var stmt = `into events
 	(kind, created_at, system_created_at, id, pubkey, sig, content, temp_tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, (select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), :reference_id)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
+
+	if replace {
+		stmt = `insert or replace ` + stmt
+	} else {
+		stmt = `insert ` + stmt + ` on conflict do nothing`
+	}
 
 	event.SystemCreatedAt = time.Now().UnixNano()
 	rowsAffected, err := db.exec(ctx, stmt, event)
 	if err != nil {
 		return errors.Wrap(err, "failed to exec insert event sql")
 	}
-	if rowsAffected == 0 {
+	if rowsAffected == 0 && replace {
 		return ErrUnexpectedRowsAffected
 	}
 
@@ -147,7 +152,7 @@ func eventToDatabaseEvent(event *model.Event) *databaseEvent {
 }
 
 func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
-	return db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(event))
+	return db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(event), true)
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
