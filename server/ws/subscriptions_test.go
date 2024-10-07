@@ -50,7 +50,7 @@ func TestRelaySubscription(t *testing.T) {
 		events := make([]*model.Event, 0, len(eventsQueue))
 		for _, ev := range eventsQueue {
 			for _, f := range subscription.Filters {
-				if f.Matches(ev) {
+				if f.Matches(&ev.Event) {
 					events = append(events, ev)
 				}
 			}
