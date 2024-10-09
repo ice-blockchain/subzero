@@ -4,7 +4,9 @@ package query
 
 import (
 	"context"
+	"log"
 	"sync"
+	"time"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -25,9 +27,9 @@ func MustInit(url ...string) {
 
 	globalDB.Once.Do(func() {
 		globalDB.Client = openDatabase(target, true)
-	})
 
-	go globalDB.Client.StartExpiredEventsCleanup(context.Background())
+		go globalDB.Client.StartExpiredEventsCleanup(context.Background())
+	})
 }
 
 func AcceptEvent(ctx context.Context, event *model.Event) error {
@@ -40,4 +42,23 @@ func GetStoredEvents(ctx context.Context, subscription *model.Subscription) Even
 
 func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {
 	return globalDB.Client.CountEvents(ctx, subscription)
+}
+
+func (d *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			reqCtx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			if err := d.deleteExpiredEvents(reqCtx); err != nil {
+				log.Printf("failed to delete expired events: %v", err)
+			}
+
+			cancel()
+		case <-ctx.Done():
+			return
+		}
+	}
 }

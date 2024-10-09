@@ -672,6 +672,15 @@ func TestSelectQuotesReferences(t *testing.T) {
 	})
 }
 
+func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
+	t.Helper()
+	var expiredEventsCount []int
+	err := db.Select(&expiredEventsCount, "select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as integer) <= unixepoch())))")
+	require.NoError(t, err)
+
+	return expiredEventsCount[0]
+}
+
 func TestSelectEventsExpiration(t *testing.T) {
 	t.Parallel()
 
@@ -758,37 +767,18 @@ func TestSelectEventsExpiration(t *testing.T) {
 			event.Kind = nostr.KindTextNote
 			event.ID = fmt.Sprintf("expired:%v", i)
 			event.PubKey = "1"
-			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
+			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-int64(i), 10)}, {"q", "fooo"}}
 			event.CreatedAt = 1
 
 			err := db.SaveEvent(context.TODO(), &event)
 			require.NoError(t, err)
 		}
 	})
-	t.Run("All expired events", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:expired"
-		}))
-		require.NoError(t, err)
-		require.Equal(t, int64(101), count)
-	})
 	t.Run("Delete expired events", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:expired"
-		}))
+		require.Equal(t, 101, helperCountExpiredEvents(t, db))
+		err := db.deleteExpiredEvents(context.TODO())
 		require.NoError(t, err)
-		require.Equal(t, int64(101), count)
-		err = db.deleteExpiredEvents(context.TODO(), &model.Subscription{
-			Filters: model.Filters{
-				model.Filter{Search: "expiration:expired"},
-			},
-		})
-		require.NoError(t, err)
-		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:expired"
-		}))
-		require.NoError(t, err)
-		require.Equal(t, int64(0), count)
+		require.Equal(t, 0, helperCountExpiredEvents(t, db))
 	})
 }
 

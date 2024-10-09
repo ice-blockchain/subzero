@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
-	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -304,38 +303,13 @@ func generateEventsWhereClause(subscription *model.Subscription) (clause string,
 	return newWhereBuilder().Build(filters...)
 }
 
-func (d *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
+func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
+	params := map[string]any{}
+	_, err := db.exec(ctx, `delete from events
+								where id in (
+									select event_id from event_tags
+										where (((event_tag_key = 'expiration')
+											AND cast(event_tag_value1 as integer) <= unixepoch())))`, params)
 
-	for {
-		select {
-		case <-ticker.C:
-			reqCtx, cancel := context.WithTimeout(ctx, 1*time.Minute) //nolint:gomnd,mnd // .
-			if err := d.deleteExpiredEvents(reqCtx, &model.Subscription{
-				Filters: model.Filters{
-					model.Filter{Search: "expiration:expired"},
-				},
-			}); err != nil {
-				log.Printf("failed to delete expired events: %v", err)
-			}
-
-			cancel()
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (db *dbClient) deleteExpiredEvents(ctx context.Context, subscription *model.Subscription) error {
-	where, params, err := generateEventsWhereClause(subscription)
-	if err != nil {
-		return errors.Wrap(err, "failed to generate events where clause")
-	}
-	_, err = db.exec(ctx, fmt.Sprintf(`delete from events where %v`, where), params)
-	if err != nil {
-		return errors.Wrap(err, "failed to exec delete expired events")
-	}
-
-	return nil
+	return errors.Wrap(err, "failed to exec delete expired events")
 }
