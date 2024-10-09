@@ -12,5 +12,6 @@ type (
 		Port                    uint16              `yaml:"port"`
 		WriteTimeout            stdlibtime.Duration `yaml:"writeTimeout"`
 		ReadTimeout             stdlibtime.Duration `yaml:"readTimeout"`
+		Debug                   bool                `yaml:"debug"`
 	}
 )

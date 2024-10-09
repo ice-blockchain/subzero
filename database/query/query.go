@@ -55,11 +55,6 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 		}
 
 		return nil
-
-	case nostr.KindReaction:
-		if ev, err := getReactionTargetEvent(ctx, db, event); err != nil || ev == nil {
-			return errors.Wrap(ErrTargetReactionEventNotFound, "can't find target event for reaction kind")
-		}
 	}
 
 	return db.saveEvent(ctx, event)

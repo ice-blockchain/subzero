@@ -22,6 +22,7 @@ var (
 	cert               string
 	key                string
 	databasePath       string
+	debug              bool
 	subzero            = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
@@ -41,6 +42,7 @@ var (
 				KeyPath:                 key,
 				Port:                    port,
 				NIP13MinLeadingZeroBits: minLeadingZeroBits,
+				Debug:                   debug,
 			})
 		},
 	}
@@ -50,6 +52,7 @@ var (
 		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
 		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
 		subzero.Flags().IntVar(&minLeadingZeroBits, "minLeadingZeroBits", 0, "min leading zero bits according NIP-13")
+		subzero.Flags().BoolVar(&debug, "debug", false, "debug mode")
 		if err := subzero.MarkFlagRequired("cert"); err != nil {
 			log.Print(err)
 		}
