@@ -26,6 +26,8 @@ func MustInit(url ...string) {
 	globalDB.Once.Do(func() {
 		globalDB.Client = openDatabase(target, true)
 	})
+
+	go globalDB.Client.StartExpiredEventsCleanup(context.Background())
 }
 
 func AcceptEvent(ctx context.Context, event *model.Event) error {

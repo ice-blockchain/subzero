@@ -27,6 +27,15 @@ const (
 	extensionReferences
 )
 
+const (
+	ExtensionOff = 0
+	ExtensionOn  = 1
+
+	ExpirationExtensionNoTag         = 0
+	ExpirationExtensionNotExpiredTag = 1
+	ExpirationExtensionExpiredTag    = 2
+)
+
 var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
 type (
@@ -36,11 +45,11 @@ type (
 	}
 	databaseFilter struct {
 		nostr.Filter
-		Expiration *bool
-		Videos     *bool
-		Images     *bool
-		Quotes     *bool
-		References *bool
+		Expiration *int
+		Videos     *int
+		Images     *int
+		Quotes     *int
+		References *int
 	}
 	filterBuilder struct {
 		Name           string
@@ -260,7 +269,7 @@ func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model
 
 func filterHasExtensions(filter *databaseFilter) (positive, negative int) {
 	var values = []struct {
-		val *bool
+		val *int
 		bit int
 	}{
 		{filter.Expiration, extensionExpiration},
@@ -275,7 +284,7 @@ func filterHasExtensions(filter *databaseFilter) (positive, negative int) {
 			continue
 		}
 
-		if *v.val {
+		if *v.val > 0 {
 			positive |= v.bit
 		} else {
 			negative |= v.bit
@@ -294,21 +303,21 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilter, builder 
 	}
 
 	w.WriteRune('(')
-	if filter.Quotes != nil && *filter.Quotes == include {
+	if filter.Quotes != nil && ((*filter.Quotes == ExtensionOn && include) || (*filter.Quotes == ExtensionOff && !include)) {
 		separator()
 		w.WriteString("(event_tag_key = 'q')")
 	}
-	if filter.References != nil && *filter.References == include {
+	if filter.References != nil && ((*filter.References == ExtensionOn && include) || (*filter.References == ExtensionOff && !include)) {
 		separator()
 		w.WriteString("(event_tag_key = 'e')")
 	}
-	if filter.Images != nil && *filter.Images == include {
+	if filter.Images != nil && ((*filter.Images == ExtensionOn && include) || (*filter.Images == ExtensionOff && !include)) {
 		separator()
 		w.WriteString("(event_tag_key = 'imeta' AND ")
 		w.WriteString(tagValueMimeType)
 		w.WriteString(" IN ('m image/png', 'm image/jpeg', 'm image/gif', 'm image/webp', 'm image/avif'))")
 	}
-	if filter.Videos != nil && *filter.Videos == include {
+	if filter.Videos != nil && ((*filter.Videos == ExtensionOn && include) || (*filter.Videos == ExtensionOff && !include)) {
 		separator()
 		w.WriteString("(event_tag_key = 'imeta' AND ")
 		w.WriteString(tagValueMimeType)
@@ -316,14 +325,18 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilter, builder 
 	}
 	if filter.Expiration != nil {
 		separator()
-		if *filter.Expiration {
+		if *filter.Expiration == ExpirationExtensionNotExpiredTag || *filter.Expiration == ExpirationExtensionExpiredTag {
 			w.WriteRune('(')
 		}
 		w.WriteString("(event_tag_key = 'expiration')")
-		if *filter.Expiration {
+		if *filter.Expiration == ExpirationExtensionNotExpiredTag {
 			w.WriteString(" AND cast(")
 			w.WriteString(tagValueExpiration)
 			w.WriteString(" as integer) > unixepoch())")
+		} else if *filter.Expiration == ExpirationExtensionExpiredTag {
+			w.WriteString(" AND cast(")
+			w.WriteString(tagValueExpiration)
+			w.WriteString(" as integer) <= unixepoch())")
 		}
 	}
 	w.WriteRune(')')
@@ -409,7 +422,7 @@ func parseNostrFilter(filter model.Filter) *databaseFilter {
 	}
 	flags := []struct {
 		Name string
-		Flag **bool
+		Flag **int
 	}{
 		{"expiration", &f.Expiration},
 		{"videos", &f.Videos},
@@ -433,11 +446,14 @@ func parseNostrFilter(filter model.Filter) *databaseFilter {
 
 		value := strings.ToLower(f.Search[flagStart+len(flags[idx].Name)+1 : flagEnd])
 		if value == "true" || value == "1" || value == "on" || value == "yes" {
-			on := true
+			on := ExtensionOn
 			*flags[idx].Flag = &on
 		} else if value == "false" || value == "0" || value == "off" || value == "no" {
-			off := false
+			off := ExtensionOff
 			*flags[idx].Flag = &off
+		} else if value == "expired" {
+			expired := ExpirationExtensionExpiredTag
+			*flags[idx].Flag = &expired
 		} else {
 			// Do not now how to parse the value.
 			continue

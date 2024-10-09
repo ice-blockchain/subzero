@@ -258,16 +258,16 @@ func TestParseNostrFilter(t *testing.T) {
 		})
 		require.Empty(t, f.Filter)
 		require.NotNil(t, f.Images)
-		require.True(t, *f.Images)
+		require.Equal(t, ExtensionOn, *f.Images)
 	})
 	t.Run("ImagesWithQuotes", func(t *testing.T) {
 		f := parseNostrFilter(model.Filter{
 			Search: "images:true quoteS:off",
 		})
 		require.NotNil(t, f.Images)
-		require.True(t, *f.Images)
+		require.Equal(t, ExtensionOn, *f.Images)
 		require.NotNil(t, f.Quotes)
-		require.False(t, *f.Quotes)
+		require.Equal(t, ExtensionOff, *f.Quotes)
 		require.Empty(t, f.Filter)
 	})
 	t.Run("ImagesWithQuotesWithRef", func(t *testing.T) {
@@ -275,11 +275,11 @@ func TestParseNostrFilter(t *testing.T) {
 			Search: "images:true quoteS:off references:yes",
 		})
 		require.NotNil(t, f.Images)
-		require.True(t, *f.Images)
+		require.Equal(t, ExtensionOn, *f.Images)
 		require.NotNil(t, f.Quotes)
-		require.False(t, *f.Quotes)
+		require.Equal(t, ExtensionOff, *f.Quotes)
 		require.NotNil(t, f.References)
-		require.True(t, *f.References)
+		require.Equal(t, ExtensionOn, *f.References)
 		require.Empty(t, f.Filter)
 	})
 	t.Run("ImagesWithUnknownValue", func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestParseNostrFilter(t *testing.T) {
 			Search: "images:true quoteS:foo",
 		})
 		require.NotNil(t, f.Images)
-		require.True(t, *f.Images)
+		require.Equal(t, ExtensionOn, *f.Images)
 		require.Nil(t, f.Quotes)
 		require.Equal(t, "quoteS:foo", f.Filter.Search)
 	})
@@ -296,11 +296,11 @@ func TestParseNostrFilter(t *testing.T) {
 			Search: "images:true quoteS:off some content here references:yes",
 		})
 		require.NotNil(t, f.Images)
-		require.True(t, *f.Images)
+		require.Equal(t, ExtensionOn, *f.Images)
 		require.NotNil(t, f.Quotes)
-		require.False(t, *f.Quotes)
+		require.Equal(t, ExtensionOff, *f.Quotes)
 		require.NotNil(t, f.References)
-		require.True(t, *f.References)
+		require.Equal(t, ExtensionOn, *f.References)
 		require.Equal(t, "some content here", f.Filter.Search)
 	})
 }

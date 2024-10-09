@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -750,6 +751,44 @@ func TestSelectEventsExpiration(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
+	})
+	t.Run("Fill by expired events", func(t *testing.T) {
+		for i := range 100 {
+			var event model.Event
+			event.Kind = nostr.KindTextNote
+			event.ID = fmt.Sprintf("expired:%v", i)
+			event.PubKey = "1"
+			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
+			event.CreatedAt = 1
+
+			err := db.SaveEvent(context.TODO(), &event)
+			require.NoError(t, err)
+		}
+	})
+	t.Run("All expired events", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Search = "expiration:expired"
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(101), count)
+	})
+	t.Run("Delete expired events", func(t *testing.T) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Search = "expiration:expired"
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(101), count)
+		err = db.deleteExpiredEvents(context.TODO(), &model.Subscription{
+			Filters: model.Filters{
+				model.Filter{Search: "expiration:expired"},
+			},
+		})
+		require.NoError(t, err)
+		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Search = "expiration:expired"
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(0), count)
 	})
 }
 
