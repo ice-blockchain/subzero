@@ -56,9 +56,6 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 
 		return nil
 
-	case nostr.KindRepost:
-		return db.saveRepost(ctx, event)
-
 	case nostr.KindReaction:
 		if ev, err := getReactionTargetEvent(ctx, db, event); err != nil || ev == nil {
 			return errors.Wrap(ErrTargetReactionEventNotFound, "can't find target event for reaction kind")
@@ -66,28 +63,6 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 	}
 
 	return db.saveEvent(ctx, event)
-}
-
-func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
-	var childEvent model.Event
-
-	if event.Content != "" && json.Valid([]byte(event.Content)) {
-		err := json.Unmarshal([]byte(event.Content), &childEvent)
-		if err != nil {
-			return errors.Wrap(err, "failed to unmarshal original event")
-		}
-	}
-
-	// Link the repost event to the original event.
-	dbEvent, err := eventToDatabaseEvent(event)
-	if err != nil {
-		return err
-	}
-	if childEvent.ID != "" {
-		dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
-	}
-
-	return db.SaveDatabaseEvent(ctx, dbEvent)
 }
 
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
@@ -120,14 +95,24 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
-func (db *dbClient) SaveDatabaseEvent(ctx context.Context, event *databaseEvent) error {
+func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
 	const stmt = `insert or replace into events
 	(kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, reference_id)
 values
 	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
 
-	event.SystemCreatedAt = time.Now().UnixNano()
-	rowsAffected, err := db.exec(ctx, stmt, event)
+	jtags, err := json.Marshal(event.Tags)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal tags")
+	}
+
+	dbEvent := databaseEvent{
+		Event:           *event,
+		SystemCreatedAt: time.Now().UnixNano(),
+		Jtags:           string(jtags),
+	}
+
+	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
 	if err != nil {
 		return errors.Wrap(err, "failed to exec insert event sql")
 	}
@@ -136,28 +121,6 @@ values
 	}
 
 	return nil
-}
-
-func eventToDatabaseEvent(event *model.Event) (*databaseEvent, error) {
-	jtags, err := json.Marshal(event.Tags)
-	if err != nil {
-		return nil, err
-
-	}
-
-	return &databaseEvent{
-		Event: *event,
-		Jtags: string(jtags),
-	}, nil
-}
-
-func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
-	ev, err := eventToDatabaseEvent(event)
-	if err != nil {
-		return err
-	}
-
-	return db.SaveDatabaseEvent(ctx, ev)
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {

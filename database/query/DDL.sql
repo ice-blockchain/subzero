@@ -139,7 +139,7 @@ begin
 end
 ;
 --------
-create trigger if not exists trigger_events_unwind_report
+create trigger if not exists trigger_events_unwind_repost
     before insert
     on events
     for each row
@@ -161,8 +161,24 @@ select
 from
     (select NEW.content as b)
 where
-    json_valid(NEW.content)
+    NEW.content != '' AND json_valid(NEW.content)
 on conflict do nothing;
+end
+;
+--------
+create trigger if not exists trigger_events_link_repost
+    after insert
+    on events
+    for each row
+    when new.kind = 6
+begin
+update events set
+    reference_id = json_extract(NEW.content, '$.id')
+where
+    id = new.id AND
+    NEW.content != '' AND
+    json_valid(NEW.content) AND
+    json_extract(NEW.content, '$.id') != '';
 end
 ;
 --------
