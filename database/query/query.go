@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -32,6 +33,8 @@ type databaseEvent struct {
 	SystemCreatedAt int64
 	ReferenceID     sql.NullString
 	Jtags           string
+	SigAlg          string
+	KeyAlg          string
 }
 
 type EventIterator iter.Seq2[*model.Event, error]
@@ -95,11 +98,20 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
+func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string) {
+	p := strings.IndexRune(event.Sig, ':')
+	if p > 0 {
+		sigAlg = event.Sig[:p]
+	}
+
+	return
+}
+
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
 	const stmt = `insert or replace into events
-	(kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, reference_id)
+	(kind, created_at, system_created_at, id, pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
 
 	jtags, err := json.Marshal(event.Tags)
 	if err != nil {
@@ -111,6 +123,7 @@ values
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
 	}
+	dbEvent.SigAlg, dbEvent.KeyAlg = parseSigKeyAlg(event)
 
 	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
 	if err != nil {

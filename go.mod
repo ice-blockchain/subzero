@@ -5,6 +5,7 @@ go 1.23.0
 replace filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cockroachdb/errors v1.11.3
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gobwas/httphead v0.1.0
@@ -27,7 +28,6 @@ require (
 )
 
 require (
-	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/bytedance/sonic v1.12.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.0 // indirect

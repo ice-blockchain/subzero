@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS events
     id                text    not null primary key,
     pubkey            text    not null,
     sig               text    not null,
+    sig_alg           text    not null DEFAULT '',
+    key_alg           text    not null DEFAULT '',
     content           text    not null,
     d_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
