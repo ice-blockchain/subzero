@@ -10,20 +10,20 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func TestPrepareTag(t *testing.T) {
+func TestEventTagsReorder(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Empty", func(t *testing.T) {
-		require.Nil(t, prepareTag(nil))
-		require.Equal(t, model.Tag{}, prepareTag(model.Tag{}))
-		require.Equal(t, model.Tag{"a"}, prepareTag(model.Tag{"a"}))
+		require.Nil(t, eventTagsReorder(nil))
+		require.Equal(t, model.Tag{}, eventTagsReorder(model.Tag{}))
+		require.Equal(t, model.Tag{"a"}, eventTagsReorder(model.Tag{"a"}))
 	})
 	t.Run("URL", func(t *testing.T) {
 		tags := model.Tag{"imeta", "url http://example.com", "foo bar"}
-		require.Equal(t, tags, prepareTag(tags))
+		require.Equal(t, tags, eventTagsReorder(tags))
 
 		tagsRaw := model.Tag{"imeta", "foo bar", "url http://example.com"}
-		require.Equal(t, tags, prepareTag(tagsRaw))
+		require.Equal(t, tags, eventTagsReorder(tagsRaw))
 	})
 
 	t.Run("URLAndMeta", func(t *testing.T) {

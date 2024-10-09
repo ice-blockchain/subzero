@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/pkg/errors"
 )
 
 const (
