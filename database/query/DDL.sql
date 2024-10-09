@@ -30,16 +30,16 @@ where 30000 <= kind AND kind < 40000;
 -- Order by:
 --   system_created_at DESC
 
-CREATE INDEX IF NOT EXISTS idx_events_hidden_system_created_at                           ON events(hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_kind_hidden_system_created_at                      ON events(kind, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_pubkey_hidden_system_created_at                    ON events(pubkey, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_hidden_system_created_at               ON events(kind, pubkey, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_kind_hidden_system_created_at                   ON events(id, kind, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_created_at_hidden_system_created_at             ON events(id, created_at DESC, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_hidden_system_created_at                 ON events(id, pubkey, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_hidden_system_created_at ON events(id, kind, pubkey, created_at DESC, hidden, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at_hidden             ON events(system_created_at DESC, id, created_at DESC, hidden);
-CREATE INDEX IF NOT EXISTS idx_events_reference_id_hidden_system_created_at              ON events(reference_id, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_system_created_at                           ON events(system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_kind_system_created_at                      ON events(kind, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_system_created_at                    ON events(pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_system_created_at               ON events(kind, pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_system_created_at                   ON events(id, kind, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_id_created_at_system_created_at             ON events(id, created_at DESC, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_system_created_at                 ON events(id, pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_system_created_at ON events(id, kind, pubkey, created_at DESC, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
 
 --------
 CREATE TABLE IF NOT EXISTS event_tags
@@ -70,13 +70,14 @@ CREATE TABLE IF NOT EXISTS event_tags
     primary key (event_id, event_tag_key, event_tag_value1)
 ) strict, WITHOUT ROWID;
 --------
-create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
-create index if not exists idx_event_tags_key_value2                  on event_tags(event_tag_key, event_tag_value2) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
-create index if not exists idx_event_tags_key_value3                  on event_tags(event_tag_key, event_tag_value3) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
-create index if not exists idx_event_tags_id_key_value2               on event_tags(event_id, event_tag_key, event_tag_value2) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
-create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
-create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
-create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+--- TODO: optimize index size and usage.
+create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1);
+create index if not exists idx_event_tags_key_value2                  on event_tags(event_tag_key, event_tag_value2);
+create index if not exists idx_event_tags_key_value3                  on event_tags(event_tag_key, event_tag_value3);
+create index if not exists idx_event_tags_id_key_value2               on event_tags(event_id, event_tag_key, event_tag_value2);
+create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2);
+create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
+create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
 --------
 create trigger if not exists generate_event_tags
     after insert

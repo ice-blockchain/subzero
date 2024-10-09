@@ -164,7 +164,7 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 	})
 }
 
-func TestQueryFuzzNoUseTempBTREE(t *testing.T) {
+func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 	t.Parallel()
 
 	var sets [][]*filterElement
@@ -207,7 +207,7 @@ func TestQueryFuzzNoUseTempBTREE(t *testing.T) {
 				err := rows.Scan(&s1, &s2, &s3, &s4)
 				require.NoError(t, err)
 				op[s4]++
-				if s4 == "USE TEMP B-TREE FOR ORDER BY" {
+				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
 					t.Logf("set #%d: %s (%+v)", i+1, sql, params)
 					t.Log(s1, s2, s3, s4)
 					t.FailNow()
