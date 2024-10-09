@@ -27,14 +27,6 @@ const (
 	extensionReferences
 )
 
-const (
-	extensionExpiration = 1 << iota
-	extensionVideos
-	extensionImages
-	extensionQuotes
-	extensionReferences
-)
-
 var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
 type (
@@ -75,13 +67,6 @@ func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
 	})
 
 	return f.EventIdsString
-}
-
-type filterBuilder struct {
-	Name           string
-	EventIds       []string
-	EventIdsString string
-	sync.Once
 }
 
 func (f *filterBuilder) HasEvents() bool {

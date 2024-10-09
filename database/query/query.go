@@ -68,9 +68,11 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 	var childEvent model.Event
 
-	err := json.Unmarshal([]byte(event.Content), &childEvent)
-	if err != nil {
-		return errors.Wrap(err, "failed to unmarshal original event")
+	if event.Content != "" && json.Valid([]byte(event.Content)) {
+		err := json.Unmarshal([]byte(event.Content), &childEvent)
+		if err != nil {
+			return errors.Wrap(err, "failed to unmarshal original event")
+		}
 	}
 
 	// Link the repost event to the original event.
@@ -78,7 +80,9 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 	if err != nil {
 		return err
 	}
-	dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
+	if childEvent.ID != "" {
+		dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
+	}
 
 	return db.SaveDatabaseEvent(ctx, dbEvent)
 }
@@ -154,7 +158,7 @@ func eventToDatabaseEvent(event *model.Event) (*databaseEvent, error) {
 	}, nil
 }
 
-func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
+func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
 	ev, err := eventToDatabaseEvent(event)
 	if err != nil {
 		return err
