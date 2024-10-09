@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS events
     content           text    not null,
     d_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    tags              text    not null DEFAULT '[]'
+    tags              text    not null DEFAULT '[]',
+    hidden            integer not null default 0
 ) strict, WITHOUT ROWID;
 --------
 create unique index if not exists replaceable_event_uk on events(pubkey, kind)
@@ -29,15 +30,16 @@ where 30000 <= kind AND kind < 40000;
 -- Order by:
 --   system_created_at DESC
 
-CREATE INDEX IF NOT EXISTS idx_events_kind_system_created_at                      ON events(kind, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_pubkey_system_created_at                    ON events(pubkey, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_system_created_at               ON events(kind, pubkey, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_kind_system_created_at                   ON events(id, kind, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_created_at_system_created_at             ON events(id, created_at DESC, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_system_created_at                 ON events(id, pubkey, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_system_created_at ON events(id, kind, pubkey, created_at DESC, system_created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_hidden_system_created_at                           ON events(hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_kind_hidden_system_created_at                      ON events(kind, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_hidden_system_created_at                    ON events(pubkey, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_hidden_system_created_at               ON events(kind, pubkey, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_hidden_system_created_at                   ON events(id, kind, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_created_at_hidden_system_created_at             ON events(id, created_at DESC, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_hidden_system_created_at                 ON events(id, pubkey, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_hidden_system_created_at ON events(id, kind, pubkey, created_at DESC, hidden, system_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at_hidden             ON events(system_created_at DESC, id, created_at DESC, hidden);
+CREATE INDEX IF NOT EXISTS idx_events_reference_id_hidden_system_created_at              ON events(reference_id, hidden, system_created_at DESC);
 
 --------
 CREATE TABLE IF NOT EXISTS event_tags
@@ -143,17 +145,18 @@ create trigger if not exists trigger_events_unwind_report
     when new.kind = 6
 begin
 insert into events
-    (kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag)
+    (kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, hidden)
 select
     json_extract(b, '$.kind'),
-    json_extract(b, '$.created_at'),
-    coalesce(cast((unixepoch('subsec') * 1e9) as integer), cast((julianday('now') - 2440587.5) * 86400 * 1000 * 1e9 as integer)),
+    0,
+    0,
     json_extract(b, '$.id'),
-    json_extract(b, '$.pubkey'),
-    json_extract(b, '$.sig'),
-    json_extract(b, '$.content'),
+    '',
+    '',
+    '',
     json_extract(b, '$.tags'),
-    coalesce((select value->>1 from json_each(json_extract(b, '$.tags')) where value->>0 = 'd' limit 1), '')
+    '',
+    1
 from
     (select NEW.content as b)
 where

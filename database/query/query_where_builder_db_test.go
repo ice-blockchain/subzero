@@ -208,7 +208,7 @@ func helperGenerateEvent(
 		}
 	}
 
-	err := db.SaveEvent(context.Background(), &ev)
+	err := db.saveEvent(context.Background(), &ev)
 	require.NoError(t, err)
 
 	return ev
@@ -358,7 +358,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		event.Tags = model.Tags{{"e", "etag"}, {"p", "ptag"}, {"d", "dtag"}, {"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 
@@ -436,7 +436,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		event.Tags = model.Tags{{"e", "etag"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -445,7 +445,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		event.Tags = model.Tags{{"p", "ptag"}}
 		event.CreatedAt = 2
 
-		err = db.SaveEvent(context.TODO(), &event)
+		err = db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 
@@ -527,7 +527,7 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Tags = model.Tags{{"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -536,7 +536,7 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Tags = model.Tags{{"imeta", "m image/png"}}
 		event.CreatedAt = 2
 
-		err = db.SaveEvent(context.TODO(), &event)
+		err = db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("QueryNoImeta", func(t *testing.T) {
@@ -599,7 +599,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		event.Tags = model.Tags{{"q", "fooo"}, {"bar", "foo"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -608,7 +608,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		event.Tags = model.Tags{{"e", "fooo"}, {"foo", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.SaveEvent(context.TODO(), &event)
+		err = db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectQuotes", func(t *testing.T) {
@@ -685,7 +685,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -694,7 +694,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.SaveEvent(context.TODO(), &event)
+		err = db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("All", func(t *testing.T) {
@@ -767,7 +767,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -776,7 +776,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.SaveEvent(context.TODO(), &event)
+		err = db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("AliveAndE", func(t *testing.T) {
@@ -827,7 +827,7 @@ func TestSelectRepostWithReference(t *testing.T) {
 		event.Tags = model.Tags{{"e", "fooo"}, {"bar", "foo"}}
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectRepost", func(t *testing.T) {

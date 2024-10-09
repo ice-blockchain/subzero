@@ -694,7 +694,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 		event.Tags = slices.Clone(tags)
 		event.CreatedAt = 1
 
-		err := db.SaveEvent(context.TODO(), &event)
+		err := db.AcceptEvent(context.TODO(), &event)
 		require.NoError(t, err)
 
 		t.Run("CheckSelect", func(t *testing.T) {
@@ -793,7 +793,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 		t.Run("Save", func(t *testing.T) {
-			err := db.SaveEvent(context.Background(), &ev)
+			err := db.AcceptEvent(context.Background(), &ev)
 			require.NoError(t, err)
 		})
 		t.Run("ByID", func(t *testing.T) {
@@ -837,8 +837,9 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 
 		db := helperNewDatabase(t)
 		defer db.Close()
+
 		t.Run("Save", func(t *testing.T) {
-			err := db.SaveEvent(context.Background(), &repostEvent)
+			err := db.AcceptEvent(context.Background(), &repostEvent)
 			require.NoError(t, err)
 		})
 		t.Run("ByID", func(t *testing.T) {
@@ -855,11 +856,12 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 		t.Run("ByMimeType", func(t *testing.T) {
 			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
 				apply.Search = "images:true"
+				apply.Kinds = []int{nostr.KindRepost}
 			}))
 			require.NoError(t, err)
 			require.Len(t, events, 1)
 			t.Logf("event = %+v", events[0])
-			require.Equal(t, ev.ID, events[0].ID) // Should be the original event.
+			require.Equal(t, repostEvent.ID, events[0].ID) // Should be the reposted event.
 			ok, err := events[0].CheckSignature()
 			require.NoError(t, err)
 			require.True(t, ok)
@@ -867,7 +869,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 		t.Run("Count", func(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
 			require.NoError(t, err)
-			require.Equal(t, int64(2), count)
+			require.Equal(t, int64(1), count) // Only the reposted event should be counted.
 		})
 	})
 }

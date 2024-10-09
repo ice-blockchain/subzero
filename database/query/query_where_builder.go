@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	whereBuilderDefaultWhere = "1=1"
+	whereBuilderDefaultWhere = "hidden=0"
 )
 
 const (
@@ -441,10 +441,10 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		}
 	}
 
-	// If there are no filters, return the default WHERE clause.
-	if w.Len() == 0 {
-		return whereBuilderDefaultWhere, w.Params, nil
+	if w.Len() > 0 {
+		w.WriteString(" AND ")
 	}
+	w.WriteString(whereBuilderDefaultWhere)
 
 	return w.String(), w.Params, nil
 }
