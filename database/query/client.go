@@ -34,7 +34,7 @@ func init() {
 	sql.Register("sqlite3_subzero",
 		&sqlite3.SQLiteDriver{
 			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-				return conn.RegisterFunc("subzero_nostr_tags_reoder", eventTagsReorderJSON, true)
+				return conn.RegisterFunc("subzero_nostr_tags_reorder", eventTagsReorderJSON, true)
 			},
 		})
 }

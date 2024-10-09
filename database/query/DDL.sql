@@ -134,7 +134,7 @@ begin
         coalesce(value ->> 21,'')
     from
     (
-        select subzero_nostr_tags_reoder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
+        select subzero_nostr_tags_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
     ) where value ->> 0 is not null;
 end
 ;

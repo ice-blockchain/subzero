@@ -16,7 +16,7 @@ func TestSubZeroEventReorder(t *testing.T) {
 	defer db.Close()
 
 	var result string
-	err := db.QueryRowContext(context.Background(), `SELECT subzero_nostr_tags_reoder('["imeta", "foo", "bar", "", "m media", "url http://example.com"]')`).
+	err := db.QueryRowContext(context.Background(), `SELECT subzero_nostr_tags_reorder('["imeta", "foo", "bar", "", "m media", "url http://example.com"]')`).
 		Scan(&result)
 	require.NoError(t, err)
 	require.Equal(t, `["imeta","url http://example.com","m media","","bar","foo"]`, result)
