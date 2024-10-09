@@ -76,16 +76,14 @@ func (db *dbClient) saveRepost(ctx context.Context, event *model.Event) error {
 		return errors.Wrap(err, "failed to unmarshal original event")
 	}
 
-	err = db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(&childEvent), false)
-	if err != nil {
-		return errors.Wrap(err, "failed to save original event")
-	}
-
 	// Link the repost event to the original event.
-	dbEvent := eventToDatabaseEvent(event)
+	dbEvent, err := eventToDatabaseEvent(event)
+	if err != nil {
+		return err
+	}
 	dbEvent.ReferenceID = sql.NullString{String: childEvent.ID, Valid: true}
 
-	return db.SaveDatabaseEvent(ctx, dbEvent, true)
+	return db.SaveDatabaseEvent(ctx, dbEvent)
 }
 
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
@@ -118,41 +116,44 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
-func (db *dbClient) SaveDatabaseEvent(ctx context.Context, event *databaseEvent, replace bool) error {
-	var stmt = `into events
-	(kind, created_at, system_created_at, id, pubkey, sig, content, temp_tags, d_tag, reference_id)
+func (db *dbClient) SaveDatabaseEvent(ctx context.Context, event *databaseEvent) error {
+	const stmt = `insert or replace into events
+	(kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, reference_id)
 values
 	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
-
-	if replace {
-		stmt = `insert or replace ` + stmt
-	} else {
-		stmt = `insert ` + stmt + ` on conflict do nothing`
-	}
 
 	event.SystemCreatedAt = time.Now().UnixNano()
 	rowsAffected, err := db.exec(ctx, stmt, event)
 	if err != nil {
 		return errors.Wrap(err, "failed to exec insert event sql")
 	}
-	if rowsAffected == 0 && replace {
+	if rowsAffected == 0 {
 		return ErrUnexpectedRowsAffected
 	}
 
 	return nil
 }
 
-func eventToDatabaseEvent(event *model.Event) *databaseEvent {
-	jtags, _ := marshalTags(event.Tags)
+func eventToDatabaseEvent(event *model.Event) (*databaseEvent, error) {
+	jtags, err := json.Marshal(event.Tags)
+	if err != nil {
+		return nil, err
+
+	}
 
 	return &databaseEvent{
 		Event: *event,
 		Jtags: string(jtags),
-	}
+	}, nil
 }
 
 func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
-	return db.SaveDatabaseEvent(ctx, eventToDatabaseEvent(event), true)
+	ev, err := eventToDatabaseEvent(event)
+	if err != nil {
+		return err
+	}
+
+	return db.SaveDatabaseEvent(ctx, ev)
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
@@ -272,18 +273,7 @@ select
 	e.pubkey,
 	e.sig,
 	e.content,
-	'[]' as tags,
-	(select json_group_array(
-		json_array(
-			event_tag_key,
-			event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4,
-			event_tag_value5,event_tag_value6,event_tag_value7,event_tag_value8,
-			event_tag_value9,event_tag_value10,event_tag_value11,event_tag_value12,
-			event_tag_value13,event_tag_value14,event_tag_value15,event_tag_value16,
-			event_tag_value17,event_tag_value18,event_tag_value19,event_tag_value20,
-			event_tag_value21
-		)
-	) from event_tags where event_id = e.id) as jtags
+	tags as jtags
 from
 	events e
 where ` + systemCreatedAtFilter + `(` + where + `)

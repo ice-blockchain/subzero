@@ -687,7 +687,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 	t.Run("Regular", func(t *testing.T) {
 		var event model.Event
 
-		tags := model.Tags{{"imeta", "m video"}}
+		tags := model.Tags{{"imeta", "m video/mp4"}}
 		event.Kind = nostr.KindTextNote
 		event.ID = generateHexString()
 		event.PubKey = "1"
@@ -717,7 +717,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 
 			err := db.QueryRow("SELECT "+tagValueMimeType+" FROM event_tags WHERE event_id = $1", event.ID).Scan(&mime)
 			require.NoError(t, err)
-			require.Equal(t, "m video", mime)
+			require.Equal(t, "m video/mp4", mime)
 		})
 	})
 
@@ -766,6 +766,108 @@ func TestSaveEventWithRepost(t *testing.T) {
 
 			err := db.AcceptEvent(context.TODO(), &event)
 			require.NoError(t, err)
+		})
+	})
+}
+
+func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
+	t.Parallel()
+
+	pk := nostr.GeneratePrivateKey()
+	require.NotEmpty(t, pk)
+
+	var ev model.Event
+	ev.Tags = model.Tags{{"a", "b"}, {"imeta", "foo", "bar", "m image/png"}, {"c", "d"}}
+	ev.Content = "some tags and content here"
+	ev.CreatedAt = 1
+	ev.Kind = nostr.KindTextNote
+
+	require.NoError(t, ev.Sign(pk))
+	t.Logf("event id: %s (sign %v)", ev.ID, ev.Sig)
+
+	ok, err := ev.CheckSignature()
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	t.Run("SingleEvent", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		t.Run("Save", func(t *testing.T) {
+			err := db.SaveEvent(context.Background(), &ev)
+			require.NoError(t, err)
+		})
+		t.Run("ByID", func(t *testing.T) {
+			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+				apply.IDs = []string{ev.ID}
+			}))
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			t.Logf("event = %+v", events[0])
+			ok, err := events[0].CheckSignature()
+			require.NoError(t, err)
+			require.True(t, ok)
+		})
+		t.Run("ByMimeType", func(t *testing.T) {
+			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+				apply.Search = "images:true"
+			}))
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			t.Logf("event = %+v", events[0])
+			ok, err := events[0].CheckSignature()
+			require.NoError(t, err)
+			require.True(t, ok)
+		})
+	})
+	t.Run("RepostEvent", func(t *testing.T) {
+		var repostEvent model.Event
+
+		pk2 := nostr.GeneratePrivateKey()
+		require.NotEmpty(t, pk2)
+
+		data, err := ev.MarshalJSON()
+		require.NoError(t, err)
+
+		repostEvent.Content = string(data)
+		repostEvent.CreatedAt = 2
+		repostEvent.Kind = nostr.KindRepost
+
+		require.NoError(t, repostEvent.Sign(pk2))
+		t.Logf("event id: %s (sign %v)", repostEvent.ID, repostEvent.Sig)
+
+		db := helperNewDatabase(t)
+		defer db.Close()
+		t.Run("Save", func(t *testing.T) {
+			err := db.SaveEvent(context.Background(), &repostEvent)
+			require.NoError(t, err)
+		})
+		t.Run("ByID", func(t *testing.T) {
+			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+				apply.IDs = []string{repostEvent.ID}
+			}))
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			t.Logf("event = %+v", events[0])
+			ok, err := events[0].CheckSignature()
+			require.NoError(t, err)
+			require.True(t, ok)
+		})
+		t.Run("ByMimeType", func(t *testing.T) {
+			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+				apply.Search = "images:true"
+			}))
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			t.Logf("event = %+v", events[0])
+			require.Equal(t, ev.ID, events[0].ID) // Should be the original event.
+			ok, err := events[0].CheckSignature()
+			require.NoError(t, err)
+			require.True(t, ok)
+		})
+		t.Run("Count", func(t *testing.T) {
+			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
+			require.NoError(t, err)
+			require.Equal(t, int64(2), count)
 		})
 	})
 }

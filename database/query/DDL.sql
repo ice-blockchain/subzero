@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS events
     content           text    not null,
     d_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    temp_tags         text
+    tags              text    not null DEFAULT '[]'
 ) strict, WITHOUT ROWID;
 --------
 create unique index if not exists replaceable_event_uk on events(pubkey, kind)
@@ -68,13 +68,13 @@ CREATE TABLE IF NOT EXISTS event_tags
     primary key (event_id, event_tag_key, event_tag_value1)
 ) strict, WITHOUT ROWID;
 --------
-create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1);
-create index if not exists idx_event_tags_key_value2                  on event_tags(event_tag_key, event_tag_value2);
-create index if not exists idx_event_tags_key_value3                  on event_tags(event_tag_key, event_tag_value3);
-create index if not exists idx_event_tags_id_key_value2               on event_tags(event_id, event_tag_key, event_tag_value2);
-create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2);
-create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
-create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
+create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+create index if not exists idx_event_tags_key_value2                  on event_tags(event_tag_key, event_tag_value2) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+create index if not exists idx_event_tags_key_value3                  on event_tags(event_tag_key, event_tag_value3) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+create index if not exists idx_event_tags_id_key_value2               on event_tags(event_id, event_tag_key, event_tag_value2) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
+create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3) where event_tag_key in ('e', 'p', 'd', 'imeta', 'q', 'expiration');
 --------
 create trigger if not exists generate_event_tags
     after insert
@@ -129,8 +129,36 @@ begin
         coalesce(value ->> 19,''),
         coalesce(value ->> 20,''),
         coalesce(value ->> 21,'')
-    from json_each(jsonb(new.temp_tags));
-    update events set temp_tags = null where id = new.id;
+    from
+    (
+        select subzero_nostr_tags_reoder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
+    ) where value ->> 0 is not null;
+end
+;
+--------
+create trigger if not exists trigger_events_unwind_report
+    before insert
+    on events
+    for each row
+    when new.kind = 6
+begin
+insert into events
+    (kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag)
+select
+    json_extract(b, '$.kind'),
+    json_extract(b, '$.created_at'),
+    coalesce(cast((unixepoch('subsec') * 1e9) as integer), cast((julianday('now') - 2440587.5) * 86400 * 1000 * 1e9 as integer)),
+    json_extract(b, '$.id'),
+    json_extract(b, '$.pubkey'),
+    json_extract(b, '$.sig'),
+    json_extract(b, '$.content'),
+    json_extract(b, '$.tags'),
+    coalesce((select value->>1 from json_each(json_extract(b, '$.tags')) where value->>0 = 'd' limit 1), '')
+from
+    (select NEW.content as b)
+where
+    json_valid(NEW.content)
+on conflict do nothing;
 end
 ;
 --------

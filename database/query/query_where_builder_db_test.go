@@ -355,7 +355,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		event.Kind = nostr.KindTextNote
 		event.ID = "1"
 		event.PubKey = "1"
-		event.Tags = model.Tags{{"e", "etag"}, {"p", "ptag"}, {"d", "dtag"}, {"imeta", "m video/fooo"}}
+		event.Tags = model.Tags{{"e", "etag"}, {"p", "ptag"}, {"d", "dtag"}, {"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
 		err := db.SaveEvent(context.TODO(), &event)
@@ -524,7 +524,7 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Kind = nostr.KindTextNote
 		event.ID = "1"
 		event.PubKey = "1"
-		event.Tags = model.Tags{{"imeta", "m video/foo"}}
+		event.Tags = model.Tags{{"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
 		err := db.SaveEvent(context.TODO(), &event)

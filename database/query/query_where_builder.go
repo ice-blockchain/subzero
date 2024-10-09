@@ -285,15 +285,15 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilter, builder 
 	}
 	if filter.Images != nil && *filter.Images == include {
 		separator()
-		w.WriteString("(event_tag_key = 'imeta' AND substr(")
+		w.WriteString("(event_tag_key = 'imeta' AND ")
 		w.WriteString(tagValueMimeType)
-		w.WriteString(", 3, 5) = 'image')")
+		w.WriteString(" IN ('m image/png', 'm image/jpeg', 'm image/gif', 'm image/webp', 'm image/avif'))")
 	}
 	if filter.Videos != nil && *filter.Videos == include {
 		separator()
-		w.WriteString("(event_tag_key = 'imeta' AND substr(")
+		w.WriteString("(event_tag_key = 'imeta' AND ")
 		w.WriteString(tagValueMimeType)
-		w.WriteString(", 3, 5) = 'video')")
+		w.WriteString(" IN ('m video/mp4', 'm video/mpeg', 'm video/mpeg4'))")
 	}
 	if filter.Expiration != nil {
 		separator()

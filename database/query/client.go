@@ -5,13 +5,14 @@ package query
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	_ "embed"
 	"strings"
 	"sync"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 )
 
@@ -29,9 +30,18 @@ var (
 	ddl string
 )
 
+func init() {
+	sql.Register("sqlite3_subzero",
+		&sqlite3.SQLiteDriver{
+			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				return conn.RegisterFunc("subzero_nostr_tags_reoder", eventTagsReorderJSON, true)
+			},
+		})
+}
+
 func openDatabase(target string, runDDL bool) *dbClient {
 	client := &dbClient{
-		DB:          sqlx.MustConnect("sqlite3", target), //TODO impl this properly
+		DB:          sqlx.MustConnect("sqlite3_subzero", target),
 		stmtCacheMx: new(sync.RWMutex),
 		stmtCache:   make(map[string]*sqlx.NamedStmt),
 	}

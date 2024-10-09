@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -26,12 +27,24 @@ var tagsMarshalIndexes = map[string]int{
 	"m":   1,
 }
 
-func prepareTag(tag model.Tag) model.Tag {
-	if len(tag) == 0 {
-		return tag
+func eventTagsReorderJSON(jsonTags string) (string, error) {
+	var tag model.Tag
+
+	if jsonTags == "" {
+		return "[]", nil
 	}
 
-	// Format is: [group name], <key value>, <key value>, ...
+	if err := json.Unmarshal([]byte(jsonTags), &tag); err != nil {
+		return "", errors.Wrap(err, "failed to unmarshal tags")
+	}
+
+	data, err := json.Marshal(eventTagsReorder(tag))
+
+	return string(data), errors.Wrap(err, "failed to marshal tags")
+}
+
+func eventTagsReorder(tag model.Tag) model.Tag {
+	// Format is: <key>, <key value>, <key value>, ...
 	start := 0
 	if strings.EqualFold(tag.Key(), "imeta") {
 		start = 1
@@ -56,18 +69,4 @@ func prepareTag(tag model.Tag) model.Tag {
 	}
 
 	return tag
-}
-
-func marshalTags(tags model.Tags) ([]byte, error) {
-	var empty = []byte("[]")
-
-	if len(tags) == 0 {
-		return empty, nil
-	}
-
-	for i := range tags {
-		tags[i] = prepareTag(tags[i])
-	}
-
-	return json.Marshal(tags)
 }
