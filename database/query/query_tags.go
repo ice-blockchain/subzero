@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/pkg/errors"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 const (
