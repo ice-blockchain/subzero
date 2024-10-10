@@ -258,3 +258,14 @@ func generateEventsWhereClause(subscription *model.Subscription) (clause string,
 
 	return newWhereBuilder().Build(filters...)
 }
+
+func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
+	params := map[string]any{}
+	_, err := db.exec(ctx, `delete from events
+								where id in (
+									select event_id from event_tags
+										where (((event_tag_key = 'expiration')
+											AND cast(event_tag_value1 as integer) <= unixepoch())))`, params)
+
+	return errors.Wrap(err, "failed to exec delete expired events")
+}

@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -671,6 +672,15 @@ func TestSelectQuotesReferences(t *testing.T) {
 	})
 }
 
+func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
+	t.Helper()
+	var count int
+	err := db.QueryRow("select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as integer) <= unixepoch())))").Scan(&count)
+	require.NoError(t, err)
+
+	return count
+}
+
 func TestSelectEventsExpiration(t *testing.T) {
 	t.Parallel()
 
@@ -750,6 +760,25 @@ func TestSelectEventsExpiration(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
+	})
+	t.Run("Fill by expired events", func(t *testing.T) {
+		for i := range 100 {
+			var event model.Event
+			event.Kind = nostr.KindTextNote
+			event.ID = fmt.Sprintf("expired:%v", i)
+			event.PubKey = "1"
+			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-int64(i), 10)}, {"q", "fooo"}}
+			event.CreatedAt = 1
+
+			err := db.AcceptEvent(context.TODO(), &event)
+			require.NoError(t, err)
+		}
+	})
+	t.Run("Delete expired events", func(t *testing.T) {
+		require.Equal(t, 101, helperCountExpiredEvents(t, db))
+		err := db.deleteExpiredEvents(context.TODO())
+		require.NoError(t, err)
+		require.Zero(t, helperCountExpiredEvents(t, db))
 	})
 }
 

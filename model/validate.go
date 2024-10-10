@@ -449,7 +449,7 @@ func areTagsSupported(e *Event) bool {
 	}
 next:
 	for _, tag := range e.Tags {
-		if tag.Key() == "nonce" {
+		if tag.Key() == "nonce" || tag.Key() == "expiration" {
 			continue next
 		}
 		for _, supportedTag := range supportedTags {

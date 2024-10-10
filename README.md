@@ -18,7 +18,7 @@ NIPs | latest commit hash implemented | comments
 [26](https://github.com/nostr-protocol/nips/blob/master/26.md) | |
 [27](https://github.com/nostr-protocol/nips/blob/master/27.md) | |
 [32](https://github.com/nostr-protocol/nips/blob/master/32.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
-[40](https://github.com/nostr-protocol/nips/blob/master/40.md) | |
+[40](https://github.com/nostr-protocol/nips/blob/master/40.md) | [5dcfe85](https://github.com/nostr-protocol/nips/commit/5dcfe85306434f21ecb1e7a47edd92b2e3e64f9a) |
 [45](https://github.com/nostr-protocol/nips/blob/master/45.md) | [38af1ef](https://github.com/nostr-protocol/nips/commit/38af1efe779f9a26530c6171f292264b28c1eb43) |
 [50](https://github.com/nostr-protocol/nips/blob/master/50.md) | [38af1ef](https://github.com/nostr-protocol/nips/commit/38af1efe779f9a26530c6171f292264b28c1eb43) |
 [51](https://github.com/nostr-protocol/nips/blob/master/51.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
