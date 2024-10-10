@@ -61,6 +61,9 @@ func TestEventSignVerify(t *testing.T) {
 				"/foo",
 				"/",
 				"foo/",
+				"",
+				"/",
+				"//",
 			}
 			for i := range testData {
 				var ev Event
