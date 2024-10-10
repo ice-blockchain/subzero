@@ -55,44 +55,9 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 		}
 
 		return nil
-
-	case nostr.KindReaction:
-		if ev, err := getReactionTargetEvent(ctx, db, event); err != nil || ev == nil {
-			return errors.Wrap(ErrTargetReactionEventNotFound, "can't find target event for reaction kind")
-		}
 	}
 
 	return db.saveEvent(ctx, event)
-}
-
-func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
-	refs, err := model.ParseEventReference(event.Tags)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to detect events for delete")
-	}
-	filters := model.Filters{}
-	for _, r := range refs {
-		filters = append(filters, r.Filter())
-	}
-	eLastTag := event.Tags.GetLast([]string{"e"})
-	pLastTag := event.Tags.GetLast([]string{"p"})
-	aTag := event.Tags.GetFirst([]string{"a"})
-	kTag := event.Tags.GetFirst([]string{"k"})
-	for ev, evErr := range db.SelectEvents(ctx, &model.Subscription{Filters: filters}) {
-		if evErr != nil {
-			return nil, errors.Wrapf(evErr, "can't select reaction events for:%+v", ev)
-		}
-		if ev == nil || (ev.IsReplaceable() && aTag.Value() != fmt.Sprintf("%v:%v:%v", ev.Kind, ev.PubKey, ev.Tags.GetD())) {
-			continue
-		}
-		if ev.ID != eLastTag.Value() || ev.PubKey != pLastTag.Value() || (kTag != nil && kTag.Value() != fmt.Sprint(ev.Kind)) {
-			continue
-		}
-
-		return ev, nil
-	}
-
-	return
 }
 
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {

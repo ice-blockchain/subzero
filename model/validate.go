@@ -362,7 +362,7 @@ func validateKindProfileMetadataEvent(e *Event) error {
 }
 
 func validateKindTextNoteEvent(e *Event) error {
-	if json.Valid([]byte(e.Content)) {
+	if strings.HasPrefix(e.Content, "{") && strings.HasSuffix(e.Content, "}") {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be plain text: %+v", e)
 	}
 	if err := validateLabelTags(e); err != nil {
@@ -375,7 +375,7 @@ func validateKindTextNoteEvent(e *Event) error {
 			if len(tag) < 2 {
 				return errors.Wrapf(ErrWrongEventParams, "nip-10: no tag required param: %+v", e)
 			}
-			if len(tag) >= 3 {
+			if len(tag) > 3 {
 				if tag[3] != TagMarkerRoot && tag[3] != TagMarkerReply && tag[3] != TagMarkerMention {
 					return errors.Wrapf(ErrWrongEventParams, "nip-10: wrong tag marker param: %+v", e)
 				}
@@ -383,9 +383,6 @@ func validateKindTextNoteEvent(e *Event) error {
 		}
 	}
 	if len(pTags) > 0 {
-		if len(eTags) == 0 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong nip-10: no e tags while p tag exist: %+v", e)
-		}
 		for _, tag := range pTags {
 			if len(tag) == 1 {
 				return errors.Wrapf(ErrWrongEventParams, "nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)

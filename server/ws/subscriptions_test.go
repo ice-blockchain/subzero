@@ -625,6 +625,40 @@ func TestPublishingNIP09Events(t *testing.T) {
 	require.Equal(t, []*model.Event{validEventNIP09WithEKTags, validEventNIP09AllTags}, storedEvents)
 }
 
+func TestPublishingNip27Event(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	if err != nil {
+		log.Panic(err)
+	}
+	t.Run("kind 1 (NIP-27): p tag usage: no e tags", func(t *testing.T) {
+		validKind01Event := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}},
+		}}
+		validKind01Event.SetExtra("extra", uuid.NewString())
+		require.NoError(t, validKind01Event.Sign(privkey))
+		require.NoError(t, validKind01Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, validKind01Event.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, validKind01Event.Event))
+	})
+}
+
 func TestPublishingNIP10Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
@@ -664,18 +698,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "invalid marker"}},
-		}}
-		inValidKind01Event.SetExtra("extra", uuid.NewString())
-		require.NoError(t, inValidKind01Event.Sign(privkey))
-		require.NoError(t, inValidKind01Event.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
-		require.NoError(t, inValidKind01Event.Sign(privkey))
-		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
-	})
-	t.Run("kind 1 (NIP-10): invalid p tag usage: no e tags", func(t *testing.T) {
-		inValidKind01Event := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindTextNote,
-			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}},
 		}}
 		inValidKind01Event.SetExtra("extra", uuid.NewString())
 		require.NoError(t, inValidKind01Event.Sign(privkey))

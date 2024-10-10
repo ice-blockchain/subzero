@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/cockroachdb/errors"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -31,6 +32,9 @@ func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s.router.RedirectFixedPath = true
 	s.router.RemoveExtraSlash = true
 	s.router.UseRawPath = true
+	if cfg.Debug {
+		s.router.Use(cors.Default())
+	}
 	s.H3Server = http3.New(s.cfg, s.router)
 	s.H2Server = http2.New(s.cfg, s.router)
 	s.setupRouter()
