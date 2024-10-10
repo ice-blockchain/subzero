@@ -123,19 +123,6 @@ values
 	return nil
 }
 
-func eventToDatabaseEvent(event *model.Event) (*databaseEvent, error) {
-	jtags, err := json.Marshal(event.Tags)
-	if err != nil {
-		return nil, err
-
-	}
-
-	return &databaseEvent{
-		Event: *event,
-		Jtags: string(jtags),
-	}, nil
-}
-
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
 	limit := int64(selectDefaultBatchLimit)
 	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
