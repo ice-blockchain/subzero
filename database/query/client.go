@@ -54,6 +54,10 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "system_created_at"
 		case "referenceid":
 			out = "reference_id"
+		case "sigalg":
+			out = "sig_alg"
+		case "keyalg":
+			out = "key_alg"
 		default:
 			out = n
 		}

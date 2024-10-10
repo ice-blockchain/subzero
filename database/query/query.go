@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -32,6 +33,8 @@ type databaseEvent struct {
 	SystemCreatedAt int64
 	ReferenceID     sql.NullString
 	Jtags           string
+	SigAlg          string
+	KeyAlg          string
 }
 
 type EventIterator iter.Seq2[*model.Event, error]
@@ -95,11 +98,33 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
+func mustParseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string) {
+	extensionEnd := strings.IndexRune(event.Sig, ':')
+	if extensionEnd == -1 {
+		// No extension found, both empty values are valid.
+		return
+	}
+
+	// Event validation on the upper layer ensures that the signature is not empty and must be valid here.
+	keyStart := strings.IndexRune(event.Sig[:extensionEnd], '/')
+	if keyStart == -1 {
+		panic("invalid signature format: " + event.Sig)
+	}
+
+	sigAlg = event.Sig[:keyStart]
+	keyAlg = event.Sig[keyStart+1 : extensionEnd]
+	if sigAlg == "" || keyAlg == "" {
+		panic("signature and key algorithms must be set together: " + event.Sig)
+	}
+
+	return
+}
+
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
 	const stmt = `insert or replace into events
-	(kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, reference_id)
+	(kind, created_at, system_created_at, id, pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
 
 	jtags, err := json.Marshal(event.Tags)
 	if err != nil {
@@ -111,6 +136,7 @@ values
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
 	}
+	dbEvent.SigAlg, dbEvent.KeyAlg = mustParseSigKeyAlg(event)
 
 	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
 	if err != nil {
