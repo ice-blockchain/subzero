@@ -770,7 +770,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-int64(i), 10)}, {"q", "fooo"}}
 			event.CreatedAt = 1
 
-			err := db.SaveEvent(context.TODO(), &event)
+			err := db.AcceptEvent(context.TODO(), &event)
 			require.NoError(t, err)
 		}
 	})

@@ -45,7 +45,7 @@ func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, 
 }
 
 func (d *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {
