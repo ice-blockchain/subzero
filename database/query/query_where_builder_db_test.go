@@ -674,11 +674,11 @@ func TestSelectQuotesReferences(t *testing.T) {
 
 func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
 	t.Helper()
-	var expiredEventsCount []int
-	err := db.Select(&expiredEventsCount, "select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as integer) <= unixepoch())))")
+	var count int
+	err := db.QueryRow("select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as integer) <= unixepoch())))").Scan(&count)
 	require.NoError(t, err)
 
-	return expiredEventsCount[0]
+	return count
 }
 
 func TestSelectEventsExpiration(t *testing.T) {
@@ -778,7 +778,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		require.Equal(t, 101, helperCountExpiredEvents(t, db))
 		err := db.deleteExpiredEvents(context.TODO())
 		require.NoError(t, err)
-		require.Equal(t, 0, helperCountExpiredEvents(t, db))
+		require.Zero(t, 0, helperCountExpiredEvents(t, db))
 	})
 }
 
