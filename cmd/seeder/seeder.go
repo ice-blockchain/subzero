@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/spf13/cobra"
 )
 
@@ -15,13 +16,18 @@ var (
 	threads       int
 	relays        []string
 	outputRelay   string
+	uploadKey     string
 	seeder        = &cobra.Command{
 		Use:   "seeder",
 		Short: "seeder",
 		Run: func(_ *cobra.Command, args []string) {
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			f := NewFetcher(ctx, relays, threads, profilesCount, perUser, outputRelay)
+			defer func() {
+				cancel()
+				vips.Shutdown()
+			}()
+			vips.Startup(&vips.Config{})
+			f := NewFetcher(ctx, relays, threads, profilesCount, perUser, outputRelay, uploadKey)
 			f.StartFetching(ctx)
 		},
 	}
@@ -31,6 +37,7 @@ var (
 		seeder.Flags().IntVar(&threads, "threads", profilesCount, "threads to import = profilesCount by default")
 		seeder.Flags().StringArrayVar(&relays, "relays", make([]string, 0), "relays to fetch data from")
 		seeder.Flags().StringVar(&outputRelay, "outputRelay", "", "relay to write data")
+		seeder.Flags().StringVar(&uploadKey, "uploadKey", "", "key to upload webp generated photo if user is miss ont")
 		if err := seeder.MarkFlagRequired("outputRelay"); err != nil {
 			log.Fatal(err)
 		}
