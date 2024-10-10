@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -130,6 +131,17 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 			return errorx.Withf(err, "failed to write CLOSED message")
 		}
 	}
+
+	return nil
+}
+
+func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
+	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
+	if err != nil {
+		return errorx.With(err, "failed to count events")
+	}
+
+	envelope.Count = &count
 
 	return nil
 }

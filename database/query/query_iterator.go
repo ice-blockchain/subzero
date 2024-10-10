@@ -16,7 +16,25 @@ type eventIterator struct {
 	oneShot bool
 }
 
-func (*eventIterator) decodeTags(jtags string) (tags model.Tags, err error) {
+func (*eventIterator) decodeTag(tag model.Tag) model.Tag {
+	if len(tag) == 0 {
+		return nil
+	}
+
+	// Remove gaps.
+	newList := tag
+	x := 0
+	for i := 0; i < len(tag); i++ {
+		if tag[i] != "" {
+			newList[x] = tag[i]
+			x++
+		}
+	}
+
+	return newList[:x]
+}
+
+func (it *eventIterator) decodeTags(jtags string) (tags model.Tags, err error) {
 	if len(jtags) == 0 {
 		return
 	}
@@ -28,16 +46,7 @@ func (*eventIterator) decodeTags(jtags string) (tags model.Tags, err error) {
 	// tag e: ["e", ""] -> ["e"].
 	// tag p: [""] -> [].
 	for i := range tags {
-		for j := range tags[i] {
-			if tags[i][j] == "" {
-				if j == 0 {
-					tags[i] = nil
-				} else {
-					tags[i] = tags[i][:j]
-				}
-				break
-			}
-		}
+		tags[i] = it.decodeTag(tags[i])
 	}
 
 	return tags, nil

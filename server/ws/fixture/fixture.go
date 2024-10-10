@@ -26,7 +26,7 @@ func newMockService(processingFunc func(ctx context.Context, w adapters.WSWriter
 
 func (m *MockService) Reset() {
 	m.handlersMx.Lock()
-	for k, _ := range m.Handlers {
+	for k := range m.Handlers {
 		delete(m.Handlers, k)
 	}
 	m.ReaderExited.Store(uint64(0))

@@ -4,17 +4,21 @@ package query
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"iter"
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pkg/errors"
 
 	"github.com/ice-blockchain/subzero/model"
+)
+
+const (
+	selectDefaultBatchLimit = 100
 )
 
 var (
@@ -26,6 +30,7 @@ var (
 type databaseEvent struct {
 	model.Event
 	SystemCreatedAt int64
+	ReferenceID     sql.NullString
 	Jtags           string
 }
 
@@ -50,13 +55,14 @@ func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 		}
 
 		return nil
+
 	case nostr.KindReaction:
 		if ev, err := getReactionTargetEvent(ctx, db, event); err != nil || ev == nil {
 			return errors.Wrap(ErrTargetReactionEventNotFound, "can't find target event for reaction kind")
 		}
 	}
 
-	return db.SaveEvent(ctx, event)
+	return db.saveEvent(ctx, event)
 }
 
 func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
@@ -89,20 +95,18 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
-func (db *dbClient) SaveEvent(ctx context.Context, event *model.Event) error {
-	var jtags = []byte("[]")
-
-	const stmt = `
-insert or replace into events
-	(kind, created_at, system_created_at, id, pubkey, sig, content, temp_tags, d_tag)
+func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
+	const stmt = `insert or replace into events
+	(kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, (select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1))`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
 
-	if len(event.Tags) > 0 {
-		jtags, _ = json.Marshal(event.Tags)
+	jtags, err := json.Marshal(event.Tags)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal tags")
 	}
 
-	dbEvent := &databaseEvent{
+	dbEvent := databaseEvent{
 		Event:           *event,
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
@@ -120,22 +124,20 @@ values
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
-	const batchSize = 1000
-
-	limit := int64(batchSize)
+	limit := int64(selectDefaultBatchLimit)
 	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
 	if hasLimitFilter {
 		limit = int64(subscription.Filters[0].Limit)
 	}
 
 	it := &eventIterator{
-		oneShot: hasLimitFilter && limit <= batchSize,
+		oneShot: hasLimitFilter && limit <= selectDefaultBatchLimit,
 		fetch: func(pivot int64) (*sqlx.Rows, error) {
 			if limit <= 0 {
 				return nil, nil
 			}
 
-			sql, params, err := generateSelectEventsSQL(subscription, pivot, min(batchSize, limit))
+			sql, params, err := generateSelectEventsSQL(subscription, pivot, min(selectDefaultBatchLimit, limit))
 			if err != nil {
 				return nil, err
 			}
@@ -151,7 +153,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 			}
 
 			if hasLimitFilter && err == nil {
-				limit -= batchSize
+				limit -= selectDefaultBatchLimit
 			}
 
 			return rows, err
@@ -190,6 +192,27 @@ func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscr
 	return nil
 }
 
+func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscription) (count int64, err error) {
+	where, params, err := generateEventsWhereClause(subscription)
+	if err != nil {
+		return -1, errors.Wrap(err, "failed to generate events where clause")
+	}
+
+	sql := `select count(id) from events e where ` + where
+
+	stmt, err := db.prepare(ctx, sql, hashSQL(sql))
+	if err != nil {
+		return -1, errors.Wrapf(err, "failed to prepare query sql: %q", sql)
+	}
+
+	err = stmt.GetContext(ctx, &count, params)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to query events count sql: %q", sql)
+	}
+
+	return count, err
+}
+
 func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
 	where, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
@@ -217,8 +240,7 @@ select
 	e.pubkey,
 	e.sig,
 	e.content,
-	'[]' as tags,
-	(select json_group_array(json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)) from event_tags where event_id = e.id) as jtags
+	tags as jtags
 from
 	events e
 where ` + systemCreatedAtFilter + `(` + where + `)

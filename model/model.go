@@ -12,15 +12,14 @@ import (
 )
 
 type (
-	Filter    = nostr.Filter
-	Filters   = nostr.Filters
 	TagMap    = nostr.TagMap
 	Tag       = nostr.Tag
 	Tags      = nostr.Tags
 	Timestamp = nostr.Timestamp
 	Kind      = int
-
-	Event struct {
+	Filter    = nostr.Filter
+	Filters   = nostr.Filters
+	Event     struct {
 		nostr.Event
 	}
 	Subscription struct {

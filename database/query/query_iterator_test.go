@@ -15,7 +15,9 @@ func helperSelectEventsN(t *testing.T, db *dbClient, limit int) (events map[stri
 	t.Helper()
 
 	ctx := context.Background()
-	iter := db.SelectEvents(ctx, &model.Subscription{Filters: []model.Filter{{Limit: limit}}})
+	iter := db.SelectEvents(ctx, helperNewFilterSubscription(func(apply *model.Filter) {
+		apply.Limit = limit
+	}))
 
 	events = make(map[string]*model.Event, limit)
 	for ev, err := range iter {

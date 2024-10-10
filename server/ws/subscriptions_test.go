@@ -2917,3 +2917,42 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	require.Equal(t, uint64(1), pubsubServer.ReaderExited.Load())
 	require.Equal(t, validEvents, storedEvents)
 }
+
+func TestCountEvents(t *testing.T) {
+	query.MustInit()
+
+	privkey := nostr.GeneratePrivateKey()
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		t.Logf("received event: %v", event)
+		return query.AcceptEvent(ctx, event)
+	})
+
+	pubsubServer.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	t.Run("SaveEvent", func(t *testing.T) {
+		pk, err := nostr.GetPublicKey(privkey)
+		require.NoError(t, err)
+
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			PubKey:    pk,
+			Tags:      nil,
+			Content:   "validEvent",
+		}}
+		require.NoError(t, ev.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
+		require.NoError(t, ev.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("CountEvents", func(t *testing.T) {
+		c, err := relay.Count(ctx, nostr.Filters{{Kinds: []int{nostr.KindTextNote}}})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), c)
+	})
+	relay.Close()
+}
