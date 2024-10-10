@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"io"
 	"log"
 	"net"
@@ -17,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/quic-go/quic-go"
@@ -37,11 +36,11 @@ func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error)
 	d.TLSClientConfig = LocalhostTLS()
 	_, conn, err := d.Dial(ctx, url, nil)
 	if err != nil {
-		return nil, errorx.Withf(err, "failed to establish webtransport conn to %v", url)
+		return nil, errors.Wrapf(err, "failed to establish webtransport conn to %v", url)
 	}
 	stream, err := conn.OpenStream()
 	if err != nil {
-		return nil, errorx.Withf(err, "failed to open webtransport stream to %v", url)
+		return nil, errors.Wrapf(err, "failed to open webtransport stream to %v", url)
 	}
 	wt, closectx := adapters.NewWebTransportAdapter(ctx, conn, stream, 0, 0)
 	go wt.Write(closectx)
@@ -91,7 +90,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
+		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
 	conn := connectwsupgrader.NewHttp3Proxy(stream, rt.Connection)
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
@@ -127,7 +126,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
+		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
 	conn := newHTTP2ClientStream(bodyw, rsp)
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
@@ -160,7 +159,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 		return nil, err
 	}
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-		return nil, errorx.Errorf("received status %d", rsp.StatusCode)
+		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
 	conn := newHTTP2ClientStream(bodyw, rsp)
 	stream := &http2WebtransportWrapper{conn: conn}
@@ -183,7 +182,7 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 	dialer.TLSConfig = LocalhostTLS()
 	conn, _, _, err := dialer.Dial(ctx, url)
 	if err != nil {
-		return nil, errorx.Withf(err, "failed to establish websocket conn to %v", url)
+		return nil, errors.Wrapf(err, "failed to establish websocket conn to %v", url)
 	}
 	c, closectx := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go c.read(closectx)
@@ -225,10 +224,9 @@ func (c *wtransportClient) Received() <-chan []byte {
 }
 
 func (c *wtransportClient) WriteMessage(messageType int, data []byte) error {
-	if wErr := c.wt.WriteMessageToStream(data); wErr != nil {
-		return errorx.Withf(wErr, "client: webtransport writing message failed")
-	}
-	return nil
+	err := c.wt.WriteMessageToStream(data)
+
+	return errors.Wrap(err, "client: webtransport writing message failed")
 }
 
 func (c *wtransportClient) Close() error {
@@ -303,7 +301,7 @@ func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) er
 			wErr = nil
 		}
 		if err = multierror.Append(err, wErr).ErrorOrNil(); err != nil {
-			return errorx.Withf(err, "client: failed to write data to websocket")
+			return errors.Wrap(err, "client: failed to write data to websocket")
 		}
 
 		if flusher, ok := w.conn.(http.Flusher); ok {
@@ -318,10 +316,9 @@ func (w *wsocketClient) WriteMessage(messageType int, data []byte) error {
 	case <-w.closeChannel:
 		return nil
 	default:
-		if wErr := w.writeMessageToWebsocket(messageType, data); wErr != nil {
-			return errorx.Withf(wErr, "client: failed to send message to websocket")
-		}
-		return nil
+		err := w.writeMessageToWebsocket(messageType, data)
+
+		return errors.Wrap(err, "client: failed to send message to websocket")
 	}
 }
 
@@ -381,7 +378,7 @@ func (s *http2ClientStream) WriteByte(p byte) (err error) {
 		return err
 	}
 	if n != 1 {
-		return errorx.Errorf("expected 1 written byte got %v", n)
+		return errors.Errorf("expected 1 written byte got %v", n)
 	}
 	return nil
 }
@@ -443,21 +440,21 @@ func (h *http2WebtransportWrapper) SetWriteDeadline(time time.Time) error {
 func (h *http2WebtransportWrapper) Read(p []byte) (n int, err error) {
 	cType, data, err := http3.ParseCapsule(quicvarint.NewReader(h.conn))
 	if err != nil {
-		return 0, errorx.Withf(err, "failed to parse capsule")
+		return 0, errors.Wrap(err, "failed to parse capsule")
 	}
 	cData := bufio.NewReader(data)
 	if cType == wtCapsuleStream || cType == wtCapsuleStreamFin {
 		var sID uint64
 		sID, err = quicvarint.Read(cData)
 		if err != nil {
-			err = errorx.Withf(err, "failed to parse WT_STREAM/StreamID")
+			err = errors.Wrap(err, "failed to parse WT_STREAM/StreamID")
 			return 4, err
 		}
 		h.streamID = uint32(sID)
 		return cData.Read(p)
 	} else {
 		if _, err = io.ReadAll(cData); err != nil { // We must read capsule until end.
-			err = errorx.Withf(err, "failed to parse read till end capsule %v", cType)
+			err = errors.Wrapf(err, "failed to parse read till end capsule %v", cType)
 			return 0, err
 		}
 	}
@@ -485,7 +482,7 @@ func http3RoundTripper(qconn quic.Connection) *http3.SingleDestinationRoundTripp
 func LocalhostTLS() *tls.Config {
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM([]byte(localhostCrt)); !ok {
-		log.Panic(errorx.New("failed to append localhost tls to cert pool"))
+		log.Panic(errors.New("failed to append localhost tls to cert pool"))
 	}
 
 	return &tls.Config{

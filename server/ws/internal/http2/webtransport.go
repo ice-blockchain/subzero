@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -22,7 +22,7 @@ func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) 
 		var session h2ec.Session
 		session, err = upgrader.UpgradeWebTransport()
 		if err != nil {
-			err = errorx.Withf(err, "upgrading http2/webtransport stream failed")
+			err = errors.Wrap(err, "upgrading http2/webtransport stream failed")
 			log.Printf("ERROR:%v", err)
 			writer.WriteHeader(http.StatusBadRequest)
 
@@ -36,7 +36,7 @@ func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) 
 
 		return h2wt, ctx, nil
 	}
-	err = errorx.Withf(err, "upgrading webtransport is not implemented for http2")
+	err = errors.Wrap(err, "upgrading webtransport is not implemented for http2")
 	log.Printf("ERROR:%v", err)
 
 	return nil, nil, err

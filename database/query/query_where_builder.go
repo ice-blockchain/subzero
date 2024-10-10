@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pkg/errors"
 
 	"github.com/ice-blockchain/subzero/model"
 )

@@ -5,8 +5,8 @@ package query
 import (
 	"context"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
 
 	"github.com/ice-blockchain/subzero/model"
 )

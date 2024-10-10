@@ -6,10 +6,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"log"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 
@@ -24,11 +23,11 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 
 		for event, err := range wsSubscriptionListener(fetchCtx, sub.Subscription) {
 			if err != nil {
-				return errorx.Wrapf(err, "failed to fetch events for subscription %+v", sub)
+				return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 			}
 			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event})
 			if wErr != nil {
-				return errorx.Wrapf(wErr, "failed to write event[%+v]", event)
+				return errors.Wrapf(wErr, "failed to write event[%+v]", event)
 			}
 		}
 	} else {
@@ -55,23 +54,23 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 
 func (h *handler) handleEvent(ctx context.Context, event *model.Event, cfg *Config) (err error) {
 	if err = h.validateIncomingEvent(event, cfg); err != nil {
-		return errorx.Withf(err, "invalid: event is invalid")
+		return errors.Wrap(err, "invalid: event is invalid")
 	}
 	if !event.IsEphemeral() {
 		if wsEventListener == nil {
-			log.Panic(errorx.Errorf("wsEventListener to store events not set"))
+			log.Panic(errors.Errorf("wsEventListener to store events not set"))
 		}
 		if saveErr := wsEventListener(ctx, event); saveErr != nil {
 			switch {
 			case errors.Is(saveErr, model.ErrDuplicate):
 				return nil
 			default:
-				return errorx.Withf(saveErr, "failed to store event")
+				return errors.Wrap(saveErr, "failed to store event")
 			}
 		}
 	}
 	if err = h.notifyListenersAboutNewEvent(event); err != nil {
-		return errorx.Withf(err, "failed to notify subscribers about new event: %+v", event)
+		return errors.Wrapf(err, "failed to notify subscribers about new event: %+v", event)
 	}
 
 	return nil
@@ -80,19 +79,19 @@ func (h *handler) handleEvent(ctx context.Context, event *model.Event, cfg *Conf
 func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err error) {
 	hash := sha256.Sum256(evt.Serialize())
 	if id := hex.EncodeToString(hash[:]); id != evt.ID {
-		return errorx.New("event id is invalid")
+		return errors.New("event id is invalid")
 	}
 	var ok bool
 	if ok, err = evt.CheckSignature(); err != nil {
-		return errorx.Withf(err, "invalid event signature")
+		return errors.Wrap(err, "invalid event signature")
 	} else if !ok {
-		return errorx.New("invalid event signature")
+		return errors.New("invalid event signature")
 	}
 	if vErr := evt.Validate(); vErr != nil {
-		return errorx.Withf(err, "wrong event parameters")
+		return errors.Wrap(vErr, "wrong event parameters")
 	}
 	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {
-		return errorx.Withf(cErr, "wrong event difficulty")
+		return errors.Wrap(cErr, "wrong event difficulty")
 	}
 
 	return nil
@@ -128,7 +127,7 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 			delete(h.subListeners, respWriter)
 		}
 		if err := h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}); err != nil {
-			return errorx.Withf(err, "failed to write CLOSED message")
+			return errors.Wrap(err, "failed to write CLOSED message")
 		}
 	}
 
@@ -138,7 +137,7 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
 	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
 	if err != nil {
-		return errorx.With(err, "failed to count events")
+		return errors.Wrap(err, "failed to count events")
 	}
 
 	envelope.Count = &count

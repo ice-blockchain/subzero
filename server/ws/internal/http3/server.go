@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/webtransport-go"
@@ -50,7 +50,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 	}
 	s.server = wtserver
 	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil {
-		return errorx.With(err, "failed to start http3/udp server")
+		return errors.Wrap(err, "failed to start http3/udp server")
 	}
 
 	return nil
@@ -67,7 +67,7 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		ws, ctx, err = s.handleWebsocket(writer, req)
 	}
 	if err != nil {
-		log.Printf("ERROR:%v", errorx.Withf(err, "http3: upgrading failed for %v", req.Proto))
+		log.Printf("ERROR:%v", errors.Wrapf(err, "http3: upgrading failed for %v", req.Proto))
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return
@@ -76,7 +76,7 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		go func() {
 			defer func() {
 				if clErr := ws.Close(); clErr != nil {
-					log.Printf("ERROR:%v", errorx.Withf(clErr, "failed to close http3 stream"))
+					log.Printf("ERROR:%v", errors.Wrap(clErr, "failed to close http3 stream"))
 				}
 
 			}()
@@ -93,9 +93,5 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 }
 
 func (s *srv) Shutdown(_ context.Context) error {
-	if err := s.server.Close(); err != nil {
-		return errorx.With(err, "failed to close http3 server")
-	}
-
-	return nil
+	return errors.Wrap(s.server.Close(), "failed to close http3 server")
 }
