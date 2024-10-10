@@ -10,8 +10,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
@@ -22,15 +20,19 @@ type (
 		nostr.Event
 	}
 	EventSignAlg string
+	EventKeyAlg  string
 )
 
 const (
-	// Schnorr with secp256k1.
+	// Schnorr (default) signature.
 	SignAlgSchnorr EventSignAlg = "schnorr"
-	// EdDSA with ed25519.
+	// ECDSA.
 	SignAlgEDDSA EventSignAlg = "eddsa"
-	// ECDSA with secp256k1.
-	SignAlgECDSA EventSignAlg = "ecdsa"
+
+	// Secp256k1 (default) key.
+	KeyAlgSecp256k1 EventKeyAlg = "secp256k1"
+	// Curve25519.
+	KeyAlgCurve25519 EventKeyAlg = "curve25519"
 )
 
 func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
@@ -61,10 +63,10 @@ func (e *Event) GenerateNIP13(ctx context.Context, minLeadingZeroBits int) error
 	return nil
 }
 
-func (e *Event) SignWithAlg(privateKey string, alg EventSignAlg) error {
-	if alg == "" {
-		// Use default schnorr signature.
-		return e.Event.Sign(privateKey)
+func (e *Event) SignWithAlg(privateKey string, signAlg EventSignAlg, keyAlg EventKeyAlg) error {
+	if (signAlg == "" && keyAlg != "") || (signAlg != "" && keyAlg == "") {
+		// Both signAlg and keyAlg must be set OR both must be empty.
+		return errors.Wrap(ErrUnsupportedAlg, "signature and key algorithms must be set together")
 	}
 
 	if e.Tags == nil {
@@ -78,37 +80,41 @@ func (e *Event) SignWithAlg(privateKey string, alg EventSignAlg) error {
 
 	var sign []byte
 	var headerSum [32]byte
-	switch alg {
-	case SignAlgEDDSA:
+	switch {
+	case (signAlg == "" && keyAlg == "") || (signAlg == SignAlgSchnorr && keyAlg == KeyAlgSecp256k1):
+		return e.Event.Sign(privateKey)
+
+	case signAlg == SignAlgEDDSA && keyAlg == KeyAlgCurve25519:
 		pk := ed25519.PrivateKey(privKey)
 		e.PubKey = hex.EncodeToString(pk.Public().(ed25519.PublicKey))
 		headerSum = sha256.Sum256(e.Serialize())
 		sign = ed25519.Sign(pk, headerSum[:])
 
-	case SignAlgECDSA:
-		priv, pub := btcec.PrivKeyFromBytes(privKey)
-		e.PubKey = hex.EncodeToString(pub.SerializeCompressed())
-		headerSum = sha256.Sum256(e.Serialize())
-		sign = ecdsa.Sign(priv, headerSum[:]).Serialize()
-
-	case SignAlgSchnorr:
-		return e.Event.Sign(privateKey)
-
 	default:
-		return errors.Wrap(ErrUnsupportedSignatureAlg, string(alg))
+		return errors.Wrapf(ErrUnsupportedAlg, "signature algorithm: %q, key algorithm: %q", signAlg, keyAlg)
 	}
 
 	e.ID = hex.EncodeToString(headerSum[:])
-	e.Sig = string(alg) + ":" + hex.EncodeToString(sign)
+	e.Sig = string(signAlg) + "/" + string(keyAlg) + ":" + hex.EncodeToString(sign)
 
 	return nil
 }
 
 func (e *Event) CheckSignature() (bool, error) {
-	sigTypeIdx := strings.IndexRune(e.Sig, ':')
-	if sigTypeIdx == -1 {
+	extensionEnd := strings.IndexRune(e.Sig, ':')
+	if extensionEnd == -1 {
 		// Default schnorr signature.
 		return e.Event.CheckSignature()
+	}
+	keyStart := strings.IndexRune(e.Sig[:extensionEnd], '/')
+	if keyStart == -1 {
+		return false, errors.Wrap(ErrUnsupportedAlg, "key algorithm is not set")
+	}
+
+	signAlg := EventSignAlg(e.Sig[:keyStart])
+	keyAlg := EventKeyAlg(e.Sig[keyStart+1 : extensionEnd])
+	if signAlg == "" || keyAlg == "" {
+		return false, errors.Wrap(ErrUnsupportedAlg, "signature and key algorithms must be set together")
 	}
 
 	pk, err := hex.DecodeString(e.PubKey)
@@ -116,31 +122,18 @@ func (e *Event) CheckSignature() (bool, error) {
 		return false, errors.Wrapf(err, "public key is invalid hex")
 	}
 
-	sign, err := hex.DecodeString(e.Sig[sigTypeIdx+1:])
+	sign, err := hex.DecodeString(e.Sig[extensionEnd+1:])
 	if err != nil {
 		return false, errors.Wrap(err, "signature is invalid hex")
 	}
 	hash := sha256.Sum256(e.Serialize())
-
-	sigName := EventSignAlg(e.Sig[:sigTypeIdx])
-	switch sigName {
-	case SignAlgEDDSA:
+	switch {
+	case signAlg == SignAlgEDDSA && keyAlg == KeyAlgCurve25519:
 		return ed25519.Verify(pk, hash[:], sign), nil
 
-	case SignAlgSchnorr:
+	case (signAlg == "" && keyAlg == "") || (signAlg == SignAlgSchnorr && keyAlg == KeyAlgSecp256k1):
 		return e.Event.CheckSignature()
-
-	case SignAlgECDSA:
-		pubKey, err := btcec.ParsePubKey(pk)
-		if err != nil {
-			return false, err
-		}
-		signature, err := ecdsa.ParseSignature(sign)
-		if err != nil {
-			return false, err
-		}
-		return signature.Verify(hash[:], pubKey), nil
 	}
 
-	return false, errors.Wrap(ErrUnsupportedSignatureAlg, string(sigName))
+	return false, errors.Wrapf(ErrUnsupportedAlg, "signature algorithm: %q, key algorithm: %q", signAlg, keyAlg)
 }
