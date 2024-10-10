@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/0x6flab/namegenerator"
-	"github.com/JohnNON/ImgBB"
+	imgbb "github.com/JohnNON/ImgBB"
 	"github.com/alitto/pond"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"

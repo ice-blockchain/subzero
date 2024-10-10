@@ -1,6 +1,7 @@
 Tool to seed the relay with data
 Sample call:
 ```bash
+sudo apt-get install -y libvips-dev # dynamic linking
 seeder --relays=wss://relay.damus.io/ --outputRelay=wss://localhost:9998 --profilesCount=1000 --threads=100 --perUser=100 --uploadKey=...
 ```
 Params:
