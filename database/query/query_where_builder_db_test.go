@@ -778,7 +778,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		require.Equal(t, 101, helperCountExpiredEvents(t, db))
 		err := db.deleteExpiredEvents(context.TODO())
 		require.NoError(t, err)
-		require.Zero(t, 0, helperCountExpiredEvents(t, db))
+		require.Zero(t, helperCountExpiredEvents(t, db))
 	})
 }
 
