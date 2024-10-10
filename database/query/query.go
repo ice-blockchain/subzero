@@ -10,9 +10,9 @@ import (
 	"iter"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pkg/errors"
 
 	"github.com/ice-blockchain/subzero/model"
 )

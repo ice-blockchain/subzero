@@ -6,7 +6,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/database/command"
@@ -66,10 +66,10 @@ func init() {
 	initFlags()
 	wsserver.RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
 		if err := command.AcceptEvent(ctx, event); err != nil {
-			return errorx.Withf(err, "failed to command.AcceptEvent(%#v)", event)
+			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", event)
 		}
 		if err := query.AcceptEvent(ctx, event); err != nil {
-			return errorx.Withf(err, "failed to query.AcceptEvent(%#v)", event)
+			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", event)
 		}
 
 		return nil

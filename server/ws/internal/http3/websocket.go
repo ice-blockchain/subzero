@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
@@ -22,7 +22,7 @@ var (
 func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h3ws adapters.WSWithWriter, ctx context.Context, err error) {
 	conn, _, _, err := websocketupgrader.Upgrade(req, writer)
 	if err != nil {
-		err = errorx.Withf(err, "upgrading http3/websocket failed")
+		err = errors.Wrap(err, "upgrading http3/websocket failed")
 		log.Printf("ERROR:%v", err)
 		writer.WriteHeader(http.StatusBadRequest)
 

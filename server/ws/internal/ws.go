@@ -4,7 +4,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -12,8 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/gookit/goutil/errorx"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -64,7 +63,7 @@ func (s *Srv) startServer(ctx context.Context, server interface {
 
 	if err := server.ListenAndServeTLS(ctx, s.cfg.CertPath, s.cfg.KeyPath); isUnexpectedError(err) {
 		s.quit <- syscall.SIGTERM
-		log.Printf("ERROR:%v", errorx.With(err, "server.ListenAndServeTLS failed"))
+		log.Printf("ERROR:%v", errors.Wrap(err, "server.ListenAndServeTLS failed"))
 	}
 }
 
@@ -92,7 +91,7 @@ func (*Srv) shutdownServer(ctx context.Context, server interface {
 	log.Printf("shutting down server...")
 
 	if err := server.Shutdown(ctx); err != nil && !errors.Is(err, io.EOF) {
-		log.Printf("ERROR:%v", errorx.With(err, "server shutdown failed"))
+		log.Printf("ERROR:%v", errors.Wrap(err, "server shutdown failed"))
 	} else {
 		log.Printf("server shutdown succeeded")
 	}

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 )
 
 type (

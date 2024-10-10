@@ -4,14 +4,13 @@ package http2
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -39,7 +38,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 			!errors.Is(err, h2ec.ErrServerClosed)
 	}
 	if err := s.server.ListenAndServeTLS(certFile, keyFile); isUnexpectedError(err) {
-		return errorx.With(err, "failed to start http2/tcp server")
+		return errors.Wrap(err, "failed to start http2/tcp server")
 	}
 
 	return nil
@@ -56,7 +55,7 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		wsocket, ctx, err = s.handleWebTransport(writer, req)
 	}
 	if err != nil {
-		log.Printf("ERROR:%v", errorx.Withf(err, "upgrading failed (http2 / %v)", req.Proto))
+		log.Printf("ERROR:%v", errors.Wrapf(err, "upgrading failed (http2 / %v)", req.Proto))
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return
@@ -65,7 +64,7 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		go func() {
 			defer func() {
 				if clErr := wsocket.Close(); clErr != nil {
-					log.Printf("ERROR:%v", errorx.With(clErr, "failed to close websocket conn"))
+					log.Printf("ERROR:%v", errors.Wrap(clErr, "failed to close websocket conn"))
 				}
 			}()
 			go wsocket.Write(ctx)
@@ -82,8 +81,5 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 }
 
 func (s *srv) Shutdown(_ context.Context) error {
-	if err := s.server.Close(); err != nil {
-		return errorx.Withf(err, "failed to close server")
-	}
-	return nil
+	return errors.Wrap(s.server.Close(), "failed to close server")
 }

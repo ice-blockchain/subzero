@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
-	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
 	"github.com/stretchr/testify/assert"
@@ -109,7 +109,7 @@ func TestRelaySubscription(t *testing.T) {
 	case <-sub.EndOfStoredEvents:
 		t.Logf("received EOS")
 	case <-ctx.Done():
-		log.Panic(errorx.Withf(ctx.Err(), "EOS not received"))
+		log.Panic(errors.Wrap(ctx.Err(), "EOS not received"))
 	}
 
 	eventsQueue = append(eventsQueue, &model.Event{
@@ -185,7 +185,7 @@ func TestRelaySubscription(t *testing.T) {
 	case <-sub.EndOfStoredEvents:
 		t.Logf("received EOS")
 	case <-ctx.Done():
-		log.Panic(errorx.Withf(ctx.Err(), "EOS not received"))
+		log.Panic(errors.Wrap(ctx.Err(), "EOS not received"))
 	}
 
 	eventMatchingReplacedSub := &model.Event{Event: nostr.Event{
@@ -209,7 +209,7 @@ func TestRelaySubscription(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -297,7 +297,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic(errorx.Errorf("timeout waiting for the event"))
+					log.Panic(errors.New("timeout waiting for the event"))
 				}
 				assert.Equal(t, storedEvents[0].ID, ev.ID)
 				assert.Equal(t, storedEvents[0].Tags, ev.Tags)
@@ -309,12 +309,12 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				select {
 				case <-eosCh:
 				case <-ctx.Done():
-					log.Panic(errorx.Errorf("timeout waiting for EOS"))
+					log.Panic(errors.New("timeout waiting for EOS"))
 				}
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic(errorx.Errorf("timeout waiting for the event"))
+					log.Panic(errors.New("timeout waiting for the event"))
 				}
 				require.NotNil(t, ev)
 				assert.Equal(t, storedEvents[1].ID, ev.ID)
@@ -344,7 +344,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			select {
 			case <-s.EndOfStoredEvents:
 			case <-ctx.Done():
-				log.Panic(errorx.Errorf("timeout waiting for EOS"))
+				log.Panic(errors.New("timeout waiting for EOS"))
 			}
 		}
 	}
@@ -358,7 +358,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(connsCount) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), connsCount))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), connsCount))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -505,7 +505,7 @@ func TestPublishingEvents(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -617,7 +617,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -715,7 +715,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -905,7 +905,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1036,7 +1036,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1162,7 +1162,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1317,7 +1317,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1508,7 +1508,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1671,7 +1671,7 @@ func TestPublishingNIP56(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1887,7 +1887,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1991,7 +1991,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -2910,7 +2910,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	defer cancel()
 	for pubsubServer.ReaderExited.Load() != uint64(1) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServer.ReaderExited.Load(), 1))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

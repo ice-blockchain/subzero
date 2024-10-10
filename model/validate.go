@@ -4,11 +4,10 @@ package model
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -127,10 +126,10 @@ var (
 
 func (e *Event) Validate() error {
 	if e.Kind < 0 || e.Kind > 65535 {
-		return errorx.New("wrong kind value")
+		return errors.New("wrong kind value")
 	}
 	if !areTagsSupported(e) {
-		return errorx.Withf(ErrUnsupportedTag, "unsupported tag for this event kind: %+v", e)
+		return errors.Wrapf(ErrUnsupportedTag, "unsupported tag for this event kind: %+v", e)
 	}
 	e.normalizeTags()
 	switch e.Kind {
@@ -144,11 +143,11 @@ func (e *Event) Validate() error {
 		return validateKindRepostEvent(e)
 	case nostr.KindFollowList:
 		if len(e.Tags) == 0 || len(e.Tags.GetAll([]string{"p"})) == 0 || e.Content != "" {
-			return errorx.Withf(ErrWrongEventParams, "nip-02 params: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-02 params: %+v", e)
 		}
 		for _, tag := range e.Tags {
 			if tag.Key() == "p" && tag.Value() == "" {
-				return errorx.Withf(ErrWrongEventParams, "nip-02 params, no required pubkey %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-02 params, no required pubkey %+v", e)
 			}
 		}
 	case nostr.KindReaction:
@@ -157,51 +156,51 @@ func (e *Event) Validate() error {
 		return validateKindBadgeAwardEvent(e)
 	case KindReactionToWebsite:
 		if e.Content != "+" && e.Content != "-" && e.Content != "" {
-			return errorx.Withf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
 		}
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
-			return errorx.Withf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
 	case KindBookmarks:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindArticle) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindCommunities:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindCommunityDefinitions) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindInterests:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindInterestSets) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindEmojis:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindEmojiSets) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindBookmarksSets:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindArticle) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindCurationSets1:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindTextNote) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindCurationSets2:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(KindVideo) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case KindReport:
@@ -217,7 +216,7 @@ func (e *Event) Validate() error {
 
 	case nostr.KindArticle, KindBlogPost:
 		if e.Content == "" || json.Valid([]byte(e.Content)) {
-			return errorx.Withf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
 		}
 	}
 
@@ -227,14 +226,14 @@ func (e *Event) Validate() error {
 func validateKindRelayListMetadataEvent(e *Event) error {
 	rTags := e.Tags.GetAll([]string{"r"})
 	if len(rTags) == 0 {
-		return errorx.Withf(ErrWrongEventParams, "nip-65, no required r tags: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-65, no required r tags: %+v", e)
 	}
 	if e.Content != "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-65, content is not used: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-65, content is not used: %+v", e)
 	}
 	for _, tag := range rTags {
 		if len(tag) < 2 || (len(tag) > 2 && (tag[2] != "" && tag[2] != RelayListReadMarker && tag[2] != RelayListWriteMarker)) {
-			return errorx.Withf(ErrWrongEventParams, "nip-65, wrong read/write marker for r tag: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-65, wrong read/write marker for r tag: %+v", e)
 		}
 	}
 
@@ -243,7 +242,7 @@ func validateKindRelayListMetadataEvent(e *Event) error {
 
 func validateKindBadgeDefinitionEvent(e *Event) error {
 	if dTag := e.Tags.GetD(); dTag == "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-58, no required d tag: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-58, no required d tag: %+v", e)
 	}
 
 	return nil
@@ -252,10 +251,10 @@ func validateKindBadgeDefinitionEvent(e *Event) error {
 func validateKindBadgeAwardEvent(e *Event) error {
 	if aTag := e.Tags.GetFirst([]string{"a"}); aTag == nil || aTag.Value() == "" ||
 		len(strings.Split(aTag.Value(), ":")) != 3 || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindBadgeDefinition) {
-		return errorx.Withf(ErrWrongEventParams, "nip-58, no required a tag: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-58, no required a tag: %+v", e)
 	}
 	if pTags := e.Tags.GetAll([]string{"p"}); len(pTags) == 0 {
-		return errorx.Withf(ErrWrongEventParams, "nip-58, no required p tags: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-58, no required p tags: %+v", e)
 	}
 
 	return nil
@@ -263,16 +262,16 @@ func validateKindBadgeAwardEvent(e *Event) error {
 
 func validateKindProfileBadgesEvent(e *Event) error {
 	if dTag := e.Tags.GetD(); dTag != ProfileBadgesIdentifier {
-		return errorx.Withf(ErrWrongEventParams, "nip-58, no required d tag/wrong value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-58, no required d tag/wrong value: %+v", e)
 	}
 	aTags := e.Tags.GetAll([]string{"a"})
 	for _, aTag := range aTags {
 		if aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3 || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindBadgeDefinition) {
-			return errorx.Withf(ErrWrongEventParams, "nip-58, wrong a tag: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-58, wrong a tag: %+v", e)
 		}
 	}
 	if len(aTags) != len(e.Tags.GetAll([]string{"e"})) {
-		return errorx.Withf(ErrWrongEventParams, "nip-58, e/a tag mismatch: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-58, e/a tag mismatch: %+v", e)
 	}
 
 	return nil
@@ -282,10 +281,10 @@ func validateKindDeletionEvent(e *Event) error {
 	eTags := e.Tags.GetAll([]string{"e"})
 	aTags := e.Tags.GetAll([]string{"a"})
 	if len(eTags) == 0 && len(aTags) == 0 {
-		return errorx.Withf(ErrWrongEventParams, "nip-09, no required e/a tags: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-09, no required e/a tags: %+v", e)
 	}
 	if len(eTags) != 0 && len(eTags) != len(e.Tags.GetAll([]string{"k"})) {
-		return errorx.Withf(ErrWrongEventParams, "nip-09, deletion request should include k tag for the kind of each event being requested for deletion: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-09, deletion request should include k tag for the kind of each event being requested for deletion: %+v", e)
 	}
 
 	return nil
@@ -293,18 +292,18 @@ func validateKindDeletionEvent(e *Event) error {
 
 func validateKindReportEvent(e *Event) error {
 	if err := validateLabelTags(e); err != nil {
-		return errorx.Withf(ErrWrongEventParams, "nip-56, wrong label tags: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-56, wrong label tags: %+v", e)
 	}
 	pTag := e.Tags.GetFirst([]string{"p"})
 	if pTag == nil || pTag.Value() == "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-56, missing p tag: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-56, missing p tag: %+v", e)
 	}
 	eTag := e.Tags.GetFirst([]string{"e"})
 	if eTag != nil && (len(*eTag) < 3 || !reportTypeSupported((*eTag)[2]) || len(*pTag) > 2) {
-		return errorx.Withf(ErrWrongEventParams, "nip-56, wrong e tag report type value/wrong p tag report type value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-56, wrong e tag report type value/wrong p tag report type value: %+v", e)
 	}
 	if eTag == nil && (len(*pTag) < 3 || !reportTypeSupported((*pTag)[2])) {
-		return errorx.Withf(ErrWrongEventParams, "nip-56, wrong p tag report type value:%+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-56, wrong p tag report type value:%+v", e)
 	}
 
 	return nil
@@ -319,7 +318,7 @@ func reportTypeSupported(reportType string) bool {
 func validateKindLabelingEvent(e *Event) error {
 	if e.Tags.GetFirst([]string{"e"}) == nil && e.Tags.GetFirst([]string{"p"}) == nil && e.Tags.GetFirst([]string{"a"}) == nil &&
 		e.Tags.GetFirst([]string{"r"}) == nil && e.Tags.GetFirst([]string{"t"}) == nil {
-		return errorx.Withf(ErrWrongEventParams, "nip-32, missing one of required tags: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-32, missing one of required tags: %+v", e)
 	}
 
 	return validateLabelTags(e)
@@ -332,16 +331,16 @@ func validateLabelTags(e *Event) error {
 		return nil
 	}
 	if labelTag == nil || len(*labelTag) < 3 {
-		return errorx.Withf(ErrWrongEventParams, "nip-32, wrong l: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-32, wrong l: %+v", e)
 	}
 	if len(labelTag.Value()) > maxLabelSymbolLength {
-		return errorx.Withf(ErrWrongEventParams, "nip-32, l tag should be shorter than %d symbols: %+v", maxLabelSymbolLength, e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-32, l tag should be shorter than %d symbols: %+v", maxLabelSymbolLength, e)
 	}
 	if labelNamespaceTag == nil && (*labelTag)[2] != UserGeneratedContentNamespace {
-		return errorx.Withf(ErrWrongEventParams, "nip-32, empty L tag, namespace of l tag should be ugc: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-32, empty L tag, namespace of l tag should be ugc: %+v", e)
 	}
 	if labelNamespaceTag != nil && (*labelTag)[2] != (*labelNamespaceTag)[1] {
-		return errorx.Withf(ErrWrongEventParams, "nip-32, l -> L tag values mismatch: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-32, l -> L tag values mismatch: %+v", e)
 	}
 
 	return nil
@@ -349,14 +348,14 @@ func validateLabelTags(e *Event) error {
 
 func validateKindProfileMetadataEvent(e *Event) error {
 	if !json.Valid([]byte(e.Content)) {
-		return errorx.Withf(ErrWrongEventParams, "nip-01: content field should be stringified json: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be stringified json: %+v", e)
 	}
 	var parsedContent ProfileMetadataContent
 	if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
-		return errorx.Withf(ErrWrongEventParams, "nip-01,nip-24: wrong json fields for: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-01,nip-24: wrong json fields for: %+v", e)
 	}
 	if parsedContent.Name == "" || parsedContent.About == "" || parsedContent.Picture == "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
 	}
 
 	return nil
@@ -364,32 +363,32 @@ func validateKindProfileMetadataEvent(e *Event) error {
 
 func validateKindTextNoteEvent(e *Event) error {
 	if json.Valid([]byte(e.Content)) {
-		return errorx.Withf(ErrWrongEventParams, "nip-01: content field should be plain text: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be plain text: %+v", e)
 	}
 	if err := validateLabelTags(e); err != nil {
-		return errorx.Withf(ErrWrongEventParams, "nip-32: label tags are invalid for event: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-32: label tags are invalid for event: %+v", e)
 	}
 	pTags := e.Tags.GetAll([]string{"p"})
 	eTags := e.Tags.GetAll([]string{"e"})
 	if len(eTags) > 0 {
 		for _, tag := range eTags {
 			if len(tag) < 2 {
-				return errorx.Withf(ErrWrongEventParams, "nip-10: no tag required param: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-10: no tag required param: %+v", e)
 			}
 			if len(tag) >= 3 {
 				if tag[3] != TagMarkerRoot && tag[3] != TagMarkerReply && tag[3] != TagMarkerMention {
-					return errorx.Withf(ErrWrongEventParams, "nip-10: wrong tag marker param: %+v", e)
+					return errors.Wrapf(ErrWrongEventParams, "nip-10: wrong tag marker param: %+v", e)
 				}
 			}
 		}
 	}
 	if len(pTags) > 0 {
 		if len(eTags) == 0 {
-			return errorx.Withf(ErrWrongEventParams, "wrong nip-10: no e tags while p tag exist: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "wrong nip-10: no e tags while p tag exist: %+v", e)
 		}
 		for _, tag := range pTags {
 			if len(tag) == 1 {
-				return errorx.Withf(ErrWrongEventParams, "nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
 			}
 		}
 	}
@@ -398,26 +397,26 @@ func validateKindTextNoteEvent(e *Event) error {
 }
 func validateKindRepostEvent(e *Event) error {
 	if !json.Valid([]byte(e.Content)) {
-		return errorx.Withf(ErrWrongEventParams, "nip-18: content field should be stringified json: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: content field should be stringified json: %+v", e)
 	}
 	var parsedContent RepostContent
 	if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
-		return errorx.Withf(ErrWrongEventParams, "nip-18: wrong json fields for: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong json fields for: %+v", e)
 	}
 	if e.Kind == nostr.KindRepost {
 		if parsedContent.Kind != nostr.KindTextNote {
-			return errorx.Withf(ErrWrongEventParams, "nip-18: wrong kind of repost event: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong kind of repost event: %+v", e)
 		}
 	} else {
 		if kTag := e.Tags.GetFirst([]string{"k"}); kTag == nil || kTag.Value() != fmt.Sprint(parsedContent.Kind) {
-			return errorx.Withf(ErrWrongEventParams, "nip-18: wrong kind of reposted event: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong kind of reposted event: %+v", e)
 		}
 	}
 	if eTag := e.Tags.GetFirst([]string{"e"}); eTag == nil || len(*eTag) < 3 || eTag.Value() != parsedContent.ID {
-		return errorx.Withf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note and relay value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note and relay value: %+v", e)
 	}
 	if pTag := e.Tags.GetFirst([]string{"p"}); pTag == nil || len(*pTag) < 2 || pTag.Value() != parsedContent.PubKey {
-		return errorx.Withf(ErrWrongEventParams, "nip-18: repost must include p tag with pubkey of the event being reposted: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include p tag with pubkey of the event being reposted: %+v", e)
 	}
 
 	return nil
@@ -425,19 +424,19 @@ func validateKindRepostEvent(e *Event) error {
 
 func validateKindReactionEvent(e *Event) error {
 	if e.Content != "+" && e.Content != "-" && e.Content != "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
 	}
 	if eTag := e.Tags.GetLast([]string{"e"}); eTag == nil || eTag.Value() == "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-25, wrong e tag value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong e tag value: %+v", e)
 	}
 	if pTag := e.Tags.GetLast([]string{"p"}); pTag == nil || pTag.Value() == "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-25, wrong p tag value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong p tag value: %+v", e)
 	}
 	if kTag := e.Tags.GetFirst([]string{"k"}); kTag != nil && kTag.Value() == "" {
-		return errorx.Withf(ErrWrongEventParams, "nip-25, wrong k tag value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong k tag value: %+v", e)
 	}
 	if aTag := e.Tags.GetFirst([]string{"a"}); aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) {
-		return errorx.Withf(ErrWrongEventParams, "nip-25, wrong a tag value: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong a tag value: %+v", e)
 	}
 
 	return nil

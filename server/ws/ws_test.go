@@ -11,9 +11,9 @@ import (
 	"testing"
 	stdlibtime "time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
-	"github.com/gookit/goutil/errorx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -143,7 +143,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 	defer cancel()
 	for echoServer.ReaderExited.Load() != uint64(conns) {
 		if shutdownCtx.Err() != nil {
-			log.Panic(errorx.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
 		}
 		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
 	}

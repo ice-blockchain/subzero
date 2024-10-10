@@ -4,7 +4,6 @@ package adapters
 
 import (
 	"context"
-	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -12,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
@@ -57,7 +56,7 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 		if err = multierror.Append(err,
 			wErr,
 		).ErrorOrNil(); err != nil {
-			return errorx.Withf(err, "failed to write data to websocket")
+			return errors.Wrap(err, "failed to write data to websocket")
 		}
 
 		if flusher, ok := w.conn.(http.Flusher); err == nil && ok {
@@ -94,7 +93,7 @@ func (w *WebsocketAdapter) Write(ctx context.Context) {
 			break
 		}
 		if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
-			log.Printf("ERROR:%v", errorx.Withf(err, "failed to send message to websocket"))
+			log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to websocket"))
 		}
 	}
 }

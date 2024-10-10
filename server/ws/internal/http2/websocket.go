@@ -8,11 +8,10 @@ import (
 	"net"
 	"net/http"
 	"time"
-	stdlibtime "time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -30,7 +29,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 		conn, _, _, err = h2Upgrader.Upgrade(req, writer)
 	}
 	if err != nil {
-		return nil, nil, errorx.Withf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
+		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
 	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout)
 	go s.ping(ctx, conn)
@@ -39,7 +38,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 }
 
 func (s *srv) ping(ctx context.Context, conn net.Conn) {
-	ticker := stdlibtime.NewTicker(stdlibtime.Minute)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
@@ -52,7 +51,7 @@ func (s *srv) ping(ctx context.Context, conn net.Conn) {
 				dErr,
 				wsutil.WriteServerMessage(conn, ws.OpPing, nil),
 			).ErrorOrNil(); err != nil {
-				log.Printf("ERROR:%v", errorx.Withf(err, "failed to send ping message"))
+				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send ping message"))
 			}
 		case <-ctx.Done():
 			return

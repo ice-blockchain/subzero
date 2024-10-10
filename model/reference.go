@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 )
 
 func ParseEventReference(tags Tags) ([]EventReference, error) {
@@ -18,11 +18,11 @@ func ParseEventReference(tags Tags) ([]EventReference, error) {
 		} else if len(tag) >= 2 && tag[0] == "a" {
 			val := strings.Split(tag.Value(), ":")
 			if len(val) != 3 {
-				return nil, errorx.Errorf("failed to parse replaceable event reference, len != 3: %v", val)
+				return nil, errors.Errorf("failed to parse replaceable event reference, len != 3: %v", val)
 			}
 			kind, err := strconv.ParseInt(val[0], 10, 64)
 			if err != nil {
-				return nil, errorx.Withf(err, "failed to parse replaceable event reference %v", val)
+				return nil, errors.Wrapf(err, "failed to parse replaceable event reference %v", val)
 			}
 			refs = append(refs, &ReplaceableEventReference{
 				Kind:   int(kind),

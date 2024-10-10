@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr/nip11"
 )
 
@@ -28,7 +28,7 @@ func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) 
 	info := n.info()
 	bytes, err := json.Marshal(info)
 	if err != nil {
-		err = errorx.Withf(err, "failed to serialize NIP11 json %+v", info)
+		err = errors.Wrapf(err, "failed to serialize NIP11 json %+v", info)
 		log.Printf("ERROR:%v", err)
 	}
 	writer.Write(bytes)

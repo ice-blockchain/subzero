@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	"github.com/quic-go/webtransport-go"
 )
 
@@ -63,7 +63,7 @@ func (w *WebtransportAdapter) WriteMessageToStream(data []byte) error {
 			if isConnClosedErr(err) {
 				return nil
 			}
-			return errorx.Withf(err, "failed to write data to webtransport stream")
+			return errors.Wrap(err, "failed to write data to webtransport stream")
 		}
 		return nil
 	}
@@ -75,7 +75,7 @@ func (w *WebtransportAdapter) Write(ctx context.Context) {
 			break
 		}
 		if err := w.WriteMessageToStream(msg); err != nil {
-			log.Printf("ERROR:%v", errorx.Withf(err, "failed to send message to webtransport"))
+			log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to webtransport"))
 		}
 	}
 }
@@ -109,7 +109,7 @@ func (w *WebtransportAdapter) Close() error {
 			if strings.Contains(clErr.Error(), "close called for canceled stream") {
 				return nil
 			}
-			return errorx.With(clErr, "failed to close http3/webtransport stream")
+			return errors.Wrap(clErr, "failed to close http3/webtransport stream")
 		}
 	}
 	return nil
@@ -121,7 +121,7 @@ func (w *WebtransportAdapter) ReadMessage() (messageType int, readValue []byte, 
 	}
 	readValue, err = w.reader.ReadBytes(0x00)
 	if err != nil {
-		return 0, readValue, errorx.Withf(err, "failed to read data from webtransport stream")
+		return 0, readValue, errors.Wrap(err, "failed to read data from webtransport stream")
 	}
 	if len(readValue) > 0 && readValue[len(readValue)-1] == 0x00 {
 		readValue = readValue[0 : len(readValue)-1]

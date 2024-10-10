@@ -8,9 +8,9 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gobwas/httphead"
 	"github.com/gobwas/ws"
-	"github.com/gookit/goutil/errorx"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -28,17 +28,17 @@ func (u *ConnectUpgrader) Upgrade(req *http.Request, writer http.ResponseWriter)
 		httpStreamer := writer.(http3.HTTPStreamer) //nolint:errcheck,forcetypeassert // Should be fine unless quick change API.
 		conn = &http3StreamProxy{stream: httpStreamer.HTTPStream(), connection: w.Connection()}
 	default:
-		err = errorx.New("http.ResponseWriter does not support hijack")
+		err = errors.New("http.ResponseWriter does not support hijack")
 		log.Printf("ERROR:%v", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 
 	if err != nil {
-		return nil, nil, hs, errorx.Withf(err, "failed to hijack http2")
+		return nil, nil, hs, errors.Wrap(err, "failed to hijack http2")
 	}
 	hs, err = u.syncWSProtocols(req)
 	if err != nil {
-		return nil, nil, hs, errorx.Withf(err, "failed to sync ws protocol and extensions")
+		return nil, nil, hs, errors.Wrap(err, "failed to sync ws protocol and extensions")
 	}
 
 	writer.Header().Add(headerSecProtocolCanonical, hs.Protocol)
@@ -46,7 +46,7 @@ func (u *ConnectUpgrader) Upgrade(req *http.Request, writer http.ResponseWriter)
 	writer.WriteHeader(http.StatusOK)
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		return conn, rw, hs, errorx.New("websocket: response writer must implement flusher")
+		return conn, rw, hs, errors.New("websocket: response writer must implement flusher")
 	}
 	flusher.Flush()
 

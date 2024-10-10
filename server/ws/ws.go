@@ -4,13 +4,12 @@ package ws
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 
@@ -75,14 +74,14 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 		}
 	}
 	if err := h.CancelSubscription(ctx, stream, nil); err != nil {
-		log.Printf("ERROR:%v", errorx.Withf(err, "failed to cancel subscriptions opened on closing conn"))
+		log.Printf("ERROR:%v", errors.Wrap(err, "failed to cancel subscriptions opened on closing conn"))
 	}
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
 	input := nostr.ParseMessage(msgBytes)
 	if input == nil {
-		err := errorx.New("failed to parse input")
+		err := errors.New("failed to parse input")
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
 
@@ -120,11 +119,11 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		subID := string(*e)
 		err = h.CancelSubscription(ctx, respWriter, &subID)
 	default:
-		err = errorx.Errorf("unknown message type %v", input.Label())
+		err = errors.Errorf("unknown message type %v", input.Label())
 	}
 	if err != nil {
 		if e, isEvent := input.(*nostr.EventEnvelope); isEvent {
-			err = errorx.Withf(err, "error: failed to handle EVENT %+v", e)
+			err = errors.Wrapf(err, "error: failed to handle EVENT %+v", e)
 			log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &nostr.OKEnvelope{
 				EventID: e.ID,
 				OK:      false,
@@ -133,7 +132,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 
 			return
 		}
-		err = errorx.Withf(err, "error: failed to handle %v %+v", input.Label(), input)
+		err = errors.Wrapf(err, "error: failed to handle %v %+v", input.Label(), input)
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
 	}
@@ -142,7 +141,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Envelope) error {
 	b, err := envelope.MarshalJSON()
 	if err != nil {
-		return errorx.Withf(err, "failed to serialize %+v into json", envelope)
+		return errors.Wrapf(err, "failed to serialize %+v into json", envelope)
 	}
 
 	return respWriter.WriteMessage(int(ws.OpText), b)
