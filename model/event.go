@@ -96,23 +96,36 @@ func (e *Event) SignWithAlg(privateKey string, signAlg EventSignAlg, keyAlg Even
 	return nil
 }
 
-func (e *Event) CheckSignature() (bool, error) {
+func (e *Event) ExtractSignature() (signAlg EventSignAlg, keyAlg EventKeyAlg, sign string, err error) {
 	extensionEnd := strings.IndexRune(e.Sig, ':')
 	if extensionEnd == -1 {
-		// Default schnorr signature.
-		ok, err := e.Event.CheckSignature()
+		sign = e.Sig
 
-		return ok, errors.Wrap(err, "failed to check schnorr signature")
+		return
 	}
+
 	keyStart := strings.IndexRune(e.Sig[:extensionEnd], '/')
 	if keyStart == -1 {
-		return false, errors.Wrap(ErrUnsupportedAlg, "key algorithm is not set")
+		err = errors.Wrap(ErrUnsupportedAlg, "key algorithm is not set")
+
+		return
 	}
 
-	signAlg := EventSignAlg(e.Sig[:keyStart])
-	keyAlg := EventKeyAlg(e.Sig[keyStart+1 : extensionEnd])
+	signAlg = EventSignAlg(e.Sig[:keyStart])
+	keyAlg = EventKeyAlg(e.Sig[keyStart+1 : extensionEnd])
 	if signAlg == "" || keyAlg == "" {
-		return false, errors.Wrap(ErrUnsupportedAlg, "signature and key algorithms must be set together")
+		err = errors.Wrap(ErrUnsupportedAlg, "signature and key algorithms must be set together")
+
+		return
+	}
+
+	return signAlg, keyAlg, e.Sig[extensionEnd+1:], nil
+}
+
+func (e *Event) CheckSignature() (bool, error) {
+	signAlg, keyAlg, sign, err := e.ExtractSignature()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get signature and key algorithms")
 	}
 
 	pk, err := hex.DecodeString(e.PubKey)
@@ -120,14 +133,14 @@ func (e *Event) CheckSignature() (bool, error) {
 		return false, errors.Wrap(err, "public key is invalid hex")
 	}
 
-	sign, err := hex.DecodeString(e.Sig[extensionEnd+1:])
+	signBytes, err := hex.DecodeString(sign)
 	if err != nil {
 		return false, errors.Wrap(err, "signature is invalid hex")
 	}
 	hash := sha256.Sum256(e.Serialize())
 	switch {
 	case signAlg == SignAlgEDDSA && keyAlg == KeyAlgCurve25519:
-		return ed25519.Verify(pk, hash[:], sign), nil
+		return ed25519.Verify(pk, hash[:], signBytes), nil
 
 	case (signAlg == "" && keyAlg == "") || (signAlg == SignAlgSchnorr && keyAlg == KeyAlgSecp256k1):
 		ok, err := e.Event.CheckSignature()

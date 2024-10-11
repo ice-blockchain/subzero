@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -98,26 +97,13 @@ func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Even
 	return
 }
 
-func mustParseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string) {
-	extensionEnd := strings.IndexRune(event.Sig, ':')
-	if extensionEnd == -1 {
-		// No extension found, both empty values are valid.
-		return
+func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
+	sAlg, kAlg, _, err := event.ExtractSignature()
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to extract signature")
 	}
 
-	// Event validation on the upper layer ensures that the signature is not empty and must be valid here.
-	keyStart := strings.IndexRune(event.Sig[:extensionEnd], '/')
-	if keyStart == -1 {
-		panic("invalid signature format: " + event.Sig)
-	}
-
-	sigAlg = event.Sig[:keyStart]
-	keyAlg = event.Sig[keyStart+1 : extensionEnd]
-	if sigAlg == "" || keyAlg == "" {
-		panic("signature and key algorithms must be set together: " + event.Sig)
-	}
-
-	return
+	return string(sAlg), string(kAlg), nil
 }
 
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
@@ -136,7 +122,10 @@ values
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
 	}
-	dbEvent.SigAlg, dbEvent.KeyAlg = mustParseSigKeyAlg(event)
+	dbEvent.SigAlg, dbEvent.KeyAlg, err = parseSigKeyAlg(event)
+	if err != nil {
+		return err
+	}
 
 	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
 	if err != nil {
