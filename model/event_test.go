@@ -80,8 +80,10 @@ func TestEventSignVerify(t *testing.T) {
 	t.Run("Unknown", func(t *testing.T) {
 		t.Run("Sign", func(t *testing.T) {
 			var ev Event
-			err := ev.SignWithAlg("", EventSignAlg("unknown"), EventKeyAlg("unknown"))
-			require.ErrorIs(t, err, ErrUnsupportedAlg)
+			pk := hex.EncodeToString([]byte("private key"))
+			require.ErrorIs(t, ev.SignWithAlg(pk, EventSignAlg("unknown"), EventKeyAlg("unknown")), ErrUnsupportedAlg)
+			require.ErrorIs(t, ev.SignWithAlg(pk, SignAlgSchnorr, KeyAlgCurve25519), ErrUnsupportedAlg)
+			require.ErrorIs(t, ev.SignWithAlg(pk, SignAlgEDDSA, KeyAlgSecp256k1), ErrUnsupportedAlg)
 		})
 		t.Run("Verify", func(t *testing.T) {
 			var ev Event
