@@ -24,14 +24,10 @@ type (
 )
 
 const (
-	// Schnorr (default) signature.
 	SignAlgSchnorr EventSignAlg = "schnorr"
-	// ECDSA.
-	SignAlgEDDSA EventSignAlg = "eddsa"
+	SignAlgEDDSA   EventSignAlg = "eddsa"
 
-	// Secp256k1 (default) key.
-	KeyAlgSecp256k1 EventKeyAlg = "secp256k1"
-	// Curve25519.
+	KeyAlgSecp256k1  EventKeyAlg = "secp256k1"
 	KeyAlgCurve25519 EventKeyAlg = "curve25519"
 )
 
@@ -75,14 +71,14 @@ func (e *Event) SignWithAlg(privateKey string, signAlg EventSignAlg, keyAlg Even
 
 	privKey, err := hex.DecodeString(privateKey)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "private key is invalid hex")
 	}
 
 	var sign []byte
 	var headerSum [32]byte
 	switch {
 	case (signAlg == "" && keyAlg == "") || (signAlg == SignAlgSchnorr && keyAlg == KeyAlgSecp256k1):
-		return e.Event.Sign(privateKey)
+		return errors.Wrap(e.Event.Sign(privateKey), "failed to sign event")
 
 	case signAlg == SignAlgEDDSA && keyAlg == KeyAlgCurve25519:
 		pk := ed25519.PrivateKey(privKey)
@@ -104,7 +100,9 @@ func (e *Event) CheckSignature() (bool, error) {
 	extensionEnd := strings.IndexRune(e.Sig, ':')
 	if extensionEnd == -1 {
 		// Default schnorr signature.
-		return e.Event.CheckSignature()
+		ok, err := e.Event.CheckSignature()
+
+		return ok, errors.Wrap(err, "failed to check schnorr signature")
 	}
 	keyStart := strings.IndexRune(e.Sig[:extensionEnd], '/')
 	if keyStart == -1 {
@@ -119,7 +117,7 @@ func (e *Event) CheckSignature() (bool, error) {
 
 	pk, err := hex.DecodeString(e.PubKey)
 	if err != nil {
-		return false, errors.Wrapf(err, "public key is invalid hex")
+		return false, errors.Wrap(err, "public key is invalid hex")
 	}
 
 	sign, err := hex.DecodeString(e.Sig[extensionEnd+1:])
@@ -132,7 +130,9 @@ func (e *Event) CheckSignature() (bool, error) {
 		return ed25519.Verify(pk, hash[:], sign), nil
 
 	case (signAlg == "" && keyAlg == "") || (signAlg == SignAlgSchnorr && keyAlg == KeyAlgSecp256k1):
-		return e.Event.CheckSignature()
+		ok, err := e.Event.CheckSignature()
+
+		return ok, errors.Wrap(err, "failed to check schnorr signature")
 	}
 
 	return false, errors.Wrapf(ErrUnsupportedAlg, "signature algorithm: %q, key algorithm: %q", signAlg, keyAlg)

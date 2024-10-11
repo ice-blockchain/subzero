@@ -29,6 +29,8 @@ func helperTestSignVerify(t *testing.T, ev *Event, pk string, signAlg EventSignA
 }
 
 func TestEventSignVerify(t *testing.T) {
+	t.Parallel()
+
 	t.Run(strings.Join([]string{string(SignAlgSchnorr), string(KeyAlgSecp256k1)}, "_"), func(t *testing.T) {
 		var ev Event
 		ev.Kind = nostr.KindTextNote
