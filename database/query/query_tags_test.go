@@ -4,6 +4,7 @@ package query
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -66,4 +67,54 @@ func TestEventTagsReorder(t *testing.T) {
 			require.Equal(t, c.Expected, eventTagsReorder(c.Data), "test case %v: in=%#v, want=%#v", idx, c.Data, c.Expected)
 		}
 	})
+}
+
+func TestParseAttestationString(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		In     string
+		Action string
+		Ts     time.Time
+		Kinds  []int
+		Err    bool
+	}{
+		{
+			In:  "action",
+			Err: true,
+		},
+		{
+			In:     "action:123",
+			Action: "action",
+			Ts:     time.Unix(123, 0),
+		},
+		{
+			In:  "action:foo",
+			Err: true,
+		},
+		{
+			In:     "action:123:1,2,3",
+			Action: "action",
+			Ts:     time.Unix(123, 0),
+			Kinds:  []int{1, 2, 3},
+		},
+		{
+			In:  "action:123:1,foo,3",
+			Err: true,
+		},
+	}
+
+	for i, c := range cases {
+		t.Logf("case: %v = %v", i, c.In)
+		action, ts, kinds, err := parseAttestationString(c.In)
+		if c.Err {
+			require.Error(t, err)
+			continue
+		}
+
+		require.NoError(t, err)
+		require.Equal(t, c.Action, action)
+		require.Equal(t, c.Ts, ts)
+		require.Equal(t, c.Kinds, kinds)
+	}
 }

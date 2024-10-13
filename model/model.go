@@ -36,3 +36,18 @@ var (
 	ErrDuplicate      = errors.New("duplicate")
 	ErrUnsupportedAlg = errors.New("unsupported signature/key algorithm combination")
 )
+
+const (
+	IceKindAttestation = 10_100
+)
+
+const (
+	IceTagOnBehalfOf  = "b"
+	IceTagAttestation = "p"
+)
+
+const (
+	IceAttestationKindActive   = "active"
+	IceAttestationKindRevoked  = "revoked"
+	IceAttestationKindInactive = "inactive"
+)

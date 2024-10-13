@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -870,6 +871,96 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count) // Only the reposted event should be counted.
+		})
+	})
+}
+
+func TestQueryEventAttestation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		master = "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
+		active = "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
+	)
+
+	masterPk, err := nostr.GetPublicKey(master)
+	require.NoError(t, err)
+
+	activePk, err := nostr.GetPublicKey(active)
+	require.NoError(t, err)
+
+	t.Logf("master   public key: %s", masterPk)
+	t.Logf("onbehalf public key: %s", activePk)
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := time.Now().Unix()
+
+	t.Run("AddAttestation", func(t *testing.T) {
+		var ev model.Event
+
+		t.Log("add first attestation")
+		ev.Kind = model.IceKindAttestation
+		ev.CreatedAt = 1
+		ev.Tags = model.Tags{{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
+		require.NoError(t, ev.Sign(master))
+		t.Logf("event %+v", ev)
+		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Kinds = []int{model.IceKindAttestation}
+			apply.Authors = []string{masterPk}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+
+		t.Log("add second attestation")
+
+		ev.Kind = model.IceKindAttestation
+		ev.CreatedAt = 2
+		ev.Tags = model.Tags{
+			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
+			{model.IceTagAttestation, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
+			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+		}
+		require.NoError(t, ev.Sign(master))
+		t.Logf("event %+v", ev)
+		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Kinds = []int{model.IceKindAttestation}
+			apply.Authors = []string{masterPk}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("Publish", func(t *testing.T) {
+		t.Run("AsMaster", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = 1
+			ev.Content = "hello world"
+			require.NoError(t, ev.Sign(master))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+		})
+		t.Run("OnBehalf", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = 2
+			ev.Content = "hello world from active"
+			ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPk}}
+			require.NoError(t, ev.Sign(active))
+			t.Logf("event %+v", ev)
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+		})
+		t.Run("Count", func(t *testing.T) {
+			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+				apply.Kinds = []int{nostr.KindTextNote}
+				apply.Authors = []string{masterPk}
+			}))
+			require.NoError(t, err)
+			require.Equal(t, int64(2), count) // Both events should be counted, master + on behalf.
 		})
 	})
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
+	"github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -24,6 +25,7 @@ const (
 var (
 	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
 	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
+	ErrOnBehalfAccessDenied        = errors.New("on-behalf access denied")
 	errEventIteratorInterrupted    = errors.New("interrupted")
 )
 
@@ -34,6 +36,7 @@ type databaseEvent struct {
 	Jtags           string
 	SigAlg          string
 	KeyAlg          string
+	MasterPubKey    string
 }
 
 type EventIterator iter.Seq2[*model.Event, error]
@@ -108,9 +111,9 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
 	const stmt = `insert or replace into events
-	(kind, created_at, system_created_at, id, pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
+	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
 
 	jtags, err := json.Marshal(event.Tags)
 	if err != nil {
@@ -119,6 +122,7 @@ values
 
 	dbEvent := databaseEvent{
 		Event:           *event,
+		MasterPubKey:    event.PubKey,
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
 	}
@@ -127,15 +131,22 @@ values
 		return err
 	}
 
-	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
-	if err != nil {
-		return errors.Wrap(err, "failed to exec insert event sql")
-	}
-	if rowsAffected == 0 {
-		return ErrUnexpectedRowsAffected
+	if bTag := event.Tags.GetFirst([]string{model.IceTagOnBehalfOf}); bTag != nil && bTag.Value() != "" {
+		dbEvent.MasterPubKey = bTag.Value()
 	}
 
-	return nil
+	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
+	if err != nil {
+		var sqlError sqlite3.Error
+		if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint && sqlError.Error() == "onbehalf permission denied" {
+			err = ErrOnBehalfAccessDenied
+		}
+		err = errors.Wrap(err, "failed to exec insert event sql")
+	} else if rowsAffected == 0 {
+		err = ErrUnexpectedRowsAffected
+	}
+
+	return err
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {

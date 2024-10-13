@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS events
     system_created_at integer not null,
     id                text    not null primary key,
     pubkey            text    not null,
+    master_pubkey     text    not null,
     sig               text    not null,
     sig_alg           text    not null DEFAULT '',
     key_alg           text    not null DEFAULT '',
@@ -17,10 +18,10 @@ CREATE TABLE IF NOT EXISTS events
     hidden            integer not null default 0
 ) strict, WITHOUT ROWID;
 --------
-create unique index if not exists replaceable_event_uk on events(pubkey, kind)
+create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
 where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
 --------
-create unique index if not exists parameterized_replaceable_event_uk on events(pubkey, kind, d_tag)
+create unique index if not exists parameterized_replaceable_event_uk on events(master_pubkey, kind, d_tag)
 where 30000 <= kind AND kind < 40000;
 
 -- Where order:
@@ -28,6 +29,7 @@ where 30000 <= kind AND kind < 40000;
 --   id
 --   kind
 --   pubkey
+--   master_pubkey
 --   created_at
 -- Order by:
 --   system_created_at DESC
@@ -35,13 +37,18 @@ where 30000 <= kind AND kind < 40000;
 CREATE INDEX IF NOT EXISTS idx_events_system_created_at                           ON events(system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_kind_system_created_at                      ON events(kind, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_system_created_at                    ON events(pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_master_pubkey_system_created_at             ON events(master_pubkey, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_system_created_at               ON events(kind, pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_kind_master_pubkey_system_created_at        ON events(kind, master_pubkey, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_id_kind_system_created_at                   ON events(id, kind, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_id_created_at_system_created_at             ON events(id, created_at DESC, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_system_created_at                 ON events(id, pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_id_master_pubkey_system_created_at          ON events(id, master_pubkey, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_id_kind_pubkey_created_at_system_created_at ON events(id, kind, pubkey, created_at DESC, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_master_pubkey_created_at_system_created_at ON events(id, kind, master_pubkey, created_at DESC, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_system_created_at      ON events(pubkey, master_pubkey, system_created_at DESC) where hidden = 0;
 
 --------
 CREATE TABLE IF NOT EXISTS event_tags
@@ -137,7 +144,7 @@ begin
         coalesce(value ->> 21,'')
     from
     (
-        select subzero_nostr_tags_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
+        select subzero_nostr_tag_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
     ) where value ->> 0 is not null;
 end
 ;
@@ -149,12 +156,13 @@ create trigger if not exists trigger_events_unwind_repost
     when new.kind = 6
 begin
 insert into events
-    (kind, created_at, system_created_at, id, pubkey, sig, content, tags, d_tag, hidden)
+    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, tags, d_tag, hidden)
 select
     json_extract(b, '$.kind'),
     0,
     0,
     json_extract(b, '$.id'),
+    '',
     '',
     '',
     '',
@@ -182,6 +190,22 @@ where
     NEW.content != '' AND
     json_valid(NEW.content) AND
     json_extract(NEW.content, '$.id') != '';
+end
+;
+--------
+create trigger if not exists trigger_events_check_onbehalf_permission
+    before insert
+    on events
+    for each row
+    when new.master_pubkey != new.pubkey
+begin
+    select raise(ABORT, 'onbehalf permission denied') where not subzero_nostr_onbehalf_is_allowed(
+        coalesce((select tags from events where events.kind = 10100 and events.pubkey = new.master_pubkey and hidden = 0), '[]'),
+        new.pubkey,
+        new.master_pubkey,
+        new.kind,
+        unixepoch()
+    );
 end
 ;
 --------
