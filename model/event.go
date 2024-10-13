@@ -150,3 +150,13 @@ func (e *Event) CheckSignature() (bool, error) {
 
 	return false, errors.Wrapf(ErrUnsupportedAlg, "signature algorithm: %q, key algorithm: %q", signAlg, keyAlg)
 }
+
+func (e *Event) GetTag(tagName string) Tag {
+	for _, tag := range e.Tags {
+		if tag.Key() == tagName {
+			return tag
+		}
+	}
+
+	return nil
+}

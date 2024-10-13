@@ -922,7 +922,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		ev.Tags = model.Tags{
 			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
 			{model.IceTagAttestation, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
-			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
 		}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)

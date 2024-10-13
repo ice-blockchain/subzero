@@ -131,7 +131,7 @@ values
 		return err
 	}
 
-	if bTag := event.Tags.GetFirst([]string{model.IceTagOnBehalfOf}); bTag != nil && bTag.Value() != "" {
+	if bTag := event.GetTag(model.IceTagOnBehalfOf); bTag != nil && bTag.Value() != "" {
 		dbEvent.MasterPubKey = bTag.Value()
 	}
 
@@ -139,7 +139,7 @@ values
 	if err != nil {
 		var sqlError sqlite3.Error
 		if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint && sqlError.Error() == "onbehalf permission denied" {
-			err = ErrOnBehalfAccessDenied
+			err = errors.Wrapf(ErrOnBehalfAccessDenied, "pubkey %q, master key %q", dbEvent.PubKey, dbEvent.MasterPubKey)
 		}
 		err = errors.Wrap(err, "failed to exec insert event sql")
 	} else if rowsAffected == 0 {
