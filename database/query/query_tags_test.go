@@ -190,6 +190,16 @@ func TestAttestationUpdateIsAllowed(t *testing.T) {
 			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {"foo", "bar"}, {model.IceTagAttestation, "pub", "", "bar:123"}},
 			Allowed: true,
 		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {model.IceTagAttestation, "pub2", "", model.IceAttestationKindRevoked + ":123"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {model.IceTagAttestation, "pub2", "", model.IceAttestationKindRevoked + ":123"}, {model.IceTagAttestation, "pub2", "", model.IceAttestationKindActive + ":123"}},
+			Allowed: false,
+		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {model.IceTagAttestation, "pub2", "", model.IceAttestationKindRevoked + ":123"}, {model.IceTagAttestation, "pub2", "", model.IceAttestationKindActive + ":123"}},
+			Allowed: false,
+		},
 	}
 
 	for idx, c := range cases {

@@ -180,6 +180,14 @@ func attestationUpdateIsAllowed(old model.Tags, new model.Tags) bool {
 		return false
 	}
 
+	// List of revoked pubkeys.
+	revoked := make(map[string]struct{})
+	for _, tag := range old {
+		if tag.Key() == model.IceTagAttestation && len(tag) >= 4 && strings.HasPrefix(tag[3], model.IceAttestationKindRevoked) {
+			revoked[tag[1]] = struct{}{}
+		}
+	}
+
 	// Do a basic format check for the new tags.
 	for _, tag := range new[len(old):] {
 		if tag.Key() != model.IceTagAttestation {
@@ -194,11 +202,23 @@ func attestationUpdateIsAllowed(old model.Tags, new model.Tags) bool {
 			return false
 		}
 
-		if _, _, _, err := parseAttestationString(tag[3]); err != nil {
+		action, _, _, err := parseAttestationString(tag[3])
+		if err != nil {
 			log.Printf("failed to parse attestation string: %#v: %v", tag, err)
 
 			return false
 		}
+
+		if _, ok := revoked[tag[1]]; ok {
+			log.Printf("found attestations for revoked pubkey: %v: %#v", tag[1], tag)
+
+			return false
+		}
+
+		if action == model.IceAttestationKindRevoked {
+			revoked[tag[1]] = struct{}{}
+		}
+
 	}
 
 	return true
