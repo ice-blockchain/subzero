@@ -150,7 +150,7 @@ end
 ;
 --------
 create trigger if not exists generate_event_tags_after_update
-    before update
+    after update
     on events
     for each row
     when (new.tags != old.tags) OR (new.id != old.id)
@@ -271,7 +271,7 @@ begin
     );
 end
 ;
-create trigger if not exists trigger_events_check_onbehalf_attestation_list_must_linear
+create trigger if not exists trigger_events_check_onbehalf_attestation_list_must_be_linear
     before update
     on events
     for each row
