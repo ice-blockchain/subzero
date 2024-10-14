@@ -22,6 +22,10 @@ type onbehalfAccessEntry struct {
 }
 
 const (
+	tagAttestationName = "p"
+)
+
+const (
 	// Tags/values for `imeta`.
 	tagValueURL      = `event_tag_value1` // `url <actual url>`
 	tagValueMimeType = `event_tag_value2` // `m <actual mime type>`
@@ -111,7 +115,7 @@ func parseAttestationTags(tags model.Tags) map[string]*onbehalfAccessEntry {
 	// List of onbehalf access entries, pubkey -> entry.
 	entries := make(map[string]*onbehalfAccessEntry)
 	for _, tag := range tags {
-		if len(tag) < 4 || tag.Key() != model.IceTagAttestation {
+		if len(tag) < 4 || tag.Key() != tagAttestationName {
 			log.Printf("invalid attestation tag: %+v", tag)
 
 			continue
@@ -183,14 +187,14 @@ func attestationUpdateIsAllowed(old model.Tags, new model.Tags) bool {
 	// List of revoked pubkeys.
 	revoked := make(map[string]struct{})
 	for _, tag := range old {
-		if tag.Key() == model.IceTagAttestation && len(tag) >= 4 && strings.HasPrefix(tag[3], model.IceAttestationKindRevoked) {
+		if tag.Key() == tagAttestationName && len(tag) >= 4 && strings.HasPrefix(tag[3], model.IceAttestationKindRevoked) {
 			revoked[tag[1]] = struct{}{}
 		}
 	}
 
 	// Do a basic format check for the new tags.
 	for _, tag := range new[len(old):] {
-		if tag.Key() != model.IceTagAttestation {
+		if tag.Key() != tagAttestationName {
 			// Just ignore non-attestation tags.
 			continue
 		}

@@ -42,8 +42,7 @@ const (
 )
 
 const (
-	IceTagOnBehalfOf  = "b"
-	IceTagAttestation = "p"
+	IceTagOnBehalfOf = "b"
 )
 
 const (

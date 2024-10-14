@@ -261,6 +261,8 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 }
 
 func TestEphemeralEvents(t *testing.T) {
+	t.Parallel()
+
 	t.Run("ephemeral event", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 		defer cancel()
@@ -287,6 +289,8 @@ func TestEphemeralEvents(t *testing.T) {
 }
 
 func TestNIP09DeleteEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
@@ -409,6 +413,8 @@ func TestNIP09DeleteEvents(t *testing.T) {
 }
 
 func TestNIP25ReactionEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("reaction to non-replaceable event", func(t *testing.T) {
@@ -900,7 +906,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		t.Log("add first attestation")
 		ev.Kind = model.IceKindAttestation
 		ev.CreatedAt = 1
-		ev.Tags = model.Tags{{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
+		ev.Tags = model.Tags{{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
@@ -915,7 +921,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = model.IceKindAttestation
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{
-				{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+				{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
 			}
 			require.NoError(t, ev.Sign(master))
 			t.Logf("event %+v", ev)
@@ -926,10 +932,10 @@ func TestQueryEventAttestation(t *testing.T) {
 		ev.Kind = model.IceKindAttestation
 		ev.CreatedAt = 3
 		ev.Tags = model.Tags{
-			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
-			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
-			{model.IceTagAttestation, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
-			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
+			{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
+			{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
+			{tagAttestationName, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
+			{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
 		}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)
