@@ -118,3 +118,82 @@ func TestParseAttestationString(t *testing.T) {
 		require.Equal(t, c.Kinds, kinds)
 	}
 }
+
+func TestAttestationUpdateIsAllowed(t *testing.T) {
+	t.Parallel()
+
+	var cases = []struct {
+		Old     model.Tags
+		New     model.Tags
+		Allowed bool
+	}{
+		{
+			Allowed: true,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			Allowed: true,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo"}},
+			Allowed: false,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:bar"}},
+			Allowed: false,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "foo:bar"}},
+			Allowed: false,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123:foo"}},
+			Allowed: false,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123:1,2,3"}},
+			Allowed: true,
+		},
+		{
+			Old:     nil,
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {model.IceTagAttestation, "pub", "", "bar:123"}},
+			Allowed: true,
+		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {model.IceTagAttestation, "pub", "", "bar:123"}},
+			Allowed: true,
+		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:1234"}, {model.IceTagAttestation, "pub", "", "bar:123"}},
+			Allowed: false,
+		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:1234"}},
+			Allowed: false,
+		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {model.IceTagAttestation, "pub", "", "bar:1234"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			Allowed: false,
+		},
+		{
+			Old:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}},
+			New:     model.Tags{{model.IceTagAttestation, "pub", "", "foo:123"}, {"foo", "bar"}, {model.IceTagAttestation, "pub", "", "bar:123"}},
+			Allowed: true,
+		},
+	}
+
+	for idx, c := range cases {
+		allowed := attestationUpdateIsAllowed(c.Old, c.New)
+		require.Equalf(t, c.Allowed, allowed, "test case %v: in=%#v, want=%#v", idx, c, c.Allowed)
+	}
+}

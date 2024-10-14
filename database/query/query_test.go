@@ -43,6 +43,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestReplaceableEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
@@ -135,59 +137,54 @@ func TestReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		expectedEvents := []*model.Event{}
-		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
+		ev1 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable " + uuid.NewString(),
+				ID:        "replaceable event 1 that must be replaced",
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 1,
 				Kind:      nostr.KindFollowList,
-				Tags: nostr.Tags{
-					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
-				},
-				Content: "bogus" + uuid.NewString(),
-				Sig:     "bogus" + uuid.NewString(),
+				Tags:      model.Tags{{"p", "event1", "wss://localhost:9999/"}},
 			},
-		}))
-		expectedEvents = append(expectedEvents, &model.Event{
+		}
+		require.NoError(t, db.AcceptEvent(ctx, ev1))
+
+		// Overwrite.
+		ev2 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable " + uuid.NewString(),
+				ID:        "replaceable event 2",
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 2,
 				Kind:      nostr.KindFollowList,
-				Tags: nostr.Tags{
-					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
-				},
-				Content: "bogus" + uuid.NewString(),
-				Sig:     "bogus" + uuid.NewString(),
+				Tags:      nostr.Tags{{"p", "event2", "wss://localhost:9999/"}},
 			},
-		})
-		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[0]))
-		expectedEvents = append(expectedEvents, &model.Event{
+		}
+		require.NoError(t, db.AcceptEvent(ctx, ev2))
+
+		// Add another event.
+		ev3 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable " + uuid.NewString(),
+				ID:        "replaceable event 3",
 				PubKey:    "another bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 3,
 				Kind:      nostr.KindFollowList,
-				Tags: nostr.Tags{
-					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
-				},
-				Content: "bogus" + uuid.NewString(),
-				Sig:     "bogus" + uuid.NewString(),
+				Tags:      nostr.Tags{{"p", "event3", "wss://localhost:9999/"}},
 			},
-		})
-		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[1]))
+		}
+		require.NoError(t, db.AcceptEvent(ctx, ev3))
+
 		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
 			apply.Kinds = []int{nostr.KindFollowList}
 		}))
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
-		require.Contains(t, stored, expectedEvents[0])
-		require.Contains(t, stored, expectedEvents[1])
+		require.Equal(t, ev3, stored[0], "event 3")
+		require.Equal(t, ev2, stored[1], "event 2")
 	})
 }
 
 func TestParametrizedReplaceableEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("param replaceable event", func(t *testing.T) {
@@ -914,12 +911,22 @@ func TestQueryEventAttestation(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
+		t.Run("TryOverride", func(t *testing.T) {
+			ev.Kind = model.IceKindAttestation
+			ev.CreatedAt = 2
+			ev.Tags = model.Tags{
+				{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+			}
+			require.NoError(t, ev.Sign(master))
+			t.Logf("event %+v", ev)
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrAttestationUpdateRejected)
+		})
 
 		t.Log("add second attestation")
-
 		ev.Kind = model.IceKindAttestation
-		ev.CreatedAt = 2
+		ev.CreatedAt = 3
 		ev.Tags = model.Tags{
+			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
 			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
 			{model.IceTagAttestation, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
 			{model.IceTagAttestation, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},

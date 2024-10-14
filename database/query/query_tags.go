@@ -167,3 +167,39 @@ func onBehalfIsAllowed(tags model.Tags, onBehalfPubkey string, kind int, nowUnix
 	return (now.After(*entry.Start)) &&
 		(entry.End == nil || now.Before(*entry.End))
 }
+
+func attestationUpdateIsAllowed(old model.Tags, new model.Tags) bool {
+	if len(new) < len(old) {
+		// Deleting tags is not allowed.
+		return false
+	}
+
+	// At this point, len(new) >= len(old).
+	// Check if the new tags contain all the old tags.
+	if slices.CompareFunc(old, new[:len(old)], slices.Compare) != 0 {
+		return false
+	}
+
+	// Do a basic format check for the new tags.
+	for _, tag := range new[len(old):] {
+		if tag.Key() != model.IceTagAttestation {
+			// Just ignore non-attestation tags.
+			continue
+		}
+
+		// Malformed attestation tag.
+		if len(tag) < 4 {
+			log.Printf("failed to parse attestation string: %#v: malformed tag", tag)
+
+			return false
+		}
+
+		if _, _, _, err := parseAttestationString(tag[3]); err != nil {
+			log.Printf("failed to parse attestation string: %#v: %v", tag, err)
+
+			return false
+		}
+	}
+
+	return true
+}

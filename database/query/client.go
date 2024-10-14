@@ -52,6 +52,11 @@ func init() {
 						Ptr:  sqlObehalfIsAllowed,
 						Pure: true,
 					},
+					{
+						Name: "subzero_nostr_attestation_update_is_allowed",
+						Ptr:  sqlAttestationUpdateIsAllowed,
+						Pure: true,
+					},
 				}
 
 				for idx := range funcTable {

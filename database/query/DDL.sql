@@ -149,6 +149,69 @@ begin
 end
 ;
 --------
+create trigger if not exists generate_event_tags_after_update
+    before update
+    on events
+    for each row
+    when (new.tags != old.tags) OR (new.id != old.id)
+begin
+    delete from event_tags where event_id = old.id or event_id = new.id;
+    insert into event_tags(
+        event_id,
+        event_tag_key,
+        event_tag_value1,
+        event_tag_value2,
+        event_tag_value3,
+        event_tag_value4,
+        event_tag_value5,
+        event_tag_value6,
+        event_tag_value7,
+        event_tag_value8,
+        event_tag_value9,
+        event_tag_value10,
+        event_tag_value11,
+        event_tag_value12,
+        event_tag_value13,
+        event_tag_value14,
+        event_tag_value15,
+        event_tag_value16,
+        event_tag_value17,
+        event_tag_value18,
+        event_tag_value19,
+        event_tag_value20,
+        event_tag_value21)
+    select
+        new.id,
+        value ->> 0,
+        coalesce(value ->> 1,''),
+        coalesce(value ->> 2,''),
+        coalesce(value ->> 3,''),
+        coalesce(value ->> 4,''),
+        coalesce(value ->> 5,''),
+        coalesce(value ->> 6,''),
+        coalesce(value ->> 7,''),
+        coalesce(value ->> 8,''),
+        coalesce(value ->> 9,''),
+        coalesce(value ->> 10,''),
+        coalesce(value ->> 11,''),
+        coalesce(value ->> 12,''),
+        coalesce(value ->> 13,''),
+        coalesce(value ->> 14,''),
+        coalesce(value ->> 15,''),
+        coalesce(value ->> 16,''),
+        coalesce(value ->> 17,''),
+        coalesce(value ->> 18,''),
+        coalesce(value ->> 19,''),
+        coalesce(value ->> 20,''),
+        coalesce(value ->> 21,'')
+    from
+    (
+        select subzero_nostr_tag_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
+    ) where value ->> 0 is not null
+    on conflict do nothing;
+end
+;
+--------
 create trigger if not exists trigger_events_unwind_repost
     before insert
     on events
@@ -205,6 +268,18 @@ begin
         new.master_pubkey,
         new.kind,
         unixepoch()
+    );
+end
+;
+create trigger if not exists trigger_events_check_onbehalf_attestation_list_must_linear
+    before update
+    on events
+    for each row
+    when (new.kind = 10100) AND (new.master_pubkey = old.master_pubkey) AND (new.tags != old.tags)
+begin
+    select raise(ABORT, 'attestation list update must be linear') where not subzero_nostr_attestation_update_is_allowed(
+        coalesce(old.tags, '[]'),
+        coalesce(new.tags, '[]')
     );
 end
 ;

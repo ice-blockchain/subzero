@@ -26,6 +26,7 @@ var (
 	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
 	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
 	ErrOnBehalfAccessDenied        = errors.New("on-behalf access denied")
+	ErrAttestationUpdateRejected   = errors.New("attestation update rejected")
 	errEventIteratorInterrupted    = errors.New("interrupted")
 )
 
@@ -110,10 +111,26 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 }
 
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
-	const stmt = `insert or replace into events
+	const stmt = `insert into events
 	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)
+on conflict do update set
+	id                = excluded.id,
+	kind              = excluded.kind,
+	created_at        = excluded.created_at,
+	system_created_at = excluded.system_created_at,
+	pubkey            = excluded.pubkey,
+	master_pubkey     = excluded.master_pubkey,
+	sig               = excluded.sig,
+	sig_alg           = excluded.sig_alg,
+	key_alg           = excluded.key_alg,
+	content           = excluded.content,
+	tags              = excluded.tags,
+	d_tag             = excluded.d_tag,
+	reference_id      = excluded.reference_id,
+	hidden            = 0
+`
 
 	jtags, err := json.Marshal(event.Tags)
 	if err != nil {
@@ -138,8 +155,13 @@ values
 	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
 	if err != nil {
 		var sqlError sqlite3.Error
-		if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint && sqlError.Error() == "onbehalf permission denied" {
-			err = errors.Wrapf(ErrOnBehalfAccessDenied, "pubkey %q, master key %q", dbEvent.PubKey, dbEvent.MasterPubKey)
+		if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint {
+			switch sqlError.Error() {
+			case "onbehalf permission denied":
+				err = errors.Wrapf(ErrOnBehalfAccessDenied, "pubkey %q, master key %q", dbEvent.PubKey, dbEvent.MasterPubKey)
+			case "attestation list update must be linear":
+				err = ErrAttestationUpdateRejected
+			}
 		}
 		err = errors.Wrap(err, "failed to exec insert event sql")
 	} else if rowsAffected == 0 {

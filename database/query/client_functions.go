@@ -37,3 +37,16 @@ func sqlEventTagReorderJSON(jsonTag string) (string, error) {
 
 	return string(data), errors.Wrap(err, "failed to marshal tags")
 }
+
+func sqlAttestationUpdateIsAllowed(oldTagsJSON, newTagsJSON string) (bool, error) {
+	var oldTags, newTags model.Tags
+
+	if err := json.Unmarshal([]byte(oldTagsJSON), &oldTags); err != nil {
+		return false, errors.Wrap(err, "failed to unmarshal old tags")
+	}
+	if err := json.Unmarshal([]byte(newTagsJSON), &newTags); err != nil {
+		return false, errors.Wrap(err, "failed to unmarshal new tags")
+	}
+
+	return attestationUpdateIsAllowed(oldTags, newTags), nil
+}
