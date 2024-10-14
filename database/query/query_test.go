@@ -967,6 +967,16 @@ func TestQueryEventAttestation(t *testing.T) {
 			t.Logf("event %+v", ev)
 			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
 		})
+		t.Run("OnBehalfOfUnknownUser", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = 3
+			ev.Content = "hello world from non-existing user"
+			ev.Tags = model.Tags{{model.IceTagOnBehalfOf, nostr.GeneratePrivateKey()}}
+			require.NoError(t, ev.Sign(active))
+			t.Logf("event %+v", ev)
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
+		})
 		t.Run("Count", func(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
 				apply.Kinds = []int{nostr.KindTextNote}
@@ -974,6 +984,128 @@ func TestQueryEventAttestation(t *testing.T) {
 			}))
 			require.NoError(t, err)
 			require.Equal(t, int64(2), count) // Both events should be counted, master + on behalf.
+		})
+	})
+}
+
+func TestEventDeleteWithAttestation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		masterPrivate = "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
+		masterPublic  = "e08ab1786373d6bde8ce1d790a08730536bab1b5dbc6fb603def1d6110a707f9"
+
+		user1Private = "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
+		user1Public  = "9c7e93ead06f045703bdcbbab442b158a2093b3b0e1e389cc5b0d4884849c6a9"
+
+		user2Private = "cea41ff6c6e9eb0cde6740a1fbe8c134bda650ce819e43b68bf61add2c68f8d9"
+		user2Public  = "32d45e035d10fd630bd315215370cc2c694f2eb79487bb84abc30c855503a98c"
+	)
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+	now := time.Now().Unix()
+
+	baseAttestation := model.Tags{
+		{tagAttestationName, user1Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
+		{tagAttestationName, user2Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
+	}
+	masterMessageIds := []string{}
+	user1MessageIds := []string{}
+	user2MessageIds := []string{}
+
+	counter := func() (int64, error) {
+		return db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Authors = []string{masterPublic}
+			apply.Kinds = []int{nostr.KindTextNote}
+		}))
+	}
+	mustBeZero := func(t *testing.T, id string) {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.IDs = []string{id}
+		}))
+		require.NoError(t, err)
+		require.Zero(t, count)
+	}
+
+	t.Run("AddAttestation", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.IceKindAttestation
+		ev.CreatedAt = 1
+		ev.Tags = baseAttestation
+		require.NoError(t, ev.Sign(masterPrivate))
+		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+	})
+	t.Run("AddEvents", func(t *testing.T) {
+		t.Run("Master", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(3 + n)
+				ev.Content = "hello world" + strconv.Itoa(n)
+				require.NoError(t, ev.Sign(masterPrivate))
+				masterMessageIds = append(masterMessageIds, ev.ID)
+				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+			}
+		})
+		t.Run("Master of behalf of user1", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(5 + n)
+				ev.Content = "hello world from user1 number" + strconv.Itoa(n)
+				ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPublic}}
+				require.NoError(t, ev.Sign(user1Private))
+				user1MessageIds = append(user1MessageIds, ev.ID)
+				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+			}
+			t.Logf("user 1 messages = %v", user1MessageIds)
+		})
+		t.Run("Master of behalf of user2", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(7 + n)
+				ev.Content = "hello world from user2 number" + strconv.Itoa(n)
+				ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPublic}}
+				require.NoError(t, ev.Sign(user2Private))
+				user2MessageIds = append(user2MessageIds, ev.ID)
+				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+			}
+			t.Logf("user 2 messages = %v", user2MessageIds)
+		})
+		t.Run("Count", func(t *testing.T) {
+			count, err := counter()
+			require.NoError(t, err)
+			require.Equal(t, int64(6), count)
+		})
+	})
+	t.Run("DeleteEvents", func(t *testing.T) {
+		t.Run("Master could remove events of user1", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 10
+			ev.Tags = model.Tags{{"e", user1MessageIds[0]}}
+			require.NoError(t, ev.Sign(masterPrivate))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+			mustBeZero(t, user1MessageIds[0])
+			count, err := counter()
+			require.NoError(t, err)
+			require.Equal(t, int64(5), count)
+		})
+		t.Run("User2 could remove events of user1", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 11
+			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
+			require.NoError(t, ev.Sign(user2Private))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+			mustBeZero(t, user1MessageIds[1])
+			count, err := counter()
+			require.NoError(t, err)
+			require.Equal(t, int64(4), count)
 		})
 	})
 }

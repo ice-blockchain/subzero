@@ -89,7 +89,7 @@ create index if not exists idx_event_tags_id_key_value1_value2        on event_t
 create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
 create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
 --------
-create trigger if not exists generate_event_tags
+create trigger if not exists trigger_events_after_insert_generate_tags
     after insert
     on events
     for each row
@@ -149,7 +149,7 @@ begin
 end
 ;
 --------
-create trigger if not exists generate_event_tags_after_update
+create trigger if not exists trigger_events_after_update_generate_tags
     after update
     on events
     for each row
@@ -212,7 +212,7 @@ begin
 end
 ;
 --------
-create trigger if not exists trigger_events_unwind_repost
+create trigger if not exists trigger_events_before_insert_unwind_repost
     before insert
     on events
     for each row
@@ -240,7 +240,7 @@ on conflict do nothing;
 end
 ;
 --------
-create trigger if not exists trigger_events_link_repost
+create trigger if not exists trigger_events_after_insert_link_repost
     after insert
     on events
     for each row
@@ -256,7 +256,7 @@ where
 end
 ;
 --------
-create trigger if not exists trigger_events_check_onbehalf_permission
+create trigger if not exists trigger_events_before_insert_check_onbehalf_permission
     before insert
     on events
     for each row
@@ -271,7 +271,8 @@ begin
     );
 end
 ;
-create trigger if not exists trigger_events_check_onbehalf_attestation_list_must_be_linear
+--------
+create trigger if not exists trigger_events_before_update_check_attestation_list_content
     before update
     on events
     for each row

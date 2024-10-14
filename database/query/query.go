@@ -42,6 +42,16 @@ type databaseEvent struct {
 
 type EventIterator iter.Seq2[*model.Event, error]
 
+func (db *dbClient) AcceptEvents(ctx context.Context, event ...*model.Event) (err error) {
+	for _, ev := range event {
+		if err = db.AcceptEvent(ctx, ev); err != nil {
+			break
+		}
+	}
+
+	return err
+}
+
 func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 	if event.IsEphemeral() {
 		return nil
@@ -222,22 +232,81 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 	}
 }
 
-func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) error {
+func (db *dbClient) handleError(err error) error {
+	var sqlError sqlite3.Error
+
+	if err == nil {
+		return err
+	}
+
+	if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint {
+		switch sqlError.Error() {
+		case "onbehalf permission denied":
+			err = ErrOnBehalfAccessDenied
+		case "attestation list update must be linear":
+			err = ErrAttestationUpdateRejected
+		}
+	}
+
+	return err
+}
+
+func (db *dbClient) deleteOwnEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) (int64, error) {
 	where, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
-		return errors.Wrap(err, "failed to generate events where clause")
+		return 0, errors.Wrap(err, "failed to generate events where clause")
 	}
 
 	params["owner_pub_key"] = ownerPubKey
-	rowsAffected, err := db.exec(ctx, fmt.Sprintf(`delete from events where %v AND pubkey = :owner_pub_key`, where), params)
+	rowsAffected, err := db.exec(ctx, fmt.Sprintf(`delete from events where %v AND (pubkey = :owner_pub_key OR master_pubkey = :owner_pub_key)`, where), params)
+
+	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+}
+
+func (db *dbClient) deleteRelatedEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) (int64, error) {
+	where, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
-		return errors.Wrap(err, "failed to exec delete events sql")
-	}
-	if rowsAffected == 0 {
-		return ErrUnexpectedRowsAffected
+		return 0, errors.Wrap(err, "failed to generate events where clause")
 	}
 
-	return nil
+	stmt := `
+with cte as (
+	select
+		parent.*
+	from
+		event_tags
+	left join events parent on
+		parent.id = event_tags.event_id and
+		parent.kind = 10100
+	where
+		event_tag_key = 'p' and
+		event_tag_value1 = :owner_pub_key
+)
+delete from events where ` + where + ` AND (master_pubkey = (select pubkey from cte) AND subzero_nostr_onbehalf_is_allowed(coalesce((select tags from cte), ''), :owner_pub_key, master_pubkey, kind, unixepoch()))
+`
+
+	params["owner_pub_key"] = ownerPubKey
+	rowsAffected, err := db.exec(ctx, stmt, params)
+
+	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+}
+
+func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) error {
+	ownDeleted, err := db.deleteOwnEvents(ctx, subscription, ownerPubKey)
+	if err != nil {
+		return err
+	}
+
+	relatedDeleted, err := db.deleteRelatedEvents(ctx, subscription, ownerPubKey)
+	if err != nil {
+		return err
+	}
+
+	if ownDeleted == 0 && relatedDeleted == 0 {
+		err = ErrUnexpectedRowsAffected
+	}
+
+	return err
 }
 
 func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscription) (count int64, err error) {

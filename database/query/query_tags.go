@@ -156,13 +156,18 @@ func parseAttestationTags(tags model.Tags) map[string]*onbehalfAccessEntry {
 }
 
 func onBehalfIsAllowed(tags model.Tags, onBehalfPubkey string, kind int, nowUnix int64) bool {
+	if kind == model.IceKindAttestation {
+		// Explicitly forbid attestation access for all sub-accounts.
+		return false
+	}
+
 	entries := parseAttestationTags(tags)
 	entry, ok := entries[onBehalfPubkey]
 	if !ok || entry.Reworked != nil {
 		return false
 	}
 
-	if len(entry.Kinds) > 0 && !slices.Contains(entry.Kinds, kind) {
+	if kind > 0 && len(entry.Kinds) > 0 && !slices.Contains(entry.Kinds, kind) {
 		return false
 	}
 

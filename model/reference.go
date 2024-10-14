@@ -9,25 +9,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func ParseEventReference(tags Tags) ([]EventReference, error) {
+func ParseEventReference(tags Tags) (refs []EventReference, err error) {
 	plainEvents := make([]string, 0, len(tags))
-	refs := []EventReference{}
 	for _, tag := range tags {
-		if len(tag) >= 2 && tag[0] == "e" {
-			plainEvents = append(plainEvents, tag.Value())
-		} else if len(tag) >= 2 && tag[0] == "a" {
-			val := strings.Split(tag.Value(), ":")
-			if len(val) != 3 {
-				return nil, errors.Errorf("failed to parse replaceable event reference, len != 3: %v", val)
+		switch tag.Key() {
+		case "e":
+			if v := tag.Value(); v != "" {
+				plainEvents = append(plainEvents, v)
 			}
-			kind, err := strconv.ParseInt(val[0], 10, 64)
+		case "a":
+			vals := strings.Split(tag.Value(), ":")
+			if len(vals) != 3 {
+				return nil, errors.Errorf("failed to parse replaceable event reference, len != 3: %v", tag.Value())
+			}
+
+			kind, err := strconv.ParseInt(vals[0], 10, 64)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse replaceable event reference %v", val)
+				return nil, errors.Wrapf(err, "failed to parse replaceable event kind %v", tag.Value())
 			}
+
 			refs = append(refs, &ReplaceableEventReference{
 				Kind:   int(kind),
-				PubKey: val[1],
-				DTag:   val[2],
+				PubKey: vals[1],
+				DTag:   vals[2],
 			})
 		}
 	}
