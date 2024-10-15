@@ -4,6 +4,8 @@ go 1.23.2
 
 replace filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 
+replace github.com/quic-go/quic-go v0.48.0 => github.com/quic-go/quic-go v0.47.0
+
 require (
 	github.com/cockroachdb/errors v1.11.3
 	github.com/gin-gonic/gin v1.10.0

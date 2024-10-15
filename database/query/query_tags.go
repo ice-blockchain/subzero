@@ -15,10 +15,10 @@ import (
 )
 
 type onbehalfAccessEntry struct {
-	Start    *time.Time
-	End      *time.Time
-	Reworked *time.Time
-	Kinds    []int
+	Start   *time.Time
+	End     *time.Time
+	Revoked *time.Time
+	Kinds   []int
 }
 
 const (
@@ -163,7 +163,7 @@ func onBehalfIsAllowed(tags model.Tags, onBehalfPubkey string, kind int, nowUnix
 
 	entries := parseAttestationTags(tags)
 	entry, ok := entries[onBehalfPubkey]
-	if !ok || entry.Reworked != nil {
+	if !ok || entry.Revoked != nil {
 		return false
 	}
 
