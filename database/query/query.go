@@ -42,16 +42,6 @@ type databaseEvent struct {
 
 type EventIterator iter.Seq2[*model.Event, error]
 
-func (db *dbClient) AcceptEvents(ctx context.Context, event ...*model.Event) (err error) {
-	for _, ev := range event {
-		if err = db.AcceptEvent(ctx, ev); err != nil {
-			break
-		}
-	}
-
-	return err
-}
-
 func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
 	if event.IsEphemeral() {
 		return nil
