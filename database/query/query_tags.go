@@ -138,7 +138,7 @@ func parseAttestationTags(tags model.Tags) map[string]*onbehalfAccessEntry {
 
 		if action == model.IceAttestationKindRevoked {
 			// Revoke access.
-			entry.End = &ts
+			entry.Revoked = &ts
 		} else if action == model.IceAttestationKindActive {
 			// Grant access.
 			entry.Start = &ts

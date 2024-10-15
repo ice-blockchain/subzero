@@ -32,8 +32,8 @@ func MustInit(url ...string) {
 	})
 }
 
-func AcceptEvent(ctx context.Context, events *model.Event) error {
-	return globalDB.Client.AcceptEvent(ctx, events)
+func AcceptEvent(ctx context.Context, event *model.Event) error {
+	return globalDB.Client.AcceptEvent(ctx, event)
 }
 
 func GetStoredEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
