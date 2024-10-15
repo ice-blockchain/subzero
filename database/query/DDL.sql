@@ -276,7 +276,7 @@ create trigger if not exists trigger_events_before_update_check_attestation_list
     before update
     on events
     for each row
-    when (new.kind = 10100) AND (new.master_pubkey = old.master_pubkey) AND (new.tags != old.tags)
+    when (new.kind = 10100) AND (new.tags != old.tags)
 begin
     select raise(ABORT, 'attestation list update must be linear') where not subzero_nostr_attestation_update_is_allowed(
         coalesce(old.tags, '[]'),
