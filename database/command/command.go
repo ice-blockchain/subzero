@@ -8,7 +8,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func AcceptEvent(ctx context.Context, event *model.Event) error {
+func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	//TODO impl consensus
 
 	return nil

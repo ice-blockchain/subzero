@@ -71,7 +71,7 @@ func TestIteratorScanTagsWithGaps(t *testing.T) {
 		ev.Content = "content"
 		ev.Tags = tags
 		require.NoError(t, ev.Sign(key))
-		require.NoError(t, db.AcceptEvent(context.Background(), &ev))
+		require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 	})
 	t.Run("Select", func(t *testing.T) {
 		events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {

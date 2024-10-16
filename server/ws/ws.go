@@ -21,10 +21,10 @@ import (
 
 type EventGetter func(context.Context, *model.Subscription) query.EventIterator
 
-var wsEventListener func(context.Context, *model.Event) error
+var wsEventListener func(context.Context, ...*model.Event) error
 var wsSubscriptionListener EventGetter
 
-func RegisterWSEventListener(listen func(context.Context, *model.Event) error) {
+func RegisterWSEventListener(listen func(context.Context, ...*model.Event) error) {
 	wsEventListener = listen
 }
 
@@ -32,12 +32,12 @@ func RegisterWSSubscriptionListener(listen EventGetter) {
 	wsSubscriptionListener = listen
 }
 
-func NotifySubscriptions(event *model.Event) error {
+func notifySubscriptions(event *model.Event) error {
 	if hdl == nil {
 		log.Panic("Server is not started")
 	}
 
-	return hdl.notifyListenersAboutNewEvent(event)
+	return hdl.notifyListenersAboutNewEvents(event)
 }
 
 var hdl *handler
@@ -79,27 +79,36 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
-	input := nostr.ParseMessage(msgBytes)
-	if input == nil {
-		err := errors.New("failed to parse input")
+	input, err := model.ParseMessage(msgBytes)
+	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
 
 		return
 	}
-	var err error
+
 	switch e := input.(type) {
-	case *nostr.EventEnvelope:
-		err = h.handleEvent(ctx, &model.Event{Event: e.Event}, cfg)
-		if err == nil {
-			if err = h.writeResponse(respWriter, &nostr.OKEnvelope{
-				EventID: e.ID,
+	case *model.EventEnvelope:
+		err = h.handleEvents(ctx, e.Events, cfg)
+		for i := range e.Events {
+			resp := &nostr.OKEnvelope{
+				EventID: e.Events[i].ID,
 				OK:      true,
-				Reason:  "",
-			}); err != nil {
-				log.Printf("ERROR:%v", err)
+			}
+			if err != nil {
+				log.Printf("ERROR: failed to handle event %v: %v", e.Events[i], err)
+				resp.OK = false
+				resp.Reason = err.Error()
+			}
+
+			wErr := h.writeResponse(respWriter, resp)
+			if wErr != nil {
+				log.Printf("ERROR: write event response %v: %v", i, wErr)
+
+				return
 			}
 		}
+		return
 	case *nostr.ReqEnvelope:
 		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{Filters: e.Filters}, SubscriptionID: e.SubscriptionID})
 	case *nostr.CountEnvelope:
@@ -121,17 +130,8 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
-	if err != nil {
-		if e, isEvent := input.(*nostr.EventEnvelope); isEvent {
-			err = errors.Wrapf(err, "error: failed to handle EVENT %+v", e)
-			log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &nostr.OKEnvelope{
-				EventID: e.ID,
-				OK:      false,
-				Reason:  err.Error(),
-			})).ErrorOrNil())
 
-			return
-		}
+	if err != nil {
 		err = errors.Wrapf(err, "error: failed to handle %v %+v", input.Label(), input)
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())

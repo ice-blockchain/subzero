@@ -13,7 +13,7 @@ import (
 func TestIsFilterEmpty(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, isFilterEmpty(&databaseFilter{}))
+	require.True(t, isFilterEmpty(&databaseFilterSearch{}))
 
 	f := helperNewFilter(func(apply *model.Filter) {
 		apply.IDs = []string{"123"}
@@ -302,5 +302,62 @@ func TestParseNostrFilter(t *testing.T) {
 		require.NotNil(t, f.References)
 		require.True(t, *f.References)
 		require.Equal(t, "some content here", f.Filter.Search)
+	})
+}
+
+func TestBuildLiteFilter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Simple", func(t *testing.T) {
+		filter := databaseFilterDelete{
+			Author: "author1",
+			IDs:    []string{"123", "456"},
+		}
+		stmt, param, err := newWhereBuilder().BuildForDelete(filter)
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", stmt, param)
+		require.Len(t, param, 3)
+	})
+	t.Run("Complex", func(t *testing.T) {
+		filter := databaseFilterDelete{
+			Author: "author1",
+			IDs:    []string{"123", "456"},
+			Events: []struct {
+				Kind   int
+				Author string
+				TagD   string
+			}{
+				{Kind: 13, Author: "author2", TagD: "value1"},
+			},
+		}
+		stmt, param, err := newWhereBuilder().BuildForDelete(filter)
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", stmt, param)
+		require.Len(t, param, 6)
+	})
+	t.Run("TwoSimple", func(t *testing.T) {
+		filters := []databaseFilterDelete{
+			{Author: "author1", IDs: []string{"123", "456"}},
+			{Author: "author2", IDs: []string{"789"}},
+		}
+
+		stmt, param, err := newWhereBuilder().BuildForDelete(filters...)
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", stmt, param)
+		require.Len(t, param, 5)
+	})
+	t.Run("OnlyOwner", func(t *testing.T) {
+		filter := databaseFilterDelete{
+			Author: "author1",
+		}
+
+		stmt, param, err := newWhereBuilder().BuildForDelete(filter)
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", stmt, param)
+		require.Len(t, param, 1)
+	})
+	t.Run("Empty", func(t *testing.T) {
+		_, _, err := newWhereBuilder().BuildForDelete()
+		require.ErrorIs(t, err, ErrEmptyFilter)
 	})
 }

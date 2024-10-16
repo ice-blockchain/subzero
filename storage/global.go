@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/syndtr/goleveldb/leveldb"
 	ldbstorage "github.com/syndtr/goleveldb/leveldb/storage"
@@ -45,24 +46,25 @@ func Client() StorageClient {
 	return globalClient
 }
 
-func AcceptEvent(ctx context.Context, event *model.Event) error {
-	switch event.Kind {
-	case nostr.KindFileMetadata:
-		return acceptNewBag(ctx, event)
-	case nostr.KindDeletion:
-		matchKTag := false
-		if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
-			if kTag.Value() == strconv.FormatInt(int64(nostr.KindFileMetadata), 10) {
-				matchKTag = true
+func AcceptEvents(ctx context.Context, events ...*model.Event) error {
+	var acceptErrors multierror.Error
+
+	for _, event := range events {
+		switch event.Kind {
+		case nostr.KindFileMetadata:
+			multierror.Append(&acceptErrors, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
+
+		case nostr.KindDeletion:
+			if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
+				if kTag.Value() == strconv.FormatInt(int64(nostr.KindFileMetadata), 10) {
+					multierror.Append(&acceptErrors, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
+				}
 			}
+
 		}
-		if matchKTag {
-			return acceptDeletion(ctx, event)
-		}
-		return nil
-	default:
-		return nil
 	}
+
+	return acceptErrors.ErrorOrNil()
 }
 
 func acceptDeletion(ctx context.Context, event *model.Event) error {

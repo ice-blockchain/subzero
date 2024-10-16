@@ -6,8 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"iter"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -26,7 +24,8 @@ var (
 	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
 	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
 	ErrAttestationUpdateRejected   = errors.New("attestation update rejected")
-	errEventIteratorInterrupted    = errors.New("interrupted")
+
+	errEventIteratorInterrupted = errors.New("interrupted")
 )
 
 type databaseEvent struct {
@@ -37,67 +36,79 @@ type databaseEvent struct {
 	SigAlg          string
 	KeyAlg          string
 	MasterPubKey    string
+	Dtag            string
 }
 
-type EventIterator iter.Seq2[*model.Event, error]
+type databaseBatchRequest struct {
+	// Events to store or replace.
+	InsertOrReplace []databaseEvent
 
-func (db *dbClient) AcceptEvent(ctx context.Context, event *model.Event) error {
-	if event.IsEphemeral() {
-		return nil
-	}
-	switch event.Kind {
-	case nostr.KindDeletion:
-		refs, err := model.ParseEventReference(event.Tags)
-		if err != nil {
-			return errors.Wrap(err, "failed to detect events for delete")
-		}
-		filters := model.Filters{}
-		for _, r := range refs {
-			filters = append(filters, r.Filter())
-		}
-		if err = db.DeleteEvents(ctx, &model.Subscription{Filters: filters}, event.PubKey); err != nil {
-			return errors.Wrapf(err, "failed to delete events %+v", filters)
-		}
-
-		return nil
-
-	case nostr.KindReaction:
-		if ev, err := getReactionTargetEvent(ctx, db, event); err != nil || ev == nil {
-			return errors.Wrap(ErrTargetReactionEventNotFound, "can't find target event for reaction kind")
-		}
-	}
-
-	return db.saveEvent(ctx, event)
+	// Events to delete.
+	Delete []databaseFilterDelete
 }
 
-func getReactionTargetEvent(ctx context.Context, db *dbClient, event *model.Event) (res *model.Event, err error) {
-	refs, err := model.ParseEventReference(event.Tags)
+func (req *databaseBatchRequest) Save(e *model.Event) error {
+	jtags, err := json.Marshal(e.Tags)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to detect events for delete")
+		return errors.Wrap(err, "failed to marshal tags")
 	}
-	filters := model.Filters{}
-	for _, r := range refs {
-		filters = append(filters, r.Filter())
+
+	sigAlg, keyAlg, err := parseSigKeyAlg(e)
+	if err != nil {
+		return err
 	}
-	eLastTag := event.Tags.GetLast([]string{"e"})
-	pLastTag := event.Tags.GetLast([]string{"p"})
-	aTag := event.Tags.GetFirst([]string{"a"})
-	kTag := event.Tags.GetFirst([]string{"k"})
-	for ev, evErr := range db.SelectEvents(ctx, &model.Subscription{Filters: filters}) {
-		if evErr != nil {
-			return nil, errors.Wrapf(evErr, "can't select reaction events for:%+v", ev)
-		}
-		if ev == nil || (ev.IsReplaceable() && aTag.Value() != fmt.Sprintf("%v:%v:%v", ev.Kind, ev.PubKey, ev.Tags.GetD())) {
-			continue
-		}
-		if ev.ID != eLastTag.Value() || ev.PubKey != pLastTag.Value() || (kTag != nil && kTag.Value() != fmt.Sprint(ev.Kind)) {
+
+	var dtag string
+	if v := e.GetTag("d"); v != nil {
+		dtag = v.Value()
+	}
+
+	req.InsertOrReplace = append(req.InsertOrReplace, databaseEvent{
+		Event:           *e,
+		MasterPubKey:    e.GetMasterPublicKey(),
+		SystemCreatedAt: time.Now().UnixNano(),
+		Jtags:           string(jtags),
+		SigAlg:          sigAlg,
+		KeyAlg:          keyAlg,
+		Dtag:            dtag,
+	})
+
+	return nil
+}
+
+func (req *databaseBatchRequest) Remove(e *model.Event) error {
+	f, err := parseEventAsFilterForDelete(e)
+	if err != nil {
+		return errors.Wrap(err, "failed to detect events for delete")
+	}
+
+	req.Delete = append(req.Delete, *f)
+
+	return nil
+}
+
+func (req *databaseBatchRequest) Empty() bool {
+	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0
+}
+
+func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) error {
+	var req databaseBatchRequest
+
+	for i := range events {
+		if events[i].IsEphemeral() {
 			continue
 		}
 
-		return ev, nil
+		if events[i].Kind == nostr.KindDeletion {
+			if err := req.Remove(events[i]); err != nil {
+				return err
+			}
+		} else {
+			req.Save(events[i])
+		}
 	}
 
-	return
+	return db.executeBatch(ctx, &req)
 }
 
 func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
@@ -109,11 +120,29 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 	return string(sAlg), string(kAlg), nil
 }
 
-func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
+func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
+	where, params, err := newWhereBuilder().BuildForDelete(filters...)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate events where clause")
+	}
+
+	stmt := `delete from events where ` + where
+
+	rows, err := db.exec(ctx, stmt, params)
+	if err != nil {
+		err = errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+	} else if rows == 0 {
+		err = ErrUnexpectedRowsAffected
+	}
+
+	return err
+}
+
+func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
 	const stmt = `insert into events
 	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :reference_id)
 on conflict do update set
 	id                = excluded.id,
 	kind              = excluded.kind,
@@ -131,27 +160,33 @@ on conflict do update set
 	hidden            = 0
 `
 
-	jtags, err := json.Marshal(event.Tags)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal tags")
-	}
-
-	dbEvent := databaseEvent{
-		Event:           *event,
-		MasterPubKey:    event.GetMasterPublicKey(),
-		SystemCreatedAt: time.Now().UnixNano(),
-		Jtags:           string(jtags),
-	}
-	dbEvent.SigAlg, dbEvent.KeyAlg, err = parseSigKeyAlg(event)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
+	result, err := db.NamedExecContext(ctx, stmt, events)
 	if err != nil {
 		err = errors.Wrap(db.handleError(err), "failed to exec insert event sql")
-	} else if rowsAffected == 0 {
-		err = ErrUnexpectedRowsAffected
+	} else if rows, err := result.RowsAffected(); err != nil {
+		err = errors.Wrap(err, "failed to get rows affected")
+	} else if expected := int64(len(events)); rows < expected {
+		err = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expected, rows)
+	}
+
+	return err
+}
+
+func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest) (err error) {
+	if req.Empty() {
+		return nil
+	}
+
+	if len(req.InsertOrReplace) > 0 {
+		err = errors.Join(err, errors.Wrap(db.saveEvents(ctx, req.InsertOrReplace), "failed to save events"))
+	}
+
+	if len(req.Delete) > 0 {
+		deleteErr := db.deleteEvents(ctx, req.Delete)
+		if errors.Is(deleteErr, ErrUnexpectedRowsAffected) && len(req.InsertOrReplace) > 0 {
+			deleteErr = nil
+		}
+		err = errors.Join(err, errors.Wrap(deleteErr, "failed to delete events"))
 	}
 
 	return err
@@ -222,71 +257,6 @@ func (db *dbClient) handleError(err error) error {
 		case "attestation list update must be linear":
 			err = ErrAttestationUpdateRejected
 		}
-	}
-
-	return err
-}
-
-func (db *dbClient) deleteOwnEvents(ctx context.Context, whereClause string, params map[string]any) (int64, error) {
-	stmt := `delete from events where ` + whereClause + ` AND (pubkey = :owner_pub_key)`
-	rowsAffected, err := db.exec(ctx, stmt, params)
-
-	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
-}
-
-func (db *dbClient) deleteOnBehalfEvents(ctx context.Context, whereClause string, params map[string]any) (int64, error) {
-	stmt := `
--- Fetch attestations tags, if any.
-with cte as (
-	select
-		parent.*
-	from
-		event_tags
-	left join events parent on
-		parent.id = event_tags.event_id and
-		parent.kind = :custom_ion_kind_attestation
-	where
-		event_tag_key = 'p' and
-		event_tag_value1 = :owner_pub_key
-)
-delete from events where ` + whereClause +
-		` AND (
-		     -- Must be the event owner.
-			(master_pubkey = :owner_pub_key) OR (
-				-- OR must be on behalf of the event owner.
-				(master_pubkey = (select pubkey from cte)) AND
-				-- AND the event must be pablished on behalf of someone else.
-				(pubkey != master_pubkey) AND
-				-- AND with valid on-behalf access.
-				subzero_nostr_onbehalf_is_allowed(coalesce((select tags from cte), '[]'), :owner_pub_key, master_pubkey, kind, unixepoch())
-			)
-		)`
-
-	params["custom_ion_kind_attestation"] = model.CustomIONKindAttestation
-	rowsAffected, err := db.exec(ctx, stmt, params)
-
-	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete related event sql")
-}
-
-func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) error {
-	where, params, err := generateEventsWhereClause(subscription)
-	if err != nil {
-		return errors.Wrap(err, "failed to generate events where clause")
-	}
-	params["owner_pub_key"] = ownerPubKey
-
-	ownDeleted, err := db.deleteOwnEvents(ctx, where, params)
-	if err != nil {
-		return err
-	}
-
-	relatedDeleted, err := db.deleteOnBehalfEvents(ctx, where, params)
-	if err != nil {
-		return err
-	}
-
-	if ownDeleted == 0 && relatedDeleted == 0 {
-		err = ErrUnexpectedRowsAffected
 	}
 
 	return err

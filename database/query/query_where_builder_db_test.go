@@ -209,8 +209,9 @@ func helperGenerateEvent(
 		}
 	}
 
-	err := db.saveEvent(context.Background(), &ev)
-	require.NoError(t, err)
+	var req databaseBatchRequest
+	require.NoError(t, req.Save(&ev))
+	require.NoError(t, db.executeBatch(context.Background(), &req))
 
 	return ev
 }
@@ -359,7 +360,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		event.Tags = model.Tags{{"e", "etag"}, {"p", "ptag"}, {"d", "dtag"}, {"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 
@@ -437,7 +438,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		event.Tags = model.Tags{{"e", "etag"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -446,7 +447,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		event.Tags = model.Tags{{"p", "ptag"}}
 		event.CreatedAt = 2
 
-		err = db.AcceptEvent(context.TODO(), &event)
+		err = db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 
@@ -528,7 +529,7 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Tags = model.Tags{{"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -537,7 +538,7 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Tags = model.Tags{{"imeta", "m image/png"}}
 		event.CreatedAt = 2
 
-		err = db.AcceptEvent(context.TODO(), &event)
+		err = db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("QueryNoImeta", func(t *testing.T) {
@@ -600,7 +601,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		event.Tags = model.Tags{{"q", "fooo"}, {"bar", "foo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -609,7 +610,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		event.Tags = model.Tags{{"e", "fooo"}, {"foo", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.AcceptEvent(context.TODO(), &event)
+		err = db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectQuotes", func(t *testing.T) {
@@ -695,7 +696,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -704,7 +705,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.AcceptEvent(context.TODO(), &event)
+		err = db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("All", func(t *testing.T) {
@@ -770,7 +771,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-int64(i), 10)}, {"q", "fooo"}}
 			event.CreatedAt = 1
 
-			err := db.AcceptEvent(context.TODO(), &event)
+			err := db.AcceptEvents(context.TODO(), &event)
 			require.NoError(t, err)
 		}
 	})
@@ -796,7 +797,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -805,7 +806,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.AcceptEvent(context.TODO(), &event)
+		err = db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("AliveAndE", func(t *testing.T) {
@@ -856,7 +857,7 @@ func TestSelectRepostWithReference(t *testing.T) {
 		event.Tags = model.Tags{{"e", "fooo"}, {"bar", "foo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectRepost", func(t *testing.T) {
@@ -886,7 +887,7 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 		event.CreatedAt = 2
 		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
 
-		err := db.AcceptEvent(context.TODO(), &event)
+		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectRepost", func(t *testing.T) {

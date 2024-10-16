@@ -11,7 +11,7 @@ import (
 )
 
 func sqlObehalfIsAllowed(masterJsonTags, onBehalfPubkey, masterPubkey string, kind int, nowUnix int64) (bool, error) {
-	if masterJsonTags == "" {
+	if masterJsonTags == "" || masterJsonTags == "[]" {
 		return false, nil
 	}
 

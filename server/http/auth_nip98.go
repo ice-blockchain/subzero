@@ -121,7 +121,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 	if t.ev.PubKey == t.MasterPubKey() {
 		return nil
 	}
-	attestationEventIt := query.GetStoredEvents(ctx, &model.Subscription{model.Filters{model.Filter{
+	attestationEventIt := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{model.Filter{
 		Kinds: []int{model.CustomIONKindAttestation},
 		Tags: model.TagMap{
 			"p": []string{t.PubKey()},

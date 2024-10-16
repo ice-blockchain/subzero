@@ -77,8 +77,9 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	if err != nil {
 		return nil, err
 	}
-	rt := http3RoundTripper(qconn)
-	stream, err := rt.OpenRequestStream(ctx)
+	tr := new(http3.Transport)
+	v3conn := tr.NewClientConn(qconn)
+	stream, err := v3conn.OpenRequestStream(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
 		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
-	conn := connectwsupgrader.NewHttp3Proxy(stream, rt.Connection)
+	conn := connectwsupgrader.NewHttp3Proxy(stream, v3conn)
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go func() {
 		defer c.Close()
@@ -464,20 +465,6 @@ func (h *http2WebtransportWrapper) Read(p []byte) (n int, err error) {
 func (*http2WebtransportWrapper) CancelRead(code webtransport.StreamErrorCode) {}
 func (*http2WebtransportWrapper) SetReadDeadline(time time.Time) error         { return nil }
 func (*http2WebtransportWrapper) SetDeadline(time time.Time) error             { return nil }
-
-func http3RoundTripper(qconn quic.Connection) *http3.SingleDestinationRoundTripper {
-	rt := &http3.SingleDestinationRoundTripper{
-		Connection:      qconn,
-		EnableDatagrams: true,
-		StreamHijacker: func(ft http3.FrameType, connTracingID quic.ConnectionTracingID, str quic.Stream, e error) (hijacked bool, err error) {
-			return true, nil
-		},
-		UniStreamHijacker: func(st http3.StreamType, connTracingID quic.ConnectionTracingID, str quic.ReceiveStream, err error) (hijacked bool) {
-			return true
-		},
-	}
-	return rt
-}
 
 func LocalhostTLS() *tls.Config {
 	caCertPool := x509.NewCertPool()

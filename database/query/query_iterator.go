@@ -4,12 +4,15 @@ package query
 
 import (
 	"context"
+	"iter"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/ice-blockchain/subzero/model"
 )
+
+type EventIterator iter.Seq2[*model.Event, error]
 
 type eventIterator struct {
 	fetch   func(pivot int64) (*sqlx.Rows, error)

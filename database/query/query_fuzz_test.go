@@ -10,39 +10,40 @@ import (
 	"testing"
 
 	combinations "github.com/mxschmitt/golang-combinations"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type filterElement struct {
+type structElement struct {
 	// Name of the field.
 	Name []string
 	// Full index of the field.
 	Addr []int
 }
 
-func (f *filterElement) Clone() *filterElement {
+func (f *structElement) Clone() *structElement {
 	if f == nil {
-		return &filterElement{}
+		return &structElement{}
 	}
 
-	return &filterElement{
+	return &structElement{
 		Name: append([]string{}, f.Name...),
 		Addr: append([]int{}, f.Addr...),
 	}
 }
 
-func (f *filterElement) GetName() string {
+func (f *structElement) GetName() string {
 	return strings.Join(f.Name, ".")
 }
 
-func (f *filterElement) GetAddress() []int {
+func (f *structElement) GetAddress() []int {
 	return f.Addr
 }
 
-func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *filterElement) (fields []*filterElement) {
+func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *structElement) (fields []*structElement) {
 	t.Helper()
 
 	for i := range typ.NumField() {
@@ -84,7 +85,7 @@ func helperRandomBool(t *testing.T) string {
 	return "false"
 }
 
-func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Filter {
+func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Filter {
 	t.Helper()
 
 	var f model.Filter
@@ -142,7 +143,7 @@ func helperNewFilterFromElements(t *testing.T, fields []*filterElement) model.Fi
 func TestQueryFuzzWhereGenerator(t *testing.T) {
 	t.Parallel()
 
-	var sets [][]*filterElement
+	var sets [][]*structElement
 	t.Run("PrepareSets", func(t *testing.T) {
 		var filter model.Filter
 
@@ -167,14 +168,14 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 	t.Parallel()
 
-	var sets [][]*filterElement
+	var sets [][]*structElement
 	t.Run("PrepareSets", func(t *testing.T) {
 		var filter model.Filter
 
 		fields := helperParseFilterStruct(t, reflect.TypeOf(filter), nil)
 		sets = combinations.All(fields)
 		t.Logf("found %d total combination(s)", len(sets))
-		slices.SortStableFunc(sets, func(i, j []*filterElement) int {
+		slices.SortStableFunc(sets, func(i, j []*structElement) int {
 			if len(i) < len(j) {
 				return -1
 			}
@@ -215,6 +216,88 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 			}
 			rows.Close()
 		}
+	})
+
+	t.Run("OpSummary", func(t *testing.T) {
+		keys := make([]string, 0, len(op))
+		for k := range op {
+			keys = append(keys, k)
+		}
+		slices.SortStableFunc(keys, func(i, j string) int {
+			if op[i] > op[j] {
+				return -1
+			}
+			if op[i] < op[j] {
+				return 1
+			}
+			return 0
+		})
+		t.Log("Operations Summary:")
+		for _, k := range keys {
+			t.Logf("%s: %d", k, op[k])
+		}
+	})
+}
+
+func TestQueryFuzzInsertEvents(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	op := make(map[string]int)
+
+	t.Run("Explain", func(t *testing.T) {
+		const sql = `explain query plan insert into events
+			(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
+		values
+			(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :reference_id)
+		on conflict do update set
+			id                = excluded.id,
+			kind              = excluded.kind,
+			created_at        = excluded.created_at,
+			system_created_at = excluded.system_created_at,
+			pubkey            = excluded.pubkey,
+			master_pubkey     = excluded.master_pubkey,
+			sig               = excluded.sig,
+			sig_alg           = excluded.sig_alg,
+			key_alg           = excluded.key_alg,
+			content           = excluded.content,
+			tags              = excluded.tags,
+			d_tag             = excluded.d_tag,
+			reference_id      = excluded.reference_id,
+			hidden            = 0
+		`
+		stmt, err := db.prepare(context.Background(), sql, hashSQL(sql))
+		require.NoError(t, err)
+
+		pk := generateHexString()
+		rows, err := stmt.QueryContext(context.Background(), &databaseEvent{
+			Event: model.Event{
+				Event: nostr.Event{
+					Kind:      nostr.KindTextNote,
+					ID:        generateHexString(),
+					PubKey:    pk,
+					CreatedAt: model.Timestamp(generateCreatedAt()),
+				},
+			},
+			MasterPubKey: pk,
+			Jtags:        "[]",
+		})
+		require.NoError(t, err)
+		for rows.Next() {
+			var s1, s2, s3, s4 string
+			err := rows.Scan(&s1, &s2, &s3, &s4)
+			require.NoError(t, err)
+			if strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX") {
+				t.Logf("sql: %s", sql)
+				t.Logf("------- found SCAN without INDEX -------")
+				t.Log(s1, s2, s3, s4)
+				t.FailNow()
+			}
+			op[s4]++
+		}
+		rows.Close()
 	})
 
 	t.Run("OpSummary", func(t *testing.T) {
