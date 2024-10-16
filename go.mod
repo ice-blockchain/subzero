@@ -1,8 +1,10 @@
 module github.com/ice-blockchain/subzero
 
-go 1.23.0
+go 1.23.2
 
 replace filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
+
+replace github.com/quic-go/quic-go v0.48.0 => github.com/quic-go/quic-go v0.47.0
 
 require (
 	github.com/cockroachdb/errors v1.11.3
@@ -16,8 +18,8 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.38.2
-	github.com/quic-go/quic-go v0.47.0
+	github.com/nbd-wtf/go-nostr v0.38.3
+	github.com/quic-go/quic-go v0.48.0
 	github.com/quic-go/webtransport-go v0.8.0
 	github.com/schollz/progressbar/v3 v3.16.1
 	github.com/spf13/cobra v1.8.1
@@ -38,8 +40,8 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.5 // indirect
-	github.com/getsentry/sentry-go v0.29.0 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
+	github.com/getsentry/sentry-go v0.29.1 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect

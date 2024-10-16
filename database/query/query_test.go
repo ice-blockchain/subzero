@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -42,6 +43,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestReplaceableEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
@@ -134,59 +137,54 @@ func TestReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		expectedEvents := []*model.Event{}
-		require.NoError(t, db.AcceptEvent(ctx, &model.Event{
+		ev1 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable " + uuid.NewString(),
+				ID:        "replaceable event 1 that must be replaced",
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 1,
 				Kind:      nostr.KindFollowList,
-				Tags: nostr.Tags{
-					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
-				},
-				Content: "bogus" + uuid.NewString(),
-				Sig:     "bogus" + uuid.NewString(),
+				Tags:      model.Tags{{"p", "event1", "wss://localhost:9999/"}},
 			},
-		}))
-		expectedEvents = append(expectedEvents, &model.Event{
+		}
+		require.NoError(t, db.AcceptEvent(ctx, ev1))
+
+		// Overwrite.
+		ev2 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable " + uuid.NewString(),
+				ID:        "replaceable event 2",
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 2,
 				Kind:      nostr.KindFollowList,
-				Tags: nostr.Tags{
-					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
-				},
-				Content: "bogus" + uuid.NewString(),
-				Sig:     "bogus" + uuid.NewString(),
+				Tags:      nostr.Tags{{"p", "event2", "wss://localhost:9999/"}},
 			},
-		})
-		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[0]))
-		expectedEvents = append(expectedEvents, &model.Event{
+		}
+		require.NoError(t, db.AcceptEvent(ctx, ev2))
+
+		// Add another event.
+		ev3 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable " + uuid.NewString(),
+				ID:        "replaceable event 3",
 				PubKey:    "another bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 3,
 				Kind:      nostr.KindFollowList,
-				Tags: nostr.Tags{
-					[]string{"p", uuid.NewString(), "wss://localhost:9999/"},
-				},
-				Content: "bogus" + uuid.NewString(),
-				Sig:     "bogus" + uuid.NewString(),
+				Tags:      nostr.Tags{{"p", "event3", "wss://localhost:9999/"}},
 			},
-		})
-		require.NoError(t, db.AcceptEvent(ctx, expectedEvents[1]))
+		}
+		require.NoError(t, db.AcceptEvent(ctx, ev3))
+
 		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
 			apply.Kinds = []int{nostr.KindFollowList}
 		}))
 		require.NoError(t, err)
 		require.Len(t, stored, 2)
-		require.Contains(t, stored, expectedEvents[0])
-		require.Contains(t, stored, expectedEvents[1])
+		require.Equal(t, ev3, stored[0], "event 3")
+		require.Equal(t, ev2, stored[1], "event 2")
 	})
 }
 
 func TestParametrizedReplaceableEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("param replaceable event", func(t *testing.T) {
@@ -263,6 +261,8 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 }
 
 func TestEphemeralEvents(t *testing.T) {
+	t.Parallel()
+
 	t.Run("ephemeral event", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 		defer cancel()
@@ -289,6 +289,8 @@ func TestEphemeralEvents(t *testing.T) {
 }
 
 func TestNIP09DeleteEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
@@ -411,6 +413,8 @@ func TestNIP09DeleteEvents(t *testing.T) {
 }
 
 func TestNIP25ReactionEvents(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	t.Run("reaction to non-replaceable event", func(t *testing.T) {
@@ -870,6 +874,289 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count) // Only the reposted event should be counted.
+		})
+	})
+}
+
+func TestQueryEventAttestation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		master = "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
+		active = "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
+	)
+
+	masterPk, err := nostr.GetPublicKey(master)
+	require.NoError(t, err)
+
+	activePk, err := nostr.GetPublicKey(active)
+	require.NoError(t, err)
+
+	t.Logf("master   public key: %s", masterPk)
+	t.Logf("onbehalf public key: %s", activePk)
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := time.Now().Unix()
+
+	t.Run("AddAttestation", func(t *testing.T) {
+		var ev model.Event
+
+		t.Log("add first attestation")
+		ev.Kind = model.IceKindAttestation
+		ev.CreatedAt = 1
+		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
+		require.NoError(t, ev.Sign(master))
+		t.Logf("event %+v", ev)
+		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Kinds = []int{model.IceKindAttestation}
+			apply.Authors = []string{masterPk}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+		t.Run("TryOverride", func(t *testing.T) {
+			ev.Kind = model.IceKindAttestation
+			ev.CreatedAt = 2
+			ev.Tags = model.Tags{
+				{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+			}
+			require.NoError(t, ev.Sign(master))
+			t.Logf("event %+v", ev)
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrAttestationUpdateRejected)
+		})
+
+		t.Log("add second attestation")
+		ev.Kind = model.IceKindAttestation
+		ev.CreatedAt = 3
+		ev.Tags = model.Tags{
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
+		}
+		require.NoError(t, ev.Sign(master))
+		t.Logf("event %+v", ev)
+		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Kinds = []int{model.IceKindAttestation}
+			apply.Authors = []string{masterPk}
+		}))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+	t.Run("Publish", func(t *testing.T) {
+		t.Run("AsMaster", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = 1
+			ev.Content = "hello world"
+			require.NoError(t, ev.Sign(master))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+		})
+		t.Run("OnBehalf", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = 2
+			ev.Content = "hello world from active"
+			ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPk}}
+			require.NoError(t, ev.Sign(active))
+			t.Logf("event %+v", ev)
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+		})
+		t.Run("OnBehalfOfUnknownUser", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = 3
+			ev.Content = "hello world from non-existing user"
+			ev.Tags = model.Tags{{model.IceTagOnBehalfOf, nostr.GeneratePrivateKey()}}
+			require.NoError(t, ev.Sign(active))
+			t.Logf("event %+v", ev)
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
+		})
+		t.Run("Count", func(t *testing.T) {
+			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+				apply.Kinds = []int{nostr.KindTextNote}
+				apply.Authors = []string{masterPk}
+			}))
+			require.NoError(t, err)
+			require.Equal(t, int64(2), count) // Both events should be counted, master + on behalf.
+		})
+	})
+}
+
+func TestEventDeleteWithAttestation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		masterPrivate = "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
+		masterPublic  = "e08ab1786373d6bde8ce1d790a08730536bab1b5dbc6fb603def1d6110a707f9"
+
+		user1Private = "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
+		user1Public  = "9c7e93ead06f045703bdcbbab442b158a2093b3b0e1e389cc5b0d4884849c6a9"
+
+		user2Private = "cea41ff6c6e9eb0cde6740a1fbe8c134bda650ce819e43b68bf61add2c68f8d9"
+		user2Public  = "32d45e035d10fd630bd315215370cc2c694f2eb79487bb84abc30c855503a98c"
+
+		hackerPrivate = "e8eb18e16a3bf3ad88c448551d026e586fa996a27aaeda908fe714779cda4017"
+		hackerPublic  = "48cc7f09058b32f2bfe31bee016098a2b6b302dc02724986b38d7763e849ca84"
+	)
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+	now := time.Now().Unix()
+
+	baseAttestation := model.Tags{
+		{model.TagAttestationName, user1Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
+		{model.TagAttestationName, user2Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
+	}
+	masterMessageIds := []string{}
+	user1MessageIds := []string{}
+	user2MessageIds := []string{}
+
+	counter := func(t *testing.T, kinds []int, ids, authors []string) int64 {
+		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Authors = authors
+			apply.Kinds = kinds
+			apply.IDs = ids
+		}))
+		require.NoError(t, err)
+		return count
+	}
+	mustBeZero := func(t *testing.T, id string) {
+		require.Zero(t, counter(t, nil, []string{id}, nil))
+	}
+	mustBeOne := func(t *testing.T, id string) {
+		require.Equal(t, int64(1), counter(t, nil, []string{id}, nil))
+	}
+
+	t.Run("AddAttestation", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.IceKindAttestation
+		ev.CreatedAt = 1
+		ev.Tags = baseAttestation
+		require.NoError(t, ev.Sign(masterPrivate))
+		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+	})
+	t.Run("AddEvents", func(t *testing.T) {
+		t.Run("Master", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(3 + n)
+				ev.Content = "hello world" + strconv.Itoa(n)
+				require.NoError(t, ev.Sign(masterPrivate))
+				masterMessageIds = append(masterMessageIds, ev.ID)
+				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+			}
+		})
+		t.Run("Master of behalf of user1", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(5 + n)
+				ev.Content = "hello world from user1 number" + strconv.Itoa(n)
+				ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPublic}}
+				require.NoError(t, ev.Sign(user1Private))
+				user1MessageIds = append(user1MessageIds, ev.ID)
+				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+			}
+			t.Logf("user 1 messages = %v", user1MessageIds)
+		})
+		t.Run("Master of behalf of user2", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(7 + n)
+				ev.Content = "hello world from user2 number" + strconv.Itoa(n)
+				ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPublic}}
+				require.NoError(t, ev.Sign(user2Private))
+				user2MessageIds = append(user2MessageIds, ev.ID)
+				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+			}
+			t.Logf("user 2 messages = %v", user2MessageIds)
+		})
+		t.Run("Count", func(t *testing.T) {
+			require.Equal(t, int64(6), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
+		})
+		t.Run("User2 could not add master attestation", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = model.IceKindAttestation
+			ev.CreatedAt = 11
+			ev.Tags = append(ev.Tags, baseAttestation...)
+			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
+			ev.Tags = append(ev.Tags, model.Tag{model.IceTagOnBehalfOf, masterPublic})
+			require.NoError(t, ev.Sign(user2Private))
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
+		})
+	})
+	t.Run("DeleteEvents", func(t *testing.T) {
+		t.Run("Master could remove events of user1", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 10
+			ev.Tags = model.Tags{{"e", user1MessageIds[0]}}
+			require.NoError(t, ev.Sign(masterPrivate))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+			mustBeZero(t, user1MessageIds[0])
+			require.Equal(t, int64(5), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
+		})
+		t.Run("User2 could remove events of user1", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 11
+			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
+			require.NoError(t, ev.Sign(user2Private))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+
+			mustBeZero(t, user1MessageIds[1])
+			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
+		})
+		t.Run("Hacker could not remove events of user2 nor master", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 11
+			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
+			require.NoError(t, ev.Sign(hackerPrivate))
+			require.Error(t, db.AcceptEvent(context.TODO(), &ev))
+
+			ev.Tags = model.Tags{{"e", masterMessageIds[0]}}
+			require.NoError(t, ev.Sign(hackerPrivate))
+			require.Error(t, db.AcceptEvent(context.TODO(), &ev))
+		})
+		t.Run("User1 could not remove master events", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 11
+			ev.Tags = model.Tags{{"e", masterMessageIds[1]}}
+			require.NoError(t, ev.Sign(user2Private))
+			require.Error(t, db.AcceptEvent(context.TODO(), &ev))
+			mustBeOne(t, masterMessageIds[1])
+			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
+		})
+	})
+	t.Run("Rewoke", func(t *testing.T) {
+		t.Run("Revoke attestation of user1", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = model.IceKindAttestation
+			ev.CreatedAt = 12
+			ev.Tags = append(ev.Tags, baseAttestation...)
+			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, user1Public, "", model.IceAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
+			require.NoError(t, ev.Sign(masterPrivate))
+			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
+		})
+		t.Run("User1 could not remove events of user2", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 11
+			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
+			require.NoError(t, ev.Sign(user1Private))
+			require.Error(t, db.AcceptEvent(context.TODO(), &ev))
+			mustBeOne(t, user2MessageIds[0])
 		})
 	})
 }

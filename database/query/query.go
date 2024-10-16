@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
+	"github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -24,6 +25,8 @@ const (
 var (
 	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
 	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
+	ErrOnBehalfAccessDenied        = errors.New("on-behalf access denied")
+	ErrAttestationUpdateRejected   = errors.New("attestation update rejected")
 	errEventIteratorInterrupted    = errors.New("interrupted")
 )
 
@@ -34,6 +37,7 @@ type databaseEvent struct {
 	Jtags           string
 	SigAlg          string
 	KeyAlg          string
+	MasterPubKey    string
 }
 
 type EventIterator iter.Seq2[*model.Event, error]
@@ -107,10 +111,26 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 }
 
 func (db *dbClient) saveEvent(ctx context.Context, event *model.Event) error {
-	const stmt = `insert or replace into events
-	(kind, created_at, system_created_at, id, pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
+	const stmt = `insert into events
+	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)`
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, COALESCE((select value->>1 from json_each(jsonb(:jtags)) where value->>0 = 'd' limit 1), ''), :reference_id)
+on conflict do update set
+	id                = excluded.id,
+	kind              = excluded.kind,
+	created_at        = excluded.created_at,
+	system_created_at = excluded.system_created_at,
+	pubkey            = excluded.pubkey,
+	master_pubkey     = excluded.master_pubkey,
+	sig               = excluded.sig,
+	sig_alg           = excluded.sig_alg,
+	key_alg           = excluded.key_alg,
+	content           = excluded.content,
+	tags              = excluded.tags,
+	d_tag             = excluded.d_tag,
+	reference_id      = excluded.reference_id,
+	hidden            = 0
+`
 
 	jtags, err := json.Marshal(event.Tags)
 	if err != nil {
@@ -119,6 +139,7 @@ values
 
 	dbEvent := databaseEvent{
 		Event:           *event,
+		MasterPubKey:    event.GetMasterPublicKey(),
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
 	}
@@ -129,13 +150,12 @@ values
 
 	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
 	if err != nil {
-		return errors.Wrap(err, "failed to exec insert event sql")
-	}
-	if rowsAffected == 0 {
-		return ErrUnexpectedRowsAffected
+		err = errors.Wrap(db.handleError(err), "failed to exec insert event sql")
+	} else if rowsAffected == 0 {
+		err = ErrUnexpectedRowsAffected
 	}
 
-	return nil
+	return err
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
@@ -189,22 +209,88 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 	}
 }
 
+func (db *dbClient) handleError(err error) error {
+	var sqlError sqlite3.Error
+
+	if err == nil {
+		return err
+	}
+
+	if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint {
+		switch sqlError.Error() {
+		case "onbehalf permission denied":
+			err = ErrOnBehalfAccessDenied
+		case "attestation list update must be linear":
+			err = ErrAttestationUpdateRejected
+		}
+	}
+
+	return err
+}
+
+func (db *dbClient) deleteOwnEvents(ctx context.Context, whereClause string, params map[string]any) (int64, error) {
+	stmt := `delete from events where ` + whereClause + ` AND (pubkey = :owner_pub_key)`
+	rowsAffected, err := db.exec(ctx, stmt, params)
+
+	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+}
+
+func (db *dbClient) deleteOnBehalfEvents(ctx context.Context, whereClause string, params map[string]any) (int64, error) {
+	stmt := `
+-- Fetch attestations tags, if any.
+with cte as (
+	select
+		parent.*
+	from
+		event_tags
+	left join events parent on
+		parent.id = event_tags.event_id and
+		parent.kind = :ice_kind_attestation
+	where
+		event_tag_key = 'p' and
+		event_tag_value1 = :owner_pub_key
+)
+delete from events where ` + whereClause +
+		` AND (
+		     -- Must be the event owner.
+			(master_pubkey = :owner_pub_key) OR (
+				-- OR must be on behalf of the event owner.
+				(master_pubkey = (select pubkey from cte)) AND
+				-- AND the event must be pablished on behalf of someone else.
+				(pubkey != master_pubkey) AND
+				-- AND with valid on-behalf access.
+				subzero_nostr_onbehalf_is_allowed(coalesce((select tags from cte), '[]'), :owner_pub_key, master_pubkey, kind, unixepoch())
+			)
+		)`
+
+	params["ice_kind_attestation"] = model.IceKindAttestation
+	rowsAffected, err := db.exec(ctx, stmt, params)
+
+	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete related event sql")
+}
+
 func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscription, ownerPubKey string) error {
 	where, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate events where clause")
 	}
-
 	params["owner_pub_key"] = ownerPubKey
-	rowsAffected, err := db.exec(ctx, fmt.Sprintf(`delete from events where %v AND pubkey = :owner_pub_key`, where), params)
+
+	ownDeleted, err := db.deleteOwnEvents(ctx, where, params)
 	if err != nil {
-		return errors.Wrap(err, "failed to exec delete events sql")
-	}
-	if rowsAffected == 0 {
-		return ErrUnexpectedRowsAffected
+		return err
 	}
 
-	return nil
+	relatedDeleted, err := db.deleteOnBehalfEvents(ctx, where, params)
+	if err != nil {
+		return err
+	}
+
+	if ownDeleted == 0 && relatedDeleted == 0 {
+		err = ErrUnexpectedRowsAffected
+	}
+
+	return err
 }
 
 func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscription) (count int64, err error) {
@@ -220,10 +306,7 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 		return -1, errors.Wrapf(err, "failed to prepare query sql: %q", sql)
 	}
 
-	err = stmt.GetContext(ctx, &count, params)
-	if err != nil {
-		err = errors.Wrapf(err, "failed to query events count sql: %q", sql)
-	}
+	err = errors.Wrapf(stmt.GetContext(ctx, &count, params), "failed to query events count sql: %q", sql)
 
 	return count, err
 }

@@ -27,6 +27,12 @@ const (
 	extensionReferences
 )
 
+const (
+	sqlOpCodeNONE = iota
+	sqlOpCodeAND
+	sqlOpCodeOR
+)
+
 var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 
 type (
@@ -60,9 +66,11 @@ func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
 			&whereBuilder{
 				Params: w.Params,
 			},
+			sqlOpCodeAND,
 			f.Name,
 			f.EventIds,
 			"event_id",
+			"",
 		).String()
 	})
 
@@ -97,12 +105,26 @@ func deduplicateSlice[T comparable](s []T) []T {
 	return s[:j]
 }
 
-func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T, name string) *whereBuilder {
+//go:inline
+func maybeOpCode(builder *whereBuilder, op int) {
+	switch op {
+	case sqlOpCodeAND:
+		builder.maybeAND()
+	case sqlOpCodeOR:
+		builder.maybeOR()
+	}
+}
+
+func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string, s []T, name, paramName string) *whereBuilder {
 	if len(s) == 0 {
 		return builder
 	}
 
-	builder.maybeAND()
+	if paramName == "" {
+		paramName = name
+	}
+
+	maybeOpCode(builder, op)
 	if len(s) > 1 && (name == "id" || name == "pubkey") {
 		builder.WriteRune('+')
 	}
@@ -111,7 +133,7 @@ func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T,
 	if len(s) == 1 && name != "kind" {
 		// X = :X_name.
 		builder.WriteString(" = :")
-		builder.WriteString(builder.addParam(filterID, name, s[0]))
+		builder.WriteString(builder.addParam(filterID, paramName, s[0]))
 
 		return builder
 	}
@@ -120,11 +142,11 @@ func buildFromSlice[T comparable](builder *whereBuilder, filterID string, s []T,
 	builder.WriteString(" IN (")
 	for i := range len(s) - 1 {
 		builder.WriteRune(':')
-		builder.WriteString(builder.addParam(filterID, name+strconv.Itoa(i), s[i]))
+		builder.WriteString(builder.addParam(filterID, paramName+strconv.Itoa(i), s[i]))
 		builder.WriteRune(',')
 	}
 	builder.WriteRune(':')
-	builder.WriteString(builder.addParam(filterID, name+strconv.Itoa(len(s)-1), s[len(s)-1]))
+	builder.WriteString(builder.addParam(filterID, paramName+strconv.Itoa(len(s)-1), s[len(s)-1]))
 	builder.WriteRune(')')
 
 	return builder
@@ -356,14 +378,14 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilter) error {
 	positiveExtensions, negativeExtensions := filterHasExtensions(filter)
 	w.WriteRune('(') // Begin the filter section.
 	if w.applyRepostFilter(filter, builder, &positiveExtensions, &negativeExtensions) {
-		buildFromSlice(w, builder.Name, filter.IDs, "id")
+		buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.IDs, "id", "")
 	} else {
 		if positiveExtensions > 0 {
 			w.WriteString("+id IN (")
 			w.applyFilterForExtensions(filter, builder, true)
 			w.WriteRune(')')
 		} else {
-			buildFromSlice(w, builder.Name, filter.IDs, "id")
+			buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.IDs, "id", "")
 		}
 		if negativeExtensions > 0 {
 			w.maybeAND()
@@ -372,8 +394,14 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilter) error {
 			w.WriteString("))")
 		}
 	}
-	buildFromSlice(w, builder.Name, filter.Kinds, "kind")
-	buildFromSlice(w, builder.Name, filter.Authors, "pubkey")
+	buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.Kinds, "kind", "")
+	if len(filter.Authors) > 0 {
+		w.maybeAND()
+		w.WriteRune('(')
+		buildFromSlice(w, sqlOpCodeNONE, builder.Name, filter.Authors, "pubkey", "")
+		buildFromSlice(w, sqlOpCodeOR, builder.Name, filter.Authors, "master_pubkey", "pubkey")
+		w.WriteRune(')')
+	}
 	if err := w.applyTimeRange(builder, filter.Since, filter.Until); err != nil {
 		return err
 	}

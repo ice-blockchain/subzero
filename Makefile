@@ -26,7 +26,7 @@ latestGoMinorVersion:
 
 updateGoModVersion:
 	#TODO Temporary hack to figure; remove it asap
-	go mod edit -go $(call getLatestGoMinorVersion).0
+	go mod edit -go $(call getLatestGoPatchVersion)
 
 checkModVersion: updateGoModVersion
 	@if git status --porcelain | grep -q go.mod; then \

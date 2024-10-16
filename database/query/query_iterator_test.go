@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,27 +33,21 @@ func TestIteratorSelectEvents(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
-	helperFillDatabase(t, db, 3000)
+	helperFillDatabase(t, db, 300)
 
-	t.Run("Fetch_100", func(t *testing.T) {
-		events := helperSelectEventsN(t, db, 100)
-		t.Logf("fetched %d event(s)", len(events))
-		require.Len(t, events, 100)
+	t.Run("Limit", func(t *testing.T) {
+		for _, limit := range []int{1, 10, 15, 100, 125, selectDefaultBatchLimit + 1, 200, 222, 300} {
+			t.Run(strconv.Itoa(limit), func(t *testing.T) {
+				events := helperSelectEventsN(t, db, limit)
+				t.Logf("fetched %d event(s)", len(events))
+				require.Len(t, events, limit)
+			})
+		}
 	})
-	t.Run("Fetch_1001", func(t *testing.T) {
-		events := helperSelectEventsN(t, db, 1001)
-		t.Logf("fetched %d event(s)", len(events))
-		require.Len(t, events, 1001)
-	})
-	t.Run("Fetch_2000", func(t *testing.T) {
-		events := helperSelectEventsN(t, db, 2000)
-		t.Logf("fetched %d event(s)", len(events))
-		require.Len(t, events, 2000)
-	})
-	t.Run("Fetch_All", func(t *testing.T) {
+	t.Run("All", func(t *testing.T) {
 		events := helperSelectEventsN(t, db, 0)
 		t.Logf("fetched %d event(s)", len(events))
-		require.Len(t, events, 3000)
+		require.Len(t, events, 300)
 	})
 
 	require.NoError(t, db.Close())

@@ -3,10 +3,7 @@
 package query
 
 import (
-	"encoding/json"
 	"strings"
-
-	"github.com/cockroachdb/errors"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -26,22 +23,6 @@ const (
 var tagsMarshalIndexes = map[string]int{
 	"url": 0,
 	"m":   1,
-}
-
-func eventTagsReorderJSON(jsonTags string) (string, error) {
-	var tag model.Tag
-
-	if jsonTags == "" {
-		return "[]", nil
-	}
-
-	if err := json.Unmarshal([]byte(jsonTags), &tag); err != nil {
-		return "", errors.Wrap(err, "failed to unmarshal tags")
-	}
-
-	data, err := json.Marshal(eventTagsReorder(tag))
-
-	return string(data), errors.Wrap(err, "failed to marshal tags")
 }
 
 func eventTagsReorder(tag model.Tag) model.Tag {

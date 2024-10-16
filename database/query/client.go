@@ -34,7 +34,38 @@ func init() {
 	sql.Register("sqlite3_subzero",
 		&sqlite3.SQLiteDriver{
 			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-				return conn.RegisterFunc("subzero_nostr_tags_reorder", eventTagsReorderJSON, true)
+				funcTable := []struct {
+					// Function name to use in SQL.
+					Name string
+					// Pointer to the function.
+					Ptr any
+					// Pure flag.
+					Pure bool
+				}{
+					{
+						Name: "subzero_nostr_tag_reorder",
+						Ptr:  sqlEventTagReorderJSON,
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_onbehalf_is_allowed",
+						Ptr:  sqlObehalfIsAllowed,
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_attestation_update_is_allowed",
+						Ptr:  sqlAttestationUpdateIsAllowed,
+						Pure: true,
+					},
+				}
+
+				for idx := range funcTable {
+					if err := conn.RegisterFunc(funcTable[idx].Name, funcTable[idx].Ptr, funcTable[idx].Pure); err != nil {
+						return errors.Wrapf(err, "failed to register func %q", funcTable[idx].Name)
+					}
+				}
+
+				return nil
 			},
 		})
 }
@@ -58,6 +89,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "sig_alg"
 		case "keyalg":
 			out = "key_alg"
+		case "masterpubkey":
+			out = "master_pubkey"
 		default:
 			out = n
 		}
