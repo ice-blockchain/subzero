@@ -31,9 +31,9 @@ import (
 	connectwsupgrader "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
 )
 
-func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
+func NewWebTransportClientHttp3(ctx context.Context, url, crt string) (Client, error) {
 	d := webtransport.Dialer{}
-	d.TLSClientConfig = LocalhostTLS()
+	d.TLSClientConfig = LocalhostTLS(crt)
 	_, conn, err := d.Dial(ctx, url, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to establish webtransport conn to %v", url)
@@ -52,7 +52,7 @@ func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error)
 	return c, nil
 }
 
-func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error) {
+func NewWebsocketClientHttp3(ctx context.Context, urlStr, crt string) (Client, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 		URL:    u,
 	}
 	req = req.WithContext(ctx)
-	tlsconf := LocalhostTLS()
+	tlsconf := LocalhostTLS(crt)
 	tlsconf.NextProtos = []string{http3.NextProtoH3}
 	qconn, err := quic.DialAddrEarly(ctx, u.Host, tlsconf, &quic.Config{
 		EnableDatagrams:      true,
@@ -102,7 +102,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	return c, nil
 }
 
-func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error) {
+func NewWebsocketClientHttp2(ctx context.Context, urlStr, crt string) (Client, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 		Body:   bodyr,
 	}
 	req = req.WithContext(ctx)
-	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS()}
+	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS(crt)}
 	client := h2ec.Client{Transport: rt}
 	rsp, err := client.Do(req)
 	if err != nil {
@@ -137,7 +137,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 
 	return c, nil
 }
-func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, error) {
+func NewWebtransportClientHttp2(ctx context.Context, urlStr, crt string) (Client, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 		Body:   bodyr,
 	}
 	req = req.WithContext(ctx)
-	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS()}
+	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS(crt)}
 	client := h2ec.Client{Transport: rt}
 	rsp, err := client.Transport.RoundTrip(req)
 	if err != nil {
@@ -177,9 +177,9 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 	return c, nil
 }
 
-func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
-	dialer := ws.Dialer{TLSConfig: LocalhostTLS()}
-	dialer.TLSConfig = LocalhostTLS()
+func NewWebsocketClient(ctx context.Context, url, crt string) (Client, error) {
+	dialer := ws.Dialer{TLSConfig: LocalhostTLS(crt)}
+	dialer.TLSConfig = LocalhostTLS(crt)
 	conn, _, _, err := dialer.Dial(ctx, url)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to establish websocket conn to %v", url)
@@ -190,9 +190,9 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 	return c, nil
 }
 
-func NewRelayClient(ctx context.Context, url string) (*nostr.Relay, error) {
+func NewRelayClient(ctx context.Context, url string, cfg *tls.Config) (*nostr.Relay, error) {
 	relay := nostr.NewRelay(ctx, url)
-	err := relay.ConnectWithTLS(ctx, LocalhostTLS())
+	err := relay.ConnectWithTLS(ctx, cfg)
 	return relay, err
 }
 
@@ -479,9 +479,9 @@ func http3RoundTripper(qconn quic.Connection) *http3.SingleDestinationRoundTripp
 	return rt
 }
 
-func LocalhostTLS() *tls.Config {
+func LocalhostTLS(crt string) *tls.Config {
 	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM([]byte(localhostCrt)); !ok {
+	if ok := caCertPool.AppendCertsFromPEM([]byte(crt)); !ok {
 		log.Panic(errors.New("failed to append localhost tls to cert pool"))
 	}
 

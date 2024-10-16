@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"strings"
 
@@ -167,4 +168,17 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 		pubkey = bTag.Value()
 	}
 	return pubkey
+}
+
+func (e *Event) Strinfify() (string, error) {
+	val, err := json.Marshal(e)
+	if err != nil {
+		errors.Wrapf(err, "can't stringify event: %v", e)
+	}
+
+	return string(val), nil
+}
+
+func (e *Event) IsJobRequest() bool {
+	return e.Kind >= 5000 && e.Kind < 6000
 }

@@ -21,10 +21,13 @@ import (
 )
 
 var (
-	//go:embed .testdata/localhost.crt
-	localhostCrt string
-	//go:embed .testdata/localhost.key
-	localhostKey string
+	//go:embed .testdata/localhost1.crt
+	LocalhostCrt1 string
+	//go:embed .testdata/localhost1.key
+	LocalhostKey1 string
+
+	//go:embed .testdata/localhost2.crt
+	LocalhostCrt2 string
 )
 
 type (

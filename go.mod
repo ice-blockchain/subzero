@@ -9,6 +9,7 @@ replace (
 )
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.15.0
@@ -17,6 +18,7 @@ require (
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
+	github.com/gookit/goutil v0.6.17
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
@@ -37,6 +39,7 @@ require (
 	github.com/xssnick/tonutils-storage v0.6.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.30.0
+	golang.org/x/sync v0.8.0
 	pgregory.net/rand v1.0.2
 )
 
@@ -123,6 +126,7 @@ require (
 	golang.org/x/image v0.21.0 // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/term v0.25.0 // indirect
 	golang.org/x/text v0.19.0 // indirect

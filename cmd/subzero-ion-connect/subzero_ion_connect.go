@@ -5,14 +5,20 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
 	"log"
 	"net"
+	"os"
 
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
+	dvm "github.com/ice-blockchain/subzero/dmv"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -45,6 +51,9 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
+			pubKey, privKey := extractCertificatePublicKey()
+			dataVendingMachine = dvm.NewDvms(context.Background(), minLeadingZeroBits, pubKey, privKey)
+
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				CertPath:                cert,
 				KeyPath:                 key,
@@ -90,6 +99,7 @@ var (
 			log.Print(err)
 		}
 	}
+	dataVendingMachine dvm.DvmServiceProvider
 )
 
 func init() {
@@ -104,6 +114,10 @@ func init() {
 		if sErr := storage.AcceptEvent(ctx, event); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 event")
 		}
+		if err := dataVendingMachine.AcceptJob(ctx, event); err != nil {
+			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", event)
+		}
+
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)
@@ -113,4 +127,27 @@ func main() {
 	if err := subzero.Execute(); err != nil {
 		log.Panic(err)
 	}
+}
+
+func extractCertificatePublicKey() (pubKey string, privKey string) {
+	pkFileData, err := os.ReadFile(key)
+	if err != nil {
+		panic("can't load pk: " + err.Error())
+	}
+	pem, _ := pem.Decode(pkFileData)
+	priv, err := x509.ParsePKCS8PrivateKey(pem.Bytes)
+	if err != nil {
+		panic("can't parse pk: " + err.Error())
+	}
+	privKeyBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		panic("can't encode privkey: " + err.Error())
+	}
+	privKeyHex := hex.EncodeToString(privKeyBytes)
+
+	_, pk := btcec.PrivKeyFromBytes(privKeyBytes)
+	pkBytes := pk.SerializeCompressed()
+	pubKeyHex := hex.EncodeToString(pkBytes[1:])
+
+	return pubKeyHex, privKeyHex
 }
