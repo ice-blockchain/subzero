@@ -21,7 +21,7 @@ func sqlObehalfIsAllowed(masterJsonTags, onBehalfPubkey, masterPubkey string, ki
 		return false, errors.Wrapf(err, "%v: failed to unmarshal tags", masterPubkey)
 	}
 
-	return onBehalfIsAllowed(tags, onBehalfPubkey, kind, nowUnix), nil
+	return model.OnBehalfIsAccessAllowed(tags, onBehalfPubkey, kind, nowUnix)
 }
 
 func sqlEventTagReorderJSON(jsonTag string) (string, error) {
@@ -50,5 +50,5 @@ func sqlAttestationUpdateIsAllowed(oldTagsJSON, newTagsJSON string) (bool, error
 		return false, errors.Wrap(err, "failed to unmarshal new tags")
 	}
 
-	return attestationUpdateIsAllowed(oldTags, newTags), nil
+	return model.AttestationUpdateIsAllowed(oldTags, newTags), nil
 }

@@ -906,7 +906,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		t.Log("add first attestation")
 		ev.Kind = model.IceKindAttestation
 		ev.CreatedAt = 1
-		ev.Tags = model.Tags{{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
+		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
@@ -921,7 +921,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = model.IceKindAttestation
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{
-				{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+				{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
 			}
 			require.NoError(t, ev.Sign(master))
 			t.Logf("event %+v", ev)
@@ -932,10 +932,10 @@ func TestQueryEventAttestation(t *testing.T) {
 		ev.Kind = model.IceKindAttestation
 		ev.CreatedAt = 3
 		ev.Tags = model.Tags{
-			{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
-			{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
-			{tagAttestationName, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
-			{tagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
+			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
 		}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)
@@ -1010,8 +1010,8 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 	now := time.Now().Unix()
 
 	baseAttestation := model.Tags{
-		{tagAttestationName, user1Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
-		{tagAttestationName, user2Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
+		{model.TagAttestationName, user1Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
+		{model.TagAttestationName, user2Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
 	}
 	masterMessageIds := []string{}
 	user1MessageIds := []string{}
@@ -1087,7 +1087,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = model.IceKindAttestation
 			ev.CreatedAt = 11
 			ev.Tags = append(ev.Tags, baseAttestation...)
-			ev.Tags = append(ev.Tags, model.Tag{tagAttestationName, hackerPublic, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
+			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
 			ev.Tags = append(ev.Tags, model.Tag{model.IceTagOnBehalfOf, masterPublic})
 			require.NoError(t, ev.Sign(user2Private))
 			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
@@ -1145,7 +1145,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = model.IceKindAttestation
 			ev.CreatedAt = 12
 			ev.Tags = append(ev.Tags, baseAttestation...)
-			ev.Tags = append(ev.Tags, model.Tag{tagAttestationName, user1Public, "", model.IceAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
+			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, user1Public, "", model.IceAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
 			require.NoError(t, ev.Sign(masterPrivate))
 			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
 		})

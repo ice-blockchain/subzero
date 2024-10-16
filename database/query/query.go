@@ -139,17 +139,13 @@ on conflict do update set
 
 	dbEvent := databaseEvent{
 		Event:           *event,
-		MasterPubKey:    event.PubKey,
+		MasterPubKey:    event.GetMasterPublicKey(),
 		SystemCreatedAt: time.Now().UnixNano(),
 		Jtags:           string(jtags),
 	}
 	dbEvent.SigAlg, dbEvent.KeyAlg, err = parseSigKeyAlg(event)
 	if err != nil {
 		return err
-	}
-
-	if bTag := event.GetTag(model.IceTagOnBehalfOf); bTag != nil && bTag.Value() != "" {
-		dbEvent.MasterPubKey = bTag.Value()
 	}
 
 	rowsAffected, err := db.exec(ctx, stmt, dbEvent)
@@ -239,7 +235,7 @@ func (db *dbClient) deleteOwnEvents(ctx context.Context, whereClause string, par
 	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
 }
 
-func (db *dbClient) deleteRelatedEvents(ctx context.Context, whereClause string, params map[string]any) (int64, error) {
+func (db *dbClient) deleteOnBehalfEvents(ctx context.Context, whereClause string, params map[string]any) (int64, error) {
 	stmt := `
 -- Fetch attestations tags, if any.
 with cte as (
@@ -285,7 +281,7 @@ func (db *dbClient) DeleteEvents(ctx context.Context, subscription *model.Subscr
 		return err
 	}
 
-	relatedDeleted, err := db.deleteRelatedEvents(ctx, where, params)
+	relatedDeleted, err := db.deleteOnBehalfEvents(ctx, where, params)
 	if err != nil {
 		return err
 	}

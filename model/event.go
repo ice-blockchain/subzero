@@ -160,3 +160,11 @@ func (e *Event) GetTag(tagName string) Tag {
 
 	return nil
 }
+
+func (e *Event) GetMasterPublicKey() (pubkey string) {
+	pubkey = e.PubKey
+	if bTag := e.GetTag(IceTagOnBehalfOf); bTag != nil {
+		pubkey = bTag.Value()
+	}
+	return pubkey
+}
