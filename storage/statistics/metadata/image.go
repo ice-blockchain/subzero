@@ -3,10 +3,10 @@
 package metadata
 
 import (
+	"github.com/cockroachdb/errors"
 	"path/filepath"
 
 	"github.com/davidbyttow/govips/v2/vips"
-	"github.com/gookit/goutil/errorx"
 )
 
 type imageMetaExtractor struct{}
@@ -25,7 +25,7 @@ func (i *imageMetaExtractor) Extract(filePath, _ string, size uint64) (*Metadata
 	ext := filepath.Ext(filePath)
 	im, err := vips.LoadImageFromFile(filePath, nil)
 	if err != nil {
-		return nil, errorx.Withf(err, "failed to load image %v", filePath)
+		return nil, errors.Wrapf(err, "failed to load image %v", filePath)
 	}
 	defer im.Close()
 	return &Metadata{

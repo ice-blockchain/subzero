@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"log"
 	"net"
 
@@ -65,9 +64,9 @@ var (
 		subzero.Flags().StringVar(&storageRootDir, "storage-root", "./.uploads", "root storage directory")
 		subzero.Flags().StringVar(&globalConfigUrl, "global-config-url", storage.DefaultConfigUrl, "global config for ION storage")
 		subzero.Flags().BytesHexVar(&adnlNodeKey, "adnl-node-key", func() []byte {
-			_, nodeKey, err := ed25519.GenerateKey(rand.Reader)
+			_, nodeKey, err := ed25519.GenerateKey(nil)
 			if err != nil {
-				log.Panic(errorx.Wrapf(err, "failed to generate node key"))
+				log.Panic(errors.Wrapf(err, "failed to generate node key"))
 			}
 			return nodeKey
 		}(), "adnl node key in hex")
@@ -102,7 +101,9 @@ func init() {
 		if err := query.AcceptEvent(ctx, event); err != nil {
 			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", event)
 		}
-
+		if sErr := storage.AcceptEvent(ctx, event); sErr != nil {
+			return errors.Wrapf(sErr, "failed to process NIP-94 event")
+		}
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)

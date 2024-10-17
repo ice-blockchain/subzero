@@ -3,10 +3,10 @@
 package metadata
 
 import (
+	"github.com/cockroachdb/errors"
 	"io"
 	"strings"
 
-	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -43,12 +43,12 @@ func (e *extractor) Close() error {
 	var mErr *multierror.Error
 	for k, ex := range e.extractorsByFileType {
 		if clErr := ex.Close(); clErr != nil {
-			mErr = multierror.Append(mErr, errorx.Withf(clErr, "failed to close %v meta extractor", k))
+			mErr = multierror.Append(mErr, errors.Wrapf(clErr, "failed to close %v meta extractor", k))
 		}
 
 	}
 	if err := e.generic.Close(); err != nil {
-		mErr = multierror.Append(mErr, errorx.Withf(err, "failed to close generic meta extractor"))
+		mErr = multierror.Append(mErr, errors.Wrapf(err, "failed to close generic meta extractor"))
 	}
 	return mErr.ErrorOrNil()
 }

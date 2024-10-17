@@ -6,13 +6,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
+	"github.com/cockroachdb/errors"
 	"io"
 	"os"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/gookit/goutil/errorx"
 )
 
 func WaitForFile(ctx context.Context, watchPath, expectedPath, expectedHash string, expectedSize int64) (hash string, err error) {
@@ -26,18 +25,18 @@ func WaitForFile(ctx context.Context, watchPath, expectedPath, expectedHash stri
 	}
 	if !skipWatch {
 		if err = watchFile(ctx, watchPath, expectedPath, expectedSize); err != nil {
-			return "", errorx.Withf(err, "failed to monitor file %v", expectedPath)
+			return "", errors.Wrapf(err, "failed to monitor file %v", expectedPath)
 		}
 	}
 	f, err := os.Open(expectedPath)
 	if err != nil {
-		return "", errorx.Withf(err, "failed to open %v to check hash", expectedPath)
+		return "", errors.Wrapf(err, "failed to open %v to check hash", expectedPath)
 	}
 	defer f.Close()
 	hashCalc := sha256.New()
 	var n int64
 	if n, err = io.Copy(hashCalc, f); err != nil {
-		return "", errorx.Withf(err, "failed to calc hash of %v", expectedPath)
+		return "", errors.Wrapf(err, "failed to calc hash of %v", expectedPath)
 	}
 	if n != expectedSize {
 		return WaitForFile(ctx, watchPath, expectedPath, expectedHash, expectedSize)
@@ -52,12 +51,12 @@ func WaitForFile(ctx context.Context, watchPath, expectedPath, expectedHash stri
 func watchFile(ctx context.Context, monitorPath, expectedPath string, expectedSize int64) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return errorx.Withf(err, "failed to create fsnotify watcher %s", expectedPath)
+		return errors.Wrapf(err, "failed to create fsnotify watcher %s", expectedPath)
 	}
 	defer watcher.Close()
 	err = watcher.Add(monitorPath)
 	if err != nil {
-		return errorx.Withf(err, "failed to monitor expectedPath %s", expectedPath)
+		return errors.Wrapf(err, "failed to monitor expectedPath %s", expectedPath)
 	}
 loop:
 	for {
@@ -66,7 +65,7 @@ loop:
 			if event.Op == fsnotify.Write && event.Name == expectedPath {
 				fileInfo, err := os.Stat(expectedPath)
 				if err != nil {
-					return errorx.Withf(err, "failed to stat file %s", expectedPath)
+					return errors.Wrapf(err, "failed to stat file %s", expectedPath)
 				}
 				if fileInfo.Size() == expectedSize {
 					break loop
@@ -78,13 +77,13 @@ loop:
 				if errors.Is(err, os.ErrNotExist) {
 					continue loop
 				}
-				return errorx.Withf(err, "failed to stat file %s", expectedPath)
+				return errors.Wrapf(err, "failed to stat file %s", expectedPath)
 			}
 			if fileInfo.Size() == expectedSize {
 				break loop
 			}
 		case err = <-watcher.Errors:
-			return errorx.Withf(err, "got error from fsnotify")
+			return errors.Wrapf(err, "got error from fsnotify")
 		case <-ctx.Done():
 			return errors.New("timeout")
 		}

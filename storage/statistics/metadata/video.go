@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gookit/goutil/errorx"
+	"github.com/cockroachdb/errors"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
@@ -92,11 +92,11 @@ func (v *videoMetaExtractor) Close() error {
 func (v *videoMetaExtractor) Extract(filePath, _ string, size uint64) (*Metadata, error) {
 	res, err := ffmpeg.Probe(filePath)
 	if err != nil {
-		return nil, errorx.Withf(err, "failed to fetch video metadata from %s", filePath)
+		return nil, errors.Wrapf(err, "failed to fetch video metadata from %s", filePath)
 	}
 	var md VideoMetadata
 	if err = json.Unmarshal([]byte(res), &md); err != nil {
-		return nil, errorx.Withf(err, "failed to unmarshal video metadata from %s", filePath)
+		return nil, errors.Wrapf(err, "failed to unmarshal video metadata from %s", filePath)
 	}
 	ext := filepath.Ext(filePath)
 	return &Metadata{
@@ -110,13 +110,13 @@ func newVideoExtractor() Extractor {
 	res, err := ffmpeg.Probe("")
 	if err != nil || !strings.Contains(res, "You have to specify one input file") {
 		if err == nil {
-			err = errorx.New(res)
+			err = errors.New(res)
 		}
 		if strings.Contains(err.Error(), "ffprobe version ") {
 			err = nil
 		}
 		if err != nil {
-			log.Panic(errorx.Withf(err, "failed to call ffprobe, is ffmpeg installed?"))
+			log.Panic(errors.Wrapf(err, "failed to call ffprobe, is ffmpeg installed?"))
 		}
 	}
 	return &videoMetaExtractor{}

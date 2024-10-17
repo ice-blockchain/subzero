@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
-	"github.com/gookit/goutil/errorx"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip94"
@@ -304,11 +304,11 @@ func initStorage(ctx context.Context, path string) {
 	http.DefaultClient.Transport = http.DefaultTransport
 	_, nodeKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		log.Panic(errorx.Wrapf(err, "failed to generate node key"))
+		log.Panic(errors.Wrapf(err, "failed to generate node key"))
 	}
 	storagePort, err := rand.Int(rand.Reader, big.NewInt(63500))
 	if err != nil {
-		log.Panic(errorx.Wrapf(err, "failed to generate port number"))
+		log.Panic(errors.Wrapf(err, "failed to generate port number"))
 	}
 	wd, _ := os.Getwd()
 	rootStorage := filepath.Join(wd, path)

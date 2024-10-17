@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,8 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
-	"github.com/gookit/goutil/errorx"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr/nip94"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -88,7 +87,7 @@ func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 		hData = []byte("{}")
 	}
 	if err := json.Unmarshal(hData, &desc); err != nil {
-		return nil, errorx.With(err, "failed to unmarshal bag header data")
+		return nil, errors.Wrap(err, "failed to unmarshal bag header data")
 	}
 	return &desc, nil
 }
@@ -96,12 +95,12 @@ func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 func (c *client) detectFile(bag *storage.Torrent, fileHash string) (string, error) {
 	metadata, err := c.fileMeta(bag)
 	if err != nil {
-		return "", errorx.Withf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
+		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
 	}
 	name := metadata.FileHash[fileHash]
 	f, err := bag.GetFileOffsets(name)
 	if err != nil {
-		return "", errorx.Withf(err, "failed to locate file %v in bag %v", name, hex.EncodeToString(bag.BagID))
+		return "", errors.Wrapf(err, "failed to locate file %v in bag %v", name, hex.EncodeToString(bag.BagID))
 	}
 	return f.Name, nil
 }
@@ -112,7 +111,7 @@ func (c *client) bagByUser(userPubKey string) (*storage.Torrent, error) {
 	copy(k[3:], userPubKey)
 	bagID, err := c.db.Get(k, nil)
 	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
-		return nil, errorx.With(err, "failed to read userID:bag mapping")
+		return nil, errors.Wrap(err, "failed to read userID:bag mapping")
 	}
 	tr := c.progressStorage.GetTorrent(bagID)
 
@@ -124,7 +123,7 @@ func (c *client) bootstrapForBag(bagID []byte) (string, error) {
 	copy(k[3:], bagID)
 	bs, err := c.db.Get(k, nil)
 	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
-		return "", errorx.Withf(err, "failed to read stored bootstrap node for %v =, will wait for DHT discovery", hex.EncodeToString(bagID))
+		return "", errors.Wrapf(err, "failed to read stored bootstrap node for %v =, will wait for DHT discovery", hex.EncodeToString(bagID))
 	}
 	return string(bs), nil
 }
@@ -137,11 +136,11 @@ func (c *client) BuildUserPath(userPubKey string, contentType string) (userStora
 func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32, res []*FileMetadata, err error) {
 	bag, err := c.bagByUser(userPubKey)
 	if err != nil {
-		return 0, nil, errorx.Withf(err, "failed to get bagID for the user %v", userPubKey)
+		return 0, nil, errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
 	}
 	metadata, err := c.fileMeta(bag)
 	if err != nil {
-		return 0, nil, errorx.Withf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
+		return 0, nil, errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
 	}
 	startOffset := page * limit
 	if startOffset >= bag.Header.FilesCount {
@@ -154,11 +153,11 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 	res = make([]*FileMetadata, 0, limit)
 	bs, err := c.buildBootstrapNodeInfo(bag)
 	if err != nil {
-		return 0, nil, errorx.Withf(err, "failed to build bootstap for bag %v", hex.EncodeToString(bag.BagID))
+		return 0, nil, errors.Wrapf(err, "failed to build bootstap for bag %v", hex.EncodeToString(bag.BagID))
 	}
 	files, err := bag.ListFiles()
 	if err != nil {
-		return 0, nil, errorx.Withf(err, "failed to parse bag info for files %v", hex.EncodeToString(bag.BagID))
+		return 0, nil, errors.Wrapf(err, "failed to parse bag info for files %v", hex.EncodeToString(bag.BagID))
 	}
 	for i, f := range files[startOffset:endOffset] {
 		idx := page*limit + uint32(i)
@@ -188,16 +187,16 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 func (c *client) Delete(userPubKey, fileHash string) error {
 	bag, err := c.bagByUser(userPubKey)
 	if err != nil {
-		return errorx.Withf(err, "failed to get bagID for the user %v", userPubKey)
+		return errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
 	}
 	file, err := c.detectFile(bag, fileHash)
 	if err != nil {
-		return errorx.Withf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
+		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
 	userPath, _ := c.BuildUserPath(userPubKey, "")
 	err = os.Remove(filepath.Join(userPath, file))
 	if err != nil {
-		return errorx.Withf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
+		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
 	}
 	return nil
 }
@@ -207,13 +206,13 @@ func (c *client) Close() error {
 	c.server.Stop()
 	c.dht.Close()
 	if gClose := c.gateway.Close(); gClose != nil {
-		err = multierror.Append(err, errorx.Withf(gClose, "failed to stop gateway"))
+		err = multierror.Append(err, errors.Wrapf(gClose, "failed to stop gateway"))
 	}
 	if sClose := c.stats.Close(); sClose != nil {
-		err = multierror.Append(err, errorx.Withf(sClose, "failed to close stats file"))
+		err = multierror.Append(err, errors.Wrapf(sClose, "failed to close stats file"))
 	}
 	if dErr := c.db.Close(); dErr != nil {
-		err = multierror.Append(err, errorx.Withf(dErr, "failed to close db"))
+		err = multierror.Append(err, errors.Wrapf(dErr, "failed to close db"))
 	}
 	close(c.downloadQueue)
 	return err.ErrorOrNil()

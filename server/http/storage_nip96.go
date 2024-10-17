@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,10 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/storage"
@@ -97,13 +96,13 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errorx.With(authErr, "endpoint authentification failed"))
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
 		var upload fileUpload
 		if err := gCtx.ShouldBindWith(&upload, binding.FormMultipart); err != nil {
-			log.Printf("ERROR: failed to bind multipart form: %v", errorx.With(err, "failed to bind multipart form"))
+			log.Printf("ERROR: failed to bind multipart form: %v", errors.Wrap(err, "failed to bind multipart form"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid multipart data"))
 			return
 		}
@@ -127,39 +126,39 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		uploadingFilePath := filepath.Join(storagePath, fileType, upload.File.Filename)
 		relativePath := filepath.Join(fileType, upload.File.Filename)
 		if err := os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
-			log.Printf("ERROR: %v", errorx.With(err, "failed to open temp file while processing upload"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open temp file while processing upload"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
 			return
 		}
 		fileUploadTo, err := os.Create(uploadingFilePath)
 		if err != nil {
-			log.Printf("ERROR: %v", errorx.With(err, "failed to open temp file while processing upload"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open temp file while processing upload"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
 			return
 		}
 		defer fileUploadTo.Close()
 		mpFile, err := upload.File.Open()
 		if err != nil {
-			log.Printf("ERROR: %v", errorx.With(err, "failed to open upload file"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open upload file"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open upload file"))
 			return
 		}
 		defer mpFile.Close()
 		hashCalc := sha256.New()
 		if _, err = io.Copy(fileUploadTo, io.TeeReader(mpFile, hashCalc)); err != nil {
-			log.Printf("ERROR: %v", errorx.With(err, "failed to copy temp file while processing upload"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to copy temp file while processing upload"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
 			return
 		}
 		if err = fileUploadTo.Sync(); err != nil {
-			log.Printf("ERROR: %v", errorx.With(err, "failed to copy temp file while processing upload"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to copy temp file while processing upload"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
 			return
 		}
 		hash := hashCalc.Sum(nil)
 		hashHex := hex.EncodeToString(hash)
 		if hashHex != token.ExpectedHash() {
-			log.Printf("ERROR: endpoint authentification failed: %v", errorx.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash()))
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash()))
 			gCtx.JSON(http.StatusForbidden, uploadErr("Unauthorized"))
 			os.Remove(uploadingFilePath)
 			return
@@ -173,7 +172,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		})
 
 		if err != nil {
-			log.Printf("ERROR: failed to upload file: %v", errorx.With(err, "failed to upload file to ion storage"))
+			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
 			return
 		}
@@ -208,7 +207,7 @@ func (s *storageHandler) Download() gin.HandlerFunc {
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errorx.With(authErr, "endpoint authentification failed"))
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
@@ -223,7 +222,7 @@ func (s *storageHandler) Download() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: %v", errorx.With(err, "failed to build download url"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
 			return
 		}
@@ -235,7 +234,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errorx.With(authErr, "endpoint authentification failed"))
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
@@ -245,7 +244,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.Delete(token.PubKey(), file); err != nil {
-			log.Printf("ERROR: %v", errorx.With(err, "failed to delete file"))
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to delete file"))
 			if errors.Is(err, storage.ErrNotFound) {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
@@ -262,7 +261,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errorx.With(authErr, "endpoint authentification failed"))
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
@@ -271,7 +270,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 			Count uint32 `form:"count"`
 		}
 		if err := gCtx.ShouldBindWith(&params, binding.Query); err != nil {
-			log.Printf("ERROR: failed to bind data : %v", errorx.With(err, "failed to bind data"))
+			log.Printf("ERROR: failed to bind data : %v", errors.Wrap(err, "failed to bind data"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data"))
 			return
 		}
@@ -280,7 +279,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		}
 		total, filesList, err := s.storageClient.ListFiles(token.PubKey(), params.Page, params.Count)
 		if err != nil {
-			log.Printf("ERROR: %v", errorx.Withf(err, "failed to list files for user %v", token.PubKey()))
+			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.PubKey()))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
 			return
 		}

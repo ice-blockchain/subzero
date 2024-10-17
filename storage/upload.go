@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
-	"github.com/gookit/goutil/errorx"
 	"github.com/xssnick/tonutils-go/adnl"
 	"github.com/xssnick/tonutils-go/adnl/dht"
 	"github.com/xssnick/tonutils-go/adnl/overlay"
@@ -25,13 +25,13 @@ import (
 func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
 	existingBagForUser, err := c.bagByUser(userPubkey)
 	if err != nil {
-		return "", "", false, errorx.Withf(err, "failed to find existing bag for user %s", userPubkey)
+		return "", "", false, errors.Wrapf(err, "failed to find existing bag for user %s", userPubkey)
 	}
 	var existingHD headerData
 	if existingBagForUser != nil {
 		if len(existingBagForUser.Header.Data) > 0 {
 			if err = json.Unmarshal(existingBagForUser.Header.Data, &existingHD); err != nil {
-				return "", "", false, errorx.Withf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
+				return "", "", false, errors.Wrapf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
 	}
@@ -41,7 +41,7 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 			url, err = c.DownloadUrl(userPubkey, hash)
 			if err != nil {
 				return "", "", false,
-					errorx.Withf(err, "failed to build download url for already existing file %v/%v(%v)", userPubkey, relativePathToFileForUrl, hash)
+					errors.Wrapf(err, "failed to build download url for already existing file %v/%v(%v)", userPubkey, relativePathToFileForUrl, hash)
 			}
 			return hex.EncodeToString(existingBagForUser.BagID), url, existed, nil
 		}
@@ -51,13 +51,13 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 	var bag *storage.Torrent
 	bag, bs, err = c.upload(ctx, userPubkey, relativePathToFileForUrl, hash, newFile, &existingHD)
 	if err != nil {
-		return "", "", false, errorx.Withf(err, "failed to start upload of %v", relativePathToFileForUrl)
+		return "", "", false, errors.Wrapf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
 	bagID = hex.EncodeToString(bag.BagID)
 	if newFile != nil {
 		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
 		if err != nil {
-			return "", "", false, errorx.Withf(err, "failed to get just created file from new bag")
+			return "", "", false, errors.Wrapf(err, "failed to get just created file from new bag")
 		}
 		fullFilePath := filepath.Join(c.rootStoragePath, userPubkey, relativePathToFileForUrl)
 		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
@@ -65,7 +65,7 @@ func (c *client) StartUpload(ctx context.Context, userPubkey, relativePathToFile
 
 	url, err = c.buildUrl(bagID, relativePathToFileForUrl, bs)
 	if err != nil {
-		return "", "", false, errorx.Withf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
+		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
 	return bagID, url, existed, err
 }
@@ -82,7 +82,7 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 	rootUserPath, _ := c.BuildUserPath(user, "")
 	refs, err := c.progressStorage.GetAllFilesRefsInDir(rootUserPath)
 	if err != nil {
-		return nil, nil, errorx.With(err, "failed to detect shareable files")
+		return nil, nil, errors.Wrap(err, "failed to detect shareable files")
 	}
 	headerMD := &headerData{
 		User:         user,
@@ -111,7 +111,7 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 	var headerMDSerialized []byte
 	headerMDSerialized, err = json.Marshal(headerMD)
 	if err != nil {
-		return nil, nil, errorx.With(err, "failed to put file hashes")
+		return nil, nil, errors.Wrap(err, "failed to put file hashes")
 	}
 	header := &storage.TorrentHeader{
 		DirNameSize:   uint32(len(user)),
@@ -127,20 +127,20 @@ func (c *client) upload(ctx context.Context, user, relativePath, hash string, fi
 		}
 	}, false)
 	if err != nil {
-		return nil, nil, errorx.With(err, "failed to initialize bag")
+		return nil, nil, errors.Wrap(err, "failed to initialize bag")
 	}
 	err = tr.Start(true, false, false)
 	if err != nil {
-		return nil, nil, errorx.With(err, "failed to start bag upload")
+		return nil, nil, errors.Wrap(err, "failed to start bag upload")
 	}
 	wg.Wait()
 	err = c.saveUploadTorrent(tr, user)
 	if err != nil {
-		return nil, nil, errorx.With(err, "failed to save updated bag")
+		return nil, nil, errors.Wrap(err, "failed to save updated bag")
 	}
 	bootstrapNode, err := c.buildBootstrapNodeInfo(tr)
 	if err != nil {
-		return nil, nil, errorx.With(err, "failed to build bootstrap node info")
+		return nil, nil, errors.Wrap(err, "failed to build bootstrap node info")
 	}
 	return tr, []*Bootstrap{bootstrapNode}, nil
 }
@@ -149,7 +149,7 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 	key := c.server.GetADNLPrivateKey()
 	overlayNode, err := overlay.NewNode(tr.BagID, key)
 	if err != nil {
-		return nil, errorx.With(err, "failed to build overlay node")
+		return nil, errors.Wrap(err, "failed to build overlay node")
 	}
 	addr := c.gateway.GetAddressList()
 
@@ -162,7 +162,7 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 
 	toVerify, err := tl.Serialize(dNode, true)
 	if err != nil {
-		return nil, errorx.Withf(err, "failed to sign dht bootstrap, serialize failure")
+		return nil, errors.Wrapf(err, "failed to sign dht bootstrap, serialize failure")
 	}
 	dNode.Signature = ed25519.Sign(key, toVerify)
 
@@ -175,7 +175,7 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 func (c *client) buildUrl(bagID, relativePath string, bs []*Bootstrap) (string, error) {
 	b, err := json.Marshal(bs)
 	if err != nil {
-		return "", errorx.Withf(err, "failed to marshal %#v", bs)
+		return "", errors.Wrapf(err, "failed to marshal %#v", bs)
 	}
 	bootstrap := base64.StdEncoding.EncodeToString(b)
 	url := fmt.Sprintf("http://%v.bag/%v?bootstrap=%v", bagID, relativePath, bootstrap)
@@ -185,7 +185,7 @@ func (c *client) buildUrl(bagID, relativePath string, bs []*Bootstrap) (string, 
 
 func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string) error {
 	if err := c.saveTorrent(tr, &userPubKey, nil); err != nil {
-		return errorx.With(err, "failed to save upload torrent into storage")
+		return errors.Wrap(err, "failed to save upload torrent into storage")
 	}
 	c.newFilesMx.Lock()
 	for k := range c.newFiles[userPubKey] {
