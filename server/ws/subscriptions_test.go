@@ -4,6 +4,7 @@ package ws
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"sync"
@@ -97,7 +98,7 @@ func TestRelaySubscription(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	if err != nil {
 		panic(err)
 	}
@@ -272,7 +273,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Limit: 1,
 	}}
 	for connIdx := 0; connIdx < connsCount; connIdx++ {
-		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 		if err != nil {
 			log.Panic(err)
 		}
@@ -385,7 +386,7 @@ func TestPublishingEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -510,7 +511,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validEventNIP09WithEKTags, validEventNIP09AllTags *model.Event
@@ -602,7 +603,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -681,7 +682,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validKind06NIP18Event *model.Event
@@ -841,7 +842,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
@@ -915,25 +916,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
-
-	t.Run("kind 30023 (Article) (NIP-23): unsupported content type:JSON", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
-		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
-		tags = append(tags, nostr.Tag{"t", "placeholder"})
-		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
-		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
-		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindArticle,
-			Tags:      tags,
-			Content:   `{"id":"qwerty"}`,
-		}}
-		invalidEvent.SetExtra("extra", uuid.NewString())
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
 	require.NoError(t, relay.Close())
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -954,7 +936,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validEventNIP01, validEventNIP24 *model.Event
@@ -1060,7 +1042,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validUpvoteEvent, validReactionToWebsiteEvent, validUpvoteEmptyContentEvent, validDownvoteEvent *model.Event
@@ -1191,7 +1173,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validLabelingEvent, validUGCLabelingEvent *model.Event
@@ -1353,7 +1335,7 @@ func TestPublishingNIP56(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validReportEventWithPTagOnly *model.Event
@@ -1491,7 +1473,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent *model.Event
@@ -1676,7 +1658,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validRelayListEvent *model.Event
@@ -1763,7 +1745,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	var validEvents []*model.Event
@@ -2577,7 +2559,7 @@ func TestCountEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
 	require.NoError(t, err)
 
 	t.Run("SaveEvent", func(t *testing.T) {
@@ -2608,4 +2590,175 @@ func helperSignWithMinLeadingZeroBits(t *testing.T, event *model.Event, privkey 
 	require.NoError(t, event.Sign(privkey))
 	require.NoError(t, event.GenerateNIP13(context.Background(), NIP13MinLeadingZeroBits))
 	require.NoError(t, event.Sign(privkey))
+}
+
+func TestPublishingNIP92IMetaTag(t *testing.T) {
+	privkey := nostr.GeneratePrivateKey()
+	storedEvents := []*model.Event{}
+	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
+		for _, sEvent := range storedEvents {
+			if sEvent.ID == event.ID {
+				return model.ErrDuplicate
+			}
+		}
+		assert.False(t, event.IsEphemeral())
+		storedEvents = append(storedEvents, event)
+		return nil
+	})
+	pubsubServers[0].Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
+	require.NoError(t, err)
+
+	var validEvents []*model.Event
+	t.Run("kind 1 (text note), imeta (NIP-92): valid imeta tag", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024x4032",
+			"alt A scenic photo overlooking the coast of Costa Rica",
+			fmt.Sprintf("x %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+		validEvents = append(validEvents, ev)
+	})
+	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta key", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024x4032",
+			"alt A scenic photo overlooking the coast of Costa Rica",
+			fmt.Sprintf("x %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			"dummy dummy",
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta tag: not enough tag values", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta tag: no spaces", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+			"url",
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta tag: wrong m tag value", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024",
+			"alt A scenic photo overlooking the coast of Costa Rica",
+			fmt.Sprintf("x %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta tag: x not a hash", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024x4032",
+			"alt A scenic photo overlooking the coast of Costa Rica",
+			"x a",
+			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta tag: ox not a hash", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024x4032",
+			"alt A scenic photo overlooking the coast of Costa Rica",
+			"ox a",
+			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+		})
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      tags,
+			Content:   "dummy",
+		}}
+		ev.SetExtra("extra", uuid.NewString())
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	require.NoError(t, relay.Close())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServers[0].ReaderExited.Load() != uint64(1) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[0].ReaderExited.Load(), 1))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(1), pubsubServers[0].ReaderExited.Load())
+	require.Equal(t, validEvents, storedEvents)
 }

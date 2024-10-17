@@ -3,12 +3,13 @@
 package model
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gookit/goutil/errorx"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -85,7 +86,7 @@ var (
 
 	KindSupportedTags = map[Kind][]string{
 		nostr.KindProfileMetadata:       {"e", "p", "a", "alt"},
-		nostr.KindTextNote:              {"e", "p", "q", "l", "L"},
+		nostr.KindTextNote:              {"e", "p", "q", "l", "L", "imeta"},
 		nostr.KindFollowList:            {"p"},
 		nostr.KindDeletion:              {"a", "e", "k"},
 		nostr.KindRepost:                {"e", "p"},
@@ -119,8 +120,8 @@ var (
 		nostr.KindRelayListMetadata:     {"r"},
 		nostr.KindProfileBadges:         {"d", "a", "e"},
 		nostr.KindBadgeDefinition:       {"d", "name", "image", "description", "thumb"},
-		nostr.KindArticle:               {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
-		nostr.KindDraftArticle:          {"a", "d", "e", "t", "title", "image", "summary", "published_at"},
+		nostr.KindArticle:               {"a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"},
+		nostr.KindDraftArticle:          {"a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"},
 
 		// --- Jobs
 		KindJobTextExtraction:            {"i", "output", "param", "bid", "relays", "p"},
@@ -143,6 +144,7 @@ var (
 		KindJobNostrEventPublishSchedule: {"i", "output", "param", "bid", "relays", "p", "encrypted"},
 		nostr.KindJobFeedback:            {"status", "amount", "e", "p"},
 	}
+	SupportedIMetaKeys = []string{"url", "m", "x", "ox", "size", "dim", "magnet", "i", "blurhash", "thumb", "image", "summary", "alt", "fallback"}
 
 	JobFeedbackStatusValues = map[string]struct{}{
 		JobFeedbackStatusPaymentRequired: {},
@@ -199,19 +201,19 @@ func (e *Event) Validate() error {
 	case nostr.KindCommunityList:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindCommunityDefinition) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case nostr.KindInterestList:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindInterestSets) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case nostr.KindEmojiList:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindEmojiSets) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case nostr.KindBookmarkSets:
@@ -229,7 +231,7 @@ func (e *Event) Validate() error {
 	case nostr.KindCuratedVideoSets:
 		for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 			if aTag != nil && (aTag.Value() == "" || len(strings.Split(aTag.Value(), ":")) != 3) || strings.Split(aTag.Value(), ":")[0] != fmt.Sprint(nostr.KindVideoEvent) {
-				return errorx.Withf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
+				return errors.Wrapf(ErrWrongEventParams, "nip-51, wrong a tag value: %+v", e)
 			}
 		}
 	case nostr.KindReporting:
@@ -283,8 +285,11 @@ func (e *Event) Validate() error {
 	case nostr.KindBadgeDefinition:
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle:
-		if e.Content == "" || json.Valid([]byte(e.Content)) {
+		if e.Content == "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
+		}
+		if err := validateIMetaTag(e.Tags); err != nil {
+			return errors.Wrapf(ErrWrongEventParams, "nip-92: %w", err)
 		}
 	default:
 		if e.Kind >= 6000 && e.Kind <= 6999 {
@@ -548,6 +553,9 @@ func validateKindTextNoteEvent(e *Event) error {
 			}
 		}
 	}
+	if err := validateIMetaTag(e.Tags); err != nil {
+		return errors.Wrapf(err, "wrong imeta tag: %+v", e)
+	}
 
 	return nil
 }
@@ -640,6 +648,71 @@ func validateKindFeedbackJob(e *Event) error {
 	}
 
 	return nil
+}
+
+func validateIMetaTag(tags nostr.Tags) error {
+	if tags == nil {
+		return nil
+	}
+	var iMetaTagCount int
+	for _, tag := range tags {
+		if tag.Key() != "imeta" {
+			continue
+		}
+		iMetaTagCount++
+		if len(tag) < 3 {
+			return errors.Wrapf(ErrWrongEventParams, "imeta tag should have at least 2 values: %+v", tag)
+		}
+		for ix, val := range tag {
+			if ix == 0 {
+				continue
+			}
+			parts := strings.Split(val, " ")
+			if len(parts) < 2 {
+				return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+			}
+			var (
+				key            = parts[0]
+				val            = parts[1]
+				isKeySupported = false
+			)
+			for _, supportedIMetaKey := range SupportedIMetaKeys {
+				if key == supportedIMetaKey {
+					isKeySupported = true
+
+					break
+				}
+			}
+			if !isKeySupported {
+				return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+			}
+			if key == "url" && !strings.HasPrefix(val, "http") {
+				return errors.Wrapf(ErrWrongEventParams, "wrong url value in imeta tag: %+v", tag)
+			} else if key == "m" && !IsLower(val) {
+				return errors.Wrapf(ErrWrongEventParams, "wrong m value in imeta tag: %+v", tag)
+			} else if key == "x" || key == "ox" {
+				if _, err := hex.DecodeString(val); err != nil {
+					return errors.Wrapf(ErrWrongEventParams, "wrong x value in imeta tag: %+v, should be hex", tag)
+				}
+			} else if key == "dim" && len(strings.Split(val, "x")) != 2 {
+				return errors.Wrapf(ErrWrongEventParams, "wrong dim value in imeta tag: %+v", tag)
+			}
+		}
+	}
+	if iMetaTagCount > 1 {
+		return errors.Wrapf(ErrWrongEventParams, "wrong count of imeta tag: %+v", tags)
+	}
+
+	return nil
+}
+
+func IsLower(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLower(r) && unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func areTagsSupported(e *Event) bool {
