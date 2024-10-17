@@ -97,7 +97,7 @@ func TestRelaySubscription(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	if err != nil {
 		panic(err)
 	}
@@ -272,7 +272,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Limit: 1,
 	}}
 	for connIdx := 0; connIdx < connsCount; connIdx++ {
-		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+		relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 		if err != nil {
 			log.Panic(err)
 		}
@@ -385,7 +385,7 @@ func TestPublishingEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -510,7 +510,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validEventNIP09WithEKTags, validEventNIP09AllTags *model.Event
@@ -602,7 +602,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -681,7 +681,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validKind06NIP18Event *model.Event
@@ -841,7 +841,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
@@ -954,7 +954,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validEventNIP01, validEventNIP24 *model.Event
@@ -1060,7 +1060,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validUpvoteEvent, validReactionToWebsiteEvent, validUpvoteEmptyContentEvent, validDownvoteEvent *model.Event
@@ -1191,7 +1191,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validLabelingEvent, validUGCLabelingEvent *model.Event
@@ -1353,7 +1353,7 @@ func TestPublishingNIP56(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validReportEventWithPTagOnly *model.Event
@@ -1491,7 +1491,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent *model.Event
@@ -1676,7 +1676,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validRelayListEvent *model.Event
@@ -1763,7 +1763,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	var validEvents []*model.Event
@@ -2577,7 +2577,7 @@ func TestCountEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 
 	t.Run("SaveEvent", func(t *testing.T) {

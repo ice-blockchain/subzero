@@ -27,10 +27,8 @@ const (
 	connCountTCP            = 100
 	connCountUDP            = 100
 	testDeadline            = 15 * stdlibtime.Second
-	certPath1               = "%v/fixture/.testdata/localhost1.crt"
-	keyPath1                = "%v/fixture/.testdata/localhost1.key"
-	certPath2               = "%v/fixture/.testdata/localhost2.crt"
-	keyPath2                = "%v/fixture/.testdata/localhost2.key"
+	certPath                = "%v/fixture/.testdata/localhost.crt"
+	keyPath                 = "%v/fixture/.testdata/localhost.key"
 	NIP13MinLeadingZeroBits = 5
 )
 
@@ -47,26 +45,24 @@ func TestMain(m *testing.M) {
 
 	}
 	wd, _ := os.Getwd()
-	certFilePath1 := fmt.Sprintf(certPath1, wd)
-	keyFilePath1 := fmt.Sprintf(keyPath1, wd)
+	certFilePath := fmt.Sprintf(certPath, wd)
+	keyFilePath := fmt.Sprintf(keyPath, wd)
 	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath: certFilePath1,
-		KeyPath:  keyFilePath1,
+		CertPath: certFilePath,
+		KeyPath:  keyFilePath,
 		Port:     9999,
 	}, echoFunc, nil, map[string]gin.HandlerFunc{})
 	hdl = new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath:                certFilePath1,
-		KeyPath:                 keyFilePath1,
+		CertPath:                certFilePath,
+		KeyPath:                 keyFilePath,
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
 	hdl2 := new(handler)
-	certFilePath2 := fmt.Sprintf(certPath2, wd)
-	keyFilePath2 := fmt.Sprintf(keyPath2, wd)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath:                certFilePath2,
-		KeyPath:                 keyFilePath2,
+		CertPath:                certFilePath,
+		KeyPath:                 keyFilePath,
 		Port:                    9997,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))
@@ -79,30 +75,30 @@ func TestSimpleEchoDifferentTransports(t *testing.T) {
 	}
 	t.Run("webtransport http 3", func(t *testing.T) {
 		testEcho(t, connCountUDP, func(ctx context.Context) (fixture.Client, error) {
-			return fixture.NewWebTransportClientHttp3(ctx, "https://localhost:9999/", fixture.LocalhostCrt1)
+			return fixture.NewWebTransportClientHttp3(ctx, "https://localhost:9999/", fixture.LocalhostCrt)
 		})
 	})
 	t.Run("websocket http 3", func(t *testing.T) {
 		testEcho(t, connCountUDP, func(ctx context.Context) (fixture.Client, error) {
-			return fixture.NewWebsocketClientHttp3(ctx, "https://localhost:9999/", fixture.LocalhostCrt1)
+			return fixture.NewWebsocketClientHttp3(ctx, "https://localhost:9999/", fixture.LocalhostCrt)
 		})
 	})
 
 	t.Run("webtransport http 2", func(t *testing.T) {
 		testEcho(t, connCountTCP, func(ctx context.Context) (fixture.Client, error) {
-			return fixture.NewWebtransportClientHttp2(ctx, "https://localhost:9999/", fixture.LocalhostCrt1)
+			return fixture.NewWebtransportClientHttp2(ctx, "https://localhost:9999/", fixture.LocalhostCrt)
 		})
 	})
 
 	t.Run("websocket http 2", func(t *testing.T) {
 		testEcho(t, connCountTCP, func(ctx context.Context) (fixture.Client, error) {
-			return fixture.NewWebsocketClientHttp2(ctx, "https://localhost:9999/", fixture.LocalhostCrt1)
+			return fixture.NewWebsocketClientHttp2(ctx, "https://localhost:9999/", fixture.LocalhostCrt)
 		})
 	})
 
 	t.Run("websocket http 1.1", func(t *testing.T) {
 		testEcho(t, connCountTCP, func(ctx context.Context) (fixture.Client, error) {
-			return fixture.NewWebsocketClient(ctx, "wss://localhost:9999/", fixture.LocalhostCrt1)
+			return fixture.NewWebsocketClient(ctx, "wss://localhost:9999/", fixture.LocalhostCrt)
 		})
 	})
 }
