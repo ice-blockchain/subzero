@@ -18,9 +18,9 @@ func ListenAndServe(ctx context.Context, cancel context.CancelFunc, config *wsse
 	wsserver.New(config, &router{}).ListenAndServe(ctx, cancel)
 }
 
-func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
+func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router, cfg *Config) {
 	uploader := httpserver.NewUploadHandler(ctx)
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler())).
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: cfg.NIP13MinLeadingZeroBits}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).

@@ -36,6 +36,11 @@ func TestParseListOfFilters(t *testing.T) {
 			content:     `[{"#e":["7b0d90f1973da1cea186c85fbd09b3e4e455ce4d438b60a3d1f9aabc1681418f"],"#kinds":["7"]},{"#e":["7b0d90f1973da1cea186c85fbd09b3e4e455ce4d438b60a3d1f9aabc1681418f"],"#kinds":["10"]}]`,
 			expectedErr: nil,
 		},
+		{
+			name:        "another tag filter",
+			content:     `[{"#title":["dummy"],"#kinds":["30021"]}]`,
+			expectedErr: nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -512,7 +517,7 @@ func TestIsBidAmountEnough(t *testing.T) {
 	t.Parallel()
 
 	t.Run("required amount is 0", func(t *testing.T) {
-		n := newNostrEventCountJob(nil, "", "", 0)
+		n := newNostrEventCountJob(nil, "", true)
 		tests := []struct {
 			amount   string
 			expected bool

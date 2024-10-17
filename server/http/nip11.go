@@ -12,11 +12,18 @@ import (
 )
 
 type (
-	nip11handler struct{}
+	Config struct {
+		MinLeadingZeroBits int
+	}
+	nip11handler struct {
+		cfg *Config
+	}
 )
 
-func NewNIP11Handler() http.Handler {
-	return &nip11handler{}
+func NewNIP11Handler(cfg *Config) http.Handler {
+	return &nip11handler{
+		cfg: cfg,
+	}
 }
 
 func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
@@ -42,5 +49,8 @@ func (n *nip11handler) info() nip11.RelayInformationDocument {
 		Contact:       "~",
 		SupportedNIPs: []int{1, 2, 9, 10, 11, 13, 18, 23, 24, 25, 32, 40, 45, 50, 51, 56, 58, 65, 90, 92, 96, 98},
 		Software:      "subzero",
+		Limitation: &nip11.RelayLimitationDocument{
+			MinPowDifficulty: n.cfg.MinLeadingZeroBits,
+		},
 	}
 }

@@ -44,7 +44,7 @@ NIPs | latest commit hash implemented | comments
 [58](https://github.com/nostr-protocol/nips/blob/master/58.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
 [65](https://github.com/nostr-protocol/nips/blob/master/65.md) | |
 [90](https://github.com/nostr-protocol/nips/blob/master/90.md) | [e655247](https://github.com/nostr-protocol/nips/commit/e6552476aa2e5ca7256be572a9aa226ec8a022ee) |
-[92](https://github.com/nostr-protocol/nips/blob/master/92.md) | |
+[92](https://github.com/nostr-protocol/nips/blob/master/92.md) | [84236ac](https://github.com/nostr-protocol/nips/commit/84236acdd9fa84206beb27a4c7353a191393bf41) |
 [94](https://github.com/nostr-protocol/nips/blob/master/94.md) | |
 [96](https://github.com/nostr-protocol/nips/blob/master/96.md) | [4e73e94d417f16fa3451e58ef921cb3b512c6f8e](https://github.com/ice-blockchain/subzero/commit/130bac5adedf6563fe8d8e869f7e46b4cfb414e0)|
 [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | [ae0fd96907d0767f07fb54ca1de9f197c600cb27](https://github.com/ice-blockchain/subzero/commit/130bac5adedf6563fe8d8e869f7e46b4cfb414e0)|

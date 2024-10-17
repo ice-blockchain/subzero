@@ -21,7 +21,7 @@ type (
 		ListenAndServe(ctx context.Context, cancel context.CancelFunc)
 	}
 	RegisterRoutes interface {
-		RegisterRoutes(ctx context.Context, router Router)
+		RegisterRoutes(ctx context.Context, router Router, cfg *config.Config)
 	}
 
 	WSHandler = adapters.WSHandler
