@@ -18,7 +18,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
-	dvm "github.com/ice-blockchain/subzero/dmv"
+	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -52,7 +52,7 @@ var (
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
 			pubKey, privKey := extractCertificatePublicKey()
-			dataVendingMachine = dvm.NewDvms(context.Background(), minLeadingZeroBits, pubKey, privKey)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, pubKey, privKey)
 
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				CertPath:                cert,

@@ -49,8 +49,7 @@ var (
 	jobTimeoutDeadline = 1 * time.Minute
 )
 
-func NewDvms(ctx context.Context, minLeadingZeroBits int, pubKey, privKey string) DvmServiceProvider {
-
+func NewDvms(minLeadingZeroBits int, pubKey, privKey string) DvmServiceProvider {
 	return &dvm{
 		serviceProviderPubkey:  pubKey,
 		serviceProviderPrivKey: privKey,

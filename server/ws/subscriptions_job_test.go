@@ -27,7 +27,7 @@ func TestJob(t *testing.T) {
 	storedEvents := []*model.Event{}
 	customerPubKey := hex.EncodeToString([]byte("customer pubkey"))
 	customerPrivKey := hex.EncodeToString([]byte("customer privkey"))
-	dataVendingMachine := dvm.NewDvms(context.Background(), NIP13MinLeadingZeroBits, customerPubKey, customerPrivKey)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, customerPubKey, customerPrivKey)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -51,7 +51,7 @@ func TestJob(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -67,7 +67,7 @@ func TestJob(t *testing.T) {
 		jobEvents            []*model.Event
 	)
 
-	relayToSearchResult, err := fixture.NewRelayClient(ctx, "wss://localhost:9997", fixture.LocalhostTLS(fixture.LocalhostCrt2))
+	relayToSearchResult, err := fixture.NewRelayClient(ctx, "wss://localhost:9997", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 	t.Run("send reaction 1 with pubkey", func(t *testing.T) {
 		ev := &model.Event{
@@ -81,7 +81,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -115,7 +114,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -132,7 +130,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -150,7 +147,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -169,7 +165,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -187,7 +182,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -205,7 +199,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -259,7 +252,7 @@ func TestJobDeletion(t *testing.T) {
 	storedEvents := []*model.Event{}
 	customerPubKey := hex.EncodeToString([]byte("customer pubkey"))
 	customerPrivKey := hex.EncodeToString([]byte("customer privkey"))
-	dataVendingMachine := dvm.NewDvms(context.Background(), NIP13MinLeadingZeroBits, customerPubKey, customerPrivKey)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, customerPubKey, customerPrivKey)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -283,7 +276,7 @@ func TestJobDeletion(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -296,7 +289,7 @@ func TestJobDeletion(t *testing.T) {
 		expectedEvents       []*model.Event
 	)
 
-	relayToSearchResult, err := fixture.NewRelayClient(ctx, "wss://localhost:9997", fixture.LocalhostTLS(fixture.LocalhostCrt2))
+	relayToSearchResult, err := fixture.NewRelayClient(ctx, "wss://localhost:9997", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 	t.Run("send reaction 1 with pubkey", func(t *testing.T) {
 		ev := &model.Event{
@@ -327,7 +320,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -345,7 +337,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		jobEvent.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, jobEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, jobEvent.Event))
 		expectedEvents = append(expectedEvents, jobEvent)
@@ -362,7 +353,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -403,7 +393,7 @@ func TestErrorFeedback(t *testing.T) {
 	storedEvents := []*model.Event{}
 	customerPubKey := hex.EncodeToString([]byte("customer pubkey"))
 	customerPrivKey := hex.EncodeToString([]byte("customer privkey"))
-	dataVendingMachine := dvm.NewDvms(context.Background(), NIP13MinLeadingZeroBits, customerPubKey, customerPrivKey)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, customerPubKey, customerPrivKey)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -427,7 +417,7 @@ func TestErrorFeedback(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt1))
+	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -443,7 +433,7 @@ func TestErrorFeedback(t *testing.T) {
 		jobEvents            []*model.Event
 	)
 
-	relayToSearchResult, err := fixture.NewRelayClient(ctx, "wss://localhost:9997", fixture.LocalhostTLS(fixture.LocalhostCrt2))
+	relayToSearchResult, err := fixture.NewRelayClient(ctx, "wss://localhost:9997", fixture.LocalhostTLS(fixture.LocalhostCrt))
 	require.NoError(t, err)
 	t.Run("send reaction 1 with pubkey", func(t *testing.T) {
 		ev := &model.Event{
@@ -457,7 +447,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -474,7 +463,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -491,7 +479,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
