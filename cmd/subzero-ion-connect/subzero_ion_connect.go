@@ -12,7 +12,6 @@ import (
 	"net"
 	"os"
 
-	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
@@ -51,8 +50,7 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
-			pubKey, privKey := extractCertificatePublicKey()
-			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, pubKey, privKey)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, extractCertificatePrivKey(), false)
 
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				CertPath:                cert,
@@ -129,7 +127,7 @@ func main() {
 	}
 }
 
-func extractCertificatePublicKey() (pubKey string, privKey string) {
+func extractCertificatePrivKey() string {
 	pkFileData, err := os.ReadFile(key)
 	if err != nil {
 		panic("can't load pk: " + err.Error())
@@ -145,9 +143,5 @@ func extractCertificatePublicKey() (pubKey string, privKey string) {
 	}
 	privKeyHex := hex.EncodeToString(privKeyBytes)
 
-	_, pk := btcec.PrivKeyFromBytes(privKeyBytes)
-	pkBytes := pk.SerializeCompressed()
-	pubKeyHex := hex.EncodeToString(pkBytes[1:])
-
-	return pubKeyHex, privKeyHex
+	return privKeyHex
 }

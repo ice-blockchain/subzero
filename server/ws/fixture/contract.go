@@ -22,9 +22,9 @@ import (
 
 var (
 	//go:embed .testdata/localhost.crt
-	LocalhostCrt string
+	localhostCrt string
 	//go:embed .testdata/localhost.key
-	LocalhostKey string
+	localhostKey string
 )
 
 type (

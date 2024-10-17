@@ -36,12 +36,12 @@ func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	return s
 }
 
-func (s *Srv) setupRouter(ctx context.Context) {
-	s.routesSetup.RegisterRoutes(ctx, s.router)
+func (s *Srv) setupRouter(ctx context.Context, cfg *config.Config) {
+	s.routesSetup.RegisterRoutes(ctx, s.router, cfg)
 }
 
 func (s *Srv) ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
-	s.setupRouter(ctx)
+	s.setupRouter(ctx, s.cfg)
 	ctx = withServer(ctx, s)
 	go s.startServer(ctx, s.H3Server)
 	go s.startServer(ctx, s.H2Server)

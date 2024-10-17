@@ -7,7 +7,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"log"
 	"strings"
 
@@ -33,6 +32,9 @@ const (
 )
 
 func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
+	if (e.Kind >= 6000 && e.Kind < 7000) || e.Kind == nostr.KindJobFeedback {
+		return nil
+	}
 	if minLeadingZeroBits == 0 {
 		return nil
 	}
@@ -170,15 +172,21 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 	return pubkey
 }
 
-func (e *Event) Strinfify() (string, error) {
-	val, err := json.Marshal(e)
-	if err != nil {
-		errors.Wrapf(err, "can't stringify event: %v", e)
-	}
-
-	return string(val), nil
-}
-
 func (e *Event) IsJobRequest() bool {
 	return e.Kind >= 5000 && e.Kind < 6000
+}
+
+func DeduplicateSlice[T comparable](s []T) []T {
+	seen := make(map[T]struct{}, len(s))
+	j := 0
+	for _, v := range s {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		s[j] = v
+		j++
+	}
+
+	return s[:j]
 }
