@@ -16,37 +16,13 @@ type eventIterator struct {
 	oneShot bool
 }
 
-func (*eventIterator) decodeTag(tag model.Tag) model.Tag {
-	if len(tag) == 0 {
-		return nil
-	}
-
-	// Remove gaps.
-	newList := tag
-	x := 0
-	for i := 0; i < len(tag); i++ {
-		if tag[i] != "" {
-			newList[x] = tag[i]
-			x++
-		}
-	}
-
-	return newList[:x]
-}
-
 func (it *eventIterator) decodeTags(jtags string) (tags model.Tags, err error) {
 	if len(jtags) == 0 {
 		return
 	}
+
 	if err = tags.Scan(jtags); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal tags")
-	}
-
-	// Remove empty values from tags.
-	// tag e: ["e", ""] -> ["e"].
-	// tag p: [""] -> [].
-	for i := range tags {
-		tags[i] = it.decodeTag(tags[i])
 	}
 
 	return tags, nil

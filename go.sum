@@ -123,8 +123,8 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/mxschmitt/golang-combinations v1.2.0 h1:V5E7MncIK8Yr1SL/SpdqMuSquFsfoIs5auI7Y3n8z14=
 github.com/mxschmitt/golang-combinations v1.2.0/go.mod h1:RCm5eR03B+JrBOMRDLsKZWShluXdrHu+qwhPEJ0miBM=
-github.com/nbd-wtf/go-nostr v0.38.3 h1:1QiYEOL1Fekf9lhvFP9sd0/OP+t9bMAui5nCwjvNmhI=
-github.com/nbd-wtf/go-nostr v0.38.3/go.mod h1:UTFitPKazxHbGlFMh0QvB8MpOyuTViBU4Zf05Z1aUdk=
+github.com/nbd-wtf/go-nostr v0.39.0 h1:C2s6+wUqOW1ngzIn10tTH8VOOJ9MWWg1rbJDGDbOIBU=
+github.com/nbd-wtf/go-nostr v0.39.0/go.mod h1:UTFitPKazxHbGlFMh0QvB8MpOyuTViBU4Zf05Z1aUdk=
 github.com/onsi/ginkgo/v2 v2.20.2 h1:7NVCeyIWROIAheY21RLS+3j2bb52W0W82tkberYytp4=
 github.com/onsi/ginkgo/v2 v2.20.2/go.mod h1:K9gyxPIlb+aIvnZ8bd9Ak+YP18w3APlR+5coaZoE2ag=
 github.com/onsi/gomega v1.34.1 h1:EUMJIKUjM8sKjYbtxQI9A4z2o+rruxnzNvpknOXie6k=
