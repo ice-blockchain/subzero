@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/assert"
@@ -49,12 +50,12 @@ func TestJob(t *testing.T) {
 
 		return nil
 	})
+	pubsubServers[0].Reset()
+	pubsubServers[1].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
 	var (
 		postID               = uuid.NewString()
 		pubKeyOfRepostedNote = "pubkey1"
@@ -227,6 +228,23 @@ func TestJob(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
+	time.Sleep(time.Second * 1) // Wait for all connections.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServers[0].ReaderExited.Load() != uint64(5) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[0].ReaderExited.Load(), 4))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for pubsubServers[1].ReaderExited.Load() != uint64(5) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[1].ReaderExited.Load(), 5))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(5), pubsubServers[0].ReaderExited.Load())
+	require.Equal(t, uint64(5), pubsubServers[1].ReaderExited.Load())
 }
 
 func TestJobDeletion(t *testing.T) {
@@ -258,12 +276,12 @@ func TestJobDeletion(t *testing.T) {
 
 		return nil
 	})
+	pubsubServers[0].Reset()
+	pubsubServers[1].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
 	var (
 		postID               = uuid.NewString()
 		pubKeyOfRepostedNote = "pubkey1"
@@ -435,6 +453,23 @@ func TestJobDeletion(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
+	time.Sleep(time.Second * 1) // Wait for all connections.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServers[0].ReaderExited.Load() != uint64(4) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[0].ReaderExited.Load(), 4))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for pubsubServers[1].ReaderExited.Load() != uint64(7) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[1].ReaderExited.Load(), 7))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(4), pubsubServers[0].ReaderExited.Load())
+	require.Equal(t, uint64(7), pubsubServers[1].ReaderExited.Load())
 }
 
 func TestErrorFeedback(t *testing.T) {
@@ -466,12 +501,12 @@ func TestErrorFeedback(t *testing.T) {
 
 		return nil
 	})
+	pubsubServers[0].Reset()
+	pubsubServers[1].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
 	var (
 		postID               = uuid.NewString()
 		pubKeyOfRepostedNote = "pubkey1"
@@ -585,6 +620,24 @@ func TestErrorFeedback(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
+	time.Sleep(time.Second * 1) // Wait for all connections.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServers[0].ReaderExited.Load() != uint64(2) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[0].ReaderExited.Load(), 2))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(2), pubsubServers[0].ReaderExited.Load())
+	for pubsubServers[1].ReaderExited.Load() != uint64(2) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[1].ReaderExited.Load(), 2))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(2), pubsubServers[0].ReaderExited.Load())
+	require.Equal(t, uint64(2), pubsubServers[1].ReaderExited.Load())
 }
 
 func TestOfflineJob(t *testing.T) {
@@ -616,12 +669,13 @@ func TestOfflineJob(t *testing.T) {
 
 		return nil
 	})
+	pubsubServers[0].Reset()
+	pubsubServers[1].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	relay, err := fixture.NewRelayClient(ctx, "wss://localhost:9998")
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
+
 	var (
 		postID               = uuid.NewString()
 		pubKeyOfRepostedNote = "pubkey1"
@@ -790,4 +844,21 @@ func TestOfflineJob(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
+	time.Sleep(time.Second * 1) // Wait for all connections.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	defer cancel()
+	for pubsubServers[0].ReaderExited.Load() != uint64(5) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[0].ReaderExited.Load(), 5))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for pubsubServers[1].ReaderExited.Load() != uint64(3) {
+		if shutdownCtx.Err() != nil {
+			log.Panic(errors.Errorf("shutdown timeout %v of %v", pubsubServers[1].ReaderExited.Load(), 3))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.Equal(t, uint64(5), pubsubServers[0].ReaderExited.Load())
+	require.Equal(t, uint64(3), pubsubServers[1].ReaderExited.Load())
 }

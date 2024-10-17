@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -688,7 +687,7 @@ func validateIMetaTag(tags nostr.Tags) error {
 			}
 			if key == "url" && !strings.HasPrefix(val, "http") {
 				return errors.Wrapf(ErrWrongEventParams, "wrong url value in imeta tag: %+v", tag)
-			} else if key == "m" && !IsLower(val) {
+			} else if key == "m" && strings.ToLower(val) != val {
 				return errors.Wrapf(ErrWrongEventParams, "wrong m value in imeta tag: %+v", tag)
 			} else if key == "x" || key == "ox" {
 				if _, err := hex.DecodeString(val); err != nil {
@@ -704,15 +703,6 @@ func validateIMetaTag(tags nostr.Tags) error {
 	}
 
 	return nil
-}
-
-func IsLower(s string) bool {
-	for _, r := range s {
-		if !unicode.IsLower(r) && unicode.IsLetter(r) {
-			return false
-		}
-	}
-	return true
 }
 
 func areTagsSupported(e *Event) bool {

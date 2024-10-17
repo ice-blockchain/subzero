@@ -64,6 +64,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 
 		return strconv.FormatInt(count, 10), nil
 	}
+	//TODO: implement group based requests by relay.Count call.
 	evList, err := n.doQuery(ctx, filters, queryRelays)
 	if err != nil {
 		return zeroResponse, errors.Wrapf(err, "failed to do query job: %v", filters)
