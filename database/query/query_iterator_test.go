@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -51,4 +52,40 @@ func TestIteratorSelectEvents(t *testing.T) {
 	})
 
 	require.NoError(t, db.Close())
+}
+
+func TestIteratorScanTagsWithGaps(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	tags := model.Tags{{"a", "", "b", "c"}, {"1", "2", "3", "", "", "4"}}
+	key := nostr.GeneratePrivateKey()
+
+	t.Run("Save", func(t *testing.T) {
+		var ev model.Event
+
+		ev.Kind = nostr.KindTextNote
+		ev.CreatedAt = 1
+		ev.Content = "content"
+		ev.Tags = tags
+		require.NoError(t, ev.Sign(key))
+		require.NoError(t, db.AcceptEvent(context.Background(), &ev))
+	})
+	t.Run("Select", func(t *testing.T) {
+		events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
+			apply.Kinds = []int{nostr.KindTextNote}
+		}))
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+
+		ev := events[0]
+		require.NotNil(t, ev)
+		require.Equal(t, tags, ev.Tags)
+
+		ok, err := ev.CheckSignature()
+		require.NoError(t, err)
+		require.True(t, ok)
+	})
 }
