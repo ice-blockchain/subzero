@@ -91,15 +91,23 @@ func (storageHandler) NIP96Info() gin.HandlerFunc {
 
 func (s *storageHandler) Upload() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
+		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
+		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
+		attestationValid := token.ValidateAttestation(ctx, nostr.KindFileMetadata, now)
+		if attestationValid != nil {
+			log.Printf("ERROR: on-behalf attestation failed: %v", errors.Wrap(attestationValid, "endpoint authentification failed"))
+			gCtx.JSON(http.StatusForbidden, uploadErr("Forbidden: on-behalf attestation failed"))
+			return
+		}
+
 		var upload fileUpload
 		if err := gCtx.ShouldBindWith(&upload, binding.FormMultipart); err != nil {
 			log.Printf("ERROR: failed to bind multipart form: %v", errors.Wrap(err, "failed to bind multipart form"))
@@ -122,9 +130,9 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			upload.ContentType = gomime.TypeByExtension(filepath.Ext(upload.File.Filename))
 		}
 
-		storagePath, fileType := s.storageClient.BuildUserPath(token.PubKey(), upload.ContentType)
-		uploadingFilePath := filepath.Join(storagePath, fileType, upload.File.Filename)
-		relativePath := filepath.Join(fileType, upload.File.Filename)
+		storagePath, _ := s.storageClient.BuildUserPath(token.MasterKey(), upload.ContentType)
+		uploadingFilePath := filepath.Join(storagePath, upload.File.Filename)
+		relativePath := upload.File.Filename
 		if err := os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open temp file while processing upload"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
@@ -163,8 +171,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			os.Remove(uploadingFilePath)
 			return
 		}
-		now := time.Now()
-		bagID, url, existed, err := s.storageClient.StartUpload(ctx, token.PubKey(), relativePath, hex.EncodeToString(hash), &storage.FileMetaInput{
+		bagID, url, existed, err := s.storageClient.StartUpload(ctx, token.PubKey(), token.MasterKey(), relativePath, hex.EncodeToString(hash), &storage.FileMetaInput{
 			Hash:      hash,
 			Caption:   upload.Caption,
 			Alt:       upload.Alt,
@@ -204,8 +211,9 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 }
 func (s *storageHandler) Download() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
+		now := time.Now()
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
+		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -216,7 +224,7 @@ func (s *storageHandler) Download() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("filename is required"))
 			return
 		}
-		url, err := s.storageClient.DownloadUrl(token.PubKey(), file)
+		url, err := s.storageClient.DownloadUrl(token.MasterKey(), file)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				gCtx.Status(http.StatusNotFound)
@@ -231,11 +239,20 @@ func (s *storageHandler) Download() gin.HandlerFunc {
 }
 func (s *storageHandler) Delete() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
+		now := time.Now()
+		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
+		defer cancel()
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
+		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
+			return
+		}
+		attestationValid := token.ValidateAttestation(ctx, nostr.KindFileMetadata, now)
+		if attestationValid != nil {
+			log.Printf("ERROR: on-behalf attestation failed: %v", errors.Wrap(attestationValid, "endpoint authentification failed"))
+			gCtx.JSON(http.StatusForbidden, uploadErr("Forbidden: on-behalf attestation failed"))
 			return
 		}
 		file := gCtx.Param("file")
@@ -243,9 +260,9 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("filehash is required"))
 			return
 		}
-		if err := s.storageClient.Delete(token.PubKey(), file); err != nil {
+		if err := s.storageClient.Delete(token.PubKey(), token.MasterKey(), file); err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to delete file"))
-			if errors.Is(err, storage.ErrNotFound) {
+			if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrForbidden) {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
 			}
@@ -258,8 +275,9 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 
 func (s *storageHandler) ListFiles() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
+		now := time.Now()
 		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader)
+		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -277,9 +295,9 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		if params.Count == 0 {
 			params.Count = 10
 		}
-		total, filesList, err := s.storageClient.ListFiles(token.PubKey(), params.Page, params.Count)
+		total, filesList, err := s.storageClient.ListFiles(token.MasterKey(), params.Page, params.Count)
 		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.PubKey()))
+			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.MasterKey()))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
 			return
 		}

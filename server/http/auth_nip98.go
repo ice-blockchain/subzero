@@ -3,7 +3,10 @@
 package http
 
 import (
+	"context"
 	"encoding/base64"
+	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 	"net/url"
 	"time"
 
@@ -15,14 +18,16 @@ import (
 type (
 	Token interface {
 		PubKey() string
+		MasterKey() string
 		ExpectedHash() string
+		ValidateAttestation(ctx context.Context, kind int, now time.Time) error
 	}
 	AuthClient interface {
-		VerifyToken(gCtx *gin.Context, token string) (Token, error)
+		VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error)
 	}
 
 	nostrToken struct {
-		ev           nostr.Event
+		ev           model.Event
 		expectedHash string
 	}
 	authNostr struct {
@@ -43,7 +48,7 @@ func NewAuth() AuthClient {
 	return &authNostr{}
 }
 
-func (a *authNostr) VerifyToken(gCtx *gin.Context, token string) (Token, error) {
+func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error) {
 	bToken, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal auth token: malformed base64")
@@ -61,7 +66,6 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string) (Token, error) 
 	if event.Kind != nostrHttpAuthKind {
 		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token event kind %v", event.Kind)
 	}
-	now := time.Now()
 	if event.CreatedAt.Time().After(now) || (event.CreatedAt.Time().Before(now) && now.Sub(event.CreatedAt.Time()) > tokenExpirationWindow) {
 		return nil, ErrTokenExpired
 	}
@@ -96,11 +100,42 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string) (Token, error) 
 	if payloadTag := event.Tags.GetFirst([]string{"payload"}); payloadTag != nil && len(*payloadTag) > 1 {
 		expectedHash = payloadTag.Value()
 	}
-	return &nostrToken{ev: event, expectedHash: expectedHash}, nil
+	return &nostrToken{ev: model.Event{event}, expectedHash: expectedHash}, nil
 }
 func (t *nostrToken) PubKey() string {
 	return t.ev.PubKey
 }
+func (t *nostrToken) MasterKey() string {
+	return t.ev.GetMasterPublicKey()
+}
 func (t *nostrToken) ExpectedHash() string {
 	return t.expectedHash
+}
+
+func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time.Time) error {
+	if t.ev.PubKey == t.MasterKey() {
+		return nil
+	}
+	attestationEvent := query.GetStoredEvents(ctx, &model.Subscription{model.Filters{model.Filter{
+		Kinds: []int{model.IceKindAttestation},
+		Tags: model.TagMap{
+			"p": []string{t.PubKey()},
+		},
+	},
+	}})
+	var allowed bool
+	for attestation, err := range attestationEvent {
+		if err != nil {
+			return errors.Wrapf(err, "failed to get attestation event")
+		}
+		allowed, err = model.OnBehalfIsAccessAllowed(attestation.Tags, t.ev.PubKey, kind, now.Unix())
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse attestation event")
+		}
+		break
+	}
+	if !allowed {
+		return model.ErrOnBehalfAccessDenied
+	}
+	return nil
 }

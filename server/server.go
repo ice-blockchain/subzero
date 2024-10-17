@@ -21,9 +21,9 @@ func ListenAndServe(ctx context.Context, cancel context.CancelFunc, config *wsse
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	uploader := httpserver.NewUploadHandler(ctx)
 	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler())).
-		POST("/media", uploader.Upload()).
-		GET("/media", uploader.ListFiles()).
-		GET("/media/:file", uploader.Download()).
-		DELETE("/media/:file", uploader.Delete()).
+		POST("/files", uploader.Upload()).
+		GET("/files", uploader.ListFiles()).
+		GET("/files/:file", uploader.Download()).
+		DELETE("/files/:file", uploader.Delete()).
 		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info())
 }

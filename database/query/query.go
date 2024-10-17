@@ -25,7 +25,6 @@ const (
 var (
 	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
 	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
-	ErrOnBehalfAccessDenied        = errors.New("on-behalf access denied")
 	ErrAttestationUpdateRejected   = errors.New("attestation update rejected")
 	errEventIteratorInterrupted    = errors.New("interrupted")
 )
@@ -219,7 +218,7 @@ func (db *dbClient) handleError(err error) error {
 	if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint {
 		switch sqlError.Error() {
 		case "onbehalf permission denied":
-			err = ErrOnBehalfAccessDenied
+			err = model.ErrOnBehalfAccessDenied
 		case "attestation list update must be linear":
 			err = ErrAttestationUpdateRejected
 		}

@@ -51,10 +51,10 @@ func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port
 		KeyPath:  keyFilePath,
 		Port:     port,
 	}, nil, NewNIP11Handler(), map[string]gin.HandlerFunc{
-		"POST /media":         uploader.Upload(),
-		"GET /media":          uploader.ListFiles(),
-		"GET /media/:file":    uploader.Download(),
-		"DELETE /media/:file": uploader.Delete(),
+		"POST /files":         uploader.Upload(),
+		"GET /files":          uploader.ListFiles(),
+		"GET /files/:file":    uploader.Download(),
+		"DELETE /files/:file": uploader.Delete(),
 	})
 	time.Sleep(100 * time.Millisecond)
 }

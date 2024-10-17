@@ -31,18 +31,18 @@ import (
 type (
 	StorageClient interface {
 		io.Closer
-		StartUpload(ctx context.Context, userPubkey, relativePathToFileForUrl, fileHash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error)
-		BuildUserPath(userPubKey, contentType string) (string, string)
-		DownloadUrl(userPubkey, fileSha256 string) (string, error)
-		ListFiles(userPubkey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
-		Delete(userPubkey string, fileSha256 string) error
+		StartUpload(ctx context.Context, userPubKey, masterKey, relativePathToFileForUrl, fileHash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error)
+		BuildUserPath(masterKey, contentType string) (string, string)
+		DownloadUrl(masterKey, fileSha256 string) (string, error)
+		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
+		Delete(userPubkey, masterKey string, fileSha256 string) error
 	}
 	Bootstrap struct {
 		Overlay *overlay.Node
 		DHT     *dht.Node
 	}
 	headerData struct {
-		User         string                    `json:"u"`
+		Master       string                    `json:"m"`
 		FileMetadata map[string]*FileMetaInput `json:"f"`
 		FileHash     map[string]string         `json:"fh"`
 	}
@@ -51,6 +51,7 @@ type (
 		Caption   string `json:"c"`
 		Alt       string `json:"a"`
 		CreatedAt uint64 `json:"cAt"`
+		Owner     string `json:"o"`
 	}
 	FileMetadata struct {
 		*nip94.FileMetadata
@@ -78,7 +79,10 @@ type (
 	}
 )
 
-var ErrNotFound = storage.ErrFileNotExist
+var (
+	ErrNotFound  = storage.ErrFileNotExist
+	ErrForbidden = errors.New("forbidden")
+)
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData
@@ -97,6 +101,10 @@ func (c *client) detectFile(bag *storage.Torrent, fileHash string) (string, erro
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
 	}
+	return c.detectFileFromMeta(bag, metadata, fileHash)
+}
+
+func (c *client) detectFileFromMeta(bag *storage.Torrent, metadata *headerData, fileHash string) (string, error) {
 	name := metadata.FileHash[fileHash]
 	f, err := bag.GetFileOffsets(name)
 	if err != nil {
@@ -184,16 +192,29 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 	return bag.Header.FilesCount, res, nil
 }
 
-func (c *client) Delete(userPubKey, fileHash string) error {
-	bag, err := c.bagByUser(userPubKey)
+func (c *client) Delete(userPubKey, masterKey, fileHash string) error {
+	bag, err := c.bagByUser(masterKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
 	}
-	file, err := c.detectFile(bag, fileHash)
+	if bag == nil {
+		return ErrNotFound
+	}
+	var metadata *headerData
+	metadata, err = c.fileMeta(bag)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
+	}
+	file, err := c.detectFileFromMeta(bag, metadata, fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userPath, _ := c.BuildUserPath(userPubKey, "")
+	if userPubKey != masterKey {
+		if metadata.FileMetadata[file].Owner == masterKey {
+			return ErrForbidden
+		}
+	}
+	userPath, _ := c.BuildUserPath(masterKey, "")
 	err = os.Remove(filepath.Join(userPath, file))
 	if err != nil {
 		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))

@@ -97,19 +97,22 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	} else {
 		return errors.Errorf("malformed x tag in event %v", originalEvent.ID)
 	}
-	bag, err := globalClient.bagByUser(event.PubKey)
+	bag, err := globalClient.bagByUser(event.GetMasterPublicKey())
 	if err != nil {
-		return errors.Wrapf(err, "failed to get bagID for the user %v", event.PubKey)
+		return errors.Wrapf(err, "failed to get bagID for the user %v", event.GetMasterPublicKey())
+	}
+	if bag == nil {
+		return errors.Errorf("bagID for user %v not found", event.GetMasterPublicKey())
 	}
 	file, err := globalClient.detectFile(bag, fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userRoot, _ := globalClient.BuildUserPath(event.PubKey, "")
+	userRoot, _ := globalClient.BuildUserPath(event.GetMasterPublicKey(), "")
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
-	if _, _, _, err := globalClient.StartUpload(ctx, event.PubKey, file, fileHash, nil); err != nil {
+	if _, _, _, err := globalClient.StartUpload(ctx, event.PubKey, event.GetMasterPublicKey(), file, fileHash, nil); err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}
 	return nil

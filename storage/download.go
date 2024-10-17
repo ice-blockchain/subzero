@@ -22,6 +22,9 @@ func (c *client) DownloadUrl(userPubkey string, fileHash string) (string, error)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get bagID for the user %v", userPubkey)
 	}
+	if bag == nil {
+		return "", ErrNotFound
+	}
 	bs, err := c.buildBootstrapNodeInfo(bag)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to build bootstap for bag %v", hex.EncodeToString(bag.BagID))
@@ -51,7 +54,7 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 		return errors.Newf("malformed url tag %v", urlTag)
 	}
 	bootstrap := fileUrl.Query().Get("bootstrap")
-	if err = globalClient.newBagIDPromoted(ctx, event.PubKey, infohash, &bootstrap); err != nil {
+	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap); err != nil {
 		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, event.PubKey)
 	}
 	return nil
