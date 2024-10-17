@@ -42,7 +42,7 @@ type (
 	dvm struct {
 		devMode                bool
 		serviceProviderPrivKey string
-		dvmProcessCancel       *xsync.Map
+		dvmProcessCancel       *xsync.MapOf[string, *dvmProcessCancelInfo]
 	}
 )
 
@@ -57,7 +57,7 @@ func NewDvms(minLeadingZeroBits int, privKey string, devMode bool) DvmServicePro
 	return &dvm{
 		devMode:                devMode,
 		serviceProviderPrivKey: privKey,
-		dvmProcessCancel:       xsync.NewMap(),
+		dvmProcessCancel:       xsync.NewMapOf[string, *dvmProcessCancelInfo](),
 	}
 }
 
@@ -228,14 +228,14 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 		ctx,
 		event,
 		model.JobFeedbackStatusError,
-		cancelInfo.(*dvmProcessCancelInfo).RelayList,
+		cancelInfo.RelayList,
 		d.serviceProviderPrivKey,
 		fmt.Sprintf("Job %s has been stopped", stopJobID),
 		0,
 	), "can't publish error feedback: %v", event)
 }
 
-func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status JobFeedbackStatus, relays []*nostr.Relay, serviceProviderPrivateKey, payload string, reqiredPaymentAmount float64 /*, minLeadingZeroBits int */) error {
+func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status JobFeedbackStatus, relays []*nostr.Relay, serviceProviderPrivateKey, payload string, reqiredPaymentAmount float64) error {
 	result := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -268,6 +268,7 @@ func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status 
 func connectToRelays(ctx context.Context, relayList []string, devMode bool) (resultRelays []*nostr.Relay, err error) {
 	resultRelays = make([]*nostr.Relay, 0, len(relayList))
 	for _, relayUrl := range relayList {
+		establishedCount := 0
 		for ix := 0; ix < len(relayList); ix++ {
 			relay, err := connectToRelay(ctx, relayUrl, devMode)
 			if err != nil {
@@ -276,8 +277,9 @@ func connectToRelays(ctx context.Context, relayList []string, devMode bool) (res
 				continue
 			}
 			resultRelays = append(resultRelays, relay)
+			establishedCount++
 		}
-		log.Printf("Established %v conns to %v", len(resultRelays), relayUrl)
+		log.Printf("Established %v conns to %v", establishedCount, relayUrl)
 	}
 
 	return resultRelays, nil
