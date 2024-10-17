@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query"
-	dvm "github.com/ice-blockchain/subzero/dmv"
+	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
