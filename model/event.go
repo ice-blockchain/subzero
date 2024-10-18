@@ -163,7 +163,7 @@ func (e *Event) GetTag(tagName string) Tag {
 
 func (e *Event) GetMasterPublicKey() (pubkey string) {
 	pubkey = e.PubKey
-	if bTag := e.GetTag(IceTagOnBehalfOf); bTag != nil {
+	if bTag := e.GetTag(CustomIONTagOnBehalfOf); bTag != nil {
 		pubkey = bTag.Value()
 	}
 	return pubkey

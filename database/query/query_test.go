@@ -904,24 +904,24 @@ func TestQueryEventAttestation(t *testing.T) {
 		var ev model.Event
 
 		t.Log("add first attestation")
-		ev.Kind = model.IceKindAttestation
+		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
-		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
+		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
 
 		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{model.IceKindAttestation}
+			apply.Kinds = []int{model.CustomIONKindAttestation}
 			apply.Authors = []string{masterPk}
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 		t.Run("TryOverride", func(t *testing.T) {
-			ev.Kind = model.IceKindAttestation
+			ev.Kind = model.CustomIONKindAttestation
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{
-				{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+				{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
 			}
 			require.NoError(t, ev.Sign(master))
 			t.Logf("event %+v", ev)
@@ -929,20 +929,20 @@ func TestQueryEventAttestation(t *testing.T) {
 		})
 
 		t.Log("add second attestation")
-		ev.Kind = model.IceKindAttestation
+		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 3
 		ev.Tags = model.Tags{
-			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
-			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
-			{model.TagAttestationName, activePk, "", model.IceAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
-			{model.TagAttestationName, activePk, "", model.IceAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
 		}
 		require.NoError(t, ev.Sign(master))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
 
 		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{model.IceKindAttestation}
+			apply.Kinds = []int{model.CustomIONKindAttestation}
 			apply.Authors = []string{masterPk}
 		}))
 		require.NoError(t, err)
@@ -962,7 +962,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = nostr.KindTextNote
 			ev.CreatedAt = 2
 			ev.Content = "hello world from active"
-			ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPk}}
+			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPk}}
 			require.NoError(t, ev.Sign(active))
 			t.Logf("event %+v", ev)
 			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
@@ -972,7 +972,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = nostr.KindTextNote
 			ev.CreatedAt = 3
 			ev.Content = "hello world from non-existing user"
-			ev.Tags = model.Tags{{model.IceTagOnBehalfOf, nostr.GeneratePrivateKey()}}
+			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, nostr.GeneratePrivateKey()}}
 			require.NoError(t, ev.Sign(active))
 			t.Logf("event %+v", ev)
 			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
@@ -1010,8 +1010,8 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 	now := time.Now().Unix()
 
 	baseAttestation := model.Tags{
-		{model.TagAttestationName, user1Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
-		{model.TagAttestationName, user2Public, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
+		{model.TagAttestationName, user1Public, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
+		{model.TagAttestationName, user2Public, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
 	}
 	masterMessageIds := []string{}
 	user1MessageIds := []string{}
@@ -1035,7 +1035,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 
 	t.Run("AddAttestation", func(t *testing.T) {
 		var ev model.Event
-		ev.Kind = model.IceKindAttestation
+		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
 		ev.Tags = baseAttestation
 		require.NoError(t, ev.Sign(masterPrivate))
@@ -1059,7 +1059,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.Kind = nostr.KindTextNote
 				ev.CreatedAt = model.Timestamp(5 + n)
 				ev.Content = "hello world from user1 number" + strconv.Itoa(n)
-				ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPublic}}
+				ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}}
 				require.NoError(t, ev.Sign(user1Private))
 				user1MessageIds = append(user1MessageIds, ev.ID)
 				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
@@ -1072,7 +1072,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.Kind = nostr.KindTextNote
 				ev.CreatedAt = model.Timestamp(7 + n)
 				ev.Content = "hello world from user2 number" + strconv.Itoa(n)
-				ev.Tags = model.Tags{{model.IceTagOnBehalfOf, masterPublic}}
+				ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}}
 				require.NoError(t, ev.Sign(user2Private))
 				user2MessageIds = append(user2MessageIds, ev.ID)
 				require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
@@ -1084,11 +1084,11 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 		})
 		t.Run("User2 could not add master attestation", func(t *testing.T) {
 			var ev model.Event
-			ev.Kind = model.IceKindAttestation
+			ev.Kind = model.CustomIONKindAttestation
 			ev.CreatedAt = 11
 			ev.Tags = append(ev.Tags, baseAttestation...)
-			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
-			ev.Tags = append(ev.Tags, model.Tag{model.IceTagOnBehalfOf, masterPublic})
+			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
+			ev.Tags = append(ev.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterPublic})
 			require.NoError(t, ev.Sign(user2Private))
 			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
 		})
@@ -1142,10 +1142,10 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 	t.Run("Rewoke", func(t *testing.T) {
 		t.Run("Revoke attestation of user1", func(t *testing.T) {
 			var ev model.Event
-			ev.Kind = model.IceKindAttestation
+			ev.Kind = model.CustomIONKindAttestation
 			ev.CreatedAt = 12
 			ev.Tags = append(ev.Tags, baseAttestation...)
-			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, user1Public, "", model.IceAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
+			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, user1Public, "", model.CustomIONAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
 			require.NoError(t, ev.Sign(masterPrivate))
 			require.NoError(t, db.AcceptEvent(context.TODO(), &ev))
 		})

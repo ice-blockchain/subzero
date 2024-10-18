@@ -86,15 +86,15 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 			return nil, errors.Wrap(err, "failed to parse attestation string")
 		}
 
-		if action == IceAttestationKindRevoked {
+		if action == CustomIONAttestationKindRevoked {
 			// Revoke access.
 			entry.Revoked = &ts
-		} else if action == IceAttestationKindActive {
+		} else if action == CustomIONAttestationKindActive {
 			// Grant access.
 			entry.Start = &ts
 			entry.End = nil
 			entry.Kinds = kinds
-		} else if action == IceAttestationKindInactive {
+		} else if action == CustomIONAttestationKindInactive {
 			// Remove access.
 			entry.End = &ts
 		}
@@ -104,7 +104,7 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 }
 
 func OnBehalfIsAccessAllowed(masterTags Tags, onBehalfPubkey string, kind int, nowUnix int64) (bool, error) {
-	if kind == IceKindAttestation {
+	if kind == CustomIONKindAttestation {
 		// Explicitly forbid attestation access for all sub-accounts.
 		return false, nil
 	}
@@ -143,7 +143,7 @@ func AttestationUpdateIsAllowed(old Tags, new Tags) bool {
 	// List of revoked pubkeys.
 	revoked := make(map[string]struct{})
 	for _, tag := range old {
-		if tag.Key() == TagAttestationName && len(tag) >= 4 && strings.HasPrefix(tag[TagAttestationValueIndexAction], IceAttestationKindRevoked) {
+		if tag.Key() == TagAttestationName && len(tag) >= 4 && strings.HasPrefix(tag[TagAttestationValueIndexAction], CustomIONAttestationKindRevoked) {
 			revoked[tag[1]] = struct{}{}
 		}
 	}
@@ -175,7 +175,7 @@ func AttestationUpdateIsAllowed(old Tags, new Tags) bool {
 			return false
 		}
 
-		if action == IceAttestationKindRevoked {
+		if action == CustomIONAttestationKindRevoked {
 			revoked[tag[TagAttestationValueIndexPubkey]] = struct{}{}
 		}
 

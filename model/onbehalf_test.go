@@ -131,13 +131,13 @@ func TestAttestationUpdateIsAllowed(t *testing.T) {
 			Allowed: true,
 		},
 		{
-			Old:     Tags{{TagAttestationName, "pub", "", "foo:123"}, {TagAttestationName, "pub2", "", IceAttestationKindRevoked + ":123"}},
-			New:     Tags{{TagAttestationName, "pub", "", "foo:123"}, {TagAttestationName, "pub2", "", IceAttestationKindRevoked + ":123"}, {TagAttestationName, "pub2", "", IceAttestationKindActive + ":123"}},
+			Old:     Tags{{TagAttestationName, "pub", "", "foo:123"}, {TagAttestationName, "pub2", "", CustomIONAttestationKindRevoked + ":123"}},
+			New:     Tags{{TagAttestationName, "pub", "", "foo:123"}, {TagAttestationName, "pub2", "", CustomIONAttestationKindRevoked + ":123"}, {TagAttestationName, "pub2", "", CustomIONAttestationKindActive + ":123"}},
 			Allowed: false,
 		},
 		{
 			Old:     Tags{{TagAttestationName, "pub", "", "foo:123"}},
-			New:     Tags{{TagAttestationName, "pub", "", "foo:123"}, {TagAttestationName, "pub2", "", IceAttestationKindRevoked + ":123"}, {TagAttestationName, "pub2", "", IceAttestationKindActive + ":123"}},
+			New:     Tags{{TagAttestationName, "pub", "", "foo:123"}, {TagAttestationName, "pub2", "", CustomIONAttestationKindRevoked + ":123"}, {TagAttestationName, "pub2", "", CustomIONAttestationKindActive + ":123"}},
 			Allowed: false,
 		},
 	}

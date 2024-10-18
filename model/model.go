@@ -38,15 +38,15 @@ var (
 )
 
 const (
-	IceKindAttestation = 10_100
+	CustomIONKindAttestation = 10_100
 )
 
 const (
-	IceTagOnBehalfOf = "b"
+	CustomIONTagOnBehalfOf = "b"
 )
 
 const (
-	IceAttestationKindActive   = "active"
-	IceAttestationKindRevoked  = "revoked"
-	IceAttestationKindInactive = "inactive"
+	CustomIONAttestationKindActive   = "active"
+	CustomIONAttestationKindRevoked  = "revoked"
+	CustomIONAttestationKindInactive = "inactive"
 )

@@ -245,7 +245,7 @@ with cte as (
 		event_tags
 	left join events parent on
 		parent.id = event_tags.event_id and
-		parent.kind = :ice_kind_attestation
+		parent.kind = :custom_ion_kind_attestation
 	where
 		event_tag_key = 'p' and
 		event_tag_value1 = :owner_pub_key
@@ -263,7 +263,7 @@ delete from events where ` + whereClause +
 			)
 		)`
 
-	params["ice_kind_attestation"] = model.IceKindAttestation
+	params["custom_ion_kind_attestation"] = model.CustomIONKindAttestation
 	rowsAffected, err := db.exec(ctx, stmt, params)
 
 	return rowsAffected, errors.Wrap(db.handleError(err), "failed to exec delete related event sql")
