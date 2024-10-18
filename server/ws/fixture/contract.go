@@ -29,7 +29,7 @@ var (
 
 type (
 	MockService struct {
-		server            internal.Server
+		server internal.Server
 
 		handlersMx        sync.Mutex
 		Handlers          map[adapters.WSWriter]struct{}

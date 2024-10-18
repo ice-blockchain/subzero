@@ -19,17 +19,7 @@ type (
 		Streams []*VideoStream `json:"streams"`
 	}
 	VideoFormat struct {
-		Filename       string `json:"filename"`
-		NbStreams      int    `json:"nb_streams"`
-		NbPrograms     int    `json:"nb_programs"`
-		FormatName     string `json:"format_name"`
-		FormatLongName string `json:"format_long_name"`
-		StartTime      string `json:"start_time"`
-		Duration       string `json:"duration"`
-		Size           string `json:"size"`
-		BitRate        string `json:"bit_rate"`
-		ProbeScore     int    `json:"probe_score"`
-		Tags           struct {
+		Tags struct {
 			MajorBrand       string `json:"major_brand"`
 			MinorVersion     string `json:"minor_version"`
 			CompatibleBrands string `json:"compatible_brands"`
@@ -37,33 +27,40 @@ type (
 			LocationEng      string `json:"location-eng"`
 			Location         string `json:"location"`
 		} `json:"tags"`
+		Filename       string `json:"filename"`
+		FormatName     string `json:"format_name"`
+		FormatLongName string `json:"format_long_name"`
+		StartTime      string `json:"start_time"`
+		Duration       string `json:"duration"`
+		Size           string `json:"size"`
+		BitRate        string `json:"bit_rate"`
+		NbStreams      int    `json:"nb_streams"`
+		NbPrograms     int    `json:"nb_programs"`
+		ProbeScore     int    `json:"probe_score"`
 	}
 	VideoStream struct {
-		Index          int    `json:"index"`
-		CodecName      string `json:"codec_name"`
-		CodecLongName  string `json:"codec_long_name"`
-		Profile        string `json:"profile"`
-		CodecType      string `json:"codec_type"`
+		Tags struct {
+			Language    string `json:"language"`
+			HandlerName string `json:"handler_name"`
+		} `json:"tags"`
 		CodecTimeBase  string `json:"codec_time_base"`
+		Duration       string `json:"duration"`
+		SampleRate     string `json:"sample_rate"`
+		CodecType      string `json:"codec_type"`
+		BitRate        string `json:"bit_rate"`
 		CodecTagString string `json:"codec_tag_string"`
 		CodecTag       string `json:"codec_tag"`
 		SampleFmt      string `json:"sample_fmt"`
-		SampleRate     string `json:"sample_rate"`
-		Channels       int    `json:"channels"`
+		Profile        string `json:"profile"`
+		CodecLongName  string `json:"codec_long_name"`
+		CodecName      string `json:"codec_name"`
 		ChannelLayout  string `json:"channel_layout"`
-		BitsPerSample  int    `json:"bits_per_sample"`
 		RFrameRate     string `json:"r_frame_rate"`
 		AvgFrameRate   string `json:"avg_frame_rate"`
 		TimeBase       string `json:"time_base"`
-		StartPts       int    `json:"start_pts"`
-		StartTime      string `json:"start_time"`
-		DurationTs     int    `json:"duration_ts"`
-		Duration       string `json:"duration"`
-		BitRate        string `json:"bit_rate"`
-		MaxBitRate     string `json:"max_bit_rate"`
 		NbFrames       string `json:"nb_frames"`
-		Width          int    `json:"width"`
-		Height         int    `json:"height"`
+		StartTime      string `json:"start_time"`
+		MaxBitRate     string `json:"max_bit_rate"`
 		Disposition    struct {
 			Default         int `json:"default"`
 			Dub             int `json:"dub"`
@@ -78,10 +75,13 @@ type (
 			AttachedPic     int `json:"attached_pic"`
 			TimedThumbnails int `json:"timed_thumbnails"`
 		} `json:"disposition"`
-		Tags struct {
-			Language    string `json:"language"`
-			HandlerName string `json:"handler_name"`
-		} `json:"tags"`
+		BitsPerSample int `json:"bits_per_sample"`
+		DurationTs    int `json:"duration_ts"`
+		StartPts      int `json:"start_pts"`
+		Width         int `json:"width"`
+		Height        int `json:"height"`
+		Index         int `json:"index"`
+		Channels      int `json:"channels"`
 	}
 )
 

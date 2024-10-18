@@ -3,10 +3,10 @@
 package metadata
 
 import (
-	"github.com/cockroachdb/errors"
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -15,9 +15,9 @@ type Extractor interface {
 	Extract(filePath, contentType string, size uint64) (*Metadata, error)
 }
 type Metadata struct {
+	TypeMeta any
 	Ext      string
 	Size     uint64
-	TypeMeta any
 }
 type extractor struct {
 	extractorsByFileType map[string]Extractor

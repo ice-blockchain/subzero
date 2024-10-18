@@ -4,15 +4,17 @@ package statistics
 
 import (
 	"fmt"
-	"github.com/cockroachdb/errors"
-	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
-	"github.com/rcrowley/go-metrics"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/cockroachdb/errors"
+	"github.com/rcrowley/go-metrics"
+
+	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
 )
 
 type (

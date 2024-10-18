@@ -3,9 +3,9 @@
 package metadata
 
 import (
-	"github.com/cockroachdb/errors"
 	"path/filepath"
 
+	"github.com/cockroachdb/errors"
 	"github.com/davidbyttow/govips/v2/vips"
 )
 

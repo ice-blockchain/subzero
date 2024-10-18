@@ -66,11 +66,11 @@ func TestNIP96(t *testing.T) {
 		user1PubKey, _ := nostr.GetPublicKey(user1)
 		user2PubKey, _ := nostr.GetPublicKey(user2)
 		var ev model.Event
-		ev.Kind = model.IceKindAttestation
+		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
 		ev.Tags = model.Tags{
-			{model.TagAttestationName, user1PubKey, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
-			{model.TagAttestationName, user2PubKey, "", model.IceAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
+			{model.TagAttestationName, user1PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
+			{model.TagAttestationName, user2PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
 		}
 		require.NoError(t, ev.Sign(master))
 		require.NoError(t, query.AcceptEvent(ctx, &ev))

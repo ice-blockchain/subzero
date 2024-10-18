@@ -6,11 +6,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/cockroachdb/errors"
 	"io"
 	"os"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/fsnotify/fsnotify"
 )
 

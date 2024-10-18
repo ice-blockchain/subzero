@@ -5,14 +5,15 @@ package http
 import (
 	"context"
 	"encoding/base64"
-	"github.com/ice-blockchain/subzero/database/query"
-	"github.com/ice-blockchain/subzero/model"
 	"net/url"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
@@ -117,7 +118,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 		return nil
 	}
 	attestationEvent := query.GetStoredEvents(ctx, &model.Subscription{model.Filters{model.Filter{
-		Kinds: []int{model.IceKindAttestation},
+		Kinds: []int{model.CustomIONKindAttestation},
 		Tags: model.TagMap{
 			"p": []string{t.PubKey()},
 		},

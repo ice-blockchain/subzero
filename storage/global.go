@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -123,8 +124,17 @@ func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 }
 
 func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int, debug bool) *client {
-	if debug {
-		storage.Logger = log.Println
+	storage.Logger = func(a ...any) {
+		if debug {
+			log.Println(a...)
+		}
+		if len(a) > 0 {
+			if s, isStr := a[0].(string); isStr {
+				if strings.Contains(strings.ToLower(s), "err") {
+					log.Println(a)
+				}
+			}
+		}
 	}
 	storage.DownloadThreads = threadsPerBagForDownloading
 	adnl.Logger = func(v ...any) {}
@@ -184,6 +194,10 @@ func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 		downloadQueue:     make(chan queueItem, 1000000),
 		activeDownloads:   make(map[string]bool),
 		activeDownloadsMx: &sync.RWMutex{},
+		debug:             debug,
+	}
+	if debug {
+		go cl.report(ctx)
 	}
 	loadMonitoringCh := make(chan *db.Event, 1000000)
 	go func() {
@@ -196,10 +210,22 @@ func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 							if bsErr != nil {
 								log.Printf("WARN: failed to find stored bootstrap for bag %v: %v", hex.EncodeToString(ev.Torrent.BagID), bsErr)
 							}
+							var usr string
+							if ev.Torrent.Header != nil {
+								var m *headerData
+								m, err = cl.fileMeta(ev.Torrent)
+								if err != nil {
+									log.Printf("INFO:loading bag %v into queue but it is not resolved yet: %v", hex.EncodeToString(ev.Torrent.BagID), err)
+								}
+								if m != nil {
+									usr = m.Master
+								}
+							}
+							log.Printf("[STORAGE] INFO: bag %v not yet started before restart put it into queue", hex.EncodeToString(ev.Torrent.BagID))
 							cl.downloadQueue <- queueItem{
 								tor:       ev.Torrent,
 								bootstrap: &bs,
-								user:      nil,
+								user:      &usr,
 							}
 						}
 					}

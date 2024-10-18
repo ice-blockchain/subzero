@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 		return "", "", false, errors.Wrapf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
 	bagID = hex.EncodeToString(bag.BagID)
+	log.Printf("[STORAGE] INFO: new upload %v for user %v hash %v resulted in bag %v, total %v", relativePathToFileForUrl, masterPubKey, hash, bagID, bag.Header.FilesCount)
 	if newFile != nil {
 		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
 		if err != nil {
@@ -67,7 +69,6 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 		fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
 		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
 	}
-
 	url, err = c.buildUrl(bagID, relativePathToFileForUrl, bs)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)

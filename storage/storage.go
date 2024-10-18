@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -42,35 +43,36 @@ type (
 		DHT     *dht.Node
 	}
 	headerData struct {
-		Master       string                    `json:"m"`
 		FileMetadata map[string]*FileMetaInput `json:"f"`
 		FileHash     map[string]string         `json:"fh"`
+		Master       string                    `json:"m"`
 	}
 	FileMetaInput struct {
-		Hash      []byte `json:"h"`
 		Caption   string `json:"c"`
 		Alt       string `json:"a"`
-		CreatedAt uint64 `json:"cAt"`
 		Owner     string `json:"o"`
+		Hash      []byte `json:"h"`
+		CreatedAt uint64 `json:"cAt"`
 	}
 	FileMetadata struct {
 		*nip94.FileMetadata
 		CreatedAt uint64 `json:"created_at"`
 	}
 	client struct {
-		conn              *storage.Connector
-		db                *leveldb.DB
-		server            *storage.Server
+		stats             statistics.Statistics
 		progressStorage   *db.Storage
+		server            *storage.Server
+		conn              *storage.Connector
 		gateway           *adnl.Gateway
 		dht               *dht.Client
-		rootStoragePath   string
 		newFiles          map[string]map[string]*FileMetaInput
 		newFilesMx        *sync.RWMutex
-		stats             statistics.Statistics
+		db                *leveldb.DB
 		downloadQueue     chan queueItem
 		activeDownloads   map[string]bool
 		activeDownloadsMx *sync.RWMutex
+		rootStoragePath   string
+		debug             bool
 	}
 	queueItem struct {
 		tor       *storage.Torrent
@@ -86,6 +88,9 @@ var (
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData
+	if bag.Header == nil {
+		return nil, errors.Errorf("No header fetched yet for %v", hex.EncodeToString(bag.BagID))
+	}
 	hData := bag.Header.Data
 	if len(hData) == 0 {
 		hData = []byte("{}")
@@ -237,4 +242,38 @@ func (c *client) Close() error {
 	}
 	close(c.downloadQueue)
 	return err.ErrorOrNil()
+}
+
+func (c *client) report(ctx context.Context) {
+	period := 1 * time.Hour
+	if c.debug {
+		period = 1 * time.Minute
+	}
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(period):
+			activelyDownloading := 0
+			activeUploading := 0
+			notResolvedHeader := 0
+			notResolvedInfo := 0
+			all := c.progressStorage.GetAll()
+			for _, t := range all {
+				if t.IsDownloadAll() {
+					activelyDownloading++
+				}
+				if _, upl := t.IsActive(); upl {
+					activeUploading++
+				}
+				if t.Info == nil {
+					notResolvedInfo++
+				}
+				if t.Header == nil {
+					notResolvedHeader++
+				}
+			}
+			log.Printf("[STORAGE STATS] DEBUG: Q TO DOWNLOAD %v, DOWNLOADING %v, UPLOADING %v, RESOLVING INFO %v, RESOLVING HEADER %v TOTAL %v", len(c.downloadQueue), activelyDownloading, activeUploading, notResolvedInfo, notResolvedHeader, len(all))
+		}
+	}
 }
