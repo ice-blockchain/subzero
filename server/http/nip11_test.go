@@ -5,7 +5,6 @@ package http
 import (
 	"context"
 	"fmt"
-	"github.com/ice-blockchain/subzero/database/query"
 	"net/http"
 	"os"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
