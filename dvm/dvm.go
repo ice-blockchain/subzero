@@ -4,6 +4,7 @@ package dvm
 
 import (
 	"context"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
@@ -40,9 +41,9 @@ type (
 		CancelFunc context.CancelFunc
 	}
 	dvm struct {
-		devMode                bool
-		serviceProviderPrivKey string
-		dvmProcessCancel       *xsync.MapOf[string, *dvmProcessCancelInfo]
+		devMode          bool
+		dvmProcessCancel *xsync.MapOf[string, *dvmProcessCancelInfo]
+		tlsConfig        *tls.Config
 	}
 )
 
@@ -53,11 +54,11 @@ var (
 	jobTimeoutDeadline = 1 * time.Minute
 )
 
-func NewDvms(minLeadingZeroBits int, privKey string, devMode bool) DvmServiceProvider {
+func NewDvms(minLeadingZeroBits int, tlsConfig *tls.Config, devMode bool) DvmServiceProvider {
 	return &dvm{
-		devMode:                devMode,
-		serviceProviderPrivKey: privKey,
-		dvmProcessCancel:       xsync.NewMapOf[string, *dvmProcessCancelInfo](),
+		devMode:          devMode,
+		tlsConfig:        tlsConfig,
+		dvmProcessCancel: xsync.NewMapOf[string, *dvmProcessCancelInfo](),
 	}
 }
 
@@ -94,7 +95,8 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
 }
 
 func (d *dvm) isServiceProviderCustomerInterestedIn(event *model.Event) (res bool, err error) {
-	pubKey, err := nostr.GetPublicKey(d.serviceProviderPrivKey)
+	privKeyHex := fmt.Sprintf("%x", d.tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	pubKey, err := nostr.GetPublicKey(privKeyHex)
 	if err != nil {
 		return false, errors.Wrap(err, "can't get public key")
 	}
@@ -157,7 +159,7 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 	)
 	switch event.Kind {
 	case model.KindJobNostrEventCount:
-		job = newNostrEventCountJob(outputRelays, d.serviceProviderPrivKey, d.devMode)
+		job = newNostrEventCountJob(outputRelays, d.tlsConfig, d.devMode)
 	default:
 		log.Printf("dvm kind:%v not supported", event.Kind)
 
@@ -205,7 +207,8 @@ func (d *dvm) publishJobResult(ctx context.Context, incomingEvent *model.Event, 
 	if reqiredPaymentAmount > 0 {
 		result.Tags = append(result.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
 	}
-	if err := result.Sign(d.serviceProviderPrivKey); err != nil {
+	privKeyHex := fmt.Sprintf("%x", d.tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	if err := result.Sign(privKeyHex); err != nil {
 		return errors.Wrapf(err, "failed to sign event: %v", result)
 	}
 	eg := errgroup.Group{}
@@ -229,7 +232,7 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 		event,
 		model.JobFeedbackStatusError,
 		cancelInfo.RelayList,
-		d.serviceProviderPrivKey,
+		fmt.Sprintf("%x", d.tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes()),
 		fmt.Sprintf("Job %s has been stopped", stopJobID),
 		0,
 	), "can't publish error feedback: %v", event)

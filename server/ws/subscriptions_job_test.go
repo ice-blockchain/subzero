@@ -4,6 +4,9 @@ package ws
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/tls"
+	_ "embed"
 	"fmt"
 	"log"
 	"testing"
@@ -25,10 +28,11 @@ func TestJob(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	serviceProviderPrivKey := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(serviceProviderPrivKey)
+	tlsConfig := helperLoadKeyPair(t)
+	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, serviceProviderPrivKey, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -228,7 +232,6 @@ func TestJob(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
-	time.Sleep(time.Second * 1) // Wait for all connections.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	for pubsubServers[0].ReaderExited.Load() != uint64(5) {
@@ -251,10 +254,11 @@ func TestJobDeletion(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	serviceProviderPrivKey := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(serviceProviderPrivKey)
+	tlsConfig := helperLoadKeyPair(t)
+	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, serviceProviderPrivKey, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -453,7 +457,6 @@ func TestJobDeletion(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
-	time.Sleep(time.Second * 1) // Wait for all connections.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	for pubsubServers[0].ReaderExited.Load() != uint64(4) {
@@ -476,10 +479,11 @@ func TestErrorFeedback(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	serviceProviderPrivKey := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(serviceProviderPrivKey)
+	tlsConfig := helperLoadKeyPair(t)
+	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, serviceProviderPrivKey, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -620,7 +624,6 @@ func TestErrorFeedback(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
-	time.Sleep(time.Second * 1) // Wait for all connections.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	for pubsubServers[0].ReaderExited.Load() != uint64(2) {
@@ -644,10 +647,11 @@ func TestOfflineJob(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	serviceProviderPrivKey := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(serviceProviderPrivKey)
+	tlsConfig := helperLoadKeyPair(t)
+	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, serviceProviderPrivKey, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -844,7 +848,6 @@ func TestOfflineJob(t *testing.T) {
 		}
 		require.Contains(t, expectedEvents, event)
 	}
-	time.Sleep(time.Second * 1) // Wait for all connections.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
 	for pubsubServers[0].ReaderExited.Load() != uint64(5) {
@@ -861,4 +864,23 @@ func TestOfflineJob(t *testing.T) {
 	}
 	require.Equal(t, uint64(5), pubsubServers[0].ReaderExited.Load())
 	require.Equal(t, uint64(3), pubsubServers[1].ReaderExited.Load())
+}
+
+var (
+	//go:embed fixture/.testdata/localhost.crt
+	localhostCrt string
+	//go:embed fixture/.testdata/localhost.key
+	localhostKey string
+)
+
+func helperLoadKeyPair(t *testing.T) *tls.Config {
+	t.Helper()
+	cert, err := tls.X509KeyPair([]byte(localhostCrt), []byte(localhostKey))
+	if err != nil {
+		panic(err)
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
 }

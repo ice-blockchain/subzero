@@ -4,7 +4,10 @@ package dvm
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -31,9 +34,14 @@ const (
 	NostrEventCountGroupRoot    = "root"
 )
 
-func newNostrEventCountJob(outputRelays []*nostr.Relay, serviceProviderPrivKey string, devMode bool) *nostrEventCountJob {
+func newNostrEventCountJob(outputRelays []*nostr.Relay, tlsConfig *tls.Config, devMode bool) *nostrEventCountJob {
+	var privKeyHex string
+	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
+		privKeyHex = fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	}
+
 	return &nostrEventCountJob{
-		ServiceProviderPrivKey: serviceProviderPrivKey,
+		ServiceProviderPrivKey: privKeyHex,
 		OutputRelays:           outputRelays,
 		devMode:                devMode,
 	}
@@ -48,7 +56,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 	defer closeRelays(queryRelays)
 	filters, err := parseListOfFilters(e.Content)
 	if err != nil {
-		return zeroResponse, errors.Wrapf(err, "failed to parse filters: %v", e)
+		return zeroResponse, errors.Wrapf(err, "failed to call parseListOfFilters: %v", e)
 	}
 	var groups []string
 	for _, tag := range e.Tags {
@@ -132,7 +140,7 @@ func (n *nostrEventCountJob) doQuery(ctx context.Context, filters []nostr.Filter
 		}
 	}
 
-	return model.DeduplicateSlice(evList), nil
+	return model.DeduplicateSlice(evList, func(ev *nostr.Event) string { return ev.ID }), nil
 }
 
 func (n *nostrEventCountJob) RequiredPaymentAmount() float64 {
@@ -141,7 +149,7 @@ func (n *nostrEventCountJob) RequiredPaymentAmount() float64 {
 
 func (n *nostrEventCountJob) IsBidAmountEnough(amount string) bool {
 	if n.RequiredPaymentAmount() > 0 {
-		if strings.Trim(amount, " ") == "" {
+		if strings.TrimSpace(amount) == "" {
 			return false
 		}
 		amount, err := strconv.ParseFloat(amount, 64)
@@ -208,10 +216,7 @@ func collectRelayURLs(e *model.Event) []string {
 	var relayList []string
 	for _, tag := range e.Tags {
 		if tag.Key() == "param" && tag.Value() == "relay" {
-			for ix, relayURL := range tag {
-				if ix <= 1 {
-					continue
-				}
+			for _, relayURL := range tag[2:] {
 				relayList = append(relayList, relayURL)
 			}
 		}

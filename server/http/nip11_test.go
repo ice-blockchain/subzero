@@ -4,12 +4,12 @@ package http
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,10 +22,8 @@ import (
 
 const (
 	testDeadline       = 30 * time.Second
-	certPath           = "%v/../ws/fixture/.testdata/localhost.crt"
-	keyPath            = "%v/../ws/fixture/.testdata/localhost.key"
-	storageRoot        = "../../.test-uploads"
 	minLeadingZeroBits = 5
+	storageRoot        = "../../.test-uploads"
 )
 
 var pubsubServer *fixture.MockService
@@ -42,16 +40,17 @@ func TestMain(m *testing.M) {
 }
 
 func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port uint16, storageRoot string) {
-	wd, _ := os.Getwd()
-	certFilePath := fmt.Sprintf(certPath, wd)
-	keyFilePath := fmt.Sprintf(keyPath, wd)
 	initStorage(serverCtx, storageRoot)
 	uploader := NewUploadHandler(serverCtx)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{
-		CertPath: certFilePath,
-		KeyPath:  keyFilePath,
-		Port:     port,
-	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}))
+		TLSConfig: fixture.LocalhostTLS(),
+		Port:      port,
+	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}), map[string]gin.HandlerFunc{
+		"POST /files":         uploader.Upload(),
+		"GET /files":          uploader.ListFiles(),
+		"GET /files/:file":    uploader.Download(),
+		"DELETE /files/:file": uploader.Delete(),
+	})
 	http.DefaultClient.Transport = &http.Transport{TLSClientConfig: fixture.LocalhostTLS()}
 	time.Sleep(100 * time.Millisecond)
 }
