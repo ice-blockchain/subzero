@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"log"
 	"net"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -38,6 +40,7 @@ var (
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
+			tlsConfig := loadTLSConfig(cert, key)
 			if databasePath == ":memory:" {
 				log.Print("using in-memory database")
 			} else {
@@ -45,9 +48,10 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, tlsConfig, false)
+
 			server.ListenAndServe(ctx, cancel, &server.Config{
-				CertPath:                cert,
-				KeyPath:                 key,
+				TLSConfig:               tlsConfig,
 				Port:                    port,
 				NIP13MinLeadingZeroBits: minLeadingZeroBits,
 			})
@@ -90,6 +94,7 @@ var (
 			log.Print(err)
 		}
 	}
+	dataVendingMachine dvm.DvmServiceProvider
 )
 
 func init() {
@@ -104,6 +109,10 @@ func init() {
 		if sErr := storage.AcceptEvent(ctx, event); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 event")
 		}
+		if err := dataVendingMachine.AcceptJob(ctx, event); err != nil {
+			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", event)
+		}
+
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)
@@ -112,5 +121,16 @@ func init() {
 func main() {
 	if err := subzero.Execute(); err != nil {
 		log.Panic(err)
+	}
+}
+
+func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
+	cert, err := tls.LoadX509KeyPair(certFileName, keyFileName)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
 	}
 }

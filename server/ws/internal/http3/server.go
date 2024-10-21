@@ -24,7 +24,7 @@ func New(cfg *config.Config, router http.Handler) Server {
 	return s
 }
 
-func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error {
+func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 	wtserver := &webtransport.Server{
 		H3: http3.Server{
 			Addr:    fmt.Sprintf(":%v", s.cfg.Port),
@@ -40,6 +40,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 				MaxIncomingStreams:    maxStreamsCount,
 				MaxIncomingUniStreams: maxStreamsCount,
 			},
+			TLSConfig: s.cfg.TLSConfig,
 		},
 	}
 	if s.cfg.Debug {
@@ -49,7 +50,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) e
 		wtserver.CheckOrigin = noCors
 	}
 	s.server = wtserver
-	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil {
+	if err := s.server.ListenAndServe(); err != nil {
 		return errors.Wrap(err, "failed to start http3/udp server")
 	}
 

@@ -90,21 +90,6 @@ func (w *whereBuilder) addParam(filterID, name string, value any) (key string) {
 	return key
 }
 
-func deduplicateSlice[T comparable](s []T) []T {
-	seen := make(map[T]struct{}, len(s))
-	j := 0
-	for _, v := range s {
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		s[j] = v
-		j++
-	}
-
-	return s[:j]
-}
-
 //go:inline
 func maybeOpCode(builder *whereBuilder, op int) {
 	switch op {
@@ -129,7 +114,7 @@ func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string
 		builder.WriteRune('+')
 	}
 	builder.WriteString(name)
-	s = deduplicateSlice(s)
+	s = model.DeduplicateSlice(s, func(elem T) T { return elem })
 	if len(s) == 1 && name != "kind" {
 		// X = :X_name.
 		builder.WriteString(" = :")

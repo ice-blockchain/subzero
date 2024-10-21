@@ -15,7 +15,7 @@ import (
 
 type (
 	Server interface {
-		ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
+		ListenAndServeTLS(ctx context.Context) error
 		Shutdown(ctx context.Context) error
 		HandleWS(wsHandler adapters.WSHandler, handler http.Handler, writer http.ResponseWriter, req *http.Request)
 	}

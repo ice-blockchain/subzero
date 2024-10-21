@@ -104,3 +104,70 @@ func TestEventSignVerify(t *testing.T) {
 		helperTestSignVerify(t, &ev, pk, "", "")
 	})
 }
+
+func TestDeduplicateSlice(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Events", func(t *testing.T) {
+		events := []*Event{
+			{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					ID:   "id1",
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "id2",
+					Kind: nostr.KindTextNote,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "id1",
+					Kind: nostr.KindTextNote,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "id3",
+					Kind: nostr.KindTextNote,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "id2",
+					Kind: nostr.KindTextNote,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "id4",
+					Kind: nostr.KindTextNote,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "id3",
+					Kind: nostr.KindTextNote,
+				},
+			},
+		}
+		deduplicated := DeduplicateSlice(events, func(e *Event) string { return e.ID })
+		require.Len(t, deduplicated, 4)
+		require.Equal(t, "id1", deduplicated[0].ID)
+		require.Equal(t, "id2", deduplicated[1].ID)
+		require.Equal(t, "id3", deduplicated[2].ID)
+		require.Equal(t, "id4", deduplicated[3].ID)
+	})
+
+	t.Run("String", func(t *testing.T) {
+		ids := []string{"id1", "id2", "id1", "id3", "id2", "id4", "id3"}
+		deduplicated := DeduplicateSlice(ids, func(e string) string { return e })
+		require.Len(t, deduplicated, 4)
+		require.Equal(t, "id1", deduplicated[0])
+		require.Equal(t, "id2", deduplicated[1])
+		require.Equal(t, "id3", deduplicated[2])
+		require.Equal(t, "id4", deduplicated[3])
+	})
+}

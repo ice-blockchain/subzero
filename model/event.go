@@ -32,6 +32,9 @@ const (
 )
 
 func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
+	if (e.Kind >= 6000 && e.Kind < 7000) || e.Kind == nostr.KindJobFeedback {
+		return nil
+	}
 	if minLeadingZeroBits == 0 {
 		return nil
 	}
@@ -167,4 +170,24 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 		pubkey = bTag.Value()
 	}
 	return pubkey
+}
+
+func (e *Event) IsJobRequest() bool {
+	return e.Kind >= 5000 && e.Kind < 6000
+}
+
+func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
+	seen := make(map[H]struct{}, len(s))
+	j := 0
+	for _, v := range s {
+		x := key(v)
+		if _, ok := seen[x]; ok {
+			continue
+		}
+		seen[x] = struct{}{}
+		s[j] = v
+		j++
+	}
+
+	return s[:j]
 }

@@ -4,12 +4,11 @@ package ws
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"sync"
 	"testing"
-	stdlibtime "time"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -26,42 +25,41 @@ import (
 const (
 	connCountTCP            = 100
 	connCountUDP            = 100
-	testDeadline            = 15 * stdlibtime.Second
-	certPath                = "%v/fixture/.testdata/localhost.crt"
-	keyPath                 = "%v/fixture/.testdata/localhost.key"
+	testDeadline            = 15 * time.Second
 	NIP13MinLeadingZeroBits = 5
 )
 
 var echoServer *fixture.MockService
-var pubsubServer *fixture.MockService
+var pubsubServers []*fixture.MockService
 
 func TestMain(m *testing.M) {
-	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*stdlibtime.Minute)
+	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
 		}
-
 	}
-	wd, _ := os.Getwd()
-	certFilePath := fmt.Sprintf(certPath, wd)
-	keyFilePath := fmt.Sprintf(keyPath, wd)
 	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath: certFilePath,
-		KeyPath:  keyFilePath,
-		Port:     9999,
+		TLSConfig: fixture.LocalhostTLS(),
+		Port:      9999,
 	}, echoFunc, nil, map[string]gin.HandlerFunc{})
 	hdl = new(handler)
-	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath:                certFilePath,
-		KeyPath:                 keyFilePath,
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
+		TLSConfig:               fixture.LocalhostTLS(),
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-	}, hdl.Handle, nil, map[string]gin.HandlerFunc{})
+	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
+	hdl2 := new(handler)
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
+		TLSConfig:               fixture.LocalhostTLS(),
+		Port:                    9997,
+		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))
 	m.Run()
 	serverCancel()
 }
+
 func TestSimpleEchoDifferentTransports(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip() // Heavy CPU load, it produces messages in loop
@@ -146,7 +144,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 		if shutdownCtx.Err() != nil {
 			log.Panic(errors.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
 		}
-		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(conns), echoServer.ReaderExited.Load())
 	require.Len(t, echoServer.Handlers, conns)
