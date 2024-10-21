@@ -176,14 +176,15 @@ func (e *Event) IsJobRequest() bool {
 	return e.Kind >= 5000 && e.Kind < 6000
 }
 
-func DeduplicateSlice[T comparable](s []T) []T {
-	seen := make(map[T]struct{}, len(s))
+func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
+	seen := make(map[H]struct{}, len(s))
 	j := 0
 	for _, v := range s {
-		if _, ok := seen[v]; ok {
+		x := key(v)
+		if _, ok := seen[x]; ok {
 			continue
 		}
-		seen[v] = struct{}{}
+		seen[x] = struct{}{}
 		s[j] = v
 		j++
 	}

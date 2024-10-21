@@ -50,7 +50,7 @@ func (s *Srv) ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func (s *Srv) startServer(ctx context.Context, server interface {
-	ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error
+	ListenAndServeTLS(ctx context.Context) error
 }) {
 	defer log.Printf("server stopped listening")
 	log.Printf("server started listening on %v...", s.cfg.Port)
@@ -61,7 +61,7 @@ func (s *Srv) startServer(ctx context.Context, server interface {
 			!errors.Is(err, http.ErrServerClosed)
 	}
 
-	if err := server.ListenAndServeTLS(ctx, s.cfg.CertPath, s.cfg.KeyPath); isUnexpectedError(err) {
+	if err := server.ListenAndServeTLS(ctx); isUnexpectedError(err) {
 		s.quit <- syscall.SIGTERM
 		log.Printf("ERROR:%v", errors.Wrap(err, "server.ListenAndServeTLS failed"))
 	}

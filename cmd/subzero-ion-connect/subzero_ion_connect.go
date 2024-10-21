@@ -5,9 +5,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/x509"
-	"encoding/hex"
-	"encoding/pem"
+	"crypto/tls"
 	"log"
 	"net"
 	"os"
@@ -43,6 +41,7 @@ var (
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
+			tlsConfig := loadTLSConfig(cert, key)
 			if databasePath == ":memory:" {
 				log.Print("using in-memory database")
 			} else {
@@ -50,11 +49,10 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
-			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, extractCertificatePrivKey(), false)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, tlsConfig, false)
 
 			server.ListenAndServe(ctx, cancel, &server.Config{
-				CertPath:                cert,
-				KeyPath:                 key,
+				TLSConfig:               tlsConfig,
 				Port:                    port,
 				NIP13MinLeadingZeroBits: minLeadingZeroBits,
 			})
@@ -127,21 +125,21 @@ func main() {
 	}
 }
 
-func extractCertificatePrivKey() string {
-	pkFileData, err := os.ReadFile(key)
+func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
+	certsPEM, err := os.ReadFile(certFileName)
 	if err != nil {
-		panic("can't load pk: " + err.Error())
+		log.Panic(err)
 	}
-	pem, _ := pem.Decode(pkFileData)
-	priv, err := x509.ParsePKCS8PrivateKey(pem.Bytes)
+	pkFileData, err := os.ReadFile(keyFileName)
 	if err != nil {
-		panic("can't parse pk: " + err.Error())
+		log.Panic("can't load pk: " + err.Error())
 	}
-	privKeyBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	cert, err := tls.X509KeyPair(certsPEM, pkFileData)
 	if err != nil {
-		panic("can't encode privkey: " + err.Error())
+		log.Panic(err)
 	}
-	privKeyHex := hex.EncodeToString(privKeyBytes)
 
-	return privKeyHex
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
 }

@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -27,8 +26,6 @@ const (
 	connCountTCP            = 100
 	connCountUDP            = 100
 	testDeadline            = 15 * stdlibtime.Second
-	certPath                = "%v/fixture/.testdata/localhost.crt"
-	keyPath                 = "%v/fixture/.testdata/localhost.key"
 	NIP13MinLeadingZeroBits = 5
 )
 
@@ -42,33 +39,27 @@ func TestMain(m *testing.M) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
 		}
-
 	}
-	wd, _ := os.Getwd()
-	certFilePath := fmt.Sprintf(certPath, wd)
-	keyFilePath := fmt.Sprintf(keyPath, wd)
 	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath: certFilePath,
-		KeyPath:  keyFilePath,
-		Port:     9999,
+		TLSConfig: fixture.LocalhostTLS(),
+		Port:      9999,
 	}, echoFunc, nil, map[string]gin.HandlerFunc{})
 	hdl = new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath:                certFilePath,
-		KeyPath:                 keyFilePath,
+		TLSConfig:               fixture.LocalhostTLS(),
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
 	hdl2 := new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		CertPath:                certFilePath,
-		KeyPath:                 keyFilePath,
+		TLSConfig:               fixture.LocalhostTLS(),
 		Port:                    9997,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))
 	m.Run()
 	serverCancel()
 }
+
 func TestSimpleEchoDifferentTransports(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip() // Heavy CPU load, it produces messages in loop

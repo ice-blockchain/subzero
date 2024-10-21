@@ -114,7 +114,7 @@ func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string
 		builder.WriteRune('+')
 	}
 	builder.WriteString(name)
-	s = model.DeduplicateSlice(s)
+	s = model.DeduplicateSlice(s, func(elem T) T { return elem })
 	if len(s) == 1 && name != "kind" {
 		// X = :X_name.
 		builder.WriteString(" = :")

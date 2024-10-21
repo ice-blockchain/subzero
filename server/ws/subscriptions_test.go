@@ -2707,8 +2707,8 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"m image/jpg",
 			"dim 3024x4032",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
-			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
+			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -2729,8 +2729,8 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"m image/jpg",
 			"dim 3024x4032",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
-			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
+			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 			"dummy dummy",
 		})
 		ev := &model.Event{Event: nostr.Event{
@@ -2782,8 +2782,8 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"m image/jpg",
 			"dim 3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
-			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
+			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
+			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
