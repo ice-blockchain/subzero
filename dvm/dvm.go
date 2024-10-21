@@ -8,11 +8,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v3"
@@ -44,6 +46,7 @@ type (
 		devMode          bool
 		dvmProcessCancel *xsync.MapOf[string, *dvmProcessCancelInfo]
 		tlsConfig        *tls.Config
+		privateKey       string
 	}
 )
 
@@ -55,10 +58,23 @@ var (
 )
 
 func NewDvms(minLeadingZeroBits int, tlsConfig *tls.Config, devMode bool) DvmServiceProvider {
+	var privateKey string
+	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
+		switch tlsConfig.Certificates[0].PrivateKey.(type) {
+		case *btcec.PrivateKey:
+			privateKey = fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*btcec.PrivateKey).Serialize())
+		case *rsa.PrivateKey:
+			privateKey = fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+		default:
+			log.Fatalf("unknown private key type: %T", tlsConfig.Certificates[0].PrivateKey)
+		}
+	}
+
 	return &dvm{
 		devMode:          devMode,
 		tlsConfig:        tlsConfig,
 		dvmProcessCancel: xsync.NewMapOf[string, *dvmProcessCancelInfo](),
+		privateKey:       privateKey,
 	}
 }
 
@@ -95,8 +111,7 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
 }
 
 func (d *dvm) isServiceProviderCustomerInterestedIn(event *model.Event) (res bool, err error) {
-	privKeyHex := fmt.Sprintf("%x", d.tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
-	pubKey, err := nostr.GetPublicKey(privKeyHex)
+	pubKey, err := nostr.GetPublicKey(d.privateKey)
 	if err != nil {
 		return false, errors.Wrap(err, "can't get public key")
 	}
@@ -106,26 +121,25 @@ func (d *dvm) isServiceProviderCustomerInterestedIn(event *model.Event) (res boo
 }
 
 func (d *dvm) handleDeletionEvent(ctx context.Context, event *model.Event) error {
-	if event.Kind == nostr.KindDeletion {
-		stopEventID := event.GetTag("e")
-		kTag := event.GetTag("k")
-		if stopEventID == nil || kTag == nil {
-			return nil
-		}
-		stopEventKind, err := strconv.Atoi(kTag.Value())
-		if err != nil {
-			return errors.Wrapf(err, "can't parse stop event kind for id: %v", stopEventID)
-		}
-		if stopEventKind < 5000 || stopEventKind > 5999 {
-			return nil
-		}
-		reqCtx, reqCancel := context.WithTimeout(ctx, jobTimeoutDeadline)
-		defer reqCancel()
-
-		return errors.Wrapf(d.stopEvent(reqCtx, event, stopEventID.Value()), "dvm job deletion kind, failed to stop event with id %q and kind %d: %v", stopEventID, stopEventKind, err)
+	if event.Kind != nostr.KindDeletion {
+		return nil
 	}
+	stopEventID := event.GetTag("e")
+	kTag := event.GetTag("k")
+	if stopEventID == nil || kTag == nil {
+		return nil
+	}
+	stopEventKind, err := strconv.Atoi(kTag.Value())
+	if err != nil {
+		return errors.Wrapf(err, "can't parse stop event kind for id: %v", stopEventID)
+	}
+	if stopEventKind < 5000 || stopEventKind > 5999 {
+		return nil
+	}
+	reqCtx, reqCancel := context.WithTimeout(ctx, jobTimeoutDeadline)
+	defer reqCancel()
 
-	return nil
+	return errors.Wrapf(d.stopEvent(reqCtx, event, stopEventID.Value()), "dvm job deletion kind, failed to stop event with id %q and kind %d: %v", stopEventID, stopEventKind, err)
 }
 
 func (d *dvm) process(ctx context.Context, event *model.Event) {
@@ -142,12 +156,7 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 			}
 		}
 	}
-	outputRelays, err := connectToRelays(reqCtx, relayList, d.devMode)
-	if err != nil {
-		log.Printf("failed to connect to job relays to publish response: %v, err: %v", event, err)
-
-		return
-	}
+	outputRelays := connectToRelays(reqCtx, relayList, d.devMode)
 	defer closeRelays(outputRelays)
 	d.dvmProcessCancel.Store(event.GetID(), &dvmProcessCancelInfo{
 		RelayList:  outputRelays,
@@ -159,7 +168,7 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 	)
 	switch event.Kind {
 	case model.KindJobNostrEventCount:
-		job = newNostrEventCountJob(outputRelays, d.tlsConfig, d.devMode)
+		job = newNostrEventCountJob(outputRelays, d.privateKey, d.devMode)
 	default:
 		log.Printf("dvm kind:%v not supported", event.Kind)
 
@@ -173,7 +182,7 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 
 		return
 	}
-	payload, err = job.Process(reqCtx, event)
+	payload, err := job.Process(reqCtx, event)
 	if err != nil {
 		if fErr := job.OnErrorFeedback(reqCtx, event, err); fErr != nil {
 			log.Printf("failed to publish job error feedback: %v", fErr)
@@ -191,13 +200,17 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 }
 
 func (d *dvm) publishJobResult(ctx context.Context, incomingEvent *model.Event, relays []*nostr.Relay, payload string, reqiredPaymentAmount float64) error {
+	encodedIncomingEvent, err := json.Marshal(incomingEvent)
+	if err != nil {
+		return errors.Wrapf(err, "failed to json encode incoming event: %v", incomingEvent)
+	}
 	result := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Content:   payload,
 			Kind:      incomingEvent.Kind + 1000,
 			Tags: nostr.Tags{
-				[]string{"request", fmt.Sprintf("%+v", incomingEvent)},
+				[]string{"request", string(encodedIncomingEvent)},
 				[]string{"e", incomingEvent.GetID()},
 				[]string{"i", incomingEvent.Content},
 				[]string{"p", incomingEvent.PubKey},
@@ -207,8 +220,7 @@ func (d *dvm) publishJobResult(ctx context.Context, incomingEvent *model.Event, 
 	if reqiredPaymentAmount > 0 {
 		result.Tags = append(result.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
 	}
-	privKeyHex := fmt.Sprintf("%x", d.tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
-	if err := result.Sign(privKeyHex); err != nil {
+	if err := result.Sign(d.privateKey); err != nil {
 		return errors.Wrapf(err, "failed to sign event: %v", result)
 	}
 	eg := errgroup.Group{}
@@ -232,7 +244,7 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 		event,
 		model.JobFeedbackStatusError,
 		cancelInfo.RelayList,
-		fmt.Sprintf("%x", d.tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes()),
+		d.privateKey,
 		fmt.Sprintf("Job %s has been stopped", stopJobID),
 		0,
 	), "can't publish error feedback: %v", event)
@@ -268,7 +280,7 @@ func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status 
 	return errors.Wrapf(eg.Wait(), "can't publish some of job feedback: %v", incomingEvent)
 }
 
-func connectToRelays(ctx context.Context, relayList []string, devMode bool) (resultRelays []*nostr.Relay, err error) {
+func connectToRelays(ctx context.Context, relayList []string, devMode bool) (resultRelays []*nostr.Relay) {
 	resultRelays = make([]*nostr.Relay, 0, len(relayList))
 	for _, relayUrl := range relayList {
 		establishedCount := 0
@@ -285,7 +297,7 @@ func connectToRelays(ctx context.Context, relayList []string, devMode bool) (res
 		log.Printf("Established %v conns to %v", establishedCount, relayUrl)
 	}
 
-	return resultRelays, nil
+	return resultRelays
 }
 
 func connectToRelay(ctx context.Context, url string, devMode bool) (*nostr.Relay, error) {

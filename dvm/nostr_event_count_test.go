@@ -516,7 +516,7 @@ func TestIsBidAmountEnough(t *testing.T) {
 	t.Parallel()
 
 	t.Run("required amount is 0", func(t *testing.T) {
-		n := newNostrEventCountJob(nil, nil, true)
+		n := newNostrEventCountJob(nil, "", true)
 		tests := []struct {
 			amount   string
 			expected bool
