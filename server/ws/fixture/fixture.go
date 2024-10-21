@@ -60,6 +60,7 @@ func (m *MockService) RegisterRoutes(ctx context.Context, r internal.Router, cfg
 		method, path := parts[0], parts[1]
 		r = r.Handle(method, path, handler)
 	}
+	r.Any("/", internal.WithWS(m, m.nip11Handler))
 }
 
 func (m *MockService) Close(ctx context.Context) error {

@@ -51,7 +51,6 @@ func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port
 		"GET /files/:file":    uploader.Download(),
 		"DELETE /files/:file": uploader.Delete(),
 	})
-	http.DefaultClient.Transport = &http.Transport{TLSClientConfig: fixture.LocalhostTLS()}
 	time.Sleep(100 * time.Millisecond)
 }
 

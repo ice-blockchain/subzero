@@ -52,7 +52,6 @@ func TestParseListOfFilters(t *testing.T) {
 				var filters []string
 				for _, f := range result {
 					filters = append(filters, f.String())
-
 				}
 				actual := fmt.Sprintf("[%v]", strings.Join(filters, ","))
 				require.Equal(t, actual, tt.content)
