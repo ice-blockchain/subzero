@@ -1,5 +1,23 @@
 # subzero
+## Starting
+```bash
+subzero --port=9998 --cert=./cmd/subzero/.testdata/localhost.crt --key=./cmd/subzero/.testdata/localhost.key --adnl-external-ip=127.0.0.1 --adnl-port=11512 --storage-root=./../.uploads --adnl-node-key=<hex> [--global-config-url=file://path/to/global.json]
+```
+Parameters:
+* port - port to start https/ws server for user iteraction
+* cert - tls cert for https / ws server
+* key - tls key for https / ws server
+* adnl-external-ip - node's external address (needed to serve storage uploads), other nodes connect to <adnl-external-ip>:<adnl-port>
+* adnl-port - port to start adnl / storage server
+* storage-root - root storage to store files `<storage-root>/<user's key>/files_here.ext`
+* adnl-node-key - adnl key for the node in hex form (length: 64 bytes, 128 in hex), i.e `6cc91d96a67bcae7a7a4df91f9c04469f652cf007b33460c60c0649f1777df5703bec10efbd4520126e53d0d70552f873ba843d54352d59fa28989bdf3925a7d` = random if not specified
+```go
+_, key ,_ := ed25519.GenerateKey(nil)
+fmt.Println(hex.EncodeToString(key))
+```
+* global-config-url - url (supports file:// schema) of global config (to fetch initial DHT nodes for storage), by default = mainnet url
 
+## NIPs
 NIPs | latest commit hash implemented | comments
 --- | --- | --- 
 [01](https://github.com/nostr-protocol/nips/blob/master/01.md) | [9971db3](https://github.com/nostr-protocol/nips/commit/9971db355164815c986251f8f89d1c7c70ec9e53)

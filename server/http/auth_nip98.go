@@ -19,7 +19,7 @@ import (
 type (
 	Token interface {
 		PubKey() string
-		MasterKey() string
+		MasterPubKey() string
 		ExpectedHash() string
 		ValidateAttestation(ctx context.Context, kind int, now time.Time) error
 	}
@@ -106,7 +106,7 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 func (t *nostrToken) PubKey() string {
 	return t.ev.PubKey
 }
-func (t *nostrToken) MasterKey() string {
+func (t *nostrToken) MasterPubKey() string {
 	return t.ev.GetMasterPublicKey()
 }
 func (t *nostrToken) ExpectedHash() string {
@@ -114,7 +114,7 @@ func (t *nostrToken) ExpectedHash() string {
 }
 
 func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time.Time) error {
-	if t.ev.PubKey == t.MasterKey() {
+	if t.ev.PubKey == t.MasterPubKey() {
 		return nil
 	}
 	attestationEvent := query.GetStoredEvents(ctx, &model.Subscription{model.Filters{model.Filter{
