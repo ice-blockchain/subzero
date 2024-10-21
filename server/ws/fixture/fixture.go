@@ -54,7 +54,7 @@ func (m *MockService) Read(ctx context.Context, w internal.WS, cfg *config.Confi
 	}
 }
 
-func (m *MockService) RegisterRoutes(ctx context.Context, r internal.Router, cfg *config.Config) {
+func (m *MockService) RegisterRoutes(ctx context.Context, r internal.Router) {
 	for route, handler := range m.extraHttpHandlers {
 		parts := strings.Split(route, " ")
 		method, path := parts[0], parts[1]

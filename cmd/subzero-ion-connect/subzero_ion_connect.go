@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
-	"os"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -126,15 +125,7 @@ func main() {
 }
 
 func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
-	certsPEM, err := os.ReadFile(certFileName)
-	if err != nil {
-		log.Panic(err)
-	}
-	pkFileData, err := os.ReadFile(keyFileName)
-	if err != nil {
-		log.Panic("can't load pk: " + err.Error())
-	}
-	cert, err := tls.X509KeyPair(certsPEM, pkFileData)
+	cert, err := tls.LoadX509KeyPair(certFileName, keyFileName)
 	if err != nil {
 		log.Panic(err)
 	}

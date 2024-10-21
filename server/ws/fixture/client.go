@@ -490,7 +490,7 @@ func LocalhostTLS() *tls.Config {
 	}
 
 	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
+		MinVersion:   tls.VersionTLS12,
 		RootCAs:      caCertPool,
 		Certificates: []tls.Certificate{cert},
 	}

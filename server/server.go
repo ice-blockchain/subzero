@@ -11,16 +11,20 @@ import (
 
 type (
 	Config = wsserver.Config
-	router struct{}
+	router struct {
+		cfg *Config
+	}
 )
 
 func ListenAndServe(ctx context.Context, cancel context.CancelFunc, config *wsserver.Config) {
-	wsserver.New(config, &router{}).ListenAndServe(ctx, cancel)
+	wsserver.New(config, &router{
+		cfg: config,
+	}).ListenAndServe(ctx, cancel)
 }
 
-func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router, cfg *Config) {
+func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	uploader := httpserver.NewUploadHandler(ctx)
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: cfg.NIP13MinLeadingZeroBits}))).
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: r.cfg.NIP13MinLeadingZeroBits}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).

@@ -4,10 +4,7 @@ package dvm
 
 import (
 	"context"
-	"crypto/rsa"
-	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -21,8 +18,8 @@ import (
 
 type (
 	nostrEventCountJob struct {
-		ServiceProviderPrivKey string
-		OutputRelays           []*nostr.Relay
+		serviceProviderPrivKey string
+		outputRelays           []*nostr.Relay
 		devMode                bool
 	}
 )
@@ -34,25 +31,17 @@ const (
 	NostrEventCountGroupRoot    = "root"
 )
 
-func newNostrEventCountJob(outputRelays []*nostr.Relay, tlsConfig *tls.Config, devMode bool) *nostrEventCountJob {
-	var privKeyHex string
-	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
-		privKeyHex = fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
-	}
-
+func newNostrEventCountJob(outputRelays []*nostr.Relay, privateKey string, devMode bool) *nostrEventCountJob {
 	return &nostrEventCountJob{
-		ServiceProviderPrivKey: privKeyHex,
-		OutputRelays:           outputRelays,
+		serviceProviderPrivKey: privateKey,
+		outputRelays:           outputRelays,
 		devMode:                devMode,
 	}
 }
 
 func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (payload string, err error) {
 	const zeroResponse = "0"
-	queryRelays, err := connectToRelays(ctx, collectRelayURLs(e), n.devMode)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to connect to job relays to publish response: %v", e)
-	}
+	queryRelays := connectToRelays(ctx, collectRelayURLs(e), n.devMode)
 	defer closeRelays(queryRelays)
 	filters, err := parseListOfFilters(e.Content)
 	if err != nil {
@@ -227,7 +216,7 @@ func collectRelayURLs(e *model.Event) []string {
 
 func (n *nostrEventCountJob) OnErrorFeedback(ctx context.Context, event *model.Event, inErr error) error {
 	return errors.Wrapf(
-		publishJobFeedback(ctx, event, model.JobFeedbackStatusError, n.OutputRelays, n.ServiceProviderPrivKey, "error: %v"+inErr.Error(), n.RequiredPaymentAmount()),
+		publishJobFeedback(ctx, event, model.JobFeedbackStatusError, n.outputRelays, n.serviceProviderPrivKey, "error: %v"+inErr.Error(), n.RequiredPaymentAmount()),
 		"failed to publish job payment required feedback: %v", event)
 }
 
@@ -245,6 +234,6 @@ func (n *nostrEventCountJob) OnPartialFeedback(ctx context.Context, event *model
 
 func (n *nostrEventCountJob) OnPaymentRequiredFeedback(ctx context.Context, event *model.Event) error {
 	return errors.Wrapf(
-		publishJobFeedback(ctx, event, model.JobFeedbackStatusPaymentRequired, n.OutputRelays, n.ServiceProviderPrivKey, "not enough bid", n.RequiredPaymentAmount()),
+		publishJobFeedback(ctx, event, model.JobFeedbackStatusPaymentRequired, n.outputRelays, n.serviceProviderPrivKey, "not enough bid", n.RequiredPaymentAmount()),
 		"failed to publish job payment required feedback: %v", event)
 }
