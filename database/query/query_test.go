@@ -975,7 +975,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, nostr.GeneratePrivateKey()}}
 			require.NoError(t, ev.Sign(active))
 			t.Logf("event %+v", ev)
-			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
 		})
 		t.Run("Count", func(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
@@ -1090,7 +1090,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
 			ev.Tags = append(ev.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterPublic})
 			require.NoError(t, ev.Sign(user2Private))
-			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), ErrOnBehalfAccessDenied)
+			require.ErrorIs(t, db.AcceptEvent(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
 		})
 	})
 	t.Run("DeleteEvents", func(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	stdlibtime "time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -50,14 +51,14 @@ func TestMain(m *testing.M) {
 		CertPath: certFilePath,
 		KeyPath:  keyFilePath,
 		Port:     9999,
-	}, echoFunc, nil)
+	}, echoFunc, nil, map[string]gin.HandlerFunc{})
 	hdl = new(handler)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
 		CertPath:                certFilePath,
 		KeyPath:                 keyFilePath,
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-	}, hdl.Handle, nil)
+	}, hdl.Handle, nil, map[string]gin.HandlerFunc{})
 	m.Run()
 	serverCancel()
 }

@@ -15,13 +15,13 @@ import (
 )
 
 type (
-	Router = gin.Engine
+	Router = gin.IRoutes
 	Server interface {
 		// ListenAndServe starts everything and blocks indefinitely.
 		ListenAndServe(ctx context.Context, cancel context.CancelFunc)
 	}
 	RegisterRoutes interface {
-		RegisterRoutes(router *Router)
+		RegisterRoutes(ctx context.Context, router Router)
 	}
 
 	WSHandler = adapters.WSHandler
@@ -31,7 +31,7 @@ type (
 	Srv struct {
 		H3Server    http3.Server
 		H2Server    http2.Server
-		router      *Router
+		router      *gin.Engine
 		cfg         *config.Config
 		quit        chan<- os.Signal
 		routesSetup RegisterRoutes

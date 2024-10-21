@@ -33,15 +33,15 @@ func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s.router.UseRawPath = true
 	s.H3Server = http3.New(s.cfg, s.router)
 	s.H2Server = http2.New(s.cfg, s.router)
-	s.setupRouter()
 	return s
 }
 
-func (s *Srv) setupRouter() {
-	s.routesSetup.RegisterRoutes(s.router)
+func (s *Srv) setupRouter(ctx context.Context) {
+	s.routesSetup.RegisterRoutes(ctx, s.router)
 }
 
 func (s *Srv) ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
+	s.setupRouter(ctx)
 	ctx = withServer(ctx, s)
 	go s.startServer(ctx, s.H3Server)
 	go s.startServer(ctx, s.H2Server)

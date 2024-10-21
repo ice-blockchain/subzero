@@ -1,0 +1,15 @@
+{
+  "api_url": "/files",
+  "download_url": "/files",
+  "delegated_to_url": "",
+  "content_types": ["image/webp", "video/mpeg4", "application/x-brotli"],
+  "plans": {
+    "free": {
+      "name": "Free Tier",
+      "is_nip98_required": true,
+      "max_byte_size": 104857600,
+      "file_expiration": [0, 0],
+      "media_transformations": {}
+    }
+  }
+}

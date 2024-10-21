@@ -18,6 +18,12 @@ func ListenAndServe(ctx context.Context, cancel context.CancelFunc, config *wsse
 	wsserver.New(config, &router{}).ListenAndServe(ctx, cancel)
 }
 
-func (r *router) RegisterRoutes(wsroutes *wsserver.Router) {
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler()))
+func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
+	uploader := httpserver.NewUploadHandler(ctx)
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler())).
+		POST("/files", uploader.Upload()).
+		GET("/files", uploader.ListFiles()).
+		GET("/files/:file", uploader.Download()).
+		DELETE("/files/:file", uploader.Delete()).
+		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info())
 }

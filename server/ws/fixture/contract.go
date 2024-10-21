@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	stdlibtime "time"
 
+	"github.com/gin-gonic/gin"
+
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -27,12 +29,14 @@ var (
 
 type (
 	MockService struct {
-		server         internal.Server
-		handlersMx     sync.Mutex
-		Handlers       map[adapters.WSWriter]struct{}
-		processingFunc func(ctx context.Context, writer adapters.WSWriter, in []byte, cfg *config.Config)
-		nip11Handler   http.Handler
-		ReaderExited   atomic.Uint64
+		server internal.Server
+
+		handlersMx        sync.Mutex
+		Handlers          map[adapters.WSWriter]struct{}
+		processingFunc    func(ctx context.Context, writer adapters.WSWriter, in []byte, cfg *config.Config)
+		nip11Handler      http.Handler
+		extraHttpHandlers map[string]gin.HandlerFunc
+		ReaderExited      atomic.Uint64
 	}
 	Client interface {
 		Received
