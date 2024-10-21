@@ -178,7 +178,7 @@ jobs:
     name: Test
     strategy:
       matrix:
-        package: [ "database/query", "server/http", "server/ws" ]
+        package: [ "cfg", "database/query", "server/http", "server/ws" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
     runs-on: ubuntu-latest
     steps:
