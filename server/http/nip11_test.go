@@ -5,6 +5,7 @@ package http
 import (
 	"context"
 	"fmt"
+	"github.com/ice-blockchain/subzero/database/query"
 	"net/http"
 	"os"
 	"testing"
@@ -16,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
@@ -33,17 +33,18 @@ var pubsubServer *fixture.MockService
 func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
+	query.MustInit()
 	initServer(serverCtx, serverCancel, 9997, storageRoot)
 	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.LocalhostTLS()}
-	m.Run()
+	code := m.Run()
 	serverCancel()
+	os.Exit(code)
 }
 
 func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port uint16, storageRoot string) {
 	wd, _ := os.Getwd()
 	certFilePath := fmt.Sprintf(certPath, wd)
 	keyFilePath := fmt.Sprintf(keyPath, wd)
-	query.MustInit()
 	initStorage(serverCtx, storageRoot)
 	uploader := NewUploadHandler(serverCtx)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{

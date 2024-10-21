@@ -94,7 +94,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
+		authHeader := getAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -181,6 +181,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		if err != nil {
 			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			os.Remove(uploadingFilePath)
 			return
 		}
 		resStatus := http.StatusCreated
@@ -212,7 +213,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 func (s *storageHandler) Download() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
+		authHeader := getAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -242,7 +243,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
+		authHeader := getAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -276,7 +277,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 func (s *storageHandler) ListFiles() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
+		authHeader := getAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))

@@ -61,7 +61,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 	}
 	bagID = hex.EncodeToString(bag.BagID)
 	log.Printf("[STORAGE] INFO: new upload %v for user %v hash %v resulted in bag %v, total %v", relativePathToFileForUrl, masterPubKey, hash, bagID, bag.Header.FilesCount)
-	if newFile != nil {
+	if newFile != nil && c.debug {
 		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
 		if err != nil {
 			return "", "", false, errors.Wrapf(err, "failed to get just created file from new bag")

@@ -6,12 +6,11 @@ import (
 	"context"
 	"encoding/base64"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/nbd-wtf/go-nostr"
-
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -49,12 +48,16 @@ func NewAuth() AuthClient {
 	return &authNostr{}
 }
 
+func getAuthHeader(gCtx *gin.Context) string {
+	return strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
+}
+
 func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error) {
 	bToken, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal auth token: malformed base64")
 	}
-	var event nostr.Event
+	var event model.Event
 	if err = event.UnmarshalJSON(bToken); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal auth token: malformed event json")
 	}
@@ -101,7 +104,7 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 	if payloadTag := event.Tags.GetFirst([]string{"payload"}); payloadTag != nil && len(*payloadTag) > 1 {
 		expectedHash = payloadTag.Value()
 	}
-	return &nostrToken{ev: model.Event{event}, expectedHash: expectedHash}, nil
+	return &nostrToken{ev: event, expectedHash: expectedHash}, nil
 }
 func (t *nostrToken) PubKey() string {
 	return t.ev.PubKey
@@ -117,7 +120,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 	if t.ev.PubKey == t.MasterPubKey() {
 		return nil
 	}
-	attestationEvent := query.GetStoredEvents(ctx, &model.Subscription{model.Filters{model.Filter{
+	attestationEventIt := query.GetStoredEvents(ctx, &model.Subscription{model.Filters{model.Filter{
 		Kinds: []int{model.CustomIONKindAttestation},
 		Tags: model.TagMap{
 			"p": []string{t.PubKey()},
@@ -125,7 +128,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 	},
 	}})
 	var allowed bool
-	for attestation, err := range attestationEvent {
+	for attestation, err := range attestationEventIt {
 		if err != nil {
 			return errors.Wrapf(err, "failed to get attestation event")
 		}
