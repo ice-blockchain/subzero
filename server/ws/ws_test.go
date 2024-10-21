@@ -8,7 +8,7 @@ import (
 	"os"
 	"sync"
 	"testing"
-	stdlibtime "time"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -25,7 +25,7 @@ import (
 const (
 	connCountTCP            = 100
 	connCountUDP            = 100
-	testDeadline            = 15 * stdlibtime.Second
+	testDeadline            = 15 * time.Second
 	NIP13MinLeadingZeroBits = 5
 )
 
@@ -33,7 +33,7 @@ var echoServer *fixture.MockService
 var pubsubServers []*fixture.MockService
 
 func TestMain(m *testing.M) {
-	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*stdlibtime.Minute)
+	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
@@ -144,7 +144,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 		if shutdownCtx.Err() != nil {
 			log.Panic(errors.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
 		}
-		stdlibtime.Sleep(100 * stdlibtime.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	require.Equal(t, uint64(conns), echoServer.ReaderExited.Load())
 	require.Len(t, echoServer.Handlers, conns)
