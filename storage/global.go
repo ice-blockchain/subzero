@@ -39,7 +39,7 @@ const DefaultConfigUrl = "https://ton.org/global.config.json"
 
 var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
-const threadsPerBagForDownloading = 1
+const threadsPerBagForDownloading = 7
 
 func Client() StorageClient {
 	return globalClient
