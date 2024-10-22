@@ -11,14 +11,22 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/mailru/easyjson"
+	"github.com/mailru/easyjson/jwriter"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
+	"github.com/tidwall/gjson"
 )
 
 type (
 	Event struct {
 		nostr.Event
 	}
+	EventEnvelope struct {
+		SubscriptionID *string
+		Events         []*Event
+	}
+
 	EventSignAlg string
 	EventKeyAlg  string
 )
@@ -167,4 +175,76 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 		pubkey = bTag.Value()
 	}
 	return pubkey
+}
+
+func (EventEnvelope) Label() string { return "EVENT" }
+
+func (v *EventEnvelope) UnmarshalJSON(data []byte) error {
+	r := gjson.ParseBytes(data)
+	arr := r.Array()
+	switch len(arr) {
+	case 0, 1:
+		return errors.Wrapf(ErrUnknownMessage, "failed to decode EVENT envelope: unknown array len: %v", len(arr))
+
+	// No subscription ID: ["EVENT", event].
+	case 2:
+		var ev Event
+
+		err := easyjson.Unmarshal([]byte(arr[1].Raw), &ev)
+		if err == nil {
+			v.Events = []*Event{&ev}
+
+			return nil
+		}
+
+		return errors.Wrap(err, "failed to decode event")
+
+	// With multiple events: ["EVENT", [optional subscriptionID], <event1>, [event2], ...].
+	default:
+		jsonEvents := arr[1:] // Skip the first element, which is the label.
+		if jsonEvents[0].Type == gjson.String {
+			v.SubscriptionID = &jsonEvents[0].Str
+			jsonEvents = jsonEvents[1:]
+		} else if jsonEvents[0].Type == gjson.Null {
+			v.SubscriptionID = nil
+			jsonEvents = jsonEvents[1:]
+		}
+		v.Events = make([]*Event, 0, len(jsonEvents))
+		for i := range jsonEvents {
+			var ev Event
+			if err := easyjson.Unmarshal([]byte(jsonEvents[i].Raw), &ev); err != nil {
+				return errors.Wrapf(err, "failed to decode event %d", i)
+			}
+			v.Events = append(v.Events, &ev)
+		}
+	}
+
+	return nil
+}
+
+func (v EventEnvelope) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	w.RawString(`["EVENT",`)
+	if v.SubscriptionID != nil {
+		w.RawString(`"` + *v.SubscriptionID + `"`)
+		if len(v.Events) > 0 {
+			w.RawByte(',')
+		}
+	}
+
+	for i := range v.Events {
+		v.Events[i].MarshalEasyJSON(&w)
+		if i < len(v.Events)-1 {
+			w.RawByte(',')
+		}
+	}
+	w.RawString(`]`)
+
+	return w.BuildBytes()
+}
+
+func (v EventEnvelope) String() string {
+	j, _ := v.MarshalJSON()
+
+	return string(j)
 }

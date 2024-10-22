@@ -94,15 +94,15 @@ var (
 
 func init() {
 	initFlags()
-	wsserver.RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		if err := command.AcceptEvent(ctx, event); err != nil {
-			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", event)
+	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		if err := command.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
 		}
-		if err := query.AcceptEvent(ctx, event); err != nil {
-			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", event)
+		if err := query.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
 		}
-		if sErr := storage.AcceptEvent(ctx, event); sErr != nil {
-			return errors.Wrapf(sErr, "failed to process NIP-94 event")
+		if sErr := storage.AcceptEvents(ctx, events...); sErr != nil {
+			return errors.Wrapf(sErr, "failed to process NIP-94 events")
 		}
 		return nil
 	})

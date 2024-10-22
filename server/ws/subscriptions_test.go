@@ -22,6 +22,38 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
+func helperRegisterWSEventListenerProxy(t *testing.T, f func(*model.Event)) {
+	t.Helper()
+
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for i := range events {
+			f(events[i])
+		}
+
+		return nil
+	})
+}
+
+func helperRegisterWSEventListenerProxyWithStorage(t *testing.T, storedEvents *[]*model.Event) {
+	t.Helper()
+
+	helperRegisterWSEventListenerProxy(t, func(event *model.Event) {
+		require.NotNil(t, event)
+
+		if event.IsEphemeral() {
+			return
+		}
+
+		for i := range *storedEvents {
+			if (*storedEvents)[i].ID == event.ID {
+				return
+			}
+		}
+
+		*storedEvents = append(*storedEvents, event)
+	})
+}
+
 func TestRelaySubscription(t *testing.T) {
 	var eventsQueue []*model.Event
 
@@ -66,11 +98,8 @@ func TestRelaySubscription(t *testing.T) {
 	})
 
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		storedEvents = append(storedEvents, event)
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 
-		return nil
-	})
 	pubsubServer.Reset()
 	ctx, cancel = context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -142,7 +171,7 @@ func TestRelaySubscription(t *testing.T) {
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
-	require.NoError(t, NotifySubscriptions(eventBy3rdParty))
+	require.NoError(t, notifySubscriptions(eventBy3rdParty))
 
 	repostedPubkey := "pubkey1"
 	repostedID := uuid.NewString()
@@ -244,10 +273,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
 	require.NoError(t, storedEvents[len(storedEvents)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, storedEvents[len(storedEvents)-1].Sign(privkey))
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	connsCount := 10
 	subsPerConnectionCount := 10
@@ -368,16 +394,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 func TestPublishingEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -516,17 +533,7 @@ func TestPublishingEvents(t *testing.T) {
 func TestPublishingNIP09Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -628,16 +635,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 func TestPublishingNIP10Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -726,17 +724,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 func TestPublishingNIP18Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -916,16 +904,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 func TestPublishingNIP23Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -1047,17 +1026,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 func TestPublishingNIP01NIP24Events(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -1173,17 +1142,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 func TestPublishingNIP24ReactionEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -1328,16 +1287,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -1519,16 +1469,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 func TestPublishingNIP56(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -1682,16 +1623,7 @@ func TestPublishingNIP56(t *testing.T) {
 func TestPublishingNIP58Badges(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -1898,16 +1830,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -2002,16 +1925,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServer.Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
@@ -2922,9 +2836,9 @@ func TestCountEvents(t *testing.T) {
 	query.MustInit()
 
 	privkey := nostr.GeneratePrivateKey()
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		t.Logf("received event: %v", event)
-		return query.AcceptEvent(ctx, event)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		t.Logf("received events: %v", events)
+		return query.AcceptEvents(ctx, events...)
 	})
 
 	pubsubServer.Reset()

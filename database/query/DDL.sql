@@ -50,6 +50,9 @@ CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at           
 CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_system_created_at      ON events(pubkey, master_pubkey, system_created_at DESC) where hidden = 0;
 
+-- Special index for inserts.
+CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
+
 --------
 CREATE TABLE IF NOT EXISTS event_tags
 (

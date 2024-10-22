@@ -91,6 +91,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "key_alg"
 		case "masterpubkey":
 			out = "master_pubkey"
+		case "dtag":
+			out = "d_tag"
 		default:
 			out = n
 		}

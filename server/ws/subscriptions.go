@@ -52,25 +52,23 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 	return err
 }
 
-func (h *handler) handleEvent(ctx context.Context, event *model.Event, cfg *Config) (err error) {
-	if err = h.validateIncomingEvent(event, cfg); err != nil {
-		return errors.Wrap(err, "invalid: event is invalid")
-	}
-	if !event.IsEphemeral() {
-		if wsEventListener == nil {
-			log.Panic(errors.Errorf("wsEventListener to store events not set"))
-		}
-		if saveErr := wsEventListener(ctx, event); saveErr != nil {
-			switch {
-			case errors.Is(saveErr, model.ErrDuplicate):
-				return nil
-			default:
-				return errors.Wrap(saveErr, "failed to store event")
-			}
+func (h *handler) handleEvents(ctx context.Context, events []*model.Event, cfg *Config) error {
+	for i := range events {
+		if err := h.validateIncomingEvent(events[i], cfg); err != nil {
+			return errors.Wrapf(err, "event %v: invalid", events[i])
 		}
 	}
-	if err = h.notifyListenersAboutNewEvent(event); err != nil {
-		return errors.Wrapf(err, "failed to notify subscribers about new event: %+v", event)
+
+	if wsEventListener == nil {
+		log.Panic("wsEventListener is not set")
+	}
+
+	if err := wsEventListener(ctx, events...); err != nil {
+		return errors.Wrap(err, "failed to store events")
+	}
+
+	if err := h.notifyListenersAboutNewEvents(events...); err != nil {
+		return errors.Wrap(err, "failed to notify subscribers about new events")
 	}
 
 	return nil
@@ -97,15 +95,18 @@ func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err erro
 	return nil
 }
 
-func (h *handler) notifyListenersAboutNewEvent(ev *model.Event) error {
+func (h *handler) notifyListenersAboutNewEvents(events ...*model.Event) error {
 	var err *multierror.Error
+
 	for writer, subs := range h.subListeners {
 		for _, sub := range subs {
-			if sub.Filters.Match(&ev.Event) {
-				err = multierror.Append(
-					err,
-					h.writeResponse(writer, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: ev.Event}),
-				)
+			for eventIdx := range events {
+				if sub.Filters.Match(&events[eventIdx].Event) {
+					err = multierror.Append(
+						err,
+						h.writeResponse(writer, &model.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*model.Event{events[eventIdx]}}),
+					)
+				}
 			}
 		}
 	}

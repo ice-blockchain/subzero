@@ -33,20 +33,32 @@ const (
 	sqlOpCodeOR
 )
 
-var ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
+var (
+	ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
+	ErrEmptyFilter                  = errors.New("empty filter")
+)
 
 type (
 	whereBuilder struct {
 		Params map[string]any
 		strings.Builder
 	}
-	databaseFilter struct {
+	databaseFilterSearch struct {
 		nostr.Filter
 		Expiration *bool
 		Videos     *bool
 		Images     *bool
 		Quotes     *bool
 		References *bool
+	}
+	databaseFilterDelete struct {
+		Author string
+		IDs    []string
+		Events []struct {
+			Kind   int
+			Author string
+			TagD   string
+		}
 	}
 	filterBuilder struct {
 		Name           string
@@ -75,6 +87,48 @@ func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
 	})
 
 	return f.EventIdsString
+}
+
+func parseEventAsFilterForDelete(e *model.Event) (*databaseFilterDelete, error) {
+	filter := databaseFilterDelete{
+		Author: e.PubKey,
+	}
+
+	for _, tag := range e.Tags {
+		switch tag.Key() {
+		case "e":
+			if v := tag.Value(); v != "" {
+				filter.IDs = append(filter.IDs, v)
+			}
+
+		case "a":
+			vals := strings.Split(tag.Value(), ":")
+			if len(vals) != 3 {
+				return nil, errors.Errorf("failed to parse replaceable event reference, len != 3: %v", tag.Value())
+			}
+
+			kind, err := strconv.ParseInt(vals[0], 10, 64)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse replaceable event kind %v", tag.Value())
+			}
+
+			filter.Events = append(filter.Events, struct {
+				Kind   int
+				Author string
+				TagD   string
+			}{
+				Kind:   int(kind),
+				Author: vals[1],
+				TagD:   vals[2],
+			})
+		}
+	}
+
+	if len(filter.IDs) == 0 && len(filter.Events) == 0 {
+		return nil, errors.Errorf("failed to parse event reference, no filters found: %v", e)
+	}
+
+	return &filter, nil
 }
 
 func newWhereBuilder() *whereBuilder {
@@ -217,7 +271,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 	}
 }
 
-func isFilterEmpty(filter *databaseFilter) bool {
+func isFilterEmpty(filter *databaseFilterSearch) bool {
 	return len(filter.IDs) == 0 &&
 		len(filter.Kinds) == 0 &&
 		len(filter.Authors) == 0 &&
@@ -261,7 +315,7 @@ func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model
 	return nil
 }
 
-func filterHasExtensions(filter *databaseFilter) (positive, negative int) {
+func filterHasExtensions(filter *databaseFilterSearch) (positive, negative int) {
 	var values = []struct {
 		val *bool
 		bit int
@@ -288,7 +342,7 @@ func filterHasExtensions(filter *databaseFilter) (positive, negative int) {
 	return
 }
 
-func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilter, builder *filterBuilder, include bool) {
+func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch, builder *filterBuilder, include bool) {
 	separator := w.maybeOR
 	w.WriteString("select event_id from event_tags where ")
 	if include && builder.HasEvents() {
@@ -332,7 +386,7 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilter, builder 
 	w.WriteRune(')')
 }
 
-func (w *whereBuilder) applyRepostFilter(filter *databaseFilter, builder *filterBuilder, positiveExtensions, negativeExtensions *int) (applied bool) {
+func (w *whereBuilder) applyRepostFilter(filter *databaseFilterSearch, builder *filterBuilder, positiveExtensions, negativeExtensions *int) (applied bool) {
 	if (*positiveExtensions + *negativeExtensions) == 0 {
 		// No extensions in the filter.
 		return
@@ -366,7 +420,7 @@ func (w *whereBuilder) applyRepostFilter(filter *databaseFilter, builder *filter
 	return (*positiveExtensions + *negativeExtensions) > 0
 }
 
-func (w *whereBuilder) applyFilter(idx int, filter *databaseFilter) error {
+func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
 	}
@@ -412,8 +466,8 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilter) error {
 	return nil
 }
 
-func parseNostrFilter(filter model.Filter) *databaseFilter {
-	f := databaseFilter{
+func parseNostrFilter(filter model.Filter) *databaseFilterSearch {
+	f := databaseFilterSearch{
 		Filter: filter,
 	}
 	flags := []struct {
@@ -472,6 +526,62 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 	if w.Len() > 0 {
 		w.WriteString(" AND ")
 	}
+	w.WriteString(whereBuilderDefaultWhere)
+
+	return w.String(), w.Params, nil
+}
+
+func (w *whereBuilder) applyLiteFilter(idx int, filter *databaseFilterDelete) {
+	filterID := "litefilter" + strconv.Itoa(idx) + "_"
+
+	// Filter expression consists of two parts: (event filter) AND (access filter):
+	// - Event filter (ORed):
+	//   - By ID.
+	//   - By kind and author and D tag.
+	// - Account filter (ORed):
+	//   - By author.
+	//   - By master pubkey.
+	//   - By onbehalf attestations.
+	w.WriteRune('(')
+	if len(filter.IDs) > 0 || len(filter.Events) > 0 {
+		w.WriteRune('(')
+		buildFromSlice(w, sqlOpCodeNONE, filterID, filter.IDs, "id", "")
+		for i := range filter.Events {
+			idxStr := strconv.Itoa(i)
+			w.maybeOR()
+			w.WriteString("(kind = :")
+			w.WriteString(w.addParam(filterID, "kind"+idxStr, filter.Events[i].Kind))
+			w.WriteString(" AND pubkey = :")
+			w.WriteString(w.addParam(filterID, "author"+idxStr, filter.Events[i].Author))
+			w.WriteString(" AND d_tag = :")
+			w.WriteString(w.addParam(filterID, "dtag"+idxStr, filter.Events[i].TagD))
+			w.WriteRune(')')
+		}
+		w.WriteString(") AND ")
+	}
+
+	owner := w.addParam(filterID, "pubkey", filter.Author)
+	w.WriteString("((pubkey = :")
+	w.WriteString(owner)
+	w.WriteString(" OR master_pubkey = :")
+	w.WriteString(owner)
+	w.WriteString(") OR (pubkey != master_pubkey AND ")
+	w.WriteString("subzero_nostr_onbehalf_is_allowed(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden=0), '[]'), :")
+	w.WriteString(owner)
+	w.WriteString(", master_pubkey, kind, unixepoch()))))")
+}
+
+func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params map[string]any, err error) {
+	for idx := range filters {
+		w.maybeOR()
+		w.applyLiteFilter(idx, &filters[idx])
+	}
+
+	if w.Len() == 0 {
+		return "", nil, ErrEmptyFilter
+	}
+
+	w.WriteString(" AND ")
 	w.WriteString(whereBuilderDefaultWhere)
 
 	return w.String(), w.Params, nil

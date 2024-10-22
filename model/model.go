@@ -33,7 +33,6 @@ type (
 )
 
 var (
-	ErrDuplicate            = errors.New("duplicate")
 	ErrUnsupportedAlg       = errors.New("unsupported signature/key algorithm combination")
 	ErrOnBehalfAccessDenied = errors.New("on-behalf access denied")
 )

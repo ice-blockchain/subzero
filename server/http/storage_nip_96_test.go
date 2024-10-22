@@ -73,7 +73,7 @@ func TestNIP96(t *testing.T) {
 			{model.TagAttestationName, user2PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
 		}
 		require.NoError(t, ev.Sign(master))
-		require.NoError(t, query.AcceptEvent(ctx, &ev))
+		require.NoError(t, query.AcceptEvents(ctx, &ev))
 	})
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
 		var responses chan *nip96.UploadResponse
@@ -99,7 +99,7 @@ func TestNIP96(t *testing.T) {
 	var nip94EventToSign *model.Event
 	t.Run("nip-94 event is broadcasted, it causes download to other node", func(t *testing.T) {
 		tagsToBroadcast = tagsToBroadcast.AppendUnique(model.Tag{"b", masterPubKey})
-		nip94EventToSign = &model.Event{nostr.Event{
+		nip94EventToSign = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindFileMetadata,
 			Tags:      tagsToBroadcast,
@@ -108,8 +108,8 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, nip94EventToSign.Sign(user1))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
 		initStorage(ctx, newStorageRoot)
-		require.NoError(t, query.AcceptEvent(ctx, nip94EventToSign))
-		require.NoError(t, storage.AcceptEvent(ctx, nip94EventToSign))
+		require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
+		require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
 		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "profile.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
 		require.NoError(t, err)
 		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
@@ -168,7 +168,7 @@ func TestNIP96(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94EventToSign.Content).Nip94Event.Tags}).Summary
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
-		deletionEventToSign := &model.Event{nostr.Event{
+		deletionEventToSign := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindDeletion,
 			Tags: nostr.Tags{
@@ -178,7 +178,7 @@ func TestNIP96(t *testing.T) {
 			},
 		}}
 		require.NoError(t, deletionEventToSign.Sign(user1))
-		require.NoError(t, storage.AcceptEvent(ctx, deletionEventToSign))
+		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})
 	t.Run("delete file owned by user 2 on behave of usr 1 (attestation)", func(t *testing.T) {
@@ -186,7 +186,7 @@ func TestNIP96(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 		fileName := "text.txt"
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
-		deletionEventToSign := &model.Event{nostr.Event{
+		deletionEventToSign := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindDeletion,
 			Tags: nostr.Tags{
@@ -196,7 +196,7 @@ func TestNIP96(t *testing.T) {
 			},
 		}}
 		require.NoError(t, deletionEventToSign.Sign(user1))
-		require.NoError(t, storage.AcceptEvent(ctx, deletionEventToSign))
+		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})
 	t.Run("delete file owned by master by usr1 (Forbidden)", func(t *testing.T) {
@@ -473,7 +473,7 @@ func BenchmarkUploadFiles(b *testing.B) {
 			})
 			require.NoError(b, err)
 			meter.AddTime(time.Since(start))
-			nip94Event := &model.Event{nostr.Event{
+			nip94Event := &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindFileMetadata,
 				Tags:      resp.Nip94Event.Tags,
