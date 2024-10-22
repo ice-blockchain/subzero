@@ -2,6 +2,5 @@
 
 
 cfg:
-  a: b
-  c1: cc1
-  c2: cc2
+  nestedpackage:
+    xx: yy

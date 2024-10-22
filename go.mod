@@ -22,6 +22,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mailru/easyjson v0.7.7
 	github.com/mattn/go-sqlite3 v1.14.24
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.39.1
 	github.com/quic-go/quic-go v0.48.1
@@ -87,7 +88,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a // indirect

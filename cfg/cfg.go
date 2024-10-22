@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 )
 
@@ -19,6 +20,7 @@ const (
 var (
 	yamlConfigurationFilePathInitializer = new(sync.Once)
 	yamlConfigurationFilePath            string
+	globalViper                          = viper.NewWithOptions(viper.KeyDelimiter("/"))
 )
 
 func MustInit(absoluteCfgPaths ...string) {
@@ -27,9 +29,10 @@ func MustInit(absoluteCfgPaths ...string) {
 
 func mustInit(absoluteCfgPaths ...string) {
 	yamlConfigurationFilePath = ""
+	globalViper.SetConfigType("yaml")
 	for _, path := range absoluteCfgPaths {
-		viper.SetConfigFile(path)
-		if err := viper.ReadInConfig(); err == nil {
+		globalViper.SetConfigFile(path)
+		if err := globalViper.ReadInConfig(); err == nil {
 			yamlConfigurationFilePath = path
 			break
 		}
@@ -44,8 +47,19 @@ func mustInit(absoluteCfgPaths ...string) {
 
 func MustGet[T any]() *T {
 	var t T
-	key := strings.Replace(reflect.TypeOf(t).PkgPath(), "github.com/ice-blockchain/subzero/", "", 1)
-	if err := viper.UnmarshalKey(key, &t); err != nil {
+	typeOf := reflect.TypeOf(t)
+	if typeOf.Kind() != reflect.Struct {
+		log.Panic("T must be struct")
+	}
+	key := strings.Replace(typeOf.PkgPath(), "github.com/ice-blockchain/subzero/", "", 1)
+	if err := globalViper.UnmarshalKey(key, &t, func(decoderConfig *mapstructure.DecoderConfig) {
+		decoderConfig.ErrorUnset = true
+		decoderConfig.ZeroFields = true
+		decoderConfig.WeaklyTypedInput = true
+		decoderConfig.Squash = true
+		decoderConfig.IgnoreUntaggedFields = true
+		decoderConfig.TagName = "yaml"
+	}); err != nil {
 		log.Panic(errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t))
 	}
 
