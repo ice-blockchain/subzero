@@ -58,11 +58,6 @@ func (req *databaseBatchRequest) Save(e *model.Event) error {
 		return err
 	}
 
-	var dtag string
-	if v := e.GetTag("d"); v != nil {
-		dtag = v.Value()
-	}
-
 	req.InsertOrReplace = append(req.InsertOrReplace, databaseEvent{
 		Event:           *e,
 		MasterPubKey:    e.GetMasterPublicKey(),
@@ -70,7 +65,7 @@ func (req *databaseBatchRequest) Save(e *model.Event) error {
 		Jtags:           string(jtags),
 		SigAlg:          sigAlg,
 		KeyAlg:          keyAlg,
-		Dtag:            dtag,
+		Dtag:            e.Tags.GetD(),
 	})
 
 	return nil
