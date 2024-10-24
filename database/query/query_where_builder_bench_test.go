@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -93,21 +94,33 @@ func helperBenchReportMetrics(
 	t.ReportMetric(float64(metric.Time.StdDev.Milliseconds()), "stddev-ms/op")
 	t.ReportMetric(float64(metric.Time.P50.Milliseconds()), "p50-ms/op")
 	t.ReportMetric(float64(metric.Time.P95.Milliseconds()), "p95-ms/op")
+	t.ReportMetric(float64(metric.Time.Max.Milliseconds()), "max-ms/op")
+	t.ReportMetric(float64(metric.Time.Min.Milliseconds()), "min-ms/op")
 
 	db.stmtCacheMx.RLock()
 	t.ReportMetric(float64(len(db.stmtCache)), "stmt-cache-size")
 	db.stmtCacheMx.RUnlock()
 }
 
-func helperBenchPrepare(b *testing.B) (*dbClient, *tachymeter.Tachymeter) {
+func helperBenchPrepare(b *testing.B, f func() *dbClient) (*dbClient, *tachymeter.Tachymeter) {
 	b.Helper()
 
+	parallelism := benchParallelism
+	if v := os.Getenv("BENCHDB_PARALLELISM"); v != "" {
+		x, err := strconv.ParseInt(v, 10, 64)
+		require.NoError(b, err)
+		parallelism = int(x)
+	}
+
 	meter := tachymeter.New(&tachymeter.Config{Size: b.N})
+
+	b.SetParallelism(parallelism)
+
+	db := f()
 	b.ResetTimer()
 	b.ReportAllocs()
-	b.SetParallelism(benchParallelism)
 
-	return helperBenchEnsureDatabase(b), meter
+	return db, meter
 }
 
 func BenchmarkSelectByKind(b *testing.B) {
@@ -180,7 +193,7 @@ func helperBenchEnsureValidRange(t interface{ Helper() }, f *model.Filter) {
 }
 
 func BenchmarkSelectByCreatedAtRange(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{}}
 		for pb.Next() {
@@ -195,7 +208,7 @@ func BenchmarkSelectByCreatedAtRange(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndCreatedAtRange(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := model.Filters{model.Filter{}}
 		for pb.Next() {
@@ -211,7 +224,7 @@ func BenchmarkSelectByKindAndCreatedAtRange(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.IDs = []string{""}
@@ -227,7 +240,7 @@ func BenchmarkSelectByKindAndID(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndAuthor(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}
@@ -243,7 +256,7 @@ func BenchmarkSelectByKindAndAuthor(b *testing.B) {
 }
 
 func BenchmarkSelectByCreatedAtAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.IDs = []string{""}
@@ -259,7 +272,7 @@ func BenchmarkSelectByCreatedAtAndID(b *testing.B) {
 }
 
 func BenchmarkSelectByCreatedAtAndAuthor(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}
@@ -275,7 +288,7 @@ func BenchmarkSelectByCreatedAtAndAuthor(b *testing.B) {
 }
 
 func BenchmarkSelectByAuthorAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}
@@ -292,7 +305,7 @@ func BenchmarkSelectByAuthorAndID(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndCreatedAtAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.IDs = []string{""}
@@ -309,7 +322,7 @@ func BenchmarkSelectByKindAndCreatedAtAndID(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndCreatedAtAndAuthor(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}
@@ -326,7 +339,7 @@ func BenchmarkSelectByKindAndCreatedAtAndAuthor(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndAuthorAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}
@@ -344,7 +357,7 @@ func BenchmarkSelectByKindAndAuthorAndID(b *testing.B) {
 }
 
 func BenchmarkSelectByCreatedAtAndAuthorAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}
@@ -362,7 +375,7 @@ func BenchmarkSelectByCreatedAtAndAuthorAndID(b *testing.B) {
 }
 
 func BenchmarkSelectByKindAndCreatedAtAndAuthorAndID(b *testing.B) {
-	db, meter := helperBenchPrepare(b)
+	db, meter := helperBenchPrepare(b, func() *dbClient { return helperBenchEnsureDatabase(b) })
 	b.RunParallel(func(pb *testing.PB) {
 		filters := helperNewSingleFilter(func(apply *model.Filter) {
 			apply.Authors = []string{""}

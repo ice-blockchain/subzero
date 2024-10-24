@@ -110,7 +110,6 @@ func generateKind() int {
 		nostr.KindRecommendServer,
 		nostr.KindFollowList,
 		nostr.KindEncryptedDirectMessage,
-		nostr.KindDeletion,
 		nostr.KindRepost,
 		nostr.KindReaction,
 		nostr.KindSimpleGroupChatMessage,
