@@ -262,7 +262,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	})
 	helperSignWithMinLeadingZeroBits(t, storedEvents[len(storedEvents)-1], privkey)
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	pubsubServer[0].Reset()
+	pubsubServers[0].Reset()
 	connsCount := 10
 	subsPerConnectionCount := 10
 	subs := make(map[*nostr.Relay]map[*nostr.Subscription]struct{}, 0)
@@ -2595,16 +2595,7 @@ func helperSignWithMinLeadingZeroBits(t *testing.T, event *model.Event, privkey 
 func TestPublishingNIP92IMetaTag(t *testing.T) {
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
-			}
-		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
-		return nil
-	})
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	pubsubServers[0].Reset()
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()

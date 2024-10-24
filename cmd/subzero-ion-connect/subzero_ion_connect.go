@@ -26,6 +26,8 @@ var (
 	port               uint16
 	cert               string
 	key                string
+	certDvm            string
+	keyDvm             string
 	databasePath       string
 	externalIP         string
 	adnlPort           uint16
@@ -40,7 +42,8 @@ var (
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			tlsConfig := loadTLSConfig(cert, key)
+			serverTlsConfig := loadTLSConfig(cert, key)
+			dvmTlsConfig := loadTLSConfig(certDvm, keyDvm)
 			if databasePath == ":memory:" {
 				log.Print("using in-memory database")
 			} else {
@@ -48,10 +51,10 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
-			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, tlsConfig, false)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, dvmTlsConfig, false)
 
 			server.ListenAndServe(ctx, cancel, &server.Config{
-				TLSConfig:               tlsConfig,
+				TLSConfig:               serverTlsConfig,
 				Port:                    port,
 				NIP13MinLeadingZeroBits: minLeadingZeroBits,
 			})
@@ -61,6 +64,8 @@ var (
 		subzero.Flags().StringVar(&databasePath, "database", ":memory:", "path to the database")
 		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
 		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
+		subzero.Flags().StringVar(&certDvm, "cert-dvm", "", "path to tls certificate for the dvm (TLS)")
+		subzero.Flags().StringVar(&keyDvm, "key-dvm", "", "path to tls certificate for the dvm server (TLS)")
 		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
 		subzero.Flags().IntVar(&minLeadingZeroBits, "minLeadingZeroBits", 0, "min leading zero bits according NIP-13")
 		subzero.Flags().StringVar(&externalIP, "adnl-external-ip", "", "external ip for storage service")
@@ -79,6 +84,12 @@ var (
 			log.Print(err)
 		}
 		if err := subzero.MarkFlagRequired("key"); err != nil {
+			log.Print(err)
+		}
+		if err := subzero.MarkFlagRequired("cert-dvm"); err != nil {
+			log.Print(err)
+		}
+		if err := subzero.MarkFlagRequired("key-dvm"); err != nil {
 			log.Print(err)
 		}
 		if err := subzero.MarkFlagRequired("port"); err != nil {
@@ -109,8 +120,8 @@ func init() {
 		if sErr := storage.AcceptEvents(ctx, events...); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 events")
 		}
-		if err := dataVendingMachine.AcceptJob(ctx, event); err != nil {
-			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", event)
+		if err := dataVendingMachine.AcceptJob(ctx, events[0]); err != nil {
+			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
 		}
 
 		return nil

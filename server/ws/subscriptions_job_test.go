@@ -42,15 +42,15 @@ func TestJob(t *testing.T) {
 			}
 		}
 	})
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, event))
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
+			if sEvent.ID == events[0].ID {
+				return nil
 			}
 		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
+		assert.False(t, events[0].IsEphemeral())
+		storedEvents = append(storedEvents, events[0])
 
 		return nil
 	})
@@ -268,15 +268,15 @@ func TestJobDeletion(t *testing.T) {
 			}
 		}
 	})
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, event))
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
+			if sEvent.ID == events[0].ID {
+				return nil
 			}
 		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
+		assert.False(t, events[0].IsEphemeral())
+		storedEvents = append(storedEvents, events[0])
 
 		return nil
 	})
@@ -493,15 +493,15 @@ func TestErrorFeedback(t *testing.T) {
 			}
 		}
 	})
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, event))
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
+			if sEvent.ID == events[0].ID {
+				return nil
 			}
 		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
+		assert.False(t, events[0].IsEphemeral())
+		storedEvents = append(storedEvents, events[0])
 
 		return nil
 	})
@@ -661,15 +661,15 @@ func TestOfflineJob(t *testing.T) {
 			}
 		}
 	})
-	RegisterWSEventListener(func(ctx context.Context, event *model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, event))
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
-			if sEvent.ID == event.ID {
-				return model.ErrDuplicate
+			if sEvent.ID == events[0].ID {
+				return nil
 			}
 		}
-		assert.False(t, event.IsEphemeral())
-		storedEvents = append(storedEvents, event)
+		assert.False(t, events[0].IsEphemeral())
+		storedEvents = append(storedEvents, events[0])
 
 		return nil
 	})
