@@ -26,7 +26,6 @@ var (
 	port               uint16
 	cert               string
 	key                string
-	certDvm            string
 	keyDvm             string
 	databasePath       string
 	externalIP         string
