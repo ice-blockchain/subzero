@@ -4,6 +4,7 @@ package dvm
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"strconv"
@@ -20,7 +21,7 @@ type (
 	nostrEventCountJob struct {
 		serviceProviderPrivKey string
 		outputRelays           []*nostr.Relay
-		devMode                bool
+		relayConnectTLS        *tls.Config
 	}
 )
 
@@ -31,17 +32,17 @@ const (
 	NostrEventCountGroupRoot    = "root"
 )
 
-func newNostrEventCountJob(outputRelays []*nostr.Relay, privateKey string, devMode bool) *nostrEventCountJob {
+func newNostrEventCountJob(outputRelays []*nostr.Relay, privateKey string, relayConnectTLS *tls.Config) *nostrEventCountJob {
 	return &nostrEventCountJob{
 		serviceProviderPrivKey: privateKey,
 		outputRelays:           outputRelays,
-		devMode:                devMode,
+		relayConnectTLS:        relayConnectTLS,
 	}
 }
 
 func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (payload string, err error) {
 	const zeroResponse = "0"
-	queryRelays := connectToRelays(ctx, collectRelayURLs(e), n.devMode)
+	queryRelays := connectToRelays(ctx, collectRelayURLs(e), n.relayConnectTLS)
 	defer closeRelays(queryRelays)
 	filters, err := parseListOfFilters(e.Content)
 	if err != nil {

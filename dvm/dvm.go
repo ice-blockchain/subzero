@@ -5,7 +5,6 @@ package dvm
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -41,29 +40,38 @@ type (
 		CancelFunc context.CancelFunc
 	}
 	dvm struct {
-		devMode          bool
 		dvmProcessCancel *xsync.MapOf[string, *dvmProcessCancelInfo]
 		privateKey       string
+		relayConnectTLS  *tls.Config
 	}
+	Option func(*dvm)
 )
 
 var (
-	//go:embed .testdata/localhost.crt
-	devModeCert string
-
 	jobTimeoutDeadline = 1 * time.Minute
 )
 
-func NewDvms(minLeadingZeroBits int, privateKey string, devMode bool) DvmServiceProvider {
+func WithCustomConnectTLS(conf *tls.Config) Option {
+	return func(d *dvm) {
+		d.relayConnectTLS = conf
+	}
+}
+
+func NewDvms(minLeadingZeroBits int, privateKey string, opts ...Option) DvmServiceProvider {
 	if privateKey == "" {
 		log.Panic("private key is empty")
 	}
 
-	return &dvm{
-		devMode:          devMode,
+	d := &dvm{
 		dvmProcessCancel: xsync.NewMapOf[string, *dvmProcessCancelInfo](),
 		privateKey:       privateKey,
 	}
+
+	for _, opt := range opts {
+		opt(d)
+	}
+
+	return d
 }
 
 func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
@@ -144,7 +152,7 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 			}
 		}
 	}
-	outputRelays := connectToRelays(reqCtx, relayList, d.devMode)
+	outputRelays := connectToRelays(reqCtx, relayList, d.relayConnectTLS)
 	defer closeRelays(outputRelays)
 	d.dvmProcessCancel.Store(event.GetID(), &dvmProcessCancelInfo{
 		RelayList:  outputRelays,
@@ -156,7 +164,7 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 	)
 	switch event.Kind {
 	case model.KindJobNostrEventCount:
-		job = newNostrEventCountJob(outputRelays, d.privateKey, d.devMode)
+		job = newNostrEventCountJob(outputRelays, d.privateKey, d.relayConnectTLS)
 	default:
 		log.Printf("dvm kind:%v not supported", event.Kind)
 
@@ -268,12 +276,12 @@ func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status 
 	return errors.Wrapf(eg.Wait(), "can't publish some of job feedback: %v", incomingEvent)
 }
 
-func connectToRelays(ctx context.Context, relayList []string, devMode bool) (resultRelays []*nostr.Relay) {
+func connectToRelays(ctx context.Context, relayList []string, conf *tls.Config) (resultRelays []*nostr.Relay) {
 	resultRelays = make([]*nostr.Relay, 0, len(relayList))
 	for _, relayUrl := range relayList {
 		establishedCount := 0
 		for ix := 0; ix < len(relayList); ix++ {
-			relay, err := connectToRelay(ctx, relayUrl, devMode)
+			relay, err := connectToRelay(ctx, relayUrl, conf)
 			if err != nil {
 				log.Printf("ERROR: failed to connect to relay: %v, err: %v", relayUrl, err)
 
@@ -288,21 +296,9 @@ func connectToRelays(ctx context.Context, relayList []string, devMode bool) (res
 	return resultRelays
 }
 
-func connectToRelay(ctx context.Context, url string, devMode bool) (*nostr.Relay, error) {
+func connectToRelay(ctx context.Context, url string, conf *tls.Config) (*nostr.Relay, error) {
 	relay := nostr.NewRelay(ctx, url)
-	var err error
-	if !devMode {
-		err = relay.Connect(ctx)
-	} else {
-		caCertPool := x509.NewCertPool()
-		if ok := caCertPool.AppendCertsFromPEM([]byte(devModeCert)); !ok {
-			log.Printf("failed to append localhost tls to cert pool")
-		}
-		err = relay.ConnectWithTLS(ctx, &tls.Config{
-			MinVersion: tls.VersionTLS13,
-			RootCAs:    caCertPool,
-		})
-	}
+	err := relay.ConnectWithTLS(ctx, conf)
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't connect to the relays")
 	}

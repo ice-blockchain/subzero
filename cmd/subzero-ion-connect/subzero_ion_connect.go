@@ -50,7 +50,7 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
-			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, keyDvm, false)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, keyDvm)
 
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				TLSConfig:               serverTlsConfig,

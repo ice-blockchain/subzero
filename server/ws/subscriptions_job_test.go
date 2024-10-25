@@ -30,7 +30,7 @@ func TestJob(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -255,7 +255,7 @@ func TestJobDeletion(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -479,7 +479,7 @@ func TestErrorFeedback(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -646,7 +646,7 @@ func TestOfflineJob(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
