@@ -4,7 +4,6 @@ package http
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"testing"
@@ -22,10 +21,9 @@ import (
 )
 
 const (
-	testDeadline = 30 * time.Second
-	certPath     = "%v/../ws/fixture/.testdata/localhost.crt"
-	keyPath      = "%v/../ws/fixture/.testdata/localhost.key"
-	storageRoot  = "../../.test-uploads"
+	testDeadline       = 30 * time.Second
+	minLeadingZeroBits = 5
+	storageRoot        = "../../.test-uploads"
 )
 
 var pubsubServer *fixture.MockService
@@ -42,16 +40,12 @@ func TestMain(m *testing.M) {
 }
 
 func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port uint16, storageRoot string) {
-	wd, _ := os.Getwd()
-	certFilePath := fmt.Sprintf(certPath, wd)
-	keyFilePath := fmt.Sprintf(keyPath, wd)
 	initStorage(serverCtx, storageRoot)
 	uploader := NewUploadHandler(serverCtx)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{
-		CertPath: certFilePath,
-		KeyPath:  keyFilePath,
-		Port:     port,
-	}, nil, NewNIP11Handler(), map[string]gin.HandlerFunc{
+		TLSConfig: fixture.LocalhostTLS(),
+		Port:      port,
+	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),
 		"GET /files/:file":    uploader.Download(),
@@ -66,7 +60,8 @@ func TestNIP11(t *testing.T) {
 	info, err := nip11.Fetch(ctx, "wss://localhost:9997")
 	require.NoError(t, err)
 	require.NotNil(t, info)
-	expected := new(nip11handler).info()
+	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}}
+	expected := handler.info()
 	expected.URL = "wss://localhost:9997"
 	assert.Equal(t, expected, info)
 }

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"log"
 	"net"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -24,6 +26,7 @@ var (
 	port               uint16
 	cert               string
 	key                string
+	keyDvm             string
 	databasePath       string
 	externalIP         string
 	adnlPort           uint16
@@ -38,6 +41,7 @@ var (
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
+			serverTlsConfig := loadTLSConfig(cert, key)
 			if databasePath == ":memory:" {
 				log.Print("using in-memory database")
 			} else {
@@ -45,9 +49,10 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, keyDvm)
+
 			server.ListenAndServe(ctx, cancel, &server.Config{
-				CertPath:                cert,
-				KeyPath:                 key,
+				TLSConfig:               serverTlsConfig,
 				Port:                    port,
 				NIP13MinLeadingZeroBits: minLeadingZeroBits,
 			})
@@ -56,7 +61,8 @@ var (
 	initFlags = func() {
 		subzero.Flags().StringVar(&databasePath, "database", ":memory:", "path to the database")
 		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
+		subzero.Flags().StringVar(&key, "key", "", "path to tls key for the http/ws server (TLS)")
+		subzero.Flags().StringVar(&keyDvm, "key-dvm", "nostr private key in hex", "")
 		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
 		subzero.Flags().IntVar(&minLeadingZeroBits, "minLeadingZeroBits", 0, "min leading zero bits according NIP-13")
 		subzero.Flags().StringVar(&externalIP, "adnl-external-ip", "", "external ip for storage service")
@@ -77,6 +83,9 @@ var (
 		if err := subzero.MarkFlagRequired("key"); err != nil {
 			log.Print(err)
 		}
+		if err := subzero.MarkFlagRequired("key-dvm"); err != nil {
+			log.Print(err)
+		}
 		if err := subzero.MarkFlagRequired("port"); err != nil {
 			log.Print(err)
 		}
@@ -90,6 +99,7 @@ var (
 			log.Print(err)
 		}
 	}
+	dataVendingMachine dvm.DvmServiceProvider
 )
 
 func init() {
@@ -104,6 +114,10 @@ func init() {
 		if sErr := storage.AcceptEvents(ctx, events...); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 events")
 		}
+		if err := dataVendingMachine.AcceptJob(ctx, events[0]); err != nil {
+			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
+		}
+
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)
@@ -112,5 +126,16 @@ func init() {
 func main() {
 	if err := subzero.Execute(); err != nil {
 		log.Panic(err)
+	}
+}
+
+func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
+	cert, err := tls.LoadX509KeyPair(certFileName, keyFileName)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
 	}
 }

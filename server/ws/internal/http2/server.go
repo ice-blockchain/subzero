@@ -24,20 +24,21 @@ func New(cfg *config.Config, router http.Handler) Server {
 	return s
 }
 
-func (s *srv) ListenAndServeTLS(ctx context.Context, certFile, keyFile string) error {
+func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 	s.server = &h2ec.Server{
 		Addr:    fmt.Sprintf(":%v", s.cfg.Port),
 		Handler: s.router,
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},
+		TLSConfig: s.cfg.TLSConfig,
 	}
 	isUnexpectedError := func(err error) bool {
 		return err != nil &&
 			!errors.Is(err, io.EOF) &&
 			!errors.Is(err, h2ec.ErrServerClosed)
 	}
-	if err := s.server.ListenAndServeTLS(certFile, keyFile); isUnexpectedError(err) {
+	if err := s.server.ListenAndServeTLS("", ""); isUnexpectedError(err) {
 		return errors.Wrap(err, "failed to start http2/tcp server")
 	}
 

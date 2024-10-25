@@ -467,14 +467,19 @@ func (*http2WebtransportWrapper) SetReadDeadline(time time.Time) error         {
 func (*http2WebtransportWrapper) SetDeadline(time time.Time) error             { return nil }
 
 func LocalhostTLS() *tls.Config {
+	cert, err := tls.X509KeyPair([]byte(localhostCrt), []byte(localhostKey))
+	if err != nil {
+		log.Panic(err)
+	}
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM([]byte(localhostCrt)); !ok {
 		log.Panic(errors.New("failed to append localhost tls to cert pool"))
 	}
 
 	return &tls.Config{
-		MinVersion: tls.VersionTLS13,
-		RootCAs:    caCertPool,
+		MinVersion:   tls.VersionTLS12,
+		RootCAs:      caCertPool,
+		Certificates: []tls.Certificate{cert},
 	}
 }
 
