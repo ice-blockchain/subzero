@@ -4,7 +4,6 @@ package dvm
 
 import (
 	"context"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
@@ -14,7 +13,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v3"
@@ -45,7 +43,6 @@ type (
 	dvm struct {
 		devMode          bool
 		dvmProcessCancel *xsync.MapOf[string, *dvmProcessCancelInfo]
-		tlsConfig        *tls.Config
 		privateKey       string
 	}
 )
@@ -57,22 +54,13 @@ var (
 	jobTimeoutDeadline = 1 * time.Minute
 )
 
-func NewDvms(minLeadingZeroBits int, tlsConfig *tls.Config, devMode bool) DvmServiceProvider {
-	var privateKey string
-	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
-		switch tlsConfig.Certificates[0].PrivateKey.(type) {
-		case *btcec.PrivateKey:
-			privateKey = fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*btcec.PrivateKey).Serialize())
-		case *rsa.PrivateKey:
-			privateKey = fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
-		default:
-			log.Fatalf("unknown private key type: %T", tlsConfig.Certificates[0].PrivateKey)
-		}
+func NewDvms(minLeadingZeroBits int, privateKey string, devMode bool) DvmServiceProvider {
+	if privateKey == "" {
+		log.Panic("private key is empty")
 	}
 
 	return &dvm{
 		devMode:          devMode,
-		tlsConfig:        tlsConfig,
 		dvmProcessCancel: xsync.NewMapOf[string, *dvmProcessCancelInfo](),
 		privateKey:       privateKey,
 	}

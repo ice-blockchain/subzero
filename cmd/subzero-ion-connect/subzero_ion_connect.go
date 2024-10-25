@@ -43,7 +43,6 @@ var (
 			defer cancel()
 
 			serverTlsConfig := loadTLSConfig(cert, key)
-			dvmTlsConfig := loadTLSConfig(certDvm, keyDvm)
 			if databasePath == ":memory:" {
 				log.Print("using in-memory database")
 			} else {
@@ -51,7 +50,7 @@ var (
 			}
 			query.MustInit(databasePath)
 			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
-			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, dvmTlsConfig, false)
+			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, keyDvm, false)
 
 			server.ListenAndServe(ctx, cancel, &server.Config{
 				TLSConfig:               serverTlsConfig,
@@ -63,9 +62,8 @@ var (
 	initFlags = func() {
 		subzero.Flags().StringVar(&databasePath, "database", ":memory:", "path to the database")
 		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().StringVar(&key, "key", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().StringVar(&certDvm, "cert-dvm", "", "path to tls certificate for the dvm (TLS)")
-		subzero.Flags().StringVar(&keyDvm, "key-dvm", "", "path to tls certificate for the dvm server (TLS)")
+		subzero.Flags().StringVar(&key, "key", "", "path to tls key for the http/ws server (TLS)")
+		subzero.Flags().StringVar(&keyDvm, "key-dvm", "nostr private key in hex", "")
 		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
 		subzero.Flags().IntVar(&minLeadingZeroBits, "minLeadingZeroBits", 0, "min leading zero bits according NIP-13")
 		subzero.Flags().StringVar(&externalIP, "adnl-external-ip", "", "external ip for storage service")
@@ -84,9 +82,6 @@ var (
 			log.Print(err)
 		}
 		if err := subzero.MarkFlagRequired("key"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("cert-dvm"); err != nil {
 			log.Print(err)
 		}
 		if err := subzero.MarkFlagRequired("key-dvm"); err != nil {

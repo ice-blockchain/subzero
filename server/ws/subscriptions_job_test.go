@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"crypto/rsa"
 	"crypto/tls"
 	_ "embed"
 	"fmt"
@@ -28,11 +27,10 @@ func TestJob(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	tlsConfig := helperLoadKeyPair(t)
-	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -254,11 +252,10 @@ func TestJobDeletion(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	tlsConfig := helperLoadKeyPair(t)
-	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -479,11 +476,10 @@ func TestErrorFeedback(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	tlsConfig := helperLoadKeyPair(t)
-	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -647,11 +643,10 @@ func TestOfflineJob(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	tlsConfig := helperLoadKeyPair(t)
-	privKeyHex := fmt.Sprintf("%x", tlsConfig.Certificates[0].PrivateKey.(*rsa.PrivateKey).D.Bytes())
+	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, tlsConfig, true)
+	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, true)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
