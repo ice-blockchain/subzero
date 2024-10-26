@@ -5,8 +5,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"embed"
@@ -16,9 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
@@ -395,18 +390,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 func initStorage(ctx context.Context, path string) {
 	transportOverride := http.DefaultClient.Transport
 	http.DefaultClient.Transport = http.DefaultTransport
-	_, nodeKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to generate node key"))
-	}
-	storagePort, err := rand.Int(rand.Reader, big.NewInt(63500))
-	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to generate port number"))
-	}
-	wd, _ := os.Getwd()
-	rootStorage := filepath.Join(wd, path)
-	port := int(storagePort.Int64()) + 1024
-	storage.MustInit(ctx, nodeKey, storage.DefaultConfigUrl, rootStorage, net.ParseIP("127.0.0.1"), port, true)
+	storage.MustInit(ctx)
 	http.DefaultClient.Transport = transportOverride
 }
 

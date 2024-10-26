@@ -41,18 +41,15 @@ func TestMain(m *testing.M) {
 		}
 	}
 	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		TLSConfig: fixture.LocalhostTLS(),
-		Port:      9999,
+		Port: 9999,
 	}, echoFunc, nil, map[string]gin.HandlerFunc{})
 	hdl = new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		TLSConfig:               fixture.LocalhostTLS(),
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
 	hdl2 := new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		TLSConfig:               fixture.LocalhostTLS(),
 		Port:                    9997,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))

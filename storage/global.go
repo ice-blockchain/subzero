@@ -29,12 +29,27 @@ import (
 	"github.com/xssnick/tonutils-storage/db"
 	"github.com/xssnick/tonutils-storage/storage"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
-var globalClient *client
+var (
+	globalClient *client
+	globalConfig *config
+)
+
+type (
+	config struct {
+		PrivateKey              ed25519.PrivateKey `yaml:"private-key"`
+		IONStorageConfigURL     string             `yaml:"ion-storage-config-url"`
+		AbsoluteRootStoragePath string             `yaml:"absolute-root-storage-path"`
+		ExternalADNLAddress     net.IP             `yaml:"external-adnl-address"`
+		ExternalADNLPort        int                `yaml:"external-adnl-port"`
+		Debug                   bool               `yaml:"debug"`
+	}
+)
 
 const DefaultConfigUrl = "https://ton.org/global.config.json"
 
@@ -121,13 +136,14 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	return nil
 }
 
-func MustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int, debug bool) {
-	globalClient = mustInit(ctx, nodeKey, tonConfigUrl, rootStorage, externalAddress, port, debug)
+func MustInit(ctx context.Context) {
+	globalConfig = cfg.MustGet[config]()
+	globalClient = mustInit(ctx)
 }
 
-func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, rootStorage string, externalAddress net.IP, port int, debug bool) *client {
+func mustInit(ctx context.Context) *client {
 	storage.Logger = func(a ...any) {
-		if debug {
+		if globalConfig.Debug {
 			log.Println(a...)
 		}
 		if len(a) > 0 {
@@ -141,9 +157,9 @@ func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 	storage.DownloadThreads = threadsPerBagForDownloading
 	adnl.Logger = func(v ...any) {}
 	var lsCfg *liteclient.GlobalConfig
-	u, err := url.Parse(tonConfigUrl)
+	u, err := url.Parse(globalConfig.IONStorageConfigURL)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "invalid ton config url: %v", tonConfigUrl))
+		log.Panic(errors.Wrapf(err, "invalid ton config url: %v", globalConfig.IONStorageConfigURL))
 	}
 	if u.Scheme == "file" {
 		lsCfg, err = liteclient.GetConfigFromFile(u.Path)
@@ -153,18 +169,18 @@ func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 	} else {
 		downloadConfigCtx, cancelDownloadConfig := context.WithTimeout(ctx, 30*time.Second)
 		defer cancelDownloadConfig()
-		lsCfg, err = liteclient.GetConfigFromUrl(downloadConfigCtx, tonConfigUrl)
+		lsCfg, err = liteclient.GetConfigFromUrl(downloadConfigCtx, globalConfig.IONStorageConfigURL)
 		if err != nil {
 			log.Panic(errors.Wrapf(err, "failed to load ton network config from url: %v", u.String()))
 		}
 	}
 
-	gate := adnl.NewGateway(nodeKey)
-	gate.SetExternalIP(externalAddress)
-	if err = gate.StartServer(fmt.Sprintf(":%v", port)); err != nil {
+	gate := adnl.NewGateway(globalConfig.PrivateKey)
+	gate.SetExternalIP(globalConfig.ExternalADNLAddress)
+	if err = gate.StartServer(fmt.Sprintf(":%v", globalConfig.ExternalADNLPort)); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start adnl gateway"))
 	}
-	dhtGate := adnl.NewGateway(nodeKey)
+	dhtGate := adnl.NewGateway(globalConfig.PrivateKey)
 	if err = dhtGate.StartClient(); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start dht"))
 	}
@@ -173,11 +189,11 @@ func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 	if err != nil {
 		log.Panic(errors.Wrapf(err, "failed to create dht client"))
 	}
-	srv := storage.NewServer(dhtClient, gate, nodeKey, true)
+	srv := storage.NewServer(dhtClient, gate, globalConfig.PrivateKey, true)
 	conn := storage.NewConnector(srv)
-	fStorage, err := ldbstorage.OpenFile(filepath.Join(rootStorage, "db"), false)
+	fStorage, err := ldbstorage.OpenFile(filepath.Join(globalConfig.AbsoluteRootStoragePath, "db"), false)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to open leveldb storage %v", filepath.Join(rootStorage, "db")))
+		log.Panic(errors.Wrapf(err, "failed to open leveldb storage %v", filepath.Join(globalConfig.AbsoluteRootStoragePath, "db")))
 	}
 	progressDb, err := leveldb.Open(fStorage, nil)
 	if err != nil {
@@ -189,16 +205,16 @@ func mustInit(ctx context.Context, nodeKey ed25519.PrivateKey, tonConfigUrl, roo
 		server:            srv,
 		gateway:           gate,
 		dht:               dhtClient,
-		rootStoragePath:   rootStorage,
+		rootStoragePath:   globalConfig.AbsoluteRootStoragePath,
 		newFiles:          make(map[string]map[string]*FileMetaInput),
 		newFilesMx:        &sync.RWMutex{},
-		stats:             statistics.NewStatistics(rootStorage, debug),
+		stats:             statistics.NewStatistics(globalConfig.AbsoluteRootStoragePath, globalConfig.Debug),
 		downloadQueue:     make(chan queueItem, 1000000),
 		activeDownloads:   make(map[string]bool),
 		activeDownloadsMx: &sync.RWMutex{},
-		debug:             debug,
+		debug:             globalConfig.Debug,
 	}
-	if debug {
+	if globalConfig.Debug {
 		go cl.report(ctx)
 	}
 	loadMonitoringCh := make(chan *db.Event, 1000000)

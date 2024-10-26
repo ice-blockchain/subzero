@@ -20,13 +20,6 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
-var (
-	//go:embed .testdata/localhost.crt
-	localhostCrt string
-	//go:embed .testdata/localhost.key
-	localhostKey string
-)
-
 type (
 	MockService struct {
 		server internal.Server
@@ -48,8 +41,6 @@ type (
 )
 
 const (
-	applicationYamlKeyEcho            = "echo"
-	applicationYamlKeyPubSub          = "sub"
 	wtCapsuleStream                   = 0x190B4D3B
 	wtCapsuleStreamFin                = 0x190B4D3C
 	wtCapsuleCloseWebtransportSession = 0x2843

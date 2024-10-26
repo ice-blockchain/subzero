@@ -4,14 +4,12 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/tls"
 	"log"
-	"net"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
@@ -22,84 +20,24 @@ import (
 )
 
 var (
-	minLeadingZeroBits int
-	port               uint16
-	cert               string
-	key                string
-	keyDvm             string
-	databasePath       string
-	externalIP         string
-	adnlPort           uint16
-	storageRootDir     string
-	globalConfigUrl    string
-	adnlNodeKey        []byte
-	debug              bool
-	subzero            = &cobra.Command{
+	configPath string
+	subzero    = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
 		Run: func(_ *cobra.Command, args []string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			cfg.MustInit(configPath)
+			query.MustInit()
+			storage.MustInit(ctx)
+			dvm.MustInit()
 
-			serverTlsConfig := loadTLSConfig(cert, key)
-			if databasePath == ":memory:" {
-				log.Print("using in-memory database")
-			} else {
-				log.Print("using database at ", databasePath)
-			}
-			query.MustInit(databasePath)
-			storage.MustInit(ctx, adnlNodeKey, globalConfigUrl, storageRootDir, net.ParseIP(externalIP), int(adnlPort), debug)
-			dataVendingMachine = dvm.NewDvms(minLeadingZeroBits, keyDvm)
-
-			server.ListenAndServe(ctx, cancel, &server.Config{
-				TLSConfig:               serverTlsConfig,
-				Port:                    port,
-				NIP13MinLeadingZeroBits: minLeadingZeroBits,
-			})
+			server.ListenAndServe(ctx, cancel)
 		},
 	}
 	initFlags = func() {
-		subzero.Flags().StringVar(&databasePath, "database", ":memory:", "path to the database")
-		subzero.Flags().StringVar(&cert, "cert", "", "path to tls certificate for the http/ws server (TLS)")
-		subzero.Flags().StringVar(&key, "key", "", "path to tls key for the http/ws server (TLS)")
-		subzero.Flags().StringVar(&keyDvm, "key-dvm", "nostr private key in hex", "")
-		subzero.Flags().Uint16Var(&port, "port", 0, "port to communicate with clients (http/websocket)")
-		subzero.Flags().IntVar(&minLeadingZeroBits, "minLeadingZeroBits", 0, "min leading zero bits according NIP-13")
-		subzero.Flags().StringVar(&externalIP, "adnl-external-ip", "", "external ip for storage service")
-		subzero.Flags().Uint16Var(&adnlPort, "adnl-port", 0, "port to open adnl-gateway for storage service")
-		subzero.Flags().StringVar(&storageRootDir, "storage-root", "./.uploads", "root storage directory")
-		subzero.Flags().StringVar(&globalConfigUrl, "global-config-url", storage.DefaultConfigUrl, "global config for ION storage")
-		subzero.Flags().BytesHexVar(&adnlNodeKey, "adnl-node-key", func() []byte {
-			_, nodeKey, err := ed25519.GenerateKey(nil)
-			if err != nil {
-				log.Panic(errors.Wrapf(err, "failed to generate node key"))
-			}
-			return nodeKey
-		}(), "adnl node key in hex")
-		subzero.Flags().BoolVar(&debug, "debug", false, "enable debugging info")
-		if err := subzero.MarkFlagRequired("cert"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("key"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("key-dvm"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("port"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("adnl-external-ip"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("adnl-port"); err != nil {
-			log.Print(err)
-		}
-		if err := subzero.MarkFlagRequired("storage-root"); err != nil {
-			log.Print(err)
-		}
+		subzero.Flags().StringVar(&configPath, "config", cfg.DefaultYAMLConfigurationFilePath, "absolute path to the service config yaml file")
 	}
-	dataVendingMachine dvm.DvmServiceProvider
 )
 
 func init() {
@@ -114,7 +52,7 @@ func init() {
 		if sErr := storage.AcceptEvents(ctx, events...); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 events")
 		}
-		if err := dataVendingMachine.AcceptJob(ctx, events[0]); err != nil {
+		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
 		}
 
@@ -126,16 +64,5 @@ func init() {
 func main() {
 	if err := subzero.Execute(); err != nil {
 		log.Panic(err)
-	}
-}
-
-func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
-	cert, err := tls.LoadX509KeyPair(certFileName, keyFileName)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
 	}
 }

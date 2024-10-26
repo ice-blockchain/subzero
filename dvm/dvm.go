@@ -5,6 +5,7 @@ package dvm
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -17,15 +18,13 @@ import (
 	"github.com/puzpuzpuz/xsync/v3"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
-	JobFeedbackStatus  = string
-	DvmServiceProvider interface {
-		AcceptJob(ctx context.Context, event *model.Event) error
-	}
-	JobItem interface {
+	JobFeedbackStatus = string
+	JobItem           interface {
 		Process(ctx context.Context, e *model.Event) (payload string, err error)
 		RequiredPaymentAmount() float64
 		IsBidAmountEnough(amount string) bool
@@ -44,34 +43,49 @@ type (
 		privateKey       string
 		relayConnectTLS  *tls.Config
 	}
-	Option func(*dvm)
+	config struct {
+		PrivateKey string `yaml:"private-key"`
+		TLSCert    string `yaml:"tls-cert"`
+		TLSKey     string `yaml:"tls-key"`
+	}
 )
 
 var (
 	jobTimeoutDeadline = 1 * time.Minute
+	globalDVM          *dvm
+	globalConfig       *config
 )
 
-func WithCustomConnectTLS(conf *tls.Config) Option {
-	return func(d *dvm) {
-		d.relayConnectTLS = conf
+func MustInit() {
+	globalConfig = cfg.MustGet[config]()
+	globalDVM = &dvm{
+		dvmProcessCancel: xsync.NewMapOf[string, *dvmProcessCancelInfo](),
+		privateKey:       globalConfig.PrivateKey,
+	}
+	if globalConfig.TLSKey != "-" && globalConfig.TLSCert != "-" {
+		globalDVM.relayConnectTLS = buildTLS()
 	}
 }
 
-func NewDvms(minLeadingZeroBits int, privateKey string, opts ...Option) DvmServiceProvider {
-	if privateKey == "" {
-		log.Panic("private key is empty")
+func buildTLS() *tls.Config {
+	cert, err := tls.X509KeyPair([]byte(globalConfig.TLSCert), []byte(globalConfig.TLSKey))
+	if err != nil {
+		log.Panic(err)
+	}
+	caCertPool := x509.NewCertPool()
+	if ok := caCertPool.AppendCertsFromPEM([]byte(globalConfig.TLSCert)); !ok {
+		log.Panic(errors.New("failed to append tls to cert pool"))
 	}
 
-	d := &dvm{
-		dvmProcessCancel: xsync.NewMapOf[string, *dvmProcessCancelInfo](),
-		privateKey:       privateKey,
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		RootCAs:      caCertPool,
+		Certificates: []tls.Certificate{cert},
 	}
+}
 
-	for _, opt := range opts {
-		opt(d)
-	}
-
-	return d
+func AcceptJob(ctx context.Context, event *model.Event) error {
+	return globalDVM.AcceptJob(ctx, event)
 }
 
 func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {

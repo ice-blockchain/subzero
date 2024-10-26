@@ -5,10 +5,7 @@ package fixture
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,7 +30,6 @@ import (
 
 func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
 	d := webtransport.Dialer{}
-	d.TLSClientConfig = LocalhostTLS()
 	_, conn, err := d.Dial(ctx, url, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to establish webtransport conn to %v", url)
@@ -67,9 +63,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 		URL:    u,
 	}
 	req = req.WithContext(ctx)
-	tlsconf := LocalhostTLS()
-	tlsconf.NextProtos = []string{http3.NextProtoH3}
-	qconn, err := quic.DialAddrEarly(ctx, u.Host, tlsconf, &quic.Config{
+	qconn, err := quic.DialAddrEarly(ctx, u.Host, nil, &quic.Config{
 		EnableDatagrams:      true,
 		MaxIdleTimeout:       600 * time.Second,
 		HandshakeIdleTimeout: 600 * time.Second,
@@ -120,7 +114,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 		Body:   bodyr,
 	}
 	req = req.WithContext(ctx)
-	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS()}
+	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: nil}
 	client := h2ec.Client{Transport: rt}
 	rsp, err := client.Do(req)
 	if err != nil {
@@ -153,7 +147,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 		Body:   bodyr,
 	}
 	req = req.WithContext(ctx)
-	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: LocalhostTLS()}
+	rt := &h2ec.Http2Transport{AllowHTTP: false, TLSClientConfig: nil}
 	client := h2ec.Client{Transport: rt}
 	rsp, err := client.Transport.RoundTrip(req)
 	if err != nil {
@@ -179,8 +173,8 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 }
 
 func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
-	dialer := ws.Dialer{TLSConfig: LocalhostTLS()}
-	dialer.TLSConfig = LocalhostTLS()
+	dialer := ws.Dialer{TLSConfig: nil}
+	dialer.TLSConfig = nil
 	conn, _, _, err := dialer.Dial(ctx, url)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to establish websocket conn to %v", url)
@@ -193,7 +187,7 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 
 func NewRelayClient(ctx context.Context, url string) (*nostr.Relay, error) {
 	relay := nostr.NewRelay(ctx, url)
-	err := relay.ConnectWithTLS(ctx, LocalhostTLS())
+	err := relay.ConnectWithTLS(ctx, nil)
 	return relay, err
 }
 
@@ -465,23 +459,6 @@ func (h *http2WebtransportWrapper) Read(p []byte) (n int, err error) {
 func (*http2WebtransportWrapper) CancelRead(code webtransport.StreamErrorCode) {}
 func (*http2WebtransportWrapper) SetReadDeadline(time time.Time) error         { return nil }
 func (*http2WebtransportWrapper) SetDeadline(time time.Time) error             { return nil }
-
-func LocalhostTLS() *tls.Config {
-	cert, err := tls.X509KeyPair([]byte(localhostCrt), []byte(localhostKey))
-	if err != nil {
-		log.Panic(err)
-	}
-	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM([]byte(localhostCrt)); !ok {
-		log.Panic(errors.New("failed to append localhost tls to cert pool"))
-	}
-
-	return &tls.Config{
-		MinVersion:   tls.VersionTLS12,
-		RootCAs:      caCertPool,
-		Certificates: []tls.Certificate{cert},
-	}
-}
 
 func isConnClosedErr(err error) bool {
 	return err != nil &&

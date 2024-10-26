@@ -1,0 +1,4 @@
+
+database:
+  query:
+    url: ":memory:"

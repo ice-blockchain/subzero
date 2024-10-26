@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultYAMLConfigurationFilePath = "/etc/subzero_ion_connect/subzero_ion_connect.yaml"
+	DefaultYAMLConfigurationFilePath = "/etc/subzero_ion_connect/subzero_ion_connect.yaml"
 )
 
 var (
@@ -31,6 +31,9 @@ func mustInit(absoluteCfgPaths ...string) {
 	yamlConfigurationFilePath = ""
 	globalViper.SetConfigType("yaml")
 	for _, path := range absoluteCfgPaths {
+		if path == "" {
+			continue
+		}
 		globalViper.SetConfigFile(path)
 		if err := globalViper.ReadInConfig(); err == nil {
 			yamlConfigurationFilePath = path
@@ -38,10 +41,14 @@ func mustInit(absoluteCfgPaths ...string) {
 		}
 	}
 	if yamlConfigurationFilePath == "" {
-		if len(absoluteCfgPaths) > 0 {
-			log.Printf("warn: could not find any of the provided file paths %+v, defaulting to `%v`", absoluteCfgPaths, defaultYAMLConfigurationFilePath)
+		if len(absoluteCfgPaths) > 0 && absoluteCfgPaths[0] != "" {
+			log.Printf("warn: could not find any of the provided file paths %+v, defaulting to `%v`", absoluteCfgPaths, DefaultYAMLConfigurationFilePath)
 		}
-		yamlConfigurationFilePath = defaultYAMLConfigurationFilePath
+		yamlConfigurationFilePath = DefaultYAMLConfigurationFilePath
+		globalViper.SetConfigFile(yamlConfigurationFilePath)
+		if err := globalViper.ReadInConfig(); err != nil {
+			log.Panic(errors.Wrapf(err, "failed to read yaml config file at `%v`", yamlConfigurationFilePath))
+		}
 	}
 }
 
@@ -62,6 +69,7 @@ func MustGet[T any]() *T {
 	}); err != nil {
 		log.Panic(errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t))
 	}
+	log.Printf("info: [%v]config loaded: %+v", key, t)
 
 	return &t
 }

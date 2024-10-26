@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -16,17 +17,19 @@ var (
 		Client *dbClient
 		Once   sync.Once
 	}
+	globalConfig *config
 )
 
-func MustInit(url ...string) {
-	target := ":memory:"
-
-	if len(url) > 0 {
-		target = url[0]
+type (
+	config struct {
+		URL string `yaml:"url"`
 	}
+)
 
+func MustInit() {
 	globalDB.Once.Do(func() {
-		globalDB.Client = openDatabase(target, true)
+		globalConfig = cfg.MustGet[config]()
+		globalDB.Client = openDatabase(globalConfig.URL, true)
 
 		go globalDB.Client.StartExpiredEventsCleanup(context.Background())
 	})
@@ -44,7 +47,7 @@ func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, 
 	return globalDB.Client.CountEvents(ctx, subscription)
 }
 
-func (d *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
+func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
@@ -52,7 +55,7 @@ func (d *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			reqCtx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			if err := d.deleteExpiredEvents(reqCtx); err != nil {
+			if err := db.deleteExpiredEvents(reqCtx); err != nil {
 				log.Printf("failed to delete expired events: %v", err)
 			}
 

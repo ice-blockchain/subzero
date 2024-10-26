@@ -4,27 +4,55 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"log"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	httpserver "github.com/ice-blockchain/subzero/server/http"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 )
 
 type (
-	Config = wsserver.Config
+	config struct {
+		TLSCert string `yaml:"tls-cert"`
+		TLSKey  string `yaml:"tls-key"`
+		Port    uint16 `yaml:"port"`
+		Debug   bool   `yaml:"debug"`
+	}
 	router struct {
-		cfg *Config
 	}
 )
 
-func ListenAndServe(ctx context.Context, cancel context.CancelFunc, config *wsserver.Config) {
-	wsserver.New(config, &router{
-		cfg: config,
-	}).ListenAndServe(ctx, cancel)
+var (
+	globalConfig *config
+	globalRouter *router
+)
+
+func ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
+	globalConfig = cfg.MustGet[config]()
+	globalRouter = &router{}
+	internalCfg := &wsserver.Config{
+		Port:      globalConfig.Port,
+		Debug:     globalConfig.Debug,
+		TLSConfig: loadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+	}
+	wsserver.New(internalCfg, globalRouter).ListenAndServe(ctx, cancel)
+}
+
+func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
+	cert, err := tls.LoadX509KeyPair(certFileName, keyFileName)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	uploader := httpserver.NewUploadHandler(ctx)
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: r.cfg.NIP13MinLeadingZeroBits}))).
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: 1111}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).

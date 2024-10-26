@@ -21,9 +21,8 @@ const (
 )
 
 var (
-	ErrUnexpectedRowsAffected      = errors.New("unexpected rows affected")
-	ErrTargetReactionEventNotFound = errors.New("target reaction event not found")
-	ErrAttestationUpdateRejected   = errors.New("attestation update rejected")
+	ErrUnexpectedRowsAffected    = errors.New("unexpected rows affected")
+	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
 
 	errEventIteratorInterrupted = errors.New("interrupted")
 )
@@ -99,7 +98,9 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 				return err
 			}
 		} else {
-			req.Save(events[i])
+			if err := req.Save(events[i]); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -201,19 +202,19 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 				return nil, nil
 			}
 
-			sql, params, err := generateSelectEventsSQL(subscription, pivot, min(selectDefaultBatchLimit, limit))
+			sqlQuery, params, err := generateSelectEventsSQL(subscription, pivot, min(selectDefaultBatchLimit, limit))
 			if err != nil {
 				return nil, err
 			}
 
-			stmt, err := db.prepare(ctx, sql, hashSQL(sql))
+			stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to prepare query sql: %q", sql)
+				return nil, errors.Wrapf(err, "failed to prepare query sql: %q", sqlQuery)
 			}
 
 			rows, err := stmt.QueryxContext(ctx, params)
 			if err != nil {
-				err = errors.Wrapf(err, "failed to query query events sql: %q", sql)
+				err = errors.Wrapf(err, "failed to query query events sql: %q", sqlQuery)
 			}
 
 			if hasLimitFilter && err == nil {
@@ -263,14 +264,14 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 		return -1, errors.Wrap(err, "failed to generate events where clause")
 	}
 
-	sql := `select count(id) from events e where ` + where
+	sqlQuery := `select count(id) from events e where ` + where
 
-	stmt, err := db.prepare(ctx, sql, hashSQL(sql))
+	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
 	if err != nil {
-		return -1, errors.Wrapf(err, "failed to prepare query sql: %q", sql)
+		return -1, errors.Wrapf(err, "failed to prepare query sql: %q", sqlQuery)
 	}
 
-	err = errors.Wrapf(stmt.GetContext(ctx, &count, params), "failed to query events count sql: %q", sql)
+	err = errors.Wrapf(stmt.GetContext(ctx, &count, params), "failed to query events count sql: %q", sqlQuery)
 
 	return count, err
 }

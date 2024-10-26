@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 	defer serverCancel()
 	query.MustInit()
 	initServer(serverCtx, serverCancel, 9997, storageRoot)
-	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.LocalhostTLS()}
+	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: nil}
 	code := m.Run()
 	serverCancel()
 	os.Exit(code)
@@ -43,8 +43,7 @@ func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port
 	initStorage(serverCtx, storageRoot)
 	uploader := NewUploadHandler(serverCtx)
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{
-		TLSConfig: fixture.LocalhostTLS(),
-		Port:      port,
+		Port: port,
 	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),

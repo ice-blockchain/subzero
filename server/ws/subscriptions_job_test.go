@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"crypto/tls"
 	_ "embed"
 	"fmt"
 	"log"
@@ -30,7 +29,7 @@ func TestJob(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
+	dvm.MustInit()
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -41,7 +40,7 @@ func TestJob(t *testing.T) {
 		}
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
 			if sEvent.ID == events[0].ID {
 				return nil
@@ -255,7 +254,7 @@ func TestJobDeletion(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
+	dvm.MustInit()
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -266,7 +265,7 @@ func TestJobDeletion(t *testing.T) {
 		}
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
 			if sEvent.ID == events[0].ID {
 				return nil
@@ -479,7 +478,7 @@ func TestErrorFeedback(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
+	dvm.MustInit()
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -490,7 +489,7 @@ func TestErrorFeedback(t *testing.T) {
 		}
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
 			if sEvent.ID == events[0].ID {
 				return nil
@@ -646,7 +645,7 @@ func TestOfflineJob(t *testing.T) {
 	privKeyHex := nostr.GeneratePrivateKey()
 	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
-	dataVendingMachine := dvm.NewDvms(NIP13MinLeadingZeroBits, privKeyHex, dvm.WithCustomConnectTLS(fixture.LocalhostTLS()))
+	dvm.MustInit()
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -657,7 +656,7 @@ func TestOfflineJob(t *testing.T) {
 		}
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dataVendingMachine.AcceptJob(ctx, events[0]))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 		for _, sEvent := range storedEvents {
 			if sEvent.ID == events[0].ID {
 				return nil
@@ -859,23 +858,4 @@ func TestOfflineJob(t *testing.T) {
 	}
 	require.Equal(t, uint64(5), pubsubServers[0].ReaderExited.Load())
 	require.Equal(t, uint64(3), pubsubServers[1].ReaderExited.Load())
-}
-
-var (
-	//go:embed fixture/.testdata/localhost.crt
-	localhostCrt string
-	//go:embed fixture/.testdata/localhost.key
-	localhostKey string
-)
-
-func helperLoadKeyPair(t *testing.T) *tls.Config {
-	t.Helper()
-	cert, err := tls.X509KeyPair([]byte(localhostCrt), []byte(localhostKey))
-	if err != nil {
-		panic(err)
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
 }
