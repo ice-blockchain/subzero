@@ -4,12 +4,12 @@ package main
 
 import (
 	"context"
-	"log"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
@@ -24,14 +24,14 @@ var (
 	subzero    = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
-		Run: func(_ *cobra.Command, args []string) {
-			ctx, cancel := context.WithCancel(context.Background())
+		Run: func(cmd *cobra.Command, _ []string) {
+			ctx, cancel := context.WithCancel(cmd.Context())
 			defer cancel()
+
 			cfg.MustInit(configPath)
 			query.MustInit()
 			storage.MustInit(ctx)
 			dvm.MustInit()
-
 			server.ListenAndServe(ctx, cancel)
 		},
 	}
@@ -62,7 +62,5 @@ func init() {
 }
 
 func main() {
-	if err := subzero.Execute(); err != nil {
-		log.Panic(err)
-	}
+	cmd.Execute(subzero)
 }
