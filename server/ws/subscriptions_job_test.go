@@ -26,10 +26,9 @@ func TestJob(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	privKeyHex := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
-	require.NoError(t, err)
 	dvm.MustInit()
+	serivceProviderPubKey, err := dvm.PublicKey()
+	require.NoError(t, err)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -251,10 +250,9 @@ func TestJobDeletion(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	privKeyHex := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
-	require.NoError(t, err)
 	dvm.MustInit()
+	serivceProviderPubKey, err := dvm.PublicKey()
+	require.NoError(t, err)
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			for i := range storedEvents {
@@ -642,8 +640,7 @@ func TestOfflineJob(t *testing.T) {
 	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	privKeyHex := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
+	serivceProviderPubKey, err := dvm.PublicKey()
 	require.NoError(t, err)
 	dvm.MustInit()
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {

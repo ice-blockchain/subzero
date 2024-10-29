@@ -4,7 +4,6 @@ package storage
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -42,16 +41,14 @@ var (
 
 type (
 	config struct {
-		PrivateKey              ed25519.PrivateKey `yaml:"private-key"`
-		IONStorageConfigURL     string             `yaml:"ion-storage-config-url"`
-		AbsoluteRootStoragePath string             `yaml:"absolute-root-storage-path"`
-		ExternalADNLAddress     net.IP             `yaml:"external-adnl-address"`
-		ExternalADNLPort        int                `yaml:"external-adnl-port"`
-		Debug                   bool               `yaml:"debug"`
+		PrivateKey              string `yaml:"private-key"`
+		IONStorageConfigURL     string `yaml:"ion-storage-config-url"`
+		AbsoluteRootStoragePath string `yaml:"absolute-root-storage-path"`
+		ExternalADNLAddress     string `yaml:"external-adnl-address"`
+		ExternalADNLPort        int    `yaml:"external-adnl-port"`
+		Debug                   bool   `yaml:"debug"`
 	}
 )
-
-const DefaultConfigUrl = "https://ton.org/global.config.json"
 
 var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
@@ -174,13 +171,20 @@ func mustInit(ctx context.Context) *client {
 			log.Panic(errors.Wrapf(err, "failed to load ton network config from url: %v", u.String()))
 		}
 	}
-
-	gate := adnl.NewGateway(globalConfig.PrivateKey)
-	gate.SetExternalIP(globalConfig.ExternalADNLAddress)
+	privateKey, err := hex.DecodeString(globalConfig.PrivateKey)
+	if err != nil {
+		log.Panic(errors.Wrapf(err, "failed to decode private key as hex: %v", globalConfig.PrivateKey))
+	}
+	gate := adnl.NewGateway(privateKey)
+	ip := net.ParseIP(globalConfig.ExternalADNLAddress)
+	if ip == nil {
+		log.Panic(errors.Errorf("invalid external-adnl-address: %v", globalConfig.ExternalADNLAddress))
+	}
+	gate.SetExternalIP(ip)
 	if err = gate.StartServer(fmt.Sprintf(":%v", globalConfig.ExternalADNLPort)); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start adnl gateway"))
 	}
-	dhtGate := adnl.NewGateway(globalConfig.PrivateKey)
+	dhtGate := adnl.NewGateway(privateKey)
 	if err = dhtGate.StartClient(); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start dht"))
 	}
@@ -189,7 +193,7 @@ func mustInit(ctx context.Context) *client {
 	if err != nil {
 		log.Panic(errors.Wrapf(err, "failed to create dht client"))
 	}
-	srv := storage.NewServer(dhtClient, gate, globalConfig.PrivateKey, true)
+	srv := storage.NewServer(dhtClient, gate, privateKey, true)
 	conn := storage.NewConnector(srv)
 	fStorage, err := ldbstorage.OpenFile(filepath.Join(globalConfig.AbsoluteRootStoragePath, "db"), false)
 	if err != nil {

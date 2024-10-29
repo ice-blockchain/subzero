@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
@@ -32,18 +33,24 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 	query.MustInit()
-	initServer(serverCtx, serverCancel, 9997, storageRoot)
-	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: nil}
+	initServer(serverCtx, serverCancel, 9996)
+	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	code := m.Run()
 	serverCancel()
 	os.Exit(code)
 }
 
-func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port uint16, storageRoot string) {
-	initStorage(serverCtx, storageRoot)
+func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port uint16) {
+	initStorage(serverCtx)
 	uploader := NewUploadHandler(serverCtx)
+	type globalCfg struct {
+		TLSCert string `yaml:"tls-cert"`
+		TLSKey  string `yaml:"tls-key"`
+	}
+	globalConfig := cfg.MustGet[globalCfg]()
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{
-		Port: port,
+		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		Port:      port,
 	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),
@@ -56,11 +63,11 @@ func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port
 func TestNIP11(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	info, err := nip11.Fetch(ctx, "wss://localhost:9997")
+	info, err := nip11.Fetch(ctx, "wss://localhost:9996")
 	require.NoError(t, err)
 	require.NotNil(t, info)
 	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}}
 	expected := handler.info()
-	expected.URL = "wss://localhost:9997"
+	expected.URL = "wss://localhost:9996"
 	assert.Equal(t, expected, info)
 }

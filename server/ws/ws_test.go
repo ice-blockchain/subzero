@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -33,6 +34,11 @@ var echoServer *fixture.MockService
 var pubsubServers []*fixture.MockService
 
 func TestMain(m *testing.M) {
+	type globalCfg struct {
+		TLSCert string `yaml:"tls-cert"`
+		TLSKey  string `yaml:"tls-key"`
+	}
+	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
@@ -41,17 +47,20 @@ func TestMain(m *testing.M) {
 		}
 	}
 	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		Port: 9999,
+		Port:      9999,
+		TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, echoFunc, nil, map[string]gin.HandlerFunc{})
 	hdl = new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
 	hdl2 := new(handler)
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
 		Port:                    9997,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))
 	m.Run()
 	serverCancel()
