@@ -4,8 +4,6 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
-	"log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	httpserver "github.com/ice-blockchain/subzero/server/http"
@@ -34,20 +32,9 @@ func ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
 	internalCfg := &wsserver.Config{
 		Port:      globalConfig.Port,
 		Debug:     globalConfig.Debug,
-		TLSConfig: loadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}
 	wsserver.New(internalCfg, globalRouter).ListenAndServe(ctx, cancel)
-}
-
-func loadTLSConfig(certFileName, keyFileName string) *tls.Config {
-	cert, err := tls.LoadX509KeyPair(certFileName, keyFileName)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {

@@ -4,8 +4,10 @@ package ws
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"log"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
@@ -145,4 +147,24 @@ func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Env
 	}
 
 	return respWriter.WriteMessage(int(ws.OpText), b)
+}
+
+func LoadTLSConfig(certOrFileName, keyOrFileName string) *tls.Config {
+	var cert tls.Certificate
+	var err error
+	if !strings.Contains(certOrFileName, "-----BEGIN CERTIFICATE-----") {
+		cert, err = tls.LoadX509KeyPair(certOrFileName, keyOrFileName)
+		if err != nil {
+			log.Panic(err)
+		}
+	} else {
+		cert, err = tls.X509KeyPair([]byte(certOrFileName), []byte(keyOrFileName))
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
 }

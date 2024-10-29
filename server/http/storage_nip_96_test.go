@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	subzerocfg "github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/storage"
@@ -102,7 +103,8 @@ func TestNIP96(t *testing.T) {
 		}}
 		require.NoError(t, nip94EventToSign.Sign(user1))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
-		initStorage(ctx, newStorageRoot)
+		subzerocfg.MustInit("./../../server/http/.testdata/storage-2nd-instance.yaml")
+		initStorage(ctx)
 		require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
 		require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
 		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "profile.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
@@ -235,7 +237,7 @@ func upload(t *testing.T, ctx context.Context, sk, master, path, filename, capti
 	require.NoError(t, writer.WriteField("no_transform", "true"))
 	err = writer.Close()
 	require.NoError(t, err)
-	httpResp := authorizedReq(t, ctx, sk, "POST", "https://localhost:9997/files", hex.EncodeToString(fileHash.Sum(nil)), writer.FormDataContentType(), &requestBody, master)
+	httpResp := authorizedReq(t, ctx, sk, "POST", "https://localhost:9996/files", hex.EncodeToString(fileHash.Sum(nil)), writer.FormDataContentType(), &requestBody, master)
 	require.NotNil(t, httpResp)
 	switch httpResp.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusAccepted:
@@ -256,7 +258,7 @@ func download(t *testing.T, ctx context.Context, sk, fileHash string, masterPubk
 	defer func() {
 		http.DefaultClient.CheckRedirect = func(req *http.Request, via []*http.Request) error { return nil }
 	}()
-	resp := authorizedReq(t, ctx, sk, "GET", fmt.Sprintf("https://localhost:9997/files/%v", fileHash), "", "", nil, masterPubkey...)
+	resp := authorizedReq(t, ctx, sk, "GET", fmt.Sprintf("https://localhost:9996/files/%v", fileHash), "", "", nil, masterPubkey...)
 	if resp.StatusCode == http.StatusFound {
 		require.Equal(t, http.StatusFound, resp.StatusCode)
 		locationUrl = resp.Header.Get("location")
@@ -268,7 +270,7 @@ func download(t *testing.T, ctx context.Context, sk, fileHash string, masterPubk
 
 func list(t *testing.T, ctx context.Context, sk string, page, limit uint32, masterPubkey ...string) *listedFiles {
 	t.Helper()
-	resp := authorizedReq(t, ctx, sk, "GET", fmt.Sprintf("https://localhost:9997/files?page=%v&count=%v", page, limit), "", "", nil, masterPubkey...)
+	resp := authorizedReq(t, ctx, sk, "GET", fmt.Sprintf("https://localhost:9996/files?page=%v&count=%v", page, limit), "", "", nil, masterPubkey...)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var files listedFiles
 	body, err := io.ReadAll(resp.Body)
@@ -279,7 +281,7 @@ func list(t *testing.T, ctx context.Context, sk string, page, limit uint32, mast
 
 func deleteFile(t *testing.T, ctx context.Context, sk string, fileHash string, masterKey ...string) int {
 	t.Helper()
-	resp := authorizedReq(t, ctx, sk, "DELETE", fmt.Sprintf("https://localhost:9997/files/%v", fileHash), "", "", nil, masterKey...)
+	resp := authorizedReq(t, ctx, sk, "DELETE", fmt.Sprintf("https://localhost:9996/files/%v", fileHash), "", "", nil, masterKey...)
 	if resp.StatusCode == http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -387,7 +389,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 	return expectedResponses[caption]
 }
 
-func initStorage(ctx context.Context, path string) {
+func initStorage(ctx context.Context) {
 	transportOverride := http.DefaultClient.Transport
 	http.DefaultClient.Transport = http.DefaultTransport
 	storage.MustInit(ctx)
@@ -447,7 +449,7 @@ func BenchmarkUploadFiles(b *testing.B) {
 			defer img.Close()
 			start := time.Now()
 			resp, err := nip96.Upload(ctx, nip96.UploadRequest{
-				Host:        "https://localhost:9997/files",
+				Host:        "https://localhost:9996/files",
 				File:        img,
 				Filename:    "profile.png",
 				Caption:     "ice profile pic",
