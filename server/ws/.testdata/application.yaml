@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: ice License 1.0
+
 server:
   ws:
     tls-cert: &ws-cert |
