@@ -66,9 +66,6 @@ func MustInit() {
 		globalDVM.relayConnectTLS = buildTLS()
 	}
 }
-func PublicKey() (string, error) {
-	return nostr.GetPublicKey(globalDVM.privateKey)
-}
 
 func buildTLS() *tls.Config {
 	cert, err := tls.X509KeyPair([]byte(globalConfig.TLSCert), []byte(globalConfig.TLSKey))

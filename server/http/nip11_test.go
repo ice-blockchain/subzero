@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
-	subzerocfg "github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	defer serverCancel()
 	query.MustInit()
 	initServer(serverCtx, serverCancel, 9996)
-	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.LocalhostTLS()}
+	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	code := m.Run()
 	serverCancel()
 	os.Exit(code)
@@ -47,7 +47,7 @@ func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port
 		TLSCert string `yaml:"tls-cert"`
 		TLSKey  string `yaml:"tls-key"`
 	}
-	globalConfig := subzerocfg.MustGet[globalCfg]()
+	globalConfig := cfg.MustGet[globalCfg]()
 	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,

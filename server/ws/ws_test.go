@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	subzerocfg "github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 		TLSCert string `yaml:"tls-cert"`
 		TLSKey  string `yaml:"tls-key"`
 	}
-	globalConfig := subzerocfg.MustGet[globalCfg]()
+	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {

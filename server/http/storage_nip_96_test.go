@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
-	subzerocfg "github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/storage"
@@ -103,7 +103,7 @@ func TestNIP96(t *testing.T) {
 		}}
 		require.NoError(t, nip94EventToSign.Sign(user1))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
-		subzerocfg.MustInit("./../../server/http/.testdata/storage-2nd-instance.yaml")
+		cfg.MustInit("./../../server/http/.testdata/storage-2nd-instance.yaml")
 		initStorage(ctx)
 		require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
 		require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
