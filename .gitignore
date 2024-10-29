@@ -1,4 +1,5 @@
 /subzero
+*.sqlite*
 *.exe
 *.BIN
 *.exe~

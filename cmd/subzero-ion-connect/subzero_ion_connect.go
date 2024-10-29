@@ -4,12 +4,15 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
-	"github.com/ice-blockchain/subzero/cmd"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
@@ -61,6 +64,31 @@ func init() {
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)
 }
 
+func newContext() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		force := false
+		for sig := range c {
+			if force {
+				log.Println("force shutdown", "signal", sig.String())
+				os.Exit(2)
+			} else {
+				log.Println("graceful shutdown", "signal", sig.String())
+				cancel()
+				force = true
+			}
+		}
+	}()
+
+	return ctx
+}
+
 func main() {
-	cmd.Execute(subzero)
+	err := subzero.ExecuteContext(newContext())
+	if err != nil {
+		log.Panic(err)
+	}
 }

@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
 --------
 CREATE TABLE IF NOT EXISTS event_tags
 (
-    event_id          text not null references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    event_id          text not null references events (id) ON UPDATE RESTRICT ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     event_tag_key     text not null,
     event_tag_value1  text not null DEFAULT '',
     event_tag_value2  text not null DEFAULT '',
@@ -152,13 +152,22 @@ begin
 end
 ;
 --------
+create trigger if not exists trigger_events_before_update_remove_old_data
+    before update
+    on events
+    for each row
+    when (new.tags != old.tags) OR (new.id != old.id)
+begin
+    delete from event_tags where event_id in (new.id, old.id);
+end
+;
+--------
 create trigger if not exists trigger_events_after_update_generate_tags
     after update
     on events
     for each row
     when (new.tags != old.tags) OR (new.id != old.id)
 begin
-    delete from event_tags where event_id = old.id or event_id = new.id;
     insert into event_tags(
         event_id,
         event_tag_key,
@@ -285,6 +294,107 @@ begin
         coalesce(old.tags, '[]'),
         coalesce(new.tags, '[]')
     );
+end
+;
+--------
+create trigger if not exists trigger_events_before_delete_remove_tags_explicit
+    before delete
+    on events
+    for each row
+begin
+    delete from event_tags where event_id = OLD.id;
+end
+;
+--------
+CREATE TABLE IF NOT EXISTS event_counters
+(
+    reference_id   text    not null,
+    reference_type text    not null DEFAULT '',
+    kind           integer not null,
+    value          integer not null DEFAULT 0,
+    primary key (reference_id, kind, reference_type)
+) strict, WITHOUT ROWID;
+--------
+create trigger if not exists trigger_event_tags_after_insert_inc_counter
+    after insert
+    on event_tags
+    for each row
+    when (NEW.event_tag_key in ('q', 'e', 'p')) AND (NEW.event_tag_value1 != '')
+begin
+    insert into event_counters (reference_id, reference_type, kind, value)
+    select
+        NEW.event_tag_value1, -- Either event id OR public key (kind = 3).
+        case
+            when e.kind = 1 and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind = 1 and NEW.event_tag_key = 'q'                                               then 'quote'
+            when e.kind = 3 and NEW.event_tag_key = 'p'                                               then 'follower'
+            else ''
+        end,
+        e.kind,
+        1
+    from
+        events e
+    where
+            (e.id = NEW.event_id)
+        and (e.kind in (1, 3, 6, 7))
+        and (e.kind = 3 OR exists (select 1 from events where id = NEW.event_tag_value1))
+        and (
+            case
+                when e.kind = 7 then
+                    -- As per NIP25, we want only the value of the last `e` tag here.
+                    NEW.event_tag_value1 = (
+                        select
+                            json_group_array(json_extract(value, '$[1]'))->>'$[#-1]'
+                        from
+                            json_each(e.tags)
+                        where
+                            json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
+                    )
+                else
+                    true
+            end
+        )
+    on conflict do update
+    set
+        value = value + 1;
+end
+;
+--------
+create trigger if not exists trigger_event_tags_after_delete_dec_counter
+    after delete
+    on event_tags
+    for each row
+    when (OLD.event_tag_key in ('q', 'e', 'p')) AND (OLD.event_tag_value1 != '')
+begin
+    update event_counters set
+        value = max(value - 1, 0)
+    from
+        events e
+    where
+            e.id = OLD.event_id
+        and event_counters.reference_id = OLD.event_tag_value1
+        and event_counters.kind = e.kind
+        and event_counters.reference_type = case
+            when e.kind = 1 and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind = 1 and OLD.event_tag_key = 'q'                                               then 'quote'
+            when e.kind = 3 and OLD.event_tag_key = 'p'                                               then 'follower'
+            else ''
+        end
+        and (
+            case
+                when e.kind = 7 then
+                    OLD.event_tag_value1 = (
+                        select
+                            json_group_array(json_extract(je.value, '$[1]'))->>'$[#-1]'
+                        from
+                            json_each(e.tags) je
+                        where
+                            json_valid(e.tags) and json_extract(je.value, '$[0]') = 'e'
+                    )
+                else true
+            end
+        );
+        delete from event_counters where reference_id = OLD.event_tag_value1 and value = 0;
 end
 ;
 --------

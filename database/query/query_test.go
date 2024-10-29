@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"testing"
@@ -35,7 +36,14 @@ func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Contex
 func helperNewDatabase(t *testing.T) *dbClient {
 	t.Helper()
 
-	return openDatabase(":memory:", true)
+	path := ":memory:"
+	if tempDb := os.Getenv("TEST_TEMP_DB"); tempDb != "" {
+		t.Logf("using temporary database: %q", tempDb)
+		os.Remove(tempDb)
+		path = tempDb
+	}
+
+	return openDatabase(path, true)
 }
 
 func TestMain(m *testing.M) {
