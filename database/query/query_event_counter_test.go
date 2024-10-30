@@ -230,7 +230,7 @@ func TestEventCounters(t *testing.T) {
 			ev.Content = "content"
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 		})
-		t.Run("AddReply", func(t *testing.T) {
+		t.Run("Reply", func(t *testing.T) {
 			var ev model.Event
 			ev.ID = "2rp"
 			ev.Kind = nostr.KindTextNote
@@ -239,6 +239,21 @@ func TestEventCounters(t *testing.T) {
 			ev.Tags = model.Tags{{"e", "1rp", "", "reply", "pubkeyrp2"}, {"p", "pubkeyrp1"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 			helperMustEventCount(t, db, "1rp", nostr.KindTextNote, "reply", 1)
+		})
+		t.Run("Repost with multiple E tags", func(t *testing.T) {
+			var ev model.Event
+			ev.ID = "14r"
+			ev.Kind = nostr.KindRepost
+			ev.PubKey = "pubkeyr3"
+			ev.CreatedAt = 2
+			ev.Tags = model.Tags{
+				{"e", "1r", "wss://relay1", "reply"},
+				{"e", "2rp"},
+				{"p", "pkey1"},
+			}
+			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			helperMustEventCount(t, db, "1r", nostr.KindRepost, "reply", 1)
+			helperMustEventCount(t, db, "2rp", nostr.KindRepost, "", 0)
 		})
 	})
 }

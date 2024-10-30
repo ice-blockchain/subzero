@@ -148,7 +148,8 @@ begin
     from
     (
         select subzero_nostr_tag_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
-    ) where value ->> 0 is not null;
+    ) where value ->> 0 is not null
+    on conflict do nothing;
 end
 ;
 --------
@@ -325,9 +326,9 @@ begin
     select
         NEW.event_tag_value1, -- Either event id OR public key (kind = 3).
         case
-            when e.kind = 1 and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
-            when e.kind = 1 and NEW.event_tag_key = 'q'                                               then 'quote'
-            when e.kind = 3 and NEW.event_tag_key = 'p'                                               then 'follower'
+            when e.kind in (1, 6) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind = 1 and NEW.event_tag_key = 'q' then 'quote'
+            when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
             else ''
         end,
         e.kind,
@@ -349,6 +350,17 @@ begin
                             json_each(e.tags)
                         where
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
+                    )
+                when e.kind = 6 then
+                    -- Use the first E here.
+                    NEW.event_tag_value1 = (
+                        select
+                            json_extract(value, '$[1]')
+                        from
+                            json_each(e.tags)
+                        where
+                            json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
+                        limit 1
                     )
                 else
                     true
@@ -375,9 +387,9 @@ begin
         and event_counters.reference_id = OLD.event_tag_value1
         and event_counters.kind = e.kind
         and event_counters.reference_type = case
-            when e.kind = 1 and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
-            when e.kind = 1 and OLD.event_tag_key = 'q'                                               then 'quote'
-            when e.kind = 3 and OLD.event_tag_key = 'p'                                               then 'follower'
+            when e.kind in (1, 6) and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind = 1 and OLD.event_tag_key = 'q' then 'quote'
+            when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
             else ''
         end
         and (
@@ -390,6 +402,16 @@ begin
                             json_each(e.tags) je
                         where
                             json_valid(e.tags) and json_extract(je.value, '$[0]') = 'e'
+                    )
+                when e.kind = 6 then
+                    OLD.event_tag_value1 = (
+                        select
+                            json_extract(value, '$[1]')
+                        from
+                            json_each(e.tags)
+                        where
+                            json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
+                        limit 1
                     )
                 else true
             end
