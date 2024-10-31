@@ -258,13 +258,27 @@ func (db *dbClient) handleError(err error) error {
 	return err
 }
 
-func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscription) (count int64, err error) {
+func generateEventsCountClause(subscription *model.Subscription) (sqlQuery string, params map[string]any, err error) {
+	if subscription != nil {
+		where, params, err := newWhereBuilder().BuildForEventCounter(subscription.Filters...)
+		if err == nil {
+			return `select coalesce(sum(value), 0) from event_counters where ` + where, params, nil
+		}
+	}
+
 	where, params, err := generateEventsWhereClause(subscription)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "failed to generate events where clause")
+	}
+
+	return `select count(id) from events e where ` + where, params, nil
+}
+
+func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscription) (count int64, err error) {
+	sqlQuery, params, err := generateEventsCountClause(subscription)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed to generate events where clause")
 	}
-
-	sqlQuery := `select count(id) from events e where ` + where
 
 	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
 	if err != nil {
@@ -272,6 +286,9 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 	}
 
 	err = errors.Wrapf(stmt.GetContext(ctx, &count, params), "failed to query events count sql: %q", sqlQuery)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
 
 	return count, err
 }

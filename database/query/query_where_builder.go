@@ -36,6 +36,8 @@ const (
 var (
 	ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 	ErrEmptyFilter                  = errors.New("empty filter")
+
+	errUnsupportedCombination = errors.New("unsupported filter combination")
 )
 
 type (
@@ -568,6 +570,114 @@ func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql stri
 
 	w.WriteString(" AND ")
 	w.WriteString(whereBuilderDefaultWhere)
+
+	return w.String(), w.Params, nil
+}
+
+func isValidCounterFilter(filter *model.Filter) bool {
+	if filter == nil {
+		return false
+	}
+
+	// Search is not supported.
+	if filter.Search != "" {
+		return false
+	}
+
+	// Does not support time range.
+	if filter.Since != nil || filter.Until != nil {
+		return false
+	}
+
+	// Only one kind element is allowed.
+	if len(filter.Kinds) != 1 {
+		return false
+	}
+
+	// Only IDs or authors are allowed, but not both.
+	if (len(filter.IDs) == 0 && len(filter.Authors) == 0) || (len(filter.IDs) > 0 && len(filter.Authors) > 0) {
+		return false
+	}
+
+	// Only `q` tag without other tags and without values is allowed.
+	if len(filter.Tags) == 1 {
+		// No values are allowed.
+		if val, ok := filter.Tags["q"]; !ok || len(val) > 0 {
+			return false
+		}
+		// Event(s) must be set.
+		if len(filter.IDs) == 0 {
+			return false
+		}
+	} else if len(filter.Tags) > 1 {
+		// Only one tag is allowed.
+		return false
+	}
+
+	switch {
+	case len(filter.IDs) == 0 && len(filter.Authors) > 0 && filter.Kinds[0] == nostr.KindFollowList:
+		return true
+
+	case len(filter.IDs) > 0 && len(filter.Authors) == 0:
+		switch filter.Kinds[0] {
+		case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
+			return true
+		}
+	}
+
+	return false
+}
+
+func (w *whereBuilder) BuildForEventCounter(filters ...model.Filter) (sql string, params map[string]any, err error) {
+	if len(filters) == 0 {
+		return "", nil, ErrEmptyFilter
+	}
+
+	for idx := range filters {
+		if !isValidCounterFilter(&filters[idx]) {
+			return "", nil, errors.Wrapf(errUnsupportedCombination, "filter %d", idx)
+		}
+
+		filterID := "eventcounter" + strconv.Itoa(idx) + "_"
+		filter := &filters[idx]
+
+		w.maybeOR()
+
+		switch {
+		// Count number of followees for a given author(s).
+		case len(filter.IDs) == 0 && len(filter.Authors) > 0 && filter.Kinds[0] == nostr.KindFollowList:
+			w.WriteString("(kind = 3 AND reference_type = 'follower' AND ")
+			buildFromSlice(w, sqlOpCodeNONE, filterID, filter.Authors, "reference_id", "")
+			w.WriteRune(')')
+
+		case len(filter.IDs) > 0 && len(filter.Authors) == 0:
+			w.WriteString("(kind = ")
+			switch filter.Kinds[0] {
+			case nostr.KindTextNote:
+				if _, ok := filter.Tags["q"]; ok {
+					// Count number of quotes for a given event(s).
+					w.WriteString("1 AND reference_type = 'quote' AND ")
+				} else {
+					// Count number of replies for a given event(s).
+					w.WriteString("1 AND reference_type = 'reply' AND ")
+				}
+
+			case nostr.KindRepost: // Count number of reposts for a given event(s).
+				w.WriteString("6 AND reference_type = 'reply' AND ")
+
+			case nostr.KindReaction: // Count number of reactions for a given event(s).
+				w.WriteString("7 AND reference_type = '' AND ")
+
+			default:
+				return "", nil, errors.Wrapf(errUnsupportedCombination, "kind %d", filter.Kinds[0])
+			}
+			buildFromSlice(w, sqlOpCodeNONE, filterID, filter.IDs, "reference_id", "")
+			w.WriteRune(')')
+
+		default:
+			return "", nil, errUnsupportedCombination
+		}
+	}
 
 	return w.String(), w.Params, nil
 }

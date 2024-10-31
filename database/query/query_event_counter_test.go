@@ -4,8 +4,6 @@ package query
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"strconv"
 	"testing"
 
@@ -15,25 +13,11 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperGetEventCounter(t *testing.T, db *dbClient, id string, kind int, rType string) (counter int) {
+func helperMustEventCount(t *testing.T, db *dbClient, f model.Filter, expectedCount int64) {
 	t.Helper()
 
-	err := db.QueryRowContext(
-		context.Background(),
-		`SELECT value FROM event_counters WHERE reference_id = $1 AND kind = $2 AND reference_type = $3`, id, kind, rType).
-		Scan(&counter)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
-	}
-	require.NoError(t, err)
-
-	return counter
-}
-
-func helperMustEventCount(t *testing.T, db *dbClient, id string, kind int, rType string, expectedCount int) {
-	t.Helper()
-
-	require.Equal(t, expectedCount, helperGetEventCounter(t, db, id, kind, rType))
+	count := helperCountEventsByFilter(t, db, f)
+	require.Equal(t, expectedCount, count)
 }
 
 func TestEventCounters(t *testing.T) {
@@ -66,7 +50,7 @@ func TestEventCounters(t *testing.T) {
 
 				require.NoError(t, db.AcceptEvents(context.Background(), &q))
 			}
-			helperMustEventCount(t, db, "1", nostr.KindTextNote, "quote", 3)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{"q": nil}, IDs: []string{"1"}}, 3)
 		})
 		t.Run("Delete", func(t *testing.T) {
 			var ev model.Event
@@ -80,7 +64,7 @@ func TestEventCounters(t *testing.T) {
 			c, err := db.CountEvents(context.Background(), nil)
 			require.NoError(t, err)
 			require.Equal(t, int64(13), c) // 11 posts, 2 quotes.
-			helperMustEventCount(t, db, "1", nostr.KindTextNote, "quote", 2)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{"q": nil}, IDs: []string{"1"}}, 2)
 		})
 		t.Run("Non existent", func(t *testing.T) {
 			var q model.Event
@@ -90,7 +74,7 @@ func TestEventCounters(t *testing.T) {
 			q.CreatedAt = 1
 			q.Tags = model.Tags{{"q", "foo"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &q))
-			helperMustEventCount(t, db, "1", nostr.KindTextNote, "foo", 0)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{"q": nil}, IDs: []string{"foo"}}, 0)
 		})
 	})
 	t.Run("Folowers", func(t *testing.T) {
@@ -107,7 +91,7 @@ func TestEventCounters(t *testing.T) {
 			}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 			for _, key := range []string{"alicekey", "bobkey", "carolkey"} {
-				helperMustEventCount(t, db, key, nostr.KindFollowList, "follower", 1)
+				helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{key}}, 1)
 			}
 		})
 		t.Run("RemoveCarol", func(t *testing.T) {
@@ -122,9 +106,9 @@ func TestEventCounters(t *testing.T) {
 			}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 			for _, key := range []string{"alicekey", "bobkey"} {
-				helperMustEventCount(t, db, key, nostr.KindFollowList, "follower", 1)
+				helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{key}}, 1)
 			}
-			require.Zero(t, helperGetEventCounter(t, db, "carolkey", nostr.KindFollowList, "follower"))
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"carolkey"}}, 0)
 		})
 		t.Run("AddMegan", func(t *testing.T) {
 			var ev model.Event
@@ -138,9 +122,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "megankey", "wss://meganrelay.com/", "megan"},
 			}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			for _, key := range []string{"alicekey", "bobkey", "megankey"} {
-				helperMustEventCount(t, db, key, nostr.KindFollowList, "follower", 1)
-			}
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"alicekey", "bobkey", "megankey"}}, 3)
 		})
 		t.Run("AddMeganToJoe", func(t *testing.T) {
 			var ev model.Event
@@ -152,7 +134,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "megankey", "wss://meganrelay.com/", "megan"},
 			}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "megankey", nostr.KindFollowList, "follower", 2)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"megankey"}}, 2)
 		})
 		t.Run("RemoveOriginalList", func(t *testing.T) {
 			var ev model.Event
@@ -162,9 +144,9 @@ func TestEventCounters(t *testing.T) {
 			ev.Tags = model.Tags{{"e", "3f"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 			for _, key := range []string{"alicekey", "bobkey"} {
-				helperMustEventCount(t, db, key, nostr.KindFollowList, "follower", 0)
+				helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{key}}, 0)
 			}
-			helperMustEventCount(t, db, "megankey", nostr.KindFollowList, "follower", 1)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"megankey"}}, 1)
 		})
 	})
 	t.Run("Reactions", func(t *testing.T) {
@@ -185,7 +167,7 @@ func TestEventCounters(t *testing.T) {
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{{"e", "1r"}, {"p", "pubkeyr1"}, {"k", "1"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "1r", nostr.KindReaction, "", 1)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1r"}}, 1)
 		})
 		t.Run("Reaction with multiple E tags", func(t *testing.T) {
 			var ev model.Event
@@ -204,7 +186,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "pubkeyr2"},
 			}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "1r", nostr.KindReaction, "", 2)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1r"}}, 2)
 		})
 		t.Run("Delete", func(t *testing.T) {
 			var ev model.Event
@@ -212,12 +194,12 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkeyr2"
 			ev.Tags = model.Tags{{"e", "2r"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "1r", nostr.KindReaction, "", 1)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1r"}}, 1)
 
 			ev.PubKey = "pubkeyr3"
 			ev.Tags = model.Tags{{"e", "3r"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "1r", nostr.KindReaction, "", 0)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1r"}}, 0)
 		})
 	})
 	t.Run("Reply", func(t *testing.T) {
@@ -238,7 +220,7 @@ func TestEventCounters(t *testing.T) {
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{{"e", "1rp", "", "reply", "pubkeyrp2"}, {"p", "pubkeyrp1"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "1rp", nostr.KindTextNote, "reply", 1)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1rp"}}, 1)
 		})
 		t.Run("Repost with multiple E tags", func(t *testing.T) {
 			var ev model.Event
@@ -252,8 +234,8 @@ func TestEventCounters(t *testing.T) {
 				{"p", "pkey1"},
 			}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
-			helperMustEventCount(t, db, "1r", nostr.KindRepost, "reply", 1)
-			helperMustEventCount(t, db, "2rp", nostr.KindRepost, "", 0)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"1r"}}, 1)
+			helperMustEventCount(t, db, model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"2rp"}}, 0)
 		})
 	})
 }

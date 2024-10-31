@@ -313,7 +313,7 @@ CREATE TABLE IF NOT EXISTS event_counters
     reference_type text    not null DEFAULT '',
     kind           integer not null,
     value          integer not null DEFAULT 0,
-    primary key (reference_id, kind, reference_type)
+    primary key (kind, reference_type, reference_id)
 ) strict, WITHOUT ROWID;
 --------
 create trigger if not exists trigger_event_tags_after_insert_inc_counter
