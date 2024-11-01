@@ -911,14 +911,14 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 	})
 }
 
-func helperCountEventsByFilter(t *testing.T, db *dbClient, filters ...model.Filter) (counter int64) {
+func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...model.Filter) (counter int64) {
 	t.Helper()
 
-	where, params, err := newWhereBuilder().BuildForEventCounter(filters...)
+	where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
 	require.NoError(t, err)
 
 	stmt, err := db.PrepareNamed(`select coalesce(sum(value), 0) from event_counters where ` + where)
-	require.NoError(t, err)
+	require.NoErrorf(t, err, "failed to prepare statement where: %v", where)
 
 	err = stmt.QueryRowx(params).Scan(&counter)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -939,23 +939,23 @@ func TestWhereBuilderSyntaxForCounter(t *testing.T) {
 
 	t.Run("Reply", func(t *testing.T) {
 		t.Run("Reply", func(t *testing.T) {
-			helperCountEventsByFilter(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}})
+			helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}})
 		})
 		t.Run("Quote", func(t *testing.T) {
-			helperCountEventsByFilter(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}, Tags: model.TagMap{"q": nil}})
+			helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}, Tags: model.TagMap{"q": nil}})
 		})
 	})
 	t.Run("Repost", func(t *testing.T) {
-		helperCountEventsByFilter(t, db, model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"1"}})
+		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"1"}})
 	})
 	t.Run("Reaction", func(t *testing.T) {
-		helperCountEventsByFilter(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1", "2"}})
+		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1", "2"}})
 	})
 	t.Run("Followers", func(t *testing.T) {
-		helperCountEventsByFilter(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"1"}})
+		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"1"}})
 	})
 	t.Run("Multiple", func(t *testing.T) {
-		helperCountEventsByFilter(t, db,
+		helperMustGetPrecalculatedCounters(t, db,
 			model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"1"}},
 			model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"1"}},
 			model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}, Tags: model.TagMap{"q": nil}},

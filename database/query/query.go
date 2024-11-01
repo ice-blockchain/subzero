@@ -260,9 +260,11 @@ func (db *dbClient) handleError(err error) error {
 
 func generateEventsCountClause(subscription *model.Subscription) (sqlQuery string, params map[string]any, err error) {
 	if subscription != nil {
-		where, params, err := newWhereBuilder().BuildForEventCounter(subscription.Filters...)
+		where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(subscription.Filters...)
 		if err == nil {
 			return `select coalesce(sum(value), 0) from event_counters where ` + where, params, nil
+		} else if !errors.Is(err, errUnsupportedCombination) {
+			return "", nil, errors.Wrap(err, "failed to generate events count where clause")
 		}
 	}
 

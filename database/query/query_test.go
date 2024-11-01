@@ -32,7 +32,7 @@ func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Contex
 	return events, err
 }
 
-func helperNewDatabase(t *testing.T) *dbClient {
+func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
 	return openDatabase(":memory:", true)

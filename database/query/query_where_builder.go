@@ -589,8 +589,8 @@ func isValidCounterFilter(filter *model.Filter) bool {
 		return false
 	}
 
-	// Only one kind element is allowed.
-	if len(filter.Kinds) != 1 {
+	// Kind must be set.
+	if len(filter.Kinds) == 0 {
 		return false
 	}
 
@@ -615,20 +615,24 @@ func isValidCounterFilter(filter *model.Filter) bool {
 	}
 
 	switch {
-	case len(filter.IDs) == 0 && len(filter.Authors) > 0 && filter.Kinds[0] == nostr.KindFollowList:
+	case len(filter.IDs) == 0 && len(filter.Authors) > 0 && len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindFollowList:
 		return true
 
 	case len(filter.IDs) > 0 && len(filter.Authors) == 0:
-		switch filter.Kinds[0] {
-		case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
-			return true
+		for _, kind := range filter.Kinds {
+			switch kind {
+			case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
+			default:
+				return false
+			}
 		}
+		return true
 	}
 
 	return false
 }
 
-func (w *whereBuilder) BuildForEventCounter(filters ...model.Filter) (sql string, params map[string]any, err error) {
+func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	if len(filters) == 0 {
 		return "", nil, ErrEmptyFilter
 	}
@@ -644,33 +648,33 @@ func (w *whereBuilder) BuildForEventCounter(filters ...model.Filter) (sql string
 		w.maybeOR()
 
 		switch {
-		// Count number of followees for a given author(s).
-		case len(filter.IDs) == 0 && len(filter.Authors) > 0 && filter.Kinds[0] == nostr.KindFollowList:
+		case len(filter.IDs) == 0 && len(filter.Authors) > 0 && len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindFollowList:
 			w.WriteString("(kind = 3 AND reference_type = 'follower' AND ")
 			buildFromSlice(w, sqlOpCodeNONE, filterID, filter.Authors, "reference_id", "")
 			w.WriteRune(')')
 
 		case len(filter.IDs) > 0 && len(filter.Authors) == 0:
-			w.WriteString("(kind = ")
-			switch filter.Kinds[0] {
-			case nostr.KindTextNote:
-				if _, ok := filter.Tags["q"]; ok {
-					// Count number of quotes for a given event(s).
-					w.WriteString("1 AND reference_type = 'quote' AND ")
-				} else {
-					// Count number of replies for a given event(s).
-					w.WriteString("1 AND reference_type = 'reply' AND ")
+			w.WriteRune('(')
+			for _, kind := range model.DeduplicateSlice(filter.Kinds, func(k int) int { return k }) {
+				w.WriteString("kind = :")
+				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(kind), kind))
+				w.WriteString(" AND ")
+				switch kind {
+				case nostr.KindTextNote, nostr.KindRepost:
+					if _, ok := filter.Tags["q"]; ok {
+						w.WriteString("reference_type = 'quote'")
+					} else {
+						w.WriteString("reference_type = 'reply'")
+					}
+
+				case nostr.KindReaction:
+					w.WriteString("reference_type = ''")
+
+				default:
+					return "", nil, errors.Wrapf(errUnsupportedCombination, "kind %d", filter.Kinds[0])
 				}
-
-			case nostr.KindRepost: // Count number of reposts for a given event(s).
-				w.WriteString("6 AND reference_type = 'reply' AND ")
-
-			case nostr.KindReaction: // Count number of reactions for a given event(s).
-				w.WriteString("7 AND reference_type = '' AND ")
-
-			default:
-				return "", nil, errors.Wrapf(errUnsupportedCombination, "kind %d", filter.Kinds[0])
 			}
+			w.WriteString(" AND ")
 			buildFromSlice(w, sqlOpCodeNONE, filterID, filter.IDs, "reference_id", "")
 			w.WriteRune(')')
 

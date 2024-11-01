@@ -327,7 +327,7 @@ begin
         NEW.event_tag_value1, -- Either event id OR public key (kind = 3).
         case
             when e.kind in (1, 6) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
-            when e.kind = 1 and NEW.event_tag_key = 'q' then 'quote'
+            when e.kind in (1, 6) and NEW.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
             else ''
         end,
@@ -351,17 +351,8 @@ begin
                         where
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
                     )
-                when e.kind = 6 then
-                    -- Use the first E here.
-                    NEW.event_tag_value1 = (
-                        select
-                            json_extract(value, '$[1]')
-                        from
-                            json_each(e.tags)
-                        where
-                            json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
-                        limit 1
-                    )
+                when e.kind in (1, 6) and NEW.event_tag_value3 != '' then
+                    NEW.event_tag_value3 in ('reply', 'root')
                 else
                     true
             end
@@ -388,7 +379,7 @@ begin
         and event_counters.kind = e.kind
         and event_counters.reference_type = case
             when e.kind in (1, 6) and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
-            when e.kind = 1 and OLD.event_tag_key = 'q' then 'quote'
+            when e.kind in (1, 6) and OLD.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
             else ''
         end
@@ -402,16 +393,6 @@ begin
                             json_each(e.tags) je
                         where
                             json_valid(e.tags) and json_extract(je.value, '$[0]') = 'e'
-                    )
-                when e.kind = 6 then
-                    OLD.event_tag_value1 = (
-                        select
-                            json_extract(value, '$[1]')
-                        from
-                            json_each(e.tags)
-                        where
-                            json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
-                        limit 1
                     )
                 else true
             end

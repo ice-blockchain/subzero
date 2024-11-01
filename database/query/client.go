@@ -7,8 +7,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	_ "embed"
-	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -57,15 +55,6 @@ func init() {
 					{
 						Name: "subzero_nostr_attestation_update_is_allowed",
 						Ptr:  sqlAttestationUpdateIsAllowed,
-						Pure: true,
-					},
-					{
-						Name: "subzero_debugln",
-						Ptr: func(msg ...string) int {
-							fmt.Fprintln(os.Stderr, "DEBUG: sqlite:", strings.Join(msg, " "))
-
-							return 0
-						},
 						Pure: true,
 					},
 				}
