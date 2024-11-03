@@ -81,6 +81,6 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 	writer.WriteHeader(http.StatusMethodNotAllowed)
 }
 
-func (s *srv) Shutdown(_ context.Context) error {
-	return errors.Wrap(s.server.Close(), "failed to close server")
+func (s *srv) Shutdown(ctx context.Context) error {
+	return errors.Wrap(s.server.Shutdown(ctx), "failed to close server")
 }

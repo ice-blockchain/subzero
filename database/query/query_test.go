@@ -32,7 +32,7 @@ func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Contex
 	return events, err
 }
 
-func helperNewDatabase(t *testing.T) *dbClient {
+func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
 	return openDatabase(":memory:", true)
@@ -617,7 +617,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.True(t, ok)
 		})
 		t.Run("Count", func(t *testing.T) {
-			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
+			count, err := db.CountEvents(context.TODO(), nil)
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count) // Only the reposted event should be counted.
 		})
@@ -660,6 +660,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
 			apply.Kinds = []int{model.CustomIONKindAttestation}
 			apply.Authors = []string{masterPk}
+			apply.Search = "nostr"
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
@@ -690,6 +691,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
 			apply.Kinds = []int{model.CustomIONKindAttestation}
 			apply.Authors = []string{masterPk}
+			apply.Search = "nostr"
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
@@ -727,6 +729,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
 				apply.Kinds = []int{nostr.KindTextNote}
 				apply.Authors = []string{masterPk}
+				apply.Search = "nostr"
 			}))
 			require.NoError(t, err)
 			require.Equal(t, int64(2), count) // Both events should be counted, master + on behalf.
@@ -768,6 +771,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			apply.Authors = authors
 			apply.Kinds = kinds
 			apply.IDs = ids
+			apply.Search = "nostr"
 		}))
 		require.NoError(t, err)
 		return count

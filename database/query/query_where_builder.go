@@ -36,6 +36,8 @@ const (
 var (
 	ErrWhereBuilderInvalidTimeRange = errors.New("invalid time range")
 	ErrEmptyFilter                  = errors.New("empty filter")
+
+	errUnsupportedCombination = errors.New("unsupported filter combination")
 )
 
 type (
@@ -568,6 +570,80 @@ func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql stri
 
 	w.WriteString(" AND ")
 	w.WriteString(whereBuilderDefaultWhere)
+
+	return w.String(), w.Params, nil
+}
+
+func isValidCounterFilter(filter *model.Filter) (valid bool) {
+	switch {
+	// Filter is required.
+	case filter == nil:
+
+	// Search by text is not supported.
+	case filter.Search != "":
+
+	// Time range is not supported.
+	case filter.Since != nil || filter.Until != nil:
+
+	// Only IDs or authors are allowed, but not both.
+	case (len(filter.IDs) > 0 && len(filter.Authors) > 0):
+		valid = len(filter.Kinds) > 0
+
+	default:
+		valid = true
+	}
+
+	return valid
+}
+
+func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (sql string, params map[string]any, err error) {
+	if len(filters) == 0 {
+		return "", nil, ErrEmptyFilter
+	}
+
+	for idx := range filters {
+		if !isValidCounterFilter(&filters[idx]) {
+			return "", nil, errors.Wrapf(errUnsupportedCombination, "filter %d", idx)
+		}
+
+		filterID := "eventcounter" + strconv.Itoa(idx) + "_"
+		filter := &filters[idx]
+
+		w.maybeOR()
+
+		kinds := model.DeduplicateSlice(filter.Kinds, func(k int) int { return k })
+		startLen := w.Len()
+		w.WriteRune('(')
+		if len(filter.Kinds) > 0 {
+			w.WriteRune('(')
+			for idx := range kinds {
+				w.maybeOR()
+				w.WriteString("kind = :")
+				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(idx), kinds[idx]))
+				w.WriteString(" AND reference_type = :")
+				var referenceType string
+				switch kinds[idx] {
+				case nostr.KindFollowList:
+					referenceType = "follower"
+				case nostr.KindTextNote, nostr.KindRepost:
+					if _, ok := filter.Tags["q"]; ok {
+						referenceType = "quote"
+					} else {
+						referenceType = "reply"
+					}
+				}
+				w.WriteString(w.addParam(filterID, "reference_type"+strconv.Itoa(idx), referenceType))
+
+			}
+			w.WriteRune(')')
+		}
+		buildFromSlice(w, sqlOpCodeAND, filterID, filter.Authors, "reference_id", "")
+		buildFromSlice(w, sqlOpCodeAND, filterID, filter.IDs, "reference_id", "")
+		if w.Len() == startLen+1 {
+			return "", nil, errUnsupportedCombination
+		}
+		w.WriteRune(')')
+	}
 
 	return w.String(), w.Params, nil
 }

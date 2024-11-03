@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	stdlibtime "time"
 
 	"github.com/gin-gonic/gin"
@@ -21,15 +20,16 @@ import (
 )
 
 type (
-	MockService struct {
-		server internal.Server
-
+	MockCallback func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config)
+	MockService  struct {
+		server            internal.Server
 		handlersMx        sync.Mutex
 		Handlers          map[adapters.WSWriter]struct{}
-		processingFunc    func(ctx context.Context, writer adapters.WSWriter, in []byte, cfg *config.Config)
+		processingFunc    MockCallback
 		nip11Handler      http.Handler
 		extraHttpHandlers map[string]gin.HandlerFunc
-		ReaderExited      atomic.Uint64
+		readerWg          *sync.WaitGroup
+		port              int
 	}
 	Client interface {
 		Received

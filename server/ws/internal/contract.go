@@ -4,7 +4,6 @@ package internal
 
 import (
 	"context"
-	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,7 +17,7 @@ type (
 	Router = gin.IRoutes
 	Server interface {
 		// ListenAndServe starts everything and blocks indefinitely.
-		ListenAndServe(ctx context.Context, cancel context.CancelFunc)
+		ListenAndServe(ctx context.Context)
 	}
 	RegisterRoutes interface {
 		RegisterRoutes(ctx context.Context, router Router)
@@ -33,7 +32,10 @@ type (
 		H2Server    http2.Server
 		router      *gin.Engine
 		cfg         *config.Config
-		quit        chan<- os.Signal
 		routesSetup RegisterRoutes
+	}
+	internalServer interface {
+		ListenAndServeTLS(ctx context.Context) error
+		Shutdown(ctx context.Context) error
 	}
 )
