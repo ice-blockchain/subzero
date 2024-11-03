@@ -52,21 +52,24 @@ func (s *Srv) ListenAndServe(ctx context.Context) {
 		return errors.Wrap(s.H3Server.ListenAndServeTLS(ctx), "cannot start HTTP3 server")
 	})
 
+	<-ctx.Done()
+
+	log.Println("shutting down servers ...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := s.H2Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
+		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP2 server shutdown failed"))
+	}
+	if err := s.H3Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
+		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP3 server shutdown failed"))
+	}
+
+	log.Println("servers stopped")
 	err := group.Wait()
 	if err != nil && !errors.IsAny(err, io.EOF, http.ErrServerClosed, context.Canceled) {
 		log.Printf("ERROR:%v", errors.Wrap(err, "server stopped unexpectedly"))
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	log.Println("shutting down servers ...")
-	if err = s.H2Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
-		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP2 server shutdown failed"))
-	}
-	if err = s.H3Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
-		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP3 server shutdown failed"))
-	}
 }
 
 func withServer(ctx context.Context, srv *Srv) context.Context {
