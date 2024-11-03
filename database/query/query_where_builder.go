@@ -574,62 +574,26 @@ func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql stri
 	return w.String(), w.Params, nil
 }
 
-func isValidCounterFilter(filter *model.Filter) bool {
-	if filter == nil {
-		return false
-	}
+func isValidCounterFilter(filter *model.Filter) (valid bool) {
+	switch {
+	// Filter is required.
+	case filter == nil:
 
-	// Search is not supported.
-	if filter.Search != "" {
-		return false
-	}
+	// Search by text is not supported.
+	case filter.Search != "":
 
-	// Does not support time range.
-	if filter.Since != nil || filter.Until != nil {
-		return false
-	}
-
-	// Kind must be set.
-	if len(filter.Kinds) == 0 {
-		return false
-	}
+	// Time range is not supported.
+	case filter.Since != nil || filter.Until != nil:
 
 	// Only IDs or authors are allowed, but not both.
-	if (len(filter.IDs) == 0 && len(filter.Authors) == 0) || (len(filter.IDs) > 0 && len(filter.Authors) > 0) {
-		return false
+	case (len(filter.IDs) > 0 && len(filter.Authors) > 0):
+		valid = len(filter.Kinds) > 0
+
+	default:
+		valid = true
 	}
 
-	// Only `q` tag without other tags and without values is allowed.
-	if len(filter.Tags) == 1 {
-		// No values are allowed.
-		if val, ok := filter.Tags["q"]; !ok || len(val) > 0 {
-			return false
-		}
-		// Event(s) must be set.
-		if len(filter.IDs) == 0 {
-			return false
-		}
-	} else if len(filter.Tags) > 1 {
-		// Only one tag is allowed.
-		return false
-	}
-
-	switch {
-	case len(filter.IDs) == 0 && len(filter.Authors) > 0 && len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindFollowList:
-		return true
-
-	case len(filter.IDs) > 0 && len(filter.Authors) == 0:
-		for _, kind := range filter.Kinds {
-			switch kind {
-			case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
-			default:
-				return false
-			}
-		}
-		return true
-	}
-
-	return false
+	return valid
 }
 
 func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (sql string, params map[string]any, err error) {
@@ -647,40 +611,38 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 
 		w.maybeOR()
 
-		switch {
-		case len(filter.IDs) == 0 && len(filter.Authors) > 0 && len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindFollowList:
-			w.WriteString("(kind = 3 AND reference_type = 'follower' AND ")
-			buildFromSlice(w, sqlOpCodeNONE, filterID, filter.Authors, "reference_id", "")
-			w.WriteRune(')')
-
-		case len(filter.IDs) > 0 && len(filter.Authors) == 0:
+		kinds := model.DeduplicateSlice(filter.Kinds, func(k int) int { return k })
+		startLen := w.Len()
+		w.WriteRune('(')
+		if len(filter.Kinds) > 0 {
 			w.WriteRune('(')
-			for _, kind := range model.DeduplicateSlice(filter.Kinds, func(k int) int { return k }) {
+			for idx := range kinds {
+				w.maybeOR()
 				w.WriteString("kind = :")
-				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(kind), kind))
-				w.WriteString(" AND ")
-				switch kind {
+				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(idx), kinds[idx]))
+				w.WriteString(" AND reference_type = :")
+				var referenceType string
+				switch kinds[idx] {
+				case nostr.KindFollowList:
+					referenceType = "follower"
 				case nostr.KindTextNote, nostr.KindRepost:
 					if _, ok := filter.Tags["q"]; ok {
-						w.WriteString("reference_type = 'quote'")
+						referenceType = "quote"
 					} else {
-						w.WriteString("reference_type = 'reply'")
+						referenceType = "reply"
 					}
-
-				case nostr.KindReaction:
-					w.WriteString("reference_type = ''")
-
-				default:
-					return "", nil, errors.Wrapf(errUnsupportedCombination, "kind %d", filter.Kinds[0])
 				}
-			}
-			w.WriteString(" AND ")
-			buildFromSlice(w, sqlOpCodeNONE, filterID, filter.IDs, "reference_id", "")
-			w.WriteRune(')')
+				w.WriteString(w.addParam(filterID, "reference_type"+strconv.Itoa(idx), referenceType))
 
-		default:
+			}
+			w.WriteRune(')')
+		}
+		buildFromSlice(w, sqlOpCodeAND, filterID, filter.Authors, "reference_id", "")
+		buildFromSlice(w, sqlOpCodeAND, filterID, filter.IDs, "reference_id", "")
+		if w.Len() == startLen+1 {
 			return "", nil, errUnsupportedCombination
 		}
+		w.WriteRune(')')
 	}
 
 	return w.String(), w.Params, nil
