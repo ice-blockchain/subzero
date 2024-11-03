@@ -4,8 +4,13 @@ package fixture
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -14,32 +19,37 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
-func NewTestServer(ctx context.Context, cancel context.CancelFunc, cfg *config.Config, processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config), nip11 http.Handler, extraHttpHandlers map[string]gin.HandlerFunc) *MockService {
-	service := newMockService(processingFunc, nip11, extraHttpHandlers)
-	server := internal.NewWSServer(service, cfg)
-	service.server = server
-	go service.server.ListenAndServe(ctx, cancel)
+func NewTestServer(ctx context.Context, cfg *config.Config, cb MockCallback, nip11 http.Handler, extraHttpHandlers map[string]gin.HandlerFunc) *MockService {
+	service := newMockService(cb, nip11, extraHttpHandlers)
+	service.server = internal.NewWSServer(service, cfg)
+	service.readerWg = new(sync.WaitGroup)
+	service.port = int(cfg.Port)
+
+	go service.server.ListenAndServe(ctx)
 
 	return service
 }
 
-func newMockService(processingFunc func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config), nip11Handler http.Handler, extraHttpHandlers map[string]gin.HandlerFunc) *MockService {
-	return &MockService{processingFunc: processingFunc, Handlers: make(map[adapters.WSWriter]struct{}), nip11Handler: nip11Handler, extraHttpHandlers: extraHttpHandlers}
+func newMockService(cb MockCallback, nip11Handler http.Handler, extraHttpHandlers map[string]gin.HandlerFunc) *MockService {
+	return &MockService{
+		processingFunc:    cb,
+		Handlers:          make(map[adapters.WSWriter]struct{}),
+		nip11Handler:      nip11Handler,
+		extraHttpHandlers: extraHttpHandlers,
+	}
 }
 
 func (m *MockService) Reset() {
 	m.handlersMx.Lock()
-	for k := range m.Handlers {
-		delete(m.Handlers, k)
-	}
-	m.ReaderExited.Store(uint64(0))
+	clear(m.Handlers)
+	m.readerWg = new(sync.WaitGroup)
 	m.handlersMx.Unlock()
 }
 
 func (m *MockService) Read(ctx context.Context, w internal.WS, cfg *config.Config) {
-	defer func() {
-		m.ReaderExited.Add(1)
-	}()
+	m.readerWg.Add(1)
+	defer m.readerWg.Done()
+
 	for ctx.Err() == nil {
 		_, msg, err := w.ReadMessage()
 		if err != nil {
@@ -52,6 +62,35 @@ func (m *MockService) Read(ctx context.Context, w internal.WS, cfg *config.Confi
 			m.processingFunc(ctx, w, msg, cfg)
 		}
 	}
+}
+
+func (m *MockService) WaitForReaders(timeout time.Duration) error {
+	if timeout == 0 {
+		m.readerWg.Wait()
+
+		return nil
+	}
+
+	done := make(chan struct{}, 1)
+	go func() {
+		m.readerWg.Wait()
+		done <- struct{}{}
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+		return nil
+
+	case <-timer.C:
+		return os.ErrDeadlineExceeded
+	}
+}
+
+func (m *MockService) Endpoint() string {
+	return "wss://" + net.JoinHostPort("localhost", strconv.Itoa(m.port))
 }
 
 func (m *MockService) RegisterRoutes(ctx context.Context, r internal.Router) {

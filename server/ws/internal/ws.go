@@ -7,12 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -33,6 +32,7 @@ func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s.router.UseRawPath = true
 	s.H3Server = http3.New(s.cfg, s.router)
 	s.H2Server = http2.New(s.cfg, s.router)
+
 	return s
 }
 
@@ -40,60 +40,32 @@ func (s *Srv) setupRouter(ctx context.Context) {
 	s.routesSetup.RegisterRoutes(ctx, s.router)
 }
 
-func (s *Srv) ListenAndServe(ctx context.Context, cancel context.CancelFunc) {
+func (s *Srv) ListenAndServe(ctx context.Context) {
 	s.setupRouter(ctx)
-	ctx = withServer(ctx, s)
-	go s.startServer(ctx, s.H3Server)
-	go s.startServer(ctx, s.H2Server)
-	s.wait(ctx)
-	s.shutDown() //nolint:contextcheck // Nope, we want to gracefully shutdown on a different context.
-}
+	group, ctx := errgroup.WithContext(withServer(ctx, s))
 
-func (s *Srv) startServer(ctx context.Context, server interface {
-	ListenAndServeTLS(ctx context.Context) error
-}) {
-	defer log.Printf("server stopped listening")
-	log.Printf("server started listening on %v...", s.cfg.Port)
+	log.Printf("starting servers on port %v...", s.cfg.Port)
+	group.Go(func() error {
+		return errors.Wrap(s.H2Server.ListenAndServeTLS(ctx), "cannot start HTTP2 server")
+	})
+	group.Go(func() error {
+		return errors.Wrap(s.H3Server.ListenAndServeTLS(ctx), "cannot start HTTP3 server")
+	})
 
-	isUnexpectedError := func(err error) bool {
-		return err != nil &&
-			!errors.Is(err, io.EOF) &&
-			!errors.Is(err, http.ErrServerClosed)
+	err := group.Wait()
+	if err != nil && !errors.IsAny(err, io.EOF, http.ErrServerClosed, context.Canceled) {
+		log.Printf("ERROR:%v", errors.Wrap(err, "server stopped unexpectedly"))
 	}
 
-	if err := server.ListenAndServeTLS(ctx); isUnexpectedError(err) {
-		s.quit <- syscall.SIGTERM
-		log.Printf("ERROR:%v", errors.Wrap(err, "server.ListenAndServeTLS failed"))
-	}
-}
-
-func (s *Srv) wait(ctx context.Context) {
-	quit := make(chan os.Signal, 1)
-	s.quit = quit
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case <-ctx.Done():
-	case <-quit:
-	}
-}
-
-func (s *Srv) shutDown() {
-	ctx, cancel := context.WithCancel(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	go s.shutdownServer(ctx, s.H3Server)
-	go s.shutdownServer(ctx, s.H2Server)
-}
 
-func (*Srv) shutdownServer(ctx context.Context, server interface {
-	Shutdown(ctx context.Context) error
-}) {
-	log.Printf("shutting down server...")
-
-	if err := server.Shutdown(ctx); err != nil && !errors.Is(err, io.EOF) {
-		log.Printf("ERROR:%v", errors.Wrap(err, "server shutdown failed"))
-	} else {
-		log.Printf("server shutdown succeeded")
+	log.Println("shutting down servers ...")
+	if err = s.H2Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
+		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP2 server shutdown failed"))
+	}
+	if err = s.H3Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
+		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP3 server shutdown failed"))
 	}
 }
 

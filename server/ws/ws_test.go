@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
@@ -41,29 +40,41 @@ func TestMain(m *testing.M) {
 	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
+
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
 		}
 	}
-	echoServer = fixture.NewTestServer(serverCtx, serverCancel, &Config{
-		Port:      9999,
-		TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-	}, echoFunc, nil, map[string]gin.HandlerFunc{})
+
+	echoServer = fixture.NewTestServer(
+		serverCtx,
+		&Config{
+			Port:      9999,
+			TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		},
+		echoFunc,
+		nil,
+		map[string]gin.HandlerFunc{},
+	)
+
 	hdl = new(handler)
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
 		Port:                    9998,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
+
 	hdl2 := new(handler)
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, serverCancel, &Config{
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
 		Port:                    9997,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))
-	m.Run()
+
+	code := m.Run()
 	serverCancel()
+	os.Exit(code)
 }
 
 func TestSimpleEchoDifferentTransports(t *testing.T) {
@@ -144,15 +155,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 		}(i)
 	}
 	wg.Wait()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	for echoServer.ReaderExited.Load() != uint64(conns) {
-		if shutdownCtx.Err() != nil {
-			log.Panic(errors.Errorf("shutdown timeout %v of %v", echoServer.ReaderExited.Load(), conns))
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	require.Equal(t, uint64(conns), echoServer.ReaderExited.Load())
+	require.NoError(t, echoServer.WaitForReaders(testDeadline))
 	require.Len(t, echoServer.Handlers, conns)
 	for w := range echoServer.Handlers {
 		var closed bool

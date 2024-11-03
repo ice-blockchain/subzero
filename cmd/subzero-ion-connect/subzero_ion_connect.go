@@ -28,14 +28,11 @@ var (
 		Use:   "subzero",
 		Short: "subzero",
 		Run: func(cmd *cobra.Command, _ []string) {
-			ctx, cancel := context.WithCancel(cmd.Context())
-			defer cancel()
-
 			cfg.MustInit(configPath)
 			query.MustInit()
-			storage.MustInit(ctx)
+			storage.MustInit(cmd.Context())
 			dvm.MustInit()
-			server.ListenAndServe(ctx, cancel)
+			server.ListenAndServe(cmd.Context())
 		},
 	}
 	initFlags = func() {

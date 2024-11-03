@@ -31,16 +31,16 @@ var pubsubServer *fixture.MockService
 
 func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer serverCancel()
+
 	query.MustInit()
-	initServer(serverCtx, serverCancel, 9996)
+	initServer(serverCtx, 9996)
 	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	code := m.Run()
 	serverCancel()
 	os.Exit(code)
 }
 
-func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port uint16) {
+func initServer(serverCtx context.Context, port uint16) {
 	initStorage(serverCtx)
 	uploader := NewUploadHandler(serverCtx)
 	type globalCfg struct {
@@ -48,7 +48,7 @@ func initServer(serverCtx context.Context, serverCancel context.CancelFunc, port
 		TLSKey  string `yaml:"tls-key"`
 	}
 	globalConfig := cfg.MustGet[globalCfg]()
-	pubsubServer = fixture.NewTestServer(serverCtx, serverCancel, &wsserver.Config{
+	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,
 	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}), map[string]gin.HandlerFunc{
