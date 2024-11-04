@@ -59,7 +59,7 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 			return errors.Wrap(err, "failed to write data to websocket")
 		}
 
-		if flusher, ok := w.conn.(http.Flusher); err == nil && ok {
+		if flusher, ok := w.conn.(http.Flusher); ok {
 			flusher.Flush()
 		}
 

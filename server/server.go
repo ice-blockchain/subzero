@@ -26,7 +26,7 @@ var (
 	globalRouter *router
 )
 
-func ListenAndServe(ctx context.Context) {
+func MustListenAndServe(ctx context.Context) {
 	globalConfig = cfg.MustGet[config]()
 	globalRouter = &router{}
 	internalCfg := &wsserver.Config{
@@ -35,7 +35,7 @@ func ListenAndServe(ctx context.Context) {
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}
 	wsserver.New(internalCfg, globalRouter).
-		ListenAndServe(ctx)
+		MustListenAndServe(ctx)
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {

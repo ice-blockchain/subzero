@@ -25,7 +25,7 @@ func NewTestServer(ctx context.Context, cfg *config.Config, cb MockCallback, nip
 	service.readerWg = new(sync.WaitGroup)
 	service.port = int(cfg.Port)
 
-	go service.server.ListenAndServe(ctx)
+	go service.server.MustListenAndServe(ctx)
 
 	return service
 }
