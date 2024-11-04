@@ -88,12 +88,22 @@ func (w *WebsocketAdapter) WriteMessage(messageType int, data []byte) error {
 }
 
 func (w *WebsocketAdapter) Write(ctx context.Context) {
-	for msg := range w.out {
-		if ctx.Err() != nil || isConnClosedErr(w.wrErr) {
-			break
-		}
-		if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
-			log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to websocket"))
+	for ctx.Err() == nil {
+		select {
+		case <-w.closeChannel:
+			return
+
+		case <-ctx.Done():
+			return
+
+		case msg := <-w.out:
+			if isConnClosedErr(w.wrErr) {
+				return
+			}
+
+			if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
+				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to websocket"))
+			}
 		}
 	}
 }
