@@ -2403,8 +2403,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 }
 
 func TestCountEvents(t *testing.T) {
-	query.MustInit()
-
 	privkey := nostr.GeneratePrivateKey()
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		t.Logf("received events: %v", events)

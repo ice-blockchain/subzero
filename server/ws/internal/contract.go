@@ -16,8 +16,8 @@ import (
 type (
 	Router = gin.IRoutes
 	Server interface {
-		// ListenAndServe starts everything and blocks indefinitely.
-		ListenAndServe(ctx context.Context)
+		// MustListenAndServe starts everything and blocks indefinitely.
+		MustListenAndServe(ctx context.Context)
 	}
 	RegisterRoutes interface {
 		RegisterRoutes(ctx context.Context, router Router)

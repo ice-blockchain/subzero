@@ -180,6 +180,14 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 	return pubkey
 }
 
+func (evt *Event) IsReplaceable() bool {
+	return nostr.IsReplaceableKind(evt.Kind)
+}
+
+func (evt *Event) IsEphemeral() bool {
+	return nostr.IsEphemeralKind(evt.Kind)
+}
+
 func (EventEnvelope) Label() string { return "EVENT" }
 
 func (v *EventEnvelope) UnmarshalJSON(data []byte) error {

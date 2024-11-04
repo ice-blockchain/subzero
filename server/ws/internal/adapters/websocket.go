@@ -59,7 +59,7 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 			return errors.Wrap(err, "failed to write data to websocket")
 		}
 
-		if flusher, ok := w.conn.(http.Flusher); err == nil && ok {
+		if flusher, ok := w.conn.(http.Flusher); ok {
 			flusher.Flush()
 		}
 
@@ -88,12 +88,22 @@ func (w *WebsocketAdapter) WriteMessage(messageType int, data []byte) error {
 }
 
 func (w *WebsocketAdapter) Write(ctx context.Context) {
-	for msg := range w.out {
-		if ctx.Err() != nil || isConnClosedErr(w.wrErr) {
-			break
-		}
-		if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
-			log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to websocket"))
+	for ctx.Err() == nil {
+		select {
+		case <-w.closeChannel:
+			return
+
+		case <-ctx.Done():
+			return
+
+		case msg := <-w.out:
+			if isConnClosedErr(w.wrErr) {
+				return
+			}
+
+			if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
+				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to websocket"))
+			}
 		}
 	}
 }

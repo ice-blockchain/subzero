@@ -15,8 +15,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -40,6 +42,8 @@ func TestMain(m *testing.M) {
 	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
+
+	query.MustInit(serverCtx)
 
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
@@ -74,6 +78,14 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 	serverCancel()
+
+	if code == 0 {
+		if err := goleak.Find(); err != nil {
+			log.Printf("goleak: %v", err)
+			code = 1
+		}
+	}
+
 	os.Exit(code)
 }
 

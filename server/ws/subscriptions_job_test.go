@@ -21,7 +21,6 @@ import (
 )
 
 func TestJob(t *testing.T) {
-	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	dvm.MustInit()
@@ -231,7 +230,6 @@ func TestJob(t *testing.T) {
 }
 
 func TestJobDeletion(t *testing.T) {
-	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	dvm.MustInit()
@@ -440,7 +438,6 @@ func TestJobDeletion(t *testing.T) {
 }
 
 func TestErrorFeedback(t *testing.T) {
-	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	privKeyHex := nostr.GeneratePrivateKey()
@@ -592,7 +589,6 @@ func TestErrorFeedback(t *testing.T) {
 }
 
 func TestOfflineJob(t *testing.T) {
-	query.MustInit()
 	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	serivceProviderPubKey, err := dvm.PublicKey()

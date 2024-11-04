@@ -26,12 +26,17 @@ type (
 	}
 )
 
-func MustInit() {
+func MustInit(ctx context.Context) {
 	globalDB.Once.Do(func() {
 		globalConfig = cfg.MustGet[config]()
 		globalDB.Client = openDatabase(globalConfig.URL, true)
 
-		go globalDB.Client.StartExpiredEventsCleanup(context.Background())
+		go globalDB.Client.StartExpiredEventsCleanup(ctx)
+		go func() {
+			<-ctx.Done()
+			globalDB.Client.Close()
+			globalDB.Once = sync.Once{}
+		}()
 	})
 }
 
