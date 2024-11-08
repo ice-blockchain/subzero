@@ -268,7 +268,7 @@ func generateEventsCountClause(subscription *model.Subscription) (sqlQuery strin
 		}
 	}
 
-	where, params, err := generateEventsWhereClause(subscription)
+	where, _, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -296,7 +296,7 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 }
 
 func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
-	where, params, err := generateEventsWhereClause(subscription)
+	whereMain, whereDep, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -313,7 +313,8 @@ func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPi
 		limitQuery = " limit :mainlimit"
 	}
 
-	return `
+	if whereDep == "" {
+		return `
 select
 	e.kind,
 	e.created_at,
@@ -325,20 +326,68 @@ select
 	tags as jtags
 from
 	events e
-where ` + systemCreatedAtFilter + `(` + where + `)
+where ` + systemCreatedAtFilter + `(` + whereMain + `)
 order by
 	system_created_at desc
 ` + limitQuery, params, nil
+	}
+
+	return `
+with eventsmain as (
+	select
+		e.kind,
+		e.created_at,
+		e.system_created_at,
+		e.id,
+		e.pubkey,
+		e.sig,
+		e.content,
+		tags as jtags
+	from
+		events e
+	where ` + systemCreatedAtFilter + `(` + whereMain + `)
+order by
+	system_created_at desc
+` + limitQuery + `
+)
+select
+	*
+from
+	eventsmain
+union all
+select
+	e.kind,
+	e.created_at,
+	e.system_created_at,
+	e.id,
+	e.pubkey,
+	e.sig,
+	e.content,
+	tags as jtags
+from
+	events e
+where ` + whereDep, params, nil
 }
 
-func generateEventsWhereClause(subscription *model.Subscription) (clause string, params map[string]any, err error) {
+func generateEventsWhereClause(subscription *model.Subscription) (clauseMain, clauseDeps string, params map[string]any, err error) {
 	var filters []model.Filter
 
 	if subscription != nil {
 		filters = subscription.Filters
 	}
 
-	return newWhereBuilder().Build(filters...)
+	builder := newWhereBuilder()
+	clauseMain, params, err = builder.Build(filters...)
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	clauseDeps, params, err = builder.BuildDependencies("eventsmain")
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	return clauseMain, clauseDeps, params, nil
 }
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {

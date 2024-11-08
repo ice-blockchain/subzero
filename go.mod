@@ -8,6 +8,7 @@ replace (
 )
 
 require (
+	github.com/bzick/tokenizer v1.4.6
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.15.0

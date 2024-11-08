@@ -42,16 +42,18 @@ var (
 
 type (
 	whereBuilder struct {
-		Params map[string]any
+		Params       map[string]any
+		Dependencies []*filterDependencies
 		strings.Builder
 	}
 	databaseFilterSearch struct {
 		nostr.Filter
-		Expiration *bool
-		Videos     *bool
-		Images     *bool
-		Quotes     *bool
-		References *bool
+		Expiration   *bool
+		Videos       *bool
+		Images       *bool
+		Quotes       *bool
+		References   *bool
+		Dependencies *filterDependencies
 	}
 	databaseFilterDelete struct {
 		Author string
@@ -453,7 +455,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	return nil
 }
 
-func parseNostrFilter(filter model.Filter) *databaseFilterSearch {
+func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 	f := databaseFilterSearch{
 		Filter: filter,
 	}
@@ -497,16 +499,150 @@ func parseNostrFilter(filter model.Filter) *databaseFilterSearch {
 		f.Search = strings.TrimSpace(f.Search[:flagStart] + f.Search[flagEnd:])
 	}
 
+	const dependenciesPrefix = "include:dependencies:"
+	if depStrStart := strings.Index(f.Search, dependenciesPrefix); depStrStart != -1 {
+		depStrEnd := strings.Index(f.Search[depStrStart:], " ")
+		if depStrEnd == -1 {
+			depStrEnd = len(f.Search)
+		}
+		dep, err := parseDepRequest(f.Search[depStrStart+len(dependenciesPrefix) : depStrEnd])
+		if err != nil {
+			return nil, err
+		}
+		f.Dependencies = dep
+		f.Search = f.Search[:depStrStart] + f.Search[depStrEnd:]
+	}
+
 	f.Search = strings.TrimSpace(f.Search)
 
-	return &f
+	return &f, nil
+}
+
+func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, filter *filterDependenciesStart) string {
+	var sb strings.Builder
+
+	sb.WriteString("select ")
+	sb.WriteString(field)
+	sb.WriteString(" from ")
+	sb.WriteString(cteName)
+	sb.WriteString(" where ")
+	sb.WriteString(cteName)
+	sb.WriteString(".kind = :")
+	sb.WriteString(w.addParam(filterID, "kind", filter.Kind))
+	if filter.ProfileBadges {
+		sb.WriteString(" AND d_tag='profile_badges'")
+	}
+	if filter.Tag != "" {
+		sb.WriteString(" AND EXISTS (select 42 from event_tags where event_id = ")
+		sb.WriteString(cteName)
+		sb.WriteString(".id AND event_tag_key = :")
+		sb.WriteString(w.addParam(filterID, "tag", filter.Tag))
+		sb.WriteString(")")
+	}
+
+	return sb.String()
+}
+
+func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
+	switch filter.Reduce.Kinds[0] {
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		if filter.Reduce.Author != "" {
+			w.WriteString(" AND e.pubkey = :")
+			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
+			w.WriteString(" AND ")
+		}
+		tag := filter.Reduce.Tag
+		if tag == "" {
+			// Repost, reaction.
+			tag = "e"
+		}
+		w.WriteString("e.id in (")
+		{
+			w.WriteString("select event_id from event_tags where event_tag_key = :")
+			w.WriteString(w.addParam(filterID, "rtag", tag))
+			w.WriteString(" and event_tag_value1 in (")
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+			w.WriteRune(')')
+			if filter.Reduce.Context != "" {
+				w.WriteString(" and event_tag_value3 = :")
+				w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
+			}
+			w.WriteString(" group by event_tag_value1")
+		}
+		w.WriteString(")")
+		w.WriteString(" AND e.hidden=0")
+
+	case nostr.KindProfileMetadata, nostr.KindRelayListMetadata:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(" AND master_pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		w.WriteString(")")
+		w.WriteString(" AND e.hidden=0")
+
+	case 6400:
+		w.WriteString(`
+true=false -- Stub to avoid previous clause/select from 'events' table.
+union all
+	select
+		6400,
+		0,
+		0,
+		f.reference_id,
+		'',
+		'',
+		cast(f.value as text) as content,
+		'[]' as jtags
+	from
+		event_counters f
+	where
+`)
+		w.WriteString("f.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
+		switch {
+		case filter.Reduce.Tag == "q":
+			w.WriteString(" AND f.reference_type = 'quote'")
+
+		case filter.Reduce.Context == "content", filter.Reduce.Tag == "e":
+			w.WriteString(" AND f.reference_type = ''")
+
+		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+			w.WriteString(" AND f.reference_type = 'reply'")
+		}
+		w.WriteString(" AND f.reference_id IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		w.WriteString(")")
+	}
+}
+
+func (w *whereBuilder) BuildDependencies(cteName string) (sql string, params map[string]any, err error) {
+	if len(w.Dependencies) == 0 {
+		return "", w.Params, nil
+	}
+
+	w.Reset()
+	for idx, filter := range w.Dependencies {
+		filterID := "dep" + cteName + strconv.Itoa(idx) + "_"
+		w.applyDepFilter(filterID, cteName, filter)
+	}
+
+	return w.String(), w.Params, nil
 }
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	for idx := range filters {
 		w.maybeOR()
-		if err := w.applyFilter(idx, parseNostrFilter(filters[idx])); err != nil {
+		dbFilter, err := parseNostrFilter(filters[idx])
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "failed to parse filter %d", idx)
+		}
+		if err := w.applyFilter(idx, dbFilter); err != nil {
 			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
+		}
+		if dbFilter.Dependencies != nil {
+			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies)
 		}
 	}
 
