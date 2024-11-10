@@ -164,7 +164,7 @@ buildAllBinaries:
 binary-specific-service:
 	set -xe; \
 	echo "$@: $(SERVICE_NAME) / $(GOOS) / $(GOARCH)" ; \
-	go build -tags "go_json linux sqlite_stat4 sqlite_icu" -a -v -o -race ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
+	go build -tags "go_json linux sqlite_stat4 sqlite_icu" -a -v -race -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
 	cp ./cmd/$${SERVICE_NAME}/bin ./$${SERVICE_NAME}.$${GOOS}.$${GOARCH}.bin; \
 
 all: checkLicense checkModVersion checkIfAllDependenciesAreUpToDate checkGenerated build test coverage benchmark clean
