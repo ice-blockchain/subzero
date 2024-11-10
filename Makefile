@@ -7,8 +7,9 @@ COVERAGE_FILE             := cover.out
 CGO_ENABLED ?= 1
 GOOS         ?=
 GOARCH       ?=
+SERVICE_NAME ?=
 
-export CGO_ENABLED GOOS GOARCH
+export CGO_ENABLED GOOS GOARCH SERVICE_NAME
 
 define getLatestGoPatchVersion
 	$(shell curl -s $(GO_VERSION_MANIFEST) | jq -r '.[0].version')
@@ -153,6 +154,18 @@ format-imports:
 	go install github.com/daixiang0/gci@latest
 	gci write -s standard -s default -s "prefix(github.com/ice-blockchain)" ./..
 	goimports -w -local github.com/ice-blockchain ./..
+
+buildAllBinaries:
+	set -xe; \
+	find ./cmd -mindepth 1 -maxdepth 1 -type d -print | grep -v 'fixture' | grep -v 'scripts' | while read service; do \
+			env SERVICE_NAME=$${service##*/} env GOOS=$(GOOS) env GOARCH=$(GOARCH) $(MAKE) binary-specific-service; \
+		done;
+
+binary-specific-service:
+	set -xe; \
+	echo "$@: $(SERVICE_NAME) / $(GOOS) / $(GOARCH)" ; \
+	go build -tags "go_json linux sqlite_stat4 sqlite_icu" -a -v -o -race ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
+	cp ./cmd/$${SERVICE_NAME}/bin ./$${SERVICE_NAME}.$${GOOS}.$${GOARCH}.bin; \
 
 all: checkLicense checkModVersion checkIfAllDependenciesAreUpToDate checkGenerated build test coverage benchmark clean
 local: addLicense updateGoModVersion updateAllDependencies generate build test coverage benchmark lint clean
