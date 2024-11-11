@@ -39,6 +39,7 @@ var (
 
 const (
 	CustomIONKindAttestation = 10_100
+	KindDVMCount             = 6400
 )
 
 const (

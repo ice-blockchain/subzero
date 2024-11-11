@@ -243,4 +243,45 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Equal(t, "t2id2", events[2].ID)
 		require.Equal(t, "t2id5", events[3].ID)
 	})
+	t.Run("kind1>kind6400+kind7+group+content", func(t *testing.T) {
+		var ev model.Event
+
+		ev.ID = "t3id1"
+		ev.Kind = nostr.KindReaction
+		ev.PubKey = "t3pk1"
+		ev.CreatedAt = 13
+		ev.Content = "+"
+		ev.Tags = model.Tags{
+			{"e", "t2id2"},
+		}
+		err := db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		ev.ID = "t3id2"
+		ev.Kind = nostr.KindReaction
+		ev.PubKey = "t3pk2"
+		ev.CreatedAt = 13
+		ev.Content = "+"
+		ev.Tags = model.Tags{
+			{"e", "t2id3"},
+		}
+		err = db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"t2id2", "t2id3"},
+			Search: "include:dependencies:kind1>kind6400+kind7+group+content",
+		})
+		require.Len(t, events, 4)
+		require.Equal(t, "t2id3", events[0].ID)
+		require.Equal(t, "t2id2", events[1].ID)
+		require.Condition(t, func() bool {
+			return events[2].Content == "1" &&
+				events[3].Content == "1" &&
+				events[2].Kind == model.KindDVMCount &&
+				events[3].Kind == model.KindDVMCount &&
+				events[3].ID == "t2id3" &&
+				events[2].ID == "t2id2"
+		})
+	})
 }

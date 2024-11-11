@@ -582,7 +582,7 @@ func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDe
 		w.WriteString(")")
 		w.WriteString(" AND e.hidden=0")
 
-	case 6400:
+	case model.KindDVMCount:
 		w.WriteString(`
 true=false -- Stub to avoid previous clause/select from 'events' table.
 union all
