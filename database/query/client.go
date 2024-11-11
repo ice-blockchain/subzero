@@ -57,6 +57,21 @@ func init() {
 						Ptr:  sqlAttestationUpdateIsAllowed,
 						Pure: true,
 					},
+					{
+						Name: "subzero_nostr_tag_a_get_kind",
+						Ptr:  sqlTagAGetAt(0),
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_tag_a_get_pk",
+						Ptr:  sqlTagAGetAt(1),
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_tag_a_get_dtag",
+						Ptr:  sqlTagAGetAt(2),
+						Pure: true,
+					},
 				}
 
 				for idx := range funcTable {

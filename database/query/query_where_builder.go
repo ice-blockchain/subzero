@@ -558,29 +558,34 @@ func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDe
 			// Repost, reaction.
 			tag = "e"
 		}
-		w.WriteString("e.id in (")
-		{
-			w.WriteString("select event_id from event_tags where event_tag_key = :")
-			w.WriteString(w.addParam(filterID, "rtag", tag))
-			w.WriteString(" and event_tag_value1 in (")
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
-			w.WriteRune(')')
-			if filter.Reduce.Context != "" {
-				w.WriteString(" and event_tag_value3 = :")
-				w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
-			}
-			w.WriteString(" group by event_tag_value1")
+		w.WriteString("e.id in (select event_id from event_tags where event_tag_key = :")
+		w.WriteString(w.addParam(filterID, "rtag", tag))
+		w.WriteString(" and event_tag_value1 in (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		w.WriteRune(')')
+		if filter.Reduce.Context != "" {
+			w.WriteString(" and event_tag_value3 = :")
+			w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
 		}
-		w.WriteString(")")
-		w.WriteString(" AND e.hidden=0")
+		w.WriteString(" group by event_tag_value1) AND e.hidden=0")
+
+	case nostr.KindBadgeDefinition:
+		startFilter := w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start)
+		w.WriteString("e.id in ((select event_tag_value1 from event_tags where event_id in (")
+		w.WriteString(startFilter)
+		w.WriteString(") and event_tag_key = 'e'),")
+		w.WriteString(`(select ee.id from (select subzero_nostr_tag_a_get_pk(event_tag_value1) as pk, subzero_nostr_tag_a_get_dtag(event_tag_value1) as name from event_tags where event_id in (`)
+		w.WriteString(startFilter)
+		w.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = 0)) AND e.hidden=0")
 
 	case nostr.KindProfileMetadata, nostr.KindRelayListMetadata:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-		w.WriteString(" AND master_pubkey IN (")
+		w.WriteString(" AND ( master_pubkey IN (")
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
-		w.WriteString(")")
-		w.WriteString(" AND e.hidden=0")
+		w.WriteString(") OR pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		w.WriteString(")) AND e.hidden=0")
 
 	case model.KindDVMCount:
 		w.WriteString(`
@@ -594,6 +599,7 @@ union all
 		'',
 		'',
 		cast(f.value as text) as content,
+		'',
 		'[]' as jtags
 	from
 		event_counters f
@@ -601,16 +607,19 @@ union all
 `)
 		w.WriteString("f.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
+		var refType string
 		switch {
 		case filter.Reduce.Tag == "q":
-			w.WriteString(" AND f.reference_type = 'quote'")
+			refType = "quote"
 
-		case filter.Reduce.Context == "content", filter.Reduce.Tag == "e":
-			w.WriteString(" AND f.reference_type = ''")
+		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
+			// Empty.
 
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
-			w.WriteString(" AND f.reference_type = 'reply'")
+			refType = "reply"
 		}
+		w.WriteString(" AND f.reference_type = :")
+		w.WriteString(w.addParam(filterID, "rref", refType))
 		w.WriteString(" AND f.reference_id IN (")
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
 		w.WriteString(")")

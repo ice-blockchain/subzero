@@ -284,4 +284,51 @@ func TestSelectWithDependencies(t *testing.T) {
 				events[2].ID == "t2id2"
 		})
 	})
+	t.Run("kind30008+profile_badges>kind30009>kind8", func(t *testing.T) {
+		var ev model.Event
+
+		// badge definition of `testbadge`.
+		ev.ID = "t4id1"
+		ev.Kind = nostr.KindBadgeDefinition
+		ev.PubKey = "t4pk1"
+		ev.CreatedAt = 1
+		ev.Tags = model.Tags{
+			{"d", "testbadge"},
+			{"name", "Test Badge"},
+		}
+		err := db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		// t4pk2 wants to award t4pk3 the badge `testbadge`.
+		ev.ID = "t4id2"
+		ev.Kind = nostr.KindBadgeAward
+		ev.PubKey = "t4pk2"
+		ev.CreatedAt = 2
+		ev.Tags = model.Tags{
+			{"a", "30009:t4pk1:testbadge"},
+		}
+		err = db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		// t4pk3 accepts the badge and updates their profile.
+		ev.ID = "t4id3"
+		ev.Kind = nostr.KindProfileBadges
+		ev.PubKey = "t4pk3"
+		ev.CreatedAt = 3
+		ev.Tags = model.Tags{
+			{"d", "profile_badges"},
+			{"a", "30009:t4pk1:testbadge"},
+			{"e", "t4id2"},
+		}
+		err = db.AcceptEvents(context.Background(), &ev)
+
+		events := helperSelectEvents(t, db, model.Filter{
+			Authors: []string{"t4pk3"},
+			Search:  "include:dependencies:kind30008+profile_badges>kind30009>kind8",
+		})
+		require.Len(t, events, 3)
+		require.Equal(t, nostr.KindProfileBadges, events[0].Kind)
+		require.Equal(t, nostr.KindBadgeDefinition, events[1].Kind)
+		require.Equal(t, nostr.KindBadgeAward, events[2].Kind)
+	})
 }

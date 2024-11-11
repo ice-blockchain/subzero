@@ -342,6 +342,7 @@ with eventsmain as (
 		e.pubkey,
 		e.sig,
 		e.content,
+		e.d_tag,
 		tags as jtags
 	from
 		events e
@@ -363,6 +364,7 @@ select
 	e.pubkey,
 	e.sig,
 	e.content,
+	e.d_tag,
 	tags as jtags
 from
 	events e
