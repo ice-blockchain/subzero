@@ -193,7 +193,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kind1>kind0.
+		// kindN>kindN.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenInteger,
