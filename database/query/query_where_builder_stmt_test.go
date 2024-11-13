@@ -140,7 +140,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 		}))
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.NoError(t, err)
-		require.Len(t, params, 7)
+		require.Len(t, params, 6)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("TwoTagsShink", func(t *testing.T) {
@@ -160,7 +160,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 29)
+		require.Len(t, params, 28)
 		helperEnsureParams(t, q, params)
 	})
 }
@@ -190,7 +190,7 @@ func TestWhereBuilderMulti(t *testing.T) {
 	q, params, err := builder.Build(filters...)
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
-	require.Len(t, params, 18)
+	require.Len(t, params, 16)
 	helperEnsureParams(t, q, params)
 }
 
@@ -347,6 +347,29 @@ func TestParseNostrFilter(t *testing.T) {
 			},
 		}, f.Dependencies)
 		require.Equal(t, "some content here2", f.Filter.Search)
+	})
+	t.Run("E marker with reply and images", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "images:false some content here emarker:reply",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Images)
+		require.False(t, *f.Images)
+		require.Len(t, f.TagMarkers, 1)
+		require.Equal(t, "e", f.TagMarkers[0].Tag)
+		require.Equal(t, "reply", f.TagMarkers[0].Marker)
+		require.Equal(t, "some content here", f.Filter.Search)
+	})
+	t.Run("Three markers with videos", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "amarker:aval videos:true some bmarker:bval content here cmarker:cval marker:invalid x",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Videos)
+		require.True(t, *f.Videos)
+		require.Equal(t, "some content here marker:invalid x", f.Filter.Search)
+		require.Len(t, f.TagMarkers, 3)
+		require.Equal(t, []databaseFilterMarker{{Tag: "a", Marker: "aval"}, {Tag: "b", Marker: "bval"}, {Tag: "c", Marker: "cval"}}, f.TagMarkers)
 	})
 }
 

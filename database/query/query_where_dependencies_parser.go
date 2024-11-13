@@ -148,7 +148,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kind1>kind6400+kind1+group+e.
+		// kind1>kind6400+kind6+group+e.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenInteger,
@@ -178,7 +178,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kind1>kind6400+kind1+group+content.
+		// kind1>kind6400+kind7+group+content.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenInteger,
@@ -193,7 +193,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kindN>kindN.
+		// kind1>kind0 / kind6>kind10002.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenInteger,

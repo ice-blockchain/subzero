@@ -53,6 +53,7 @@ type (
 		Images       *bool
 		Quotes       *bool
 		References   *bool
+		TagMarkers   []databaseFilterMarker
 		Dependencies *filterDependencies
 	}
 	databaseFilterDelete struct {
@@ -63,6 +64,10 @@ type (
 			Author string
 			TagD   string
 		}
+	}
+	databaseFilterMarker struct {
+		Tag    string
+		Marker string
 	}
 	filterBuilder struct {
 		Name           string
@@ -221,6 +226,21 @@ func (w *whereBuilder) maybeOR() {
 	w.WriteString(" OR ")
 }
 
+func (w *whereBuilder) applyFilterTagMarkers(filter *filterBuilder, markers []databaseFilterMarker) {
+	if len(markers) == 0 {
+		return
+	}
+
+	for id, marker := range markers {
+		w.maybeAND()
+		w.WriteString("EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = :")
+		w.WriteString(w.addParam(filter.Name, "mtag"+strconv.Itoa(id), marker.Tag))
+		w.WriteString(" AND event_tag_value3 = :")
+		w.WriteString(w.addParam(filter.Name, "mtagvalue"+strconv.Itoa(id), marker.Marker))
+		w.WriteRune(')')
+	}
+}
+
 func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap) {
 	const valuesMax = 21
 
@@ -237,16 +257,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 		}
 
 		tagID++
-		if filter.HasEvents() {
-			// We already have some IDs, so we need to check if they have the tag.
-			w.WriteString("EXISTS (select 42 from event_tags where ")
-			w.WriteString(filter.BuildEvents(w))
-			w.maybeAND()
-		} else {
-			// No IDs, so select all events that belong to the given tag.
-			w.WriteString("+id IN (select event_id from event_tags where ")
-		}
-		w.WriteString("event_tag_key = :")
+		w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
 		w.WriteString(w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tag))
 
 		for i, value := range values {
@@ -265,6 +276,7 @@ func isFilterEmpty(filter *databaseFilterSearch) bool {
 		len(filter.Kinds) == 0 &&
 		len(filter.Authors) == 0 &&
 		len(filter.Tags) == 0 &&
+		len(filter.TagMarkers) == 0 &&
 		filter.Since == nil &&
 		filter.Until == nil &&
 		filter.Expiration == nil &&
@@ -449,73 +461,11 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		return err
 	}
 	w.applyFilterTags(builder, filter.Tags)
+	w.applyFilterTagMarkers(builder, filter.TagMarkers)
 
 	w.WriteRune(')') // End the filter section.
 
 	return nil
-}
-
-func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
-	f := databaseFilterSearch{
-		Filter: filter,
-	}
-	flags := []struct {
-		Name string
-		Flag **bool
-	}{
-		{"expiration", &f.Expiration},
-		{"videos", &f.Videos},
-		{"images", &f.Images},
-		{"quotes", &f.Quotes},
-		{"references", &f.References},
-	}
-
-	for idx := range flags {
-		flagStart := strings.Index(strings.ToLower(f.Search), flags[idx].Name+":")
-		if flagStart == -1 {
-			continue
-		}
-
-		flagEnd := strings.Index(f.Search[flagStart:], " ")
-		if flagEnd == -1 {
-			flagEnd = len(f.Search)
-		} else {
-			flagEnd += flagStart
-		}
-
-		value := strings.ToLower(f.Search[flagStart+len(flags[idx].Name)+1 : flagEnd])
-		if value == "true" || value == "1" || value == "on" || value == "yes" {
-			on := true
-			*flags[idx].Flag = &on
-		} else if value == "false" || value == "0" || value == "off" || value == "no" {
-			off := false
-			*flags[idx].Flag = &off
-		} else {
-			// Do not now how to parse the value.
-			continue
-		}
-
-		// Remove flag:value from the search string.
-		f.Search = strings.TrimSpace(f.Search[:flagStart] + f.Search[flagEnd:])
-	}
-
-	const dependenciesPrefix = "include:dependencies:"
-	if depStrStart := strings.Index(f.Search, dependenciesPrefix); depStrStart != -1 {
-		depStrEnd := strings.Index(f.Search[depStrStart:], " ")
-		if depStrEnd == -1 {
-			depStrEnd = len(f.Search)
-		}
-		dep, err := parseDepRequest(f.Search[depStrStart+len(dependenciesPrefix) : depStrEnd])
-		if err != nil {
-			return nil, err
-		}
-		f.Dependencies = dep
-		f.Search = f.Search[:depStrStart] + f.Search[depStrEnd:]
-	}
-
-	f.Search = strings.TrimSpace(f.Search)
-
-	return &f, nil
 }
 
 func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, filter *filterDependenciesStart) string {
