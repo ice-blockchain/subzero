@@ -19,9 +19,9 @@ import (
 type (
 	dbClient struct {
 		*sqlx.DB
-
-		stmtCacheMx *sync.RWMutex
-		stmtCache   map[string]*sqlx.NamedStmt
+		relayPrivateKey string
+		stmtCacheMx     *sync.RWMutex
+		stmtCache       map[string]*sqlx.NamedStmt
 	}
 )
 
@@ -122,6 +122,15 @@ func openDatabase(target string, runDDL bool) *dbClient {
 	}
 
 	return client
+}
+
+func (db *dbClient) WithPrivateKey(privateKey string) *dbClient {
+	if privateKey == "" {
+		panic("private key is empty")
+	}
+	db.relayPrivateKey = privateKey
+
+	return db
 }
 
 func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected int64, err error) {

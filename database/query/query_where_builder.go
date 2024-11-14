@@ -546,7 +546,7 @@ union all
 		0,
 		0,
 		f.reference_id,
-		'',
+		coalesce((select evr.pubkey from events evr where evr.id = f.reference_id), ''),
 		'',
 		cast(f.value as text) as content,
 		'',

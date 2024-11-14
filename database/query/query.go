@@ -188,6 +188,20 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 	return err
 }
 
+func (db *dbClient) MustSignEvent(event *model.Event) {
+	if event.PubKey != "" {
+		event.Tags = append(event.Tags, model.Tag{"p", event.PubKey})
+	}
+	if event.ID != "" {
+		event.Tags = append(event.Tags, model.Tag{"b", event.ID})
+	}
+
+	err := event.Sign(db.relayPrivateKey)
+	if err != nil {
+		panic(errors.Wrap(err, "failed to sign event"))
+	}
+}
+
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
 	limit := int64(selectDefaultBatchLimit)
 	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
@@ -197,6 +211,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 
 	it := &eventIterator{
 		oneShot: hasLimitFilter && limit <= selectDefaultBatchLimit,
+		signer:  db,
 		fetch: func(pivot int64) (*sqlx.Rows, error) {
 			if limit <= 0 {
 				return nil, nil
