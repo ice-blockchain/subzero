@@ -85,7 +85,11 @@ func parseNostrFilterTagMarkers(f *databaseFilterSearch) *databaseFilterSearch {
 
 func parseNostrFilterDependencies(f *databaseFilterSearch) (*databaseFilterSearch, error) {
 	const dependenciesPrefix = "include:dependencies:"
-	if depStrStart := strings.Index(f.Search, dependenciesPrefix); depStrStart != -1 {
+	for strings.Contains(f.Search, dependenciesPrefix) {
+		depStrStart := strings.Index(f.Search, dependenciesPrefix)
+		if depStrStart == -1 {
+			break
+		}
 		depStrEnd := strings.Index(f.Search[depStrStart:], " ")
 		if depStrEnd == -1 {
 			depStrEnd = len(f.Search)
@@ -94,8 +98,8 @@ func parseNostrFilterDependencies(f *databaseFilterSearch) (*databaseFilterSearc
 		if err != nil {
 			return nil, err
 		}
-		f.Dependencies = dep
-		f.Search = f.Search[:depStrStart] + f.Search[depStrEnd:]
+		f.Dependencies = append(f.Dependencies, dep)
+		f.Search = strings.TrimSpace(f.Search[:depStrStart] + f.Search[depStrEnd:])
 	}
 	return f, nil
 }

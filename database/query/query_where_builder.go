@@ -54,7 +54,7 @@ type (
 		Quotes       *bool
 		References   *bool
 		TagMarkers   []databaseFilterMarker
-		Dependencies *filterDependencies
+		Dependencies []*filterDependencies
 	}
 	databaseFilterDelete struct {
 		Author string
@@ -494,6 +494,47 @@ func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, 
 }
 
 func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
+	if filter.Reduce.Kinds[0] == model.KindDVMCount {
+		w.WriteString(`
+union all
+select
+	6400,
+	0,
+	0,
+	f.reference_id,
+	coalesce((select evr.pubkey from events evr where evr.id = f.reference_id), ''),
+	'',
+	cast(f.value as text) as content,
+	'',
+	'[]' as jtags
+from
+	event_counters f
+where
+`)
+	} else {
+		w.WriteString(`
+union all
+select
+	e.kind,
+	e.created_at,
+	e.system_created_at,
+	e.id,
+	e.pubkey,
+	e.sig,
+	e.content,
+	e.d_tag,
+	tags as jtags
+from
+	events e
+where
+`)
+		w.WriteString(`e.id not in (select `)
+		w.WriteString(cteName)
+		w.WriteString(`.id from `)
+		w.WriteString(cteName)
+		w.WriteString(`) AND `)
+	}
+
 	switch filter.Reduce.Kinds[0] {
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
 		w.WriteString("e.kind = :")
@@ -538,23 +579,6 @@ func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDe
 		w.WriteString(")) AND e.hidden=0")
 
 	case model.KindDVMCount:
-		w.WriteString(`
-true=false -- Stub to avoid previous clause/select from 'events' table.
-union all
-	select
-		6400,
-		0,
-		0,
-		f.reference_id,
-		coalesce((select evr.pubkey from events evr where evr.id = f.reference_id), ''),
-		'',
-		cast(f.value as text) as content,
-		'',
-		'[]' as jtags
-	from
-		event_counters f
-	where
-`)
 		w.WriteString("f.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
 		var refType string
@@ -601,7 +625,7 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
 		}
 		if dbFilter.Dependencies != nil {
-			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies)
+			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
 	}
 

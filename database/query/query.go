@@ -311,7 +311,7 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 }
 
 func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
-	whereMain, whereDep, params, err := generateEventsWhereClause(subscription)
+	whereMain, depClause, params, err := generateEventsWhereClause(subscription)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -328,7 +328,7 @@ func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPi
 		limitQuery = " limit :mainlimit"
 	}
 
-	if whereDep == "" {
+	if depClause == "" {
 		return `
 select
 	e.kind,
@@ -370,20 +370,7 @@ select
 	*
 from
 	eventsmain
-union all
-select
-	e.kind,
-	e.created_at,
-	e.system_created_at,
-	e.id,
-	e.pubkey,
-	e.sig,
-	e.content,
-	e.d_tag,
-	tags as jtags
-from
-	events e
-where ` + whereDep, params, nil
+` + depClause, params, nil
 }
 
 func generateEventsWhereClause(subscription *model.Subscription) (clauseMain, clauseDeps string, params map[string]any, err error) {
