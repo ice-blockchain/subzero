@@ -319,7 +319,7 @@ func TestParseNostrFilter(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
-		require.NotNil(t, f.Dependencies)
+		require.Len(t, f.Dependencies, 1)
 		require.Equal(t, &filterDependencies{
 			Start: filterDependenciesStart{
 				Kind: 1,
@@ -327,7 +327,7 @@ func TestParseNostrFilter(t *testing.T) {
 			Reduce: filterDependenciesReduce{
 				Kinds: []int{2},
 			},
-		}, f.Dependencies)
+		}, f.Dependencies[0])
 		require.Equal(t, "some content here", f.Filter.Search)
 	})
 	t.Run("Image with dependencies in the beginning", func(t *testing.T) {
@@ -337,7 +337,7 @@ func TestParseNostrFilter(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, f.Images)
 		require.False(t, *f.Images)
-		require.NotNil(t, f.Dependencies)
+		require.Len(t, f.Dependencies, 1)
 		require.Equal(t, &filterDependencies{
 			Start: filterDependenciesStart{
 				Kind: 1,
@@ -345,7 +345,7 @@ func TestParseNostrFilter(t *testing.T) {
 			Reduce: filterDependenciesReduce{
 				Kinds: []int{3},
 			},
-		}, f.Dependencies)
+		}, f.Dependencies[0])
 		require.Equal(t, "some content here2", f.Filter.Search)
 	})
 	t.Run("E marker with reply and images", func(t *testing.T) {

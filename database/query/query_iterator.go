@@ -48,7 +48,7 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 		return nil, errors.Wrap(err, "failed to decode tags")
 	}
 
-	if ev.Kind == model.KindDVMCount {
+	if ev.Kind == model.KindDVMCount && ev.Sig == "" {
 		it.signer.MustSignEvent(&ev.Event)
 	}
 

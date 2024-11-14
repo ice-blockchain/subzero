@@ -23,7 +23,7 @@ var (
 type (
 	config struct {
 		URL        string `yaml:"url"`
-		PrivateKey string `yaml:"private_key"`
+		PrivateKey string `yaml:"private-key"`
 	}
 )
 
