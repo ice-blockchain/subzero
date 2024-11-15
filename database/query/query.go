@@ -188,12 +188,15 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 	return err
 }
 
-func (db *dbClient) MustSignEvent(event *model.Event) {
+func (db *dbClient) MustSignEvent(event *databaseEvent) {
 	if event.PubKey != "" {
 		event.Tags = append(event.Tags, model.Tag{"p", event.PubKey})
 	}
 	if event.ID != "" {
-		event.Tags = append(event.Tags, model.Tag{"b", event.ID})
+		event.Tags = append(event.Tags, model.Tag{"i", event.ID, "event"})
+	}
+	if event.MasterPubKey != "" && event.MasterPubKey != event.PubKey {
+		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.MasterPubKey})
 	}
 
 	err := event.Sign(db.relayPrivateKey)
@@ -336,6 +339,7 @@ select
 	e.system_created_at,
 	e.id,
 	e.pubkey,
+	e.master_pubkey,
 	e.sig,
 	e.content,
 	tags as jtags
@@ -355,6 +359,7 @@ with eventsmain as (
 		e.system_created_at,
 		e.id,
 		e.pubkey,
+		e.master_pubkey,
 		e.sig,
 		e.content,
 		e.d_tag,

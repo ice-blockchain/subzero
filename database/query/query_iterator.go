@@ -16,7 +16,7 @@ type EventIterator iter.Seq2[*model.Event, error]
 
 type (
 	eventSigner interface {
-		MustSignEvent(*model.Event)
+		MustSignEvent(*databaseEvent)
 	}
 	eventIterator struct {
 		fetch   func(pivot int64) (*sqlx.Rows, error)
@@ -49,7 +49,7 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 	}
 
 	if ev.Kind == model.KindDVMCount && ev.Sig == "" {
-		it.signer.MustSignEvent(&ev.Event)
+		it.signer.MustSignEvent(&ev)
 	}
 
 	return &ev, nil

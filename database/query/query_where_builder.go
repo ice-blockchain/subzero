@@ -502,13 +502,15 @@ select
 	0,
 	0,
 	f.reference_id,
-	coalesce((select evr.pubkey from events evr where evr.id = f.reference_id), ''),
+	coalesce(evr.pubkey, ''),
+	coalesce(evr.master_pubkey, ''),
 	'',
 	cast(f.value as text) as content,
 	'',
 	'[]' as jtags
 from
 	event_counters f
+left join events evr on f.reference_id = evr.id
 where
 `)
 	} else {
@@ -520,6 +522,7 @@ select
 	e.system_created_at,
 	e.id,
 	e.pubkey,
+	e.master_pubkey,
 	e.sig,
 	e.content,
 	e.d_tag,
