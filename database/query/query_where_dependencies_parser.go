@@ -94,7 +94,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kind1>$logged_in_user_pubkey@kind1+e+root.
+		// kind1>$logged_in_user_pubkey@kind1+e+root/reply.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenInteger,

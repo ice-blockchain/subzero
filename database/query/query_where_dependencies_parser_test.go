@@ -70,6 +70,20 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
+			Input: "kind1>publickey@kind1+e+reply",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 1,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds:   []int{1},
+					Author:  "publickey",
+					Tag:     "e",
+					Context: "reply",
+				},
+			},
+		},
+		{
 			Input: "kind1>publickey@kind1+q",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
