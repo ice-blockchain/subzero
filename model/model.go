@@ -38,8 +38,9 @@ var (
 )
 
 const (
-	CustomIONKindAttestation = 10_100
-	KindDVMCount             = 6400
+	CustomIONKindAttestation       = 10_100
+	CustomIONKindRelayListMetadata = 20_002
+	KindDVMCount                   = 6400
 )
 
 const (

@@ -358,4 +358,88 @@ func TestSelectWithDependencies(t *testing.T) {
 		})
 		require.Len(t, events, 5) // 2 from the first search, 3 from the second.
 	})
+	t.Run("kind10002", func(t *testing.T) {
+		t.Run("kind6>kind10002", func(t *testing.T) {
+			var ev1, ev2 model.Event
+
+			ev1.ID = "t6id1"
+			ev1.Kind = nostr.KindRepost
+			ev1.PubKey = "t6pk1"
+			ev1.CreatedAt = 13
+			ev1.Tags = model.Tags{
+				{"e", "t2id3"},
+			}
+			ev2.ID = "t6id2"
+			ev2.Kind = nostr.KindRepost
+			ev2.PubKey = "t6pk2"
+			ev2.CreatedAt = 14
+			ev2.Tags = model.Tags{
+				{"e", "t2id5"},
+			}
+			err := db.AcceptEvents(context.Background(), &ev1, &ev2)
+			require.NoError(t, err)
+
+			evRelayMetadata := model.Event{}
+			evRelayMetadata.ID = "t6id3"
+			evRelayMetadata.Kind = nostr.KindRelayListMetadata
+			evRelayMetadata.PubKey = "t6pk2"
+			evRelayMetadata.CreatedAt = 15
+			evRelayMetadata.Tags = model.Tags{
+				{"r", "wss://foo.bar"},
+			}
+			err = db.AcceptEvents(context.Background(), &evRelayMetadata)
+			require.NoError(t, err)
+			events := helperSelectEvents(t, db, model.Filter{
+				IDs:    []string{"t6id1", "t6id2", "t2id5"},
+				Search: "include:dependencies:kind6>kind10002",
+			})
+			require.Len(t, events, 5) // 2 reposts, 1 note, 2 relay metadata.
+			for i, k := range []int{nostr.KindRepost, nostr.KindRepost, nostr.KindTextNote, nostr.KindRelayListMetadata, model.CustomIONKindRelayListMetadata} {
+				require.Equalf(t, k, events[i].Kind, "event %d: %v", i, events[i])
+				if events[i].Kind == model.CustomIONKindRelayListMetadata {
+					ok, err := events[i].CheckSignature()
+					require.NoError(t, err)
+					require.True(t, ok)
+				}
+			}
+		})
+		t.Run("kind1+q>kind10002", func(t *testing.T) {
+			var ev1, ev2 model.Event
+
+			ev1.ID = "t7id1"
+			ev1.Kind = nostr.KindTextNote
+			ev1.PubKey = "t7pk2"
+			ev1.CreatedAt = 15
+			ev1.Tags = model.Tags{
+				{"q", "t2id3"},
+			}
+			ev2.ID = "t7id2"
+			ev2.Kind = nostr.KindRelayListMetadata
+			ev2.PubKey = "t7pk2"
+			ev2.CreatedAt = 15
+			ev2.Tags = model.Tags{
+				{"r", "wss://foo.bar2"},
+			}
+
+			err := db.AcceptEvents(context.Background(), &ev1, &ev2)
+			require.NoError(t, err)
+
+			ev1.ID = "t7id3"
+			ev1.Kind = nostr.KindTextNote
+			ev1.PubKey = "t7pk3"
+			ev1.CreatedAt = 16
+			ev1.Tags = model.Tags{}
+			err = db.AcceptEvents(context.Background(), &ev1)
+			require.NoError(t, err)
+
+			events := helperSelectEvents(t, db, model.Filter{
+				IDs:    []string{"t7id1", "t7id3", "t2id5"},
+				Search: "include:dependencies:kind1+q>kind10002",
+			})
+			require.Len(t, events, 4) // 3 notes, 1 relay metadata.
+			for i, k := range []int{nostr.KindTextNote, nostr.KindTextNote, nostr.KindTextNote, nostr.KindRelayListMetadata} {
+				require.Equalf(t, k, events[i].Kind, "event %d: %v", i, events[i])
+			}
+		})
+	})
 }

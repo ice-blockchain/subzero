@@ -543,9 +543,9 @@ where
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
 		if filter.Reduce.Author != "" {
-			w.WriteString(" AND e.pubkey = :")
+			w.WriteString(" AND :")
 			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
-			w.WriteString(" AND ")
+			w.WriteString(" IN (e.pubkey, e.master_pubkey) AND ")
 		}
 		tag := filter.Reduce.Tag
 		if tag == "" {
@@ -572,7 +572,53 @@ where
 		w.WriteString(startFilter)
 		w.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = 0)) AND e.hidden=0")
 
-	case nostr.KindProfileMetadata, nostr.KindRelayListMetadata:
+	case nostr.KindRelayListMetadata:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(" AND ( master_pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		w.WriteString(") OR pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		w.WriteString(")) AND e.hidden=0")
+		w.WriteString(`
+union all
+select
+	20002,
+	0 as created_at,
+	0 as system_created_at,
+	'' as id,
+	e.pubkey,
+	e.master_pubkey,
+	'' as sig,
+	'' as content,
+	'' as d_tag,
+	'[]' as jtags
+from
+	events e
+inner join `)
+		w.WriteString(cteName)
+		w.WriteString(` on e.id = `)
+		w.WriteString(cteName)
+		w.WriteString(`.id where e.kind =:`)
+		w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
+		if filter.Start.Tag != "" {
+			w.WriteString(" AND EXISTS (select true from event_tags where event_id = ")
+			w.WriteString(cteName)
+			w.WriteString(".id AND event_tag_key = :")
+			w.WriteString(w.addParam(filterID, "tag", filter.Start.Tag))
+			w.WriteString(")")
+		}
+		w.WriteString(` AND
+not exists (select true from events subev where subev.kind = 10002 and
+(
+	(subev.pubkey = e.pubkey               and subev.hidden = 0) or
+	(subev.master_pubkey = e.master_pubkey and subev.hidden = 0) or
+	(subev.master_pubkey = e.pubkey        and subev.hidden = 0) or
+	(subev.pubkey = e.master_pubkey        and subev.hidden = 0)
+)) and e.hidden=0
+group by e.pubkey, e.master_pubkey`)
+
+	case nostr.KindProfileMetadata:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
 		w.WriteString(" AND ( master_pubkey IN (")
