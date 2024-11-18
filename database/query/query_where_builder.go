@@ -42,16 +42,19 @@ var (
 
 type (
 	whereBuilder struct {
-		Params map[string]any
+		Params       map[string]any
+		Dependencies []*filterDependencies
 		strings.Builder
 	}
 	databaseFilterSearch struct {
 		nostr.Filter
-		Expiration *bool
-		Videos     *bool
-		Images     *bool
-		Quotes     *bool
-		References *bool
+		Expiration   *bool
+		Videos       *bool
+		Images       *bool
+		Quotes       *bool
+		References   *bool
+		TagMarkers   []databaseFilterMarker
+		Dependencies []*filterDependencies
 	}
 	databaseFilterDelete struct {
 		Author string
@@ -61,6 +64,10 @@ type (
 			Author string
 			TagD   string
 		}
+	}
+	databaseFilterMarker struct {
+		Tag    string
+		Marker string
 	}
 	filterBuilder struct {
 		Name           string
@@ -219,6 +226,21 @@ func (w *whereBuilder) maybeOR() {
 	w.WriteString(" OR ")
 }
 
+func (w *whereBuilder) applyFilterTagMarkers(filter *filterBuilder, markers []databaseFilterMarker) {
+	if len(markers) == 0 {
+		return
+	}
+
+	for id, marker := range markers {
+		w.maybeAND()
+		w.WriteString("EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = :")
+		w.WriteString(w.addParam(filter.Name, "mtag"+strconv.Itoa(id), marker.Tag))
+		w.WriteString(" AND event_tag_value3 = :")
+		w.WriteString(w.addParam(filter.Name, "mtagvalue"+strconv.Itoa(id), marker.Marker))
+		w.WriteRune(')')
+	}
+}
+
 func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap) {
 	const valuesMax = 21
 
@@ -235,16 +257,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 		}
 
 		tagID++
-		if filter.HasEvents() {
-			// We already have some IDs, so we need to check if they have the tag.
-			w.WriteString("EXISTS (select 42 from event_tags where ")
-			w.WriteString(filter.BuildEvents(w))
-			w.maybeAND()
-		} else {
-			// No IDs, so select all events that belong to the given tag.
-			w.WriteString("+id IN (select event_id from event_tags where ")
-		}
-		w.WriteString("event_tag_key = :")
+		w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
 		w.WriteString(w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tag))
 
 		for i, value := range values {
@@ -263,6 +276,7 @@ func isFilterEmpty(filter *databaseFilterSearch) bool {
 		len(filter.Kinds) == 0 &&
 		len(filter.Authors) == 0 &&
 		len(filter.Tags) == 0 &&
+		len(filter.TagMarkers) == 0 &&
 		filter.Since == nil &&
 		filter.Until == nil &&
 		filter.Expiration == nil &&
@@ -447,66 +461,220 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		return err
 	}
 	w.applyFilterTags(builder, filter.Tags)
+	w.applyFilterTagMarkers(builder, filter.TagMarkers)
 
 	w.WriteRune(')') // End the filter section.
 
 	return nil
 }
 
-func parseNostrFilter(filter model.Filter) *databaseFilterSearch {
-	f := databaseFilterSearch{
-		Filter: filter,
+func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, filter *filterDependenciesStart) string {
+	var sb strings.Builder
+
+	sb.WriteString("select ")
+	sb.WriteString(field)
+	sb.WriteString(" from ")
+	sb.WriteString(cteName)
+	sb.WriteString(" where ")
+	sb.WriteString(cteName)
+	sb.WriteString(".kind = :")
+	sb.WriteString(w.addParam(filterID, "kind", filter.Kind))
+	if filter.ProfileBadges {
+		sb.WriteString(" AND d_tag='profile_badges'")
 	}
-	flags := []struct {
-		Name string
-		Flag **bool
-	}{
-		{"expiration", &f.Expiration},
-		{"videos", &f.Videos},
-		{"images", &f.Images},
-		{"quotes", &f.Quotes},
-		{"references", &f.References},
-	}
-
-	for idx := range flags {
-		flagStart := strings.Index(strings.ToLower(f.Search), flags[idx].Name+":")
-		if flagStart == -1 {
-			continue
-		}
-
-		flagEnd := strings.Index(f.Search[flagStart:], " ")
-		if flagEnd == -1 {
-			flagEnd = len(f.Search)
-		} else {
-			flagEnd += flagStart
-		}
-
-		value := strings.ToLower(f.Search[flagStart+len(flags[idx].Name)+1 : flagEnd])
-		if value == "true" || value == "1" || value == "on" || value == "yes" {
-			on := true
-			*flags[idx].Flag = &on
-		} else if value == "false" || value == "0" || value == "off" || value == "no" {
-			off := false
-			*flags[idx].Flag = &off
-		} else {
-			// Do not now how to parse the value.
-			continue
-		}
-
-		// Remove flag:value from the search string.
-		f.Search = strings.TrimSpace(f.Search[:flagStart] + f.Search[flagEnd:])
+	if filter.Tag != "" {
+		sb.WriteString(" AND EXISTS (select 42 from event_tags where event_id = ")
+		sb.WriteString(cteName)
+		sb.WriteString(".id AND event_tag_key = :")
+		sb.WriteString(w.addParam(filterID, "tag", filter.Tag))
+		sb.WriteString(")")
 	}
 
-	f.Search = strings.TrimSpace(f.Search)
+	return sb.String()
+}
 
-	return &f
+func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
+	if filter.Reduce.Kinds[0] == model.KindDVMCount {
+		w.WriteString(`
+union all
+select
+	6400,
+	0,
+	0,
+	f.reference_id,
+	coalesce(evr.pubkey, ''),
+	coalesce(evr.master_pubkey, ''),
+	'',
+	cast(f.value as text) as content,
+	'',
+	'[]' as jtags
+from
+	event_counters f
+left join events evr on f.reference_id = evr.id
+where
+`)
+	} else {
+		w.WriteString(`
+union all
+select
+	e.kind,
+	e.created_at,
+	e.system_created_at,
+	e.id,
+	e.pubkey,
+	e.master_pubkey,
+	e.sig,
+	e.content,
+	e.d_tag,
+	tags as jtags
+from
+	events e
+where
+`)
+		w.WriteString(`e.id not in (select `)
+		w.WriteString(cteName)
+		w.WriteString(`.id from `)
+		w.WriteString(cteName)
+		w.WriteString(`) AND `)
+	}
+
+	switch filter.Reduce.Kinds[0] {
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		if filter.Reduce.Author != "" {
+			w.WriteString(" AND :")
+			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
+			w.WriteString(" IN (e.pubkey, e.master_pubkey) AND ")
+		}
+		tag := filter.Reduce.Tag
+		if tag == "" {
+			// Repost, reaction.
+			tag = "e"
+		}
+		w.WriteString("e.id in (select event_id from event_tags where event_tag_key = :")
+		w.WriteString(w.addParam(filterID, "rtag", tag))
+		w.WriteString(" and event_tag_value1 in (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		w.WriteRune(')')
+		if filter.Reduce.Context != "" {
+			w.WriteString(" and event_tag_value3 = :")
+			w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
+		}
+		w.WriteString(" group by event_tag_value1) AND e.hidden=0")
+
+	case nostr.KindBadgeDefinition:
+		startFilter := w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start)
+		w.WriteString("e.id in ((select event_tag_value1 from event_tags where event_id in (")
+		w.WriteString(startFilter)
+		w.WriteString(") and event_tag_key = 'e'),")
+		w.WriteString(`(select ee.id from (select subzero_nostr_tag_a_get_pk(event_tag_value1) as pk, subzero_nostr_tag_a_get_dtag(event_tag_value1) as name from event_tags where event_id in (`)
+		w.WriteString(startFilter)
+		w.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = 0)) AND e.hidden=0")
+
+	case nostr.KindRelayListMetadata:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(" AND ( master_pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		w.WriteString(") OR pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		w.WriteString(")) AND e.hidden=0")
+		w.WriteString(`
+union all
+select
+	20002,
+	0 as created_at,
+	0 as system_created_at,
+	'' as id,
+	e.pubkey,
+	e.master_pubkey,
+	'' as sig,
+	'' as content,
+	'' as d_tag,
+	'[]' as jtags
+from
+	events e
+inner join `)
+		w.WriteString(cteName)
+		w.WriteString(` on e.id = `)
+		w.WriteString(cteName)
+		w.WriteString(`.id where e.kind =:`)
+		w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
+		if filter.Start.Tag != "" {
+			w.WriteString(" AND EXISTS (select true from event_tags where event_id = ")
+			w.WriteString(cteName)
+			w.WriteString(".id AND event_tag_key = :")
+			w.WriteString(w.addParam(filterID, "tag", filter.Start.Tag))
+			w.WriteString(")")
+		}
+		w.WriteString(` AND
+not exists (select true from events subev where subev.kind = 10002 and
+(
+	(subev.pubkey = e.pubkey               and subev.hidden = 0) or
+	(subev.master_pubkey = e.master_pubkey and subev.hidden = 0) or
+	(subev.master_pubkey = e.pubkey        and subev.hidden = 0) or
+	(subev.pubkey = e.master_pubkey        and subev.hidden = 0)
+)) and e.hidden=0
+group by e.pubkey, e.master_pubkey`)
+
+	case nostr.KindProfileMetadata:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(" AND ( master_pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		w.WriteString(") OR pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		w.WriteString(")) AND e.hidden=0")
+
+	case model.KindDVMCount:
+		w.WriteString("f.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
+		var refType string
+		switch {
+		case filter.Reduce.Tag == "q":
+			refType = "quote"
+
+		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
+			// Empty.
+
+		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+			refType = "reply"
+		}
+		w.WriteString(" AND f.reference_type = :")
+		w.WriteString(w.addParam(filterID, "rref", refType))
+		w.WriteString(" AND f.reference_id IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		w.WriteString(")")
+	}
+}
+
+func (w *whereBuilder) BuildDependencies(cteName string) (sql string, params map[string]any, err error) {
+	if len(w.Dependencies) == 0 {
+		return "", w.Params, nil
+	}
+
+	w.Reset()
+	for idx, filter := range w.Dependencies {
+		filterID := "dep" + cteName + strconv.Itoa(idx) + "_"
+		w.applyDepFilter(filterID, cteName, filter)
+	}
+
+	return w.String(), w.Params, nil
 }
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	for idx := range filters {
 		w.maybeOR()
-		if err := w.applyFilter(idx, parseNostrFilter(filters[idx])); err != nil {
+		dbFilter, err := parseNostrFilter(filters[idx])
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "failed to parse filter %d", idx)
+		}
+		if err := w.applyFilter(idx, dbFilter); err != nil {
 			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
+		}
+		if dbFilter.Dependencies != nil {
+			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
 	}
 

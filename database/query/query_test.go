@@ -35,7 +35,8 @@ func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Contex
 func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
-	return openDatabase(":memory:", true)
+	return openDatabase(":memory:", true).
+		WithPrivateKey(nostr.GeneratePrivateKey())
 }
 
 func TestMain(m *testing.M) {

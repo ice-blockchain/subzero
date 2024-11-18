@@ -22,14 +22,16 @@ var (
 
 type (
 	config struct {
-		URL string `yaml:"url"`
+		URL        string `yaml:"url"`
+		PrivateKey string `yaml:"private-key"`
 	}
 )
 
 func MustInit(ctx context.Context) {
 	globalDB.Once.Do(func() {
 		globalConfig = cfg.MustGet[config]()
-		globalDB.Client = openDatabase(globalConfig.URL, true)
+		globalDB.Client = openDatabase(globalConfig.URL, true).
+			WithPrivateKey(globalConfig.PrivateKey)
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go func() {

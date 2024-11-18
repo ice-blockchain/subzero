@@ -13,6 +13,18 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+func helperSelectEvents(t *testing.T, db *dbClient, filters ...model.Filter) (events []*model.Event) {
+	t.Helper()
+
+	for ev, err := range db.SelectEvents(context.Background(), &model.Subscription{Filters: filters}) {
+		require.NoError(t, err)
+		require.NotNil(t, ev)
+		events = append(events, ev)
+	}
+
+	return events
+}
+
 func helperSelectEventsN(t *testing.T, db *dbClient, limit int) (events map[string]*model.Event) {
 	t.Helper()
 

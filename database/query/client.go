@@ -19,9 +19,9 @@ import (
 type (
 	dbClient struct {
 		*sqlx.DB
-
-		stmtCacheMx *sync.RWMutex
-		stmtCache   map[string]*sqlx.NamedStmt
+		relayPrivateKey string
+		stmtCacheMx     *sync.RWMutex
+		stmtCache       map[string]*sqlx.NamedStmt
 	}
 )
 
@@ -55,6 +55,21 @@ func init() {
 					{
 						Name: "subzero_nostr_attestation_update_is_allowed",
 						Ptr:  sqlAttestationUpdateIsAllowed,
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_tag_a_get_kind",
+						Ptr:  sqlTagAGetAt(0),
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_tag_a_get_pk",
+						Ptr:  sqlTagAGetAt(1),
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_tag_a_get_dtag",
+						Ptr:  sqlTagAGetAt(2),
 						Pure: true,
 					},
 				}
@@ -107,6 +122,15 @@ func openDatabase(target string, runDDL bool) *dbClient {
 	}
 
 	return client
+}
+
+func (db *dbClient) WithPrivateKey(privateKey string) *dbClient {
+	if privateKey == "" {
+		panic("private key is empty")
+	}
+	db.relayPrivateKey = privateKey
+
+	return db
 }
 
 func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected int64, err error) {

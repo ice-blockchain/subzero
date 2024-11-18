@@ -14,10 +14,16 @@ import (
 
 type EventIterator iter.Seq2[*model.Event, error]
 
-type eventIterator struct {
-	fetch   func(pivot int64) (*sqlx.Rows, error)
-	oneShot bool
-}
+type (
+	eventSigner interface {
+		MustSignEvent(*databaseEvent)
+	}
+	eventIterator struct {
+		fetch   func(pivot int64) (*sqlx.Rows, error)
+		signer  eventSigner
+		oneShot bool
+	}
+)
 
 func (it *eventIterator) decodeTags(jtags string) (tags model.Tags, err error) {
 	if len(jtags) == 0 {
@@ -40,6 +46,13 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 
 	if ev.Tags, err = it.decodeTags(ev.Jtags); err != nil {
 		return nil, errors.Wrap(err, "failed to decode tags")
+	}
+
+	if ev.Sig == "" {
+		switch ev.Kind {
+		case model.KindDVMCount, model.CustomIONKindRelayListMetadata:
+			it.signer.MustSignEvent(&ev)
+		}
 	}
 
 	return &ev, nil

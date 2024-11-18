@@ -18,7 +18,10 @@ func TestIsFilterEmpty(t *testing.T) {
 	f := helperNewFilter(func(apply *model.Filter) {
 		apply.IDs = []string{"123"}
 	})
-	require.False(t, isFilterEmpty(parseNostrFilter(f)))
+
+	dbFilter, err := parseNostrFilter(f)
+	require.NoError(t, err)
+	require.False(t, isFilterEmpty(dbFilter))
 }
 
 func TestWhereBuilderEmpty(t *testing.T) {
@@ -137,7 +140,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 		}))
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.NoError(t, err)
-		require.Len(t, params, 7)
+		require.Len(t, params, 6)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("TwoTagsShink", func(t *testing.T) {
@@ -157,7 +160,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 29)
+		require.Len(t, params, 28)
 		helperEnsureParams(t, q, params)
 	})
 }
@@ -187,7 +190,7 @@ func TestWhereBuilderMulti(t *testing.T) {
 	q, params, err := builder.Build(filters...)
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
-	require.Len(t, params, 18)
+	require.Len(t, params, 16)
 	helperEnsureParams(t, q, params)
 }
 
@@ -247,23 +250,26 @@ func TestParseNostrFilter(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Empty", func(t *testing.T) {
-		f := parseNostrFilter(model.Filter{})
+		f, err := parseNostrFilter(model.Filter{})
+		require.NoError(t, err)
 		require.Empty(t, f.Filter)
 		require.Nil(t, f.Quotes)
 		require.Nil(t, f.Images)
 	})
 	t.Run("Images", func(t *testing.T) {
-		f := parseNostrFilter(model.Filter{
+		f, err := parseNostrFilter(model.Filter{
 			Search: "images:true",
 		})
+		require.NoError(t, err)
 		require.Empty(t, f.Filter)
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
 	})
 	t.Run("ImagesWithQuotes", func(t *testing.T) {
-		f := parseNostrFilter(model.Filter{
+		f, err := parseNostrFilter(model.Filter{
 			Search: "images:true quoteS:off",
 		})
+		require.NoError(t, err)
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
 		require.NotNil(t, f.Quotes)
@@ -271,9 +277,10 @@ func TestParseNostrFilter(t *testing.T) {
 		require.Empty(t, f.Filter)
 	})
 	t.Run("ImagesWithQuotesWithRef", func(t *testing.T) {
-		f := parseNostrFilter(model.Filter{
+		f, err := parseNostrFilter(model.Filter{
 			Search: "images:true quoteS:off references:yes",
 		})
+		require.NoError(t, err)
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
 		require.NotNil(t, f.Quotes)
@@ -283,18 +290,20 @@ func TestParseNostrFilter(t *testing.T) {
 		require.Empty(t, f.Filter)
 	})
 	t.Run("ImagesWithUnknownValue", func(t *testing.T) {
-		f := parseNostrFilter(model.Filter{
+		f, err := parseNostrFilter(model.Filter{
 			Search: "images:true quoteS:foo",
 		})
+		require.NoError(t, err)
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
 		require.Nil(t, f.Quotes)
 		require.Equal(t, "quoteS:foo", f.Filter.Search)
 	})
 	t.Run("ImagesWithQuotesWithRefWithContent", func(t *testing.T) {
-		f := parseNostrFilter(model.Filter{
+		f, err := parseNostrFilter(model.Filter{
 			Search: "images:true quoteS:off some content here references:yes",
 		})
+		require.NoError(t, err)
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
 		require.NotNil(t, f.Quotes)
@@ -302,6 +311,65 @@ func TestParseNostrFilter(t *testing.T) {
 		require.NotNil(t, f.References)
 		require.True(t, *f.References)
 		require.Equal(t, "some content here", f.Filter.Search)
+	})
+	t.Run("Image with dependencies", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "images:true some content here include:dependencies:kind1>kind2",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+		require.Len(t, f.Dependencies, 1)
+		require.Equal(t, &filterDependencies{
+			Start: filterDependenciesStart{
+				Kind: 1,
+			},
+			Reduce: filterDependenciesReduce{
+				Kinds: []int{2},
+			},
+		}, f.Dependencies[0])
+		require.Equal(t, "some content here", f.Filter.Search)
+	})
+	t.Run("Image with dependencies in the beginning", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "include:dependencies:kind1>kind3 some content here2 images:false",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Images)
+		require.False(t, *f.Images)
+		require.Len(t, f.Dependencies, 1)
+		require.Equal(t, &filterDependencies{
+			Start: filterDependenciesStart{
+				Kind: 1,
+			},
+			Reduce: filterDependenciesReduce{
+				Kinds: []int{3},
+			},
+		}, f.Dependencies[0])
+		require.Equal(t, "some content here2", f.Filter.Search)
+	})
+	t.Run("E marker with reply and images", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "images:false some content here emarker:reply",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Images)
+		require.False(t, *f.Images)
+		require.Len(t, f.TagMarkers, 1)
+		require.Equal(t, "e", f.TagMarkers[0].Tag)
+		require.Equal(t, "reply", f.TagMarkers[0].Marker)
+		require.Equal(t, "some content here", f.Filter.Search)
+	})
+	t.Run("Three markers with videos", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "amarker:aval videos:true some bmarker:bval content here cmarker:cval marker:invalid x",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Videos)
+		require.True(t, *f.Videos)
+		require.Equal(t, "some content here marker:invalid x", f.Filter.Search)
+		require.Len(t, f.TagMarkers, 3)
+		require.Equal(t, []databaseFilterMarker{{Tag: "a", Marker: "aval"}, {Tag: "b", Marker: "bval"}, {Tag: "c", Marker: "cval"}}, f.TagMarkers)
 	})
 }
 

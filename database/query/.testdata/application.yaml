@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: ice License 1.0
 
-
 database:
   query:
     url: ":memory:"
+    private-key: "eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9"

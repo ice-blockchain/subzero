@@ -234,7 +234,7 @@ func (v *EventEnvelope) UnmarshalJSON(data []byte) error {
 }
 
 func (v EventEnvelope) MarshalJSON() ([]byte, error) {
-	w := jwriter.Writer{}
+	w := jwriter.Writer{NoEscapeHTML: true}
 	w.RawString(`["EVENT",`)
 	if v.SubscriptionID != nil {
 		w.RawString(`"` + *v.SubscriptionID + `"`)

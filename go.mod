@@ -8,6 +8,7 @@ replace (
 )
 
 require (
+	github.com/bzick/tokenizer v1.4.6
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.15.0
@@ -24,7 +25,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.42.0
+	github.com/nbd-wtf/go-nostr v0.42.2
 	github.com/puzpuzpuz/xsync/v3 v3.4.0
 	github.com/quic-go/quic-go v0.48.1
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
@@ -66,7 +67,7 @@ require (
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.22.1 // indirect
+	github.com/go-playground/validator/v10 v10.23.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
@@ -126,7 +127,7 @@ require (
 	golang.org/x/term v0.26.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 	golang.org/x/tools v0.27.0 // indirect
-	google.golang.org/protobuf v1.35.1 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

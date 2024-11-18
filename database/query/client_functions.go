@@ -4,6 +4,7 @@ package query
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 
@@ -51,4 +52,15 @@ func sqlAttestationUpdateIsAllowed(oldTagsJSON, newTagsJSON string) (bool, error
 	}
 
 	return model.AttestationUpdateIsAllowed(oldTags, newTags), nil
+}
+
+func sqlTagAGetAt(pos int) func(string) string {
+	return func(tag string) string {
+		fields := strings.Split(tag, ":")
+		if len(fields) <= pos {
+			return ""
+		}
+
+		return fields[pos]
+	}
 }
