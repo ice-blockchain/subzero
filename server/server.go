@@ -4,8 +4,9 @@ package server
 
 import (
 	"context"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	httpserver "github.com/ice-blockchain/subzero/server/http"
