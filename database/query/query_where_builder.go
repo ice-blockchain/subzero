@@ -47,7 +47,7 @@ type (
 		strings.Builder
 	}
 	databaseFilterSearch struct {
-		nostr.Filter
+		model.Filter
 		Expiration   *bool
 		Videos       *bool
 		Images       *bool
@@ -248,24 +248,48 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 		return
 	}
 
-	tagID := 0
-	for tag, values := range tags {
+	var tagID int
+	for tagName, tagValues := range tags {
+		tagID++
+
 		w.maybeAND()
-		if len(values) > valuesMax {
-			log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tag, valuesMax)
-			values = values[:valuesMax]
+		tagParam := w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tagName)
+
+		// Only the tag name is specified, no values.
+		if !tags.HasValues(tagName) {
+			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
+			w.WriteString(tagParam)
+			w.WriteRune(')')
+
+			continue
 		}
 
-		tagID++
-		w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
-		w.WriteString(w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tag))
+		w.WriteRune('(')
+		for i, values := range tagValues {
+			if values.Empty() {
+				continue
+			}
 
-		for i, value := range values {
-			w.WriteString(" AND ")
-			w.WriteString("event_tag_value")
-			w.WriteString(strconv.Itoa(i + 1))
-			w.WriteString(" = :")
-			w.WriteString(w.addParam(filter.Name, "tagvalue"+strconv.Itoa(tagID<<8|i+1), value))
+			if len(values) > valuesMax {
+				log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tagName, valuesMax)
+				values = values[:valuesMax]
+			}
+
+			w.maybeOR()
+			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
+			w.WriteString(tagParam)
+			for j := range values {
+				if values[j] == nil {
+					// Skip empty values.
+					continue
+				}
+				w.WriteString(" AND ")
+				w.WriteString("event_tag_value")
+				w.WriteString(strconv.Itoa(j + 1))
+				w.WriteString(" = :")
+				w.WriteString(w.addParam(filter.Name, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
+			}
+			w.WriteRune(')')
 		}
 		w.WriteRune(')')
 	}

@@ -111,9 +111,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			}
 		}
 		return
-	case *nostr.ReqEnvelope:
+	case *model.ReqEnvelope:
 		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{Filters: e.Filters}, SubscriptionID: e.SubscriptionID})
-	case *nostr.CountEnvelope:
+	case *model.CountEnvelope:
 		err = h.handleCount(ctx, e)
 		if err != nil {
 			defer respWriter.Close()

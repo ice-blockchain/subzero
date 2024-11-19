@@ -9,13 +9,10 @@ import (
 )
 
 type (
-	TagMap       = nostr.TagMap
 	Tag          = nostr.Tag
 	Tags         = nostr.Tags
 	Timestamp    = nostr.Timestamp
 	Kind         = int
-	Filter       = nostr.Filter
-	Filters      = nostr.Filters
 	Subscription struct {
 		Filters Filters
 	}

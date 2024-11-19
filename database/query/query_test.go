@@ -21,17 +21,6 @@ import (
 
 const testDeadline = 30 * time.Second
 
-func helperGetStoredEventsAll(t *testing.T, client *dbClient, ctx context.Context, subscription *model.Subscription) (events []*model.Event, err error) {
-	t.Helper()
-
-	for ev, evErr := range client.SelectEvents(ctx, subscription) {
-		require.NoError(t, evErr)
-		events = append(events, ev)
-	}
-
-	return events, err
-}
-
 func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
@@ -77,10 +66,9 @@ func TestReplaceableEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+		})
 		require.Len(t, stored, 2)
 		require.EqualValues(t, expectedEvents[1], stored[0])
 		require.EqualValues(t, expectedEvents[0], stored[1])
@@ -100,10 +88,9 @@ func TestReplaceableEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+		})
 		require.Empty(t, stored)
 	})
 	t.Run("normal, replaceable event with user metadata", func(t *testing.T) {
@@ -125,10 +112,9 @@ func TestReplaceableEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindProfileMetadata}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindProfileMetadata},
+		})
 		require.Len(t, stored, 2)
 		require.EqualValues(t, stored[0], expectedEvents[1])
 		require.EqualValues(t, stored[1], expectedEvents[0])
@@ -173,10 +159,9 @@ func TestReplaceableEvents(t *testing.T) {
 		}
 		require.NoError(t, db.AcceptEvents(ctx, ev3))
 
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindFollowList}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindFollowList},
+		})
 		require.Len(t, stored, 2)
 		require.Equal(t, ev3, stored[0], "event 3")
 		require.Equal(t, ev2, stored[1], "event 2")
@@ -250,10 +235,9 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 			},
 		})
 		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[2]))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindRepositoryAnnouncement}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindRepositoryAnnouncement},
+		})
 		require.Len(t, stored, 3)
 		require.Contains(t, stored, expectedEvents[0])
 		require.Contains(t, stored, expectedEvents[1])
@@ -281,10 +265,9 @@ func TestEphemeralEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+		})
 		require.Empty(t, stored)
 	})
 }
@@ -310,10 +293,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}
 		require.NoError(t, db.AcceptEvents(ctx, publishedEvent))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
 		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
@@ -327,10 +309,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err = helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-		}))
-		require.NoError(t, err)
+		stored = helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+		})
 		require.Empty(t, stored)
 	})
 	t.Run("replaceable event without d-tag", func(t *testing.T) {
@@ -349,10 +330,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}
 		require.NoError(t, db.AcceptEvents(ctx, publishedEvent))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindProfileMetadata}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindProfileMetadata},
+		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
 		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
@@ -366,10 +346,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err = helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindProfileMetadata}
-		}))
-		require.NoError(t, err)
+		stored = helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindProfileMetadata},
+		})
 		require.Empty(t, stored)
 	})
 	t.Run("replaceable event with d tag", func(t *testing.T) {
@@ -388,10 +367,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 			},
 		}
 		require.NoError(t, db.AcceptEvents(ctx, publishedEvent))
-		stored, err := helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindArticle}
-		}))
-		require.NoError(t, err)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindArticle},
+		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
 		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
@@ -405,10 +383,9 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
-		stored, err = helperGetStoredEventsAll(t, db, ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindProfileMetadata}
-		}))
-		require.NoError(t, err)
+		stored = helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindProfileMetadata},
+		})
 		require.Empty(t, stored)
 	})
 }
@@ -548,10 +525,9 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.NoError(t, err)
 		})
 		t.Run("ByID", func(t *testing.T) {
-			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-				apply.IDs = []string{ev.ID}
-			}))
-			require.NoError(t, err)
+			events := helperSelectEvents(t, db, model.Filter{
+				IDs: []string{ev.ID},
+			})
 			require.Len(t, events, 1)
 			t.Logf("event = %+v", events[0])
 			ok, err := events[0].CheckSignature()
@@ -559,10 +535,9 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.True(t, ok)
 		})
 		t.Run("ByMimeType", func(t *testing.T) {
-			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-				apply.Search = "images:true"
-			}))
-			require.NoError(t, err)
+			events := helperSelectEvents(t, db, model.Filter{
+				Search: "images:true",
+			})
 			require.Len(t, events, 1)
 			t.Logf("event = %+v", events[0])
 			ok, err := events[0].CheckSignature()
@@ -594,10 +569,9 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.NoError(t, err)
 		})
 		t.Run("ByID", func(t *testing.T) {
-			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-				apply.IDs = []string{repostEvent.ID}
-			}))
-			require.NoError(t, err)
+			events := helperSelectEvents(t, db, model.Filter{
+				IDs: []string{repostEvent.ID},
+			})
 			require.Len(t, events, 1)
 			t.Logf("event = %+v", events[0])
 			ok, err := events[0].CheckSignature()
@@ -605,11 +579,10 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.True(t, ok)
 		})
 		t.Run("ByMimeType", func(t *testing.T) {
-			events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-				apply.Search = "images:true"
-				apply.Kinds = []int{nostr.KindRepost}
-			}))
-			require.NoError(t, err)
+			events := helperSelectEvents(t, db, model.Filter{
+				Search: "images:true",
+				Kinds:  []int{nostr.KindRepost},
+			})
 			require.Len(t, events, 1)
 			t.Logf("event = %+v", events[0])
 			require.Equal(t, repostEvent.ID, events[0].ID) // Should be the reposted event.
@@ -909,5 +882,40 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
 			mustBeOne(t, user2MessageIds[0])
 		})
+	})
+}
+
+func TestQueryReply(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("AddEvents", func(t *testing.T) {
+		var ev model.Event
+
+		ev.ID = "1"
+		ev.PubKey = "1pub"
+		ev.Kind = nostr.KindTextNote
+		ev.CreatedAt = 1
+		ev.Content = "hello world"
+		ev.Tags = model.Tags{{"e", "event1", "", "reply"}}
+
+		var ev2 model.Event
+		ev2.ID = "2"
+		ev2.PubKey = "2pub"
+		ev2.Kind = nostr.KindTextNote
+		ev2.CreatedAt = 2
+		ev2.Content = "hello world 2"
+		ev2.Tags = model.Tags{{"e", "event2", "", "root"}}
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev, &ev2))
+	})
+	t.Run("Filter", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Tags: model.TagMap{}.
+				Set("e", nil, nil, model.PointerOf("reply")).
+				Append("e", nil, nil, model.PointerOf("root")),
+		})
+		require.Len(t, events, 2)
 	})
 }

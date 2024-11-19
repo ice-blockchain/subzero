@@ -20,21 +20,27 @@ func ParseMessage(message []byte) (e nostr.Envelope, err error) {
 		return nil, ErrUnknownMessage
 	}
 
-	if bytes.Contains(message[:firstComma], []byte("EVENT")) {
-		var eventEnvelope EventEnvelope
+	label := message[0:firstComma]
+	switch {
+	case bytes.Contains(label, []byte("EVENT")):
+		e = &EventEnvelope{}
 
-		if err = eventEnvelope.UnmarshalJSON(message); err != nil {
-			return nil, errors.Wrap(err, "unmarshal event envelope")
-		}
+	case bytes.Contains(label, []byte("REQ")):
+		e = &ReqEnvelope{}
 
-		e = &eventEnvelope
-	} else {
+	case bytes.Contains(label, []byte("COUNT")):
+		e = &CountEnvelope{}
+
+	default:
 		// Passthrough to the original implementation.
 		e = nostr.ParseMessage(message)
+		if e == nil {
+			err = ErrParseMessage
+		}
 	}
 
-	if e == nil {
-		err = ErrParseMessage
+	if err := e.UnmarshalJSON(message); err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal %q envelope", string(label))
 	}
 
 	return e, err

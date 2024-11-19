@@ -109,9 +109,8 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 			for range rand.Intn(3) {
 				values = append(values, generateHexString())
 			}
-			m := model.TagMap{
-				"e": values,
-			}
+			m := model.TagMap{}.SetLiterals("e", values...)
+
 			value.Set(reflect.ValueOf(m))
 
 		case "Limit":

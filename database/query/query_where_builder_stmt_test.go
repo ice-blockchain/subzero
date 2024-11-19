@@ -134,9 +134,8 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 	t.Run("OneTag", func(t *testing.T) {
 		q, params, err := newWhereBuilder().Build(helperNewFilter(func(apply *model.Filter) {
 			apply.IDs = []string{"123"}
-			apply.Tags = model.TagMap{
-				"#e": {"value1", "value2", "value3", "value4"},
-			}
+			apply.Tags = model.TagMap{}.
+				SetLiterals("e", "value1", "value2", "value3", "value4")
 		}))
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.NoError(t, err)
@@ -152,10 +151,9 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 
 		q, params, err := newWhereBuilder().Build(helperNewFilter(func(apply *model.Filter) {
 			apply.IDs = []string{"123"}
-			apply.Tags = model.TagMap{
-				"#e": {"value1", "value2", "value3", generateRandomString(4)},
-				"#p": valuesMax,
-			}
+			apply.Tags = model.TagMap{}.
+				SetLiterals("e", "value1", "value2", "value3", generateRandomString(4)).
+				SetLiterals("p", valuesMax...)
 		}))
 
 		require.NoError(t, err)
@@ -173,11 +171,13 @@ func TestWhereBuilderMulti(t *testing.T) {
 	filters := []model.Filter{
 		helperNewFilter(func(apply *model.Filter) {
 			apply.IDs = []string{"123"}
-			apply.Tags = model.TagMap{"#e": {"value1", "value2", "value3", "value4"}}
+			apply.Tags = model.TagMap{}.
+				SetLiterals("e", "value1", "value2", "value3", "value4")
 		}),
 		helperNewFilter(func(apply *model.Filter) {
 			apply.IDs = []string{"456"}
-			apply.Tags = model.TagMap{"#d": {"value1", "value2", "value3", "value4"}}
+			apply.Tags = model.TagMap{}.
+				SetLiterals("d", "value1", "value2", "value3", "value4")
 			apply.Until = &ts2
 		}),
 		helperNewFilter(func(apply *model.Filter) {
@@ -199,10 +199,12 @@ func TestWhereBuilderMultiTagsOnly(t *testing.T) {
 
 	filters := []model.Filter{
 		helperNewFilter(func(apply *model.Filter) {
-			apply.Tags = model.TagMap{"#e": {"value1", generateRandomString(3), "value3", "value4"}}
+			apply.Tags = model.TagMap{}.
+				SetLiterals("e", "value1", generateRandomString(3), "value3", "value4")
 		}),
 		helperNewFilter(func(apply *model.Filter) {
-			apply.Tags = model.TagMap{"#d": {"value1", "value2", generateRandomString(4), generateRandomString(4)}}
+			apply.Tags = model.TagMap{}.
+				SetLiterals("d", "value1", "value2", generateRandomString(4), generateRandomString(4))
 		}),
 	}
 

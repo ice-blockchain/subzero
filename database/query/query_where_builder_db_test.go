@@ -239,20 +239,14 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
-	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-		Filters: model.Filters{
-			helperNewFilter(func(apply *model.Filter) {
-				apply.Authors = []string{
-					ev.Random(t).PubKey,
-					ev.Random(t).PubKey,
-				}
-			}),
-			helperNewFilter(func(apply *model.Filter) {
-				apply.Authors = []string{ev.Random(t).PubKey}
-			}),
+	events := helperSelectEvents(t, db,
+		model.Filter{
+			Authors: []string{ev.Random(t).PubKey, ev.Random(t).PubKey},
 		},
-	})
-	require.NoError(t, err)
+		model.Filter{
+			Authors: []string{ev.Random(t).PubKey},
+		},
+	)
 	require.Len(t, events, 3)
 }
 
@@ -261,17 +255,14 @@ func TestWhereBuilderByID(t *testing.T) {
 
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
-	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-		Filters: model.Filters{
-			helperNewFilter(func(apply *model.Filter) {
-				apply.IDs = []string{ev.Random(t).ID}
-			}),
-			helperNewFilter(func(apply *model.Filter) {
-				apply.IDs = []string{ev.Random(t).ID}
-			}),
+	events := helperSelectEvents(t, db,
+		model.Filter{
+			IDs: []string{ev.Random(t).ID},
 		},
-	})
-	require.NoError(t, err)
+		model.Filter{
+			IDs: []string{ev.Random(t).ID},
+		},
+	)
 	require.Len(t, events, 2)
 }
 
@@ -282,23 +273,20 @@ func TestWhereBuilderByMany(t *testing.T) {
 	defer db.Close()
 	ev1 := ev.Random(t)
 	ev2 := ev.Random(t)
-	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-		Filters: model.Filters{
-			helperNewFilter(func(apply *model.Filter) {
-				apply.IDs = []string{ev1.ID, "bar"}
-				apply.Authors = []string{ev1.PubKey, "fooo"}
-				apply.Kinds = []int{ev1.Kind}
-			}),
-			helperNewFilter(func(apply *model.Filter) {
-				apply.IDs = []string{ev2.ID, "123"}
-				apply.Authors = []string{ev2.PubKey}
-				apply.Kinds = []int{ev2.Kind, 1, 2, 3}
-				apply.Since = &ev2.CreatedAt
-				apply.Until = &ev2.CreatedAt
-			}),
+	events := helperSelectEvents(t, db,
+		model.Filter{
+			IDs:     []string{ev1.ID, "bar"},
+			Authors: []string{ev1.PubKey, "fooo"},
+			Kinds:   []int{ev1.Kind},
 		},
-	})
-	require.NoError(t, err)
+		model.Filter{
+			IDs:     []string{ev2.ID, "123"},
+			Authors: []string{ev2.PubKey},
+			Kinds:   []int{ev2.Kind, 1, 2, 3},
+			Since:   &ev2.CreatedAt,
+			Until:   &ev2.CreatedAt,
+		},
+	)
 	require.Len(t, events, 2)
 }
 
@@ -311,31 +299,17 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 	filter := helperNewFilter(func(apply *model.Filter) {
 		apply.IDs = []string{event.ID}
 		apply.Authors = []string{event.PubKey}
-		apply.Tags = model.TagMap{
-			"#e": nil,
-			"#p": nil,
-			"#d": nil,
-		}
 	})
 
 	t.Run("Something", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-			Filters: model.Filters{filter},
-		})
-		require.NoError(t, err)
+		events := helperSelectEvents(t, db, filter)
 		require.Len(t, events, 1)
 	})
 
 	t.Run("Nothing", func(t *testing.T) {
-		x := filter
-
 		// Add additional tag to the filter, so query will return no results because all 4 tags MUST be present.
-		x.Tags["#x"] = nil
-
-		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-			Filters: model.Filters{filter},
-		})
-		require.NoError(t, err)
+		filter.Tags = model.TagMap{}.Set("x")
+		events := helperSelectEvents(t, db, filter)
 		require.Empty(t, events)
 	})
 }
@@ -362,27 +336,19 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 
 	filter := helperNewFilter(func(apply *model.Filter) {
 		apply.IDs = []string{"1"}
-		apply.Tags = model.TagMap{
-			"e": {"etag"},
-			"p": {"ptag"},
-			"d": {"dtag"},
-		}
+		apply.Tags = model.TagMap{}.
+			SetLiterals("e", "etag").
+			SetLiterals("p", "ptag").
+			SetLiterals("d", "dtag")
 	})
 
 	t.Run("Match", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-			Filters: model.Filters{filter},
-		})
-		require.NoError(t, err)
+		events := helperSelectEvents(t, db, filter)
 		require.Len(t, events, 1)
 	})
 	t.Run("Empty", func(t *testing.T) {
-		filter.Tags["e"] = append(filter.Tags["e"], "fooo") // Add 4th value to the tag list, so query will return no results.
-
-		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-			Filters: model.Filters{filter},
-		})
-		require.NoError(t, err)
+		filter.Tags.SetLiterals("x") // Add 4th tag, so query will return no results.
+		events := helperSelectEvents(t, db, filter)
 		require.Empty(t, events)
 	})
 }
@@ -395,25 +361,16 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 	event := ev.Random(t)
 
 	filter := helperNewFilter(func(apply *model.Filter) {
-		apply.Tags = model.TagMap{
-			event.Tags[0][0]: event.Tags[0][1:],
-		}
+		apply.Tags = model.TagMap{}.SetLiterals(event.Tags[0][0], event.Tags[0][1:]...)
 	})
 
 	t.Run("Match", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-			Filters: model.Filters{filter},
-		})
-		require.NoError(t, err)
+		events := helperSelectEvents(t, db, filter)
 		require.Len(t, events, 1)
 	})
 	t.Run("Empty", func(t *testing.T) {
-		filter.Tags["#d"] = append(filter.Tags["#d"], "fooo") // Add 3rd value to the tag list, so query will return no results.
-
-		events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-			Filters: model.Filters{filter},
-		})
-		require.NoError(t, err)
+		filter.Tags.SetLiterals("x") // Add 3rd value to the tag list, so query will return no results.
+		events := helperSelectEvents(t, db, filter)
 		require.Empty(t, events)
 	})
 }
@@ -447,21 +404,14 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	events, err := helperGetStoredEventsAll(t, db, context.Background(), &model.Subscription{
-		Filters: model.Filters{
-			helperNewFilter(func(apply *model.Filter) {
-				apply.Tags = model.TagMap{
-					"e": {"etag"},
-				}
-			}),
-			helperNewFilter(func(apply *model.Filter) {
-				apply.Tags = model.TagMap{
-					"p": {"ptag"},
-				}
-			}),
+	events := helperSelectEvents(t, db,
+		model.Filter{
+			Tags: model.TagMap{}.SetLiterals("e", "etag"),
 		},
-	})
-	require.NoError(t, err)
+		model.Filter{
+			Tags: model.TagMap{}.SetLiterals("p", "ptag"),
+		},
+	)
 	require.Len(t, events, 2)
 }
 

@@ -3,8 +3,6 @@
 package dvm
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -12,53 +10,6 @@ import (
 
 	"github.com/ice-blockchain/subzero/model"
 )
-
-func TestParseListOfFilters(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name        string
-		content     string
-		expectedErr error
-	}{
-		{
-			name:        "empty",
-			content:     `[]`,
-			expectedErr: nil,
-		},
-		{
-			name:        "one filter",
-			content:     `[{"#e":["7b0d90f1973da1cea186c85fbd09b3e4e455ce4d438b60a3d1f9aabc1681418f"],"#kinds":["7"]}]`,
-			expectedErr: nil,
-		},
-		{
-			name:        "two filters",
-			content:     `[{"#e":["7b0d90f1973da1cea186c85fbd09b3e4e455ce4d438b60a3d1f9aabc1681418f"],"#kinds":["7"]},{"#e":["7b0d90f1973da1cea186c85fbd09b3e4e455ce4d438b60a3d1f9aabc1681418f"],"#kinds":["10"]}]`,
-			expectedErr: nil,
-		},
-		{
-			name:        "another tag filter",
-			content:     `[{"#title":["dummy"],"#kinds":["30021"]}]`,
-			expectedErr: nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseListOfFilters(tt.content)
-			require.Equal(t, err, tt.expectedErr)
-
-			if tt.expectedErr == nil {
-				var filters []string
-				for _, f := range result {
-					filters = append(filters, f.String())
-				}
-				actual := fmt.Sprintf("[%v]", strings.Join(filters, ","))
-				require.Equal(t, actual, tt.content)
-			}
-		})
-	}
-}
 
 func TestCountBasedOnGroups(t *testing.T) {
 	t.Parallel()

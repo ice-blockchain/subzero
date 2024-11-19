@@ -86,10 +86,7 @@ func TestIteratorScanTagsWithGaps(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 	})
 	t.Run("Select", func(t *testing.T) {
-		events, err := helperGetStoredEventsAll(t, db, context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-		}))
-		require.NoError(t, err)
+		events := helperSelectEvents(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Len(t, events, 1)
 
 		ev := events[0]

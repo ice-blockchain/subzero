@@ -101,7 +101,7 @@ func (h *handler) notifyListenersAboutNewEvents(events ...*model.Event) error {
 	for writer, subs := range h.subListeners {
 		for _, sub := range subs {
 			for eventIdx := range events {
-				if sub.Filters.Match(&events[eventIdx].Event) {
+				if sub.Filters.Match(events[eventIdx]) {
 					err = multierror.Append(
 						err,
 						h.writeResponse(writer, &model.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*model.Event{events[eventIdx]}}),
@@ -135,7 +135,7 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 	return nil
 }
 
-func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
+func (h *handler) handleCount(ctx context.Context, envelope *model.CountEnvelope) error {
 	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
 	if err != nil {
 		return errors.Wrap(err, "failed to count events")

@@ -82,7 +82,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 	return string(res), nil
 }
 
-func (n *nostrEventCountJob) doCount(ctx context.Context, filters []nostr.Filter, queryRelays []*nostr.Relay) (count int64, err error) {
+func (n *nostrEventCountJob) doCount(ctx context.Context, filters model.Filters, queryRelays []*nostr.Relay) (count int64, err error) {
 	if len(queryRelays) == 0 {
 		count, err = query.CountEvents(ctx, &model.Subscription{Filters: filters})
 		if err != nil {
@@ -92,7 +92,7 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, filters []nostr.Filter
 		return count, nil
 	}
 	for _, relay := range queryRelays {
-		queriedCount, err := relay.Count(ctx, filters)
+		queriedCount, err := relay.Count(ctx, filters.ToNostr())
 		if err != nil {
 			log.Printf("online, can't get events from relay %v: %v", relay.URL, err)
 
@@ -105,7 +105,7 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, filters []nostr.Filter
 	return count, nil
 }
 
-func (n *nostrEventCountJob) doQuery(ctx context.Context, filters []nostr.Filter, queryRelays []*nostr.Relay) (events []*nostr.Event, err error) {
+func (n *nostrEventCountJob) doQuery(ctx context.Context, filters model.Filters, queryRelays []*nostr.Relay) (events []*nostr.Event, err error) {
 	evList := make([]*nostr.Event, 0)
 	if len(queryRelays) == 0 {
 		evIt := query.GetStoredEvents(ctx, &model.Subscription{Filters: filters})
@@ -116,8 +116,9 @@ func (n *nostrEventCountJob) doQuery(ctx context.Context, filters []nostr.Filter
 			evList = append(evList, &ev.Event)
 		}
 	}
+	nostrFilters := filters.ToNostr()
 	for _, relay := range queryRelays {
-		for _, filter := range filters {
+		for _, filter := range nostrFilters {
 			evs, err := relay.QueryEvents(ctx, filter)
 			if err != nil {
 				log.Printf("online, can't get events from relay %v: %v", relay.URL, err)
@@ -155,13 +156,12 @@ func (n *nostrEventCountJob) IsBidAmountEnough(amount string) bool {
 	return true
 }
 
-func parseListOfFilters(content string) (result []nostr.Filter, err error) {
-	var filter []nostr.Filter
-	if err := json.Unmarshal([]byte(content), &filter); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse filters: %v", content)
+func parseListOfFilters(content string) (result model.Filters, err error) {
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		err = errors.Wrapf(err, "failed to parse filters: %v", content)
 	}
 
-	return filter, nil
+	return
 }
 
 func countBasedOnGroups(evList []*nostr.Event, groups []string) map[string]uint64 {
