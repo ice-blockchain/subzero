@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -395,6 +396,7 @@ func TestPublishingEvents(t *testing.T) {
 		Tags:      nil,
 		Content:   "validEvent",
 	}}
+
 	t.Run("valid event", func(t *testing.T) {
 		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
@@ -489,9 +491,33 @@ func TestPublishingEvents(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, validKind03Event, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind03Event.Event))
 	})
-
+	master := "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
+	userPubKey, _ := nostr.GetPublicKey(privkey)
+	masterPubKey, _ := nostr.GetPublicKey(master)
+	attestationEvent := &model.Event{Event: nostr.Event{
+		Kind:      model.CustomIONKindAttestation,
+		CreatedAt: 1,
+		Tags: model.Tags{
+			{model.TagAttestationName, userPubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+		},
+	}}
+	t.Run("create on-behalf attestations", func(t *testing.T) {
+		attestationEvent.SetExtra("extra", "subzero")
+		helperSignWithMinLeadingZeroBits(t, attestationEvent, privkey)
+		require.NoError(t, relay.Publish(ctx, attestationEvent.Event))
+	})
+	onBehalfEvent := *validEvent
+	onBehalfEvent.Tags = nostr.Tags{
+		{model.CustomIONTagOnBehalfOf, masterPubKey},
+	}
+	onBehalfEvent.SetExtra("extra", "subzero")
+	t.Run("valid on behalf event", func(t *testing.T) {
+		helperSignWithMinLeadingZeroBits(t, &onBehalfEvent, privkey)
+		require.NoError(t, onBehalfEvent.Sign(privkey))
+		require.NoError(t, relay.Publish(ctx, onBehalfEvent.Event))
+	})
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validEvent, validKind03Event}, storedEvents)
+	require.Equal(t, []*model.Event{validEvent, validKind03Event, attestationEvent, &onBehalfEvent}, storedEvents)
 }
 
 func TestPublishingNIP09Events(t *testing.T) {
