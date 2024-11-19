@@ -4,6 +4,8 @@ package server
 
 import (
 	"context"
+	"github.com/gin-gonic/gin"
+	"net/http"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	httpserver "github.com/ice-blockchain/subzero/server/http"
@@ -45,5 +47,9 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).
 		DELETE("/files/:file", uploader.Delete()).
-		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info())
+		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info()).
+		GET("/health-check", func(c *gin.Context) {
+			c.JSON(http.StatusOK, map[string]any{})
+			return
+		})
 }
