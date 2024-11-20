@@ -96,7 +96,7 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, filters model.Filters,
 		return count, nil
 	}
 	for _, relay := range queryRelays {
-		queriedCount, err := relay.Count(ctx, filters.ToNostr())
+		queriedCount, err := relay.Count(ctx, filters)
 		if err != nil {
 			log.Printf("online, can't get events from relay %v: %v", relay.URL, err)
 
@@ -120,9 +120,9 @@ func (n *nostrEventCountJob) doQuery(ctx context.Context, filters model.Filters,
 			evList = append(evList, &ev.Event)
 		}
 	}
-	nostrFilters := filters.ToNostr()
+
 	for _, relay := range queryRelays {
-		for _, filter := range nostrFilters {
+		for _, filter := range filters {
 			evs, err := relay.QueryEvents(ctx, filter)
 			if err != nil {
 				log.Printf("online, can't get events from relay %v: %v", relay.URL, err)

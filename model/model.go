@@ -11,7 +11,11 @@ import (
 type (
 	Tag          = nostr.Tag
 	Tags         = nostr.Tags
+	TagMap       = nostr.TagMap
+	TagValues    = nostr.TagValues
 	Timestamp    = nostr.Timestamp
+	Filter       = nostr.Filter
+	Filters      = nostr.Filters
 	Kind         = int
 	Subscription struct {
 		Filters Filters

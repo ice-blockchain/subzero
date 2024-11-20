@@ -96,7 +96,6 @@ func TestRelaySubscription(t *testing.T) {
 			Sig:       uuid.NewString(),
 		},
 	}
-	ev.SetExtra("extra", "subzero")
 	helperSignWithMinLeadingZeroBits(t, ev, privkey)
 	eventsQueue = append(eventsQueue, ev)
 
@@ -104,7 +103,7 @@ func TestRelaySubscription(t *testing.T) {
 		events := make([]*model.Event, 0, len(eventsQueue))
 		for _, ev := range eventsQueue {
 			for _, f := range subscription.Filters {
-				if f.Matches(ev) {
+				if f.Matches(&ev.Event) {
 					events = append(events, ev)
 				}
 			}
@@ -168,7 +167,6 @@ func TestRelaySubscription(t *testing.T) {
 			Content:   "realtime event matching filter" + uuid.NewString(),
 		},
 	})
-	eventsQueue[len(eventsQueue)-1].SetExtra("extra", "subzero")
 	helperSignWithMinLeadingZeroBits(t, eventsQueue[len(eventsQueue)-1], privkey)
 	require.NoError(t, relay.Publish(ctx, eventsQueue[len(eventsQueue)-1].Event))
 
@@ -181,7 +179,6 @@ func TestRelaySubscription(t *testing.T) {
 	}}
 	eventsQueue = append(eventsQueue, eventBy3rdParty)
 	storedEvents = append(storedEvents, eventBy3rdParty)
-	eventsQueue[len(eventsQueue)-1].SetExtra("extra", "subzero")
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
@@ -195,7 +192,6 @@ func TestRelaySubscription(t *testing.T) {
 		Tags:      nostr.Tags{[]string{"e", repostedID, "relay"}, []string{"p", repostedPubkey}},
 		Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostedID, repostedPubkey),
 	}}
-	notMatchingEvent.SetExtra("extra", "subzero")
 	require.NoError(t, notMatchingEvent.Sign(privkey))
 	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, notMatchingEvent.Sign(privkey))
@@ -237,7 +233,6 @@ func TestRelaySubscription(t *testing.T) {
 		Tags:      nostr.Tags{},
 		Content:   "event matching replaced filter" + uuid.NewString(),
 	}}
-	eventMatchingReplacedSub.SetExtra("extra", "subzero")
 	helperSignWithMinLeadingZeroBits(t, eventMatchingReplacedSub, privkey)
 	require.NoError(t, relay.Publish(ctx, eventMatchingReplacedSub.Event))
 	eventsQueue = append(eventsQueue, eventMatchingReplacedSub)
@@ -307,7 +302,6 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Kind:    nostr.KindTextNote,
 		Content: "new realtime event",
 	}
-	newRealtimeEvent.SetExtra("extra", "subzero")
 	require.NoError(t, newRealtimeEvent.Sign(privkey))
 	tag, err := nip13.DoWork(ctx, newRealtimeEvent, NIP13MinLeadingZeroBits)
 	require.NoError(t, err)
@@ -398,7 +392,6 @@ func TestPublishingEvents(t *testing.T) {
 	}}
 
 	t.Run("valid event", func(t *testing.T) {
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
 	})
@@ -409,7 +402,6 @@ func TestPublishingEvents(t *testing.T) {
 			Tags:      nil,
 			Content:   "invalid kind id event",
 		}}
-		invalidKindEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, &invalidKindEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKindEvent.Event))
 
@@ -425,7 +417,6 @@ func TestPublishingEvents(t *testing.T) {
 			Tags:      nil,
 			Content:   "invalidID",
 		}}
-		invalidID.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, &invalidID, privkey)
 		invalidID.ID = uuid.NewString()
 		require.Error(t, relay.Publish(ctx, invalidID.Event))
@@ -439,7 +430,6 @@ func TestPublishingEvents(t *testing.T) {
 			Sig:       uuid.NewString(),
 			PubKey:    uuid.NewString(),
 		}}
-		invalidSignature.SetExtra("extra", "subzero")
 		require.NoError(t, invalidSignature.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 		require.Error(t, relay.Publish(ctx, invalidSignature.Event))
 	})
@@ -465,7 +455,6 @@ func TestPublishingEvents(t *testing.T) {
 			Kind:      nostr.KindFollowList,
 			Tags:      nil,
 		}}
-		inValidKind03Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, inValidKind03Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
 	})
@@ -476,7 +465,6 @@ func TestPublishingEvents(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"p"}, []string{"p"}},
 			Content:   "invalidEvent",
 		}}
-		inValidKind03Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, inValidKind03Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
 	})
@@ -487,7 +475,6 @@ func TestPublishingEvents(t *testing.T) {
 			Kind:      nostr.KindFollowList,
 			Tags:      nostr.Tags{[]string{"p", "wss://alicerelay.com/", "alice"}, []string{"p", "wss://bobrelay.com/nostr", "bob"}},
 		}}
-		validKind03Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validKind03Event, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind03Event.Event))
 	})
@@ -502,7 +489,6 @@ func TestPublishingEvents(t *testing.T) {
 		},
 	}}
 	t.Run("create on-behalf attestations", func(t *testing.T) {
-		attestationEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, attestationEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, attestationEvent.Event))
 	})
@@ -510,7 +496,6 @@ func TestPublishingEvents(t *testing.T) {
 	onBehalfEvent.Tags = nostr.Tags{
 		{model.CustomIONTagOnBehalfOf, masterPubKey},
 	}
-	onBehalfEvent.SetExtra("extra", "subzero")
 	t.Run("valid on behalf event", func(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &onBehalfEvent, privkey)
 		require.NoError(t, onBehalfEvent.Sign(privkey))
@@ -538,7 +523,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Deletion reason",
 		}}
-		validEventNIP09WithEKTags.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventNIP09WithEKTags, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNIP09WithEKTags.Event))
 	})
@@ -553,7 +537,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Deletion reason",
 		}}
-		validEventNIP09AllTags.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventNIP09AllTags, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNIP09AllTags.Event))
 	})
@@ -565,7 +548,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Deletion reason",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -578,7 +560,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Deletion reason",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -591,7 +572,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Deletion reason",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -613,7 +593,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e"}},
 		}}
-		inValidKind01Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -624,7 +603,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "invalid marker"}},
 		}}
-		inValidKind01Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -634,7 +612,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}},
 		}}
-		inValidKind01Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -644,7 +621,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p"}},
 		}}
-		inValidKind01Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
 	})
@@ -656,7 +632,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}},
 		}}
-		validKind01NIP10Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validKind01NIP10Event, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind01NIP10Event.Event))
 	})
@@ -682,7 +657,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", pubKeyOfRepostedNote}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		validKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validKind06NIP18Event, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind06NIP18Event.Event))
 	})
@@ -695,7 +669,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"p", pubKeyOfRepostedNote}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -708,7 +681,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -721,7 +693,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID}, []string{"p", pubKeyOfRepostedNote}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -734,7 +705,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -747,7 +717,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", "wrong pubkey"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -760,7 +729,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", "wrong pubkey"}},
 			Content:   fmt.Sprintf(`{"kind":16,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -773,7 +741,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", "wrong id value", "relay"}, []string{"p", "wrong pubkey"}},
 			Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind06NIP18Event.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind06NIP18Event, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind06NIP18Event.Event))
 	})
@@ -789,7 +756,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
 			Content:   fmt.Sprintf(`{"kind":%v,"id":"%v","pubkey":"%v"}`, repostedKind, repostID, pubKeyOfRepostedNote),
 		}}
-		validKind16NIP18GenericRepostEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validKind16NIP18GenericRepostEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind16NIP18GenericRepostEvent.Event))
 	})
@@ -804,7 +770,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 			Tags:      nostr.Tags{[]string{"e", repostID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", "invalid k tag kind"}},
 			Content:   fmt.Sprintf(`{"kind":%v,"id":"%v","pubkey":"%v"}`, repostedKind, repostID, pubKeyOfRepostedNote),
 		}}
-		invalidKind16NIP18GenericRepostEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidKind16NIP18GenericRepostEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidKind16NIP18GenericRepostEvent.Event))
 	})
@@ -835,7 +800,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
 		}}
-		validEventKindArticle.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventKindArticle, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventKindArticle.Event))
 	})
@@ -853,7 +817,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
 		}}
-		validEventKindBlogPost.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventKindBlogPost, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventKindBlogPost.Event))
 	})
@@ -866,7 +829,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
 		}}
-		validEventNoTagsKindArticle.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventNoTagsKindArticle, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNoTagsKindArticle.Event))
 	})
@@ -887,7 +849,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -915,7 +876,6 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			Tags:      tags,
 			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
 		}}
-		validEventNIP01.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventNIP01, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNIP01.Event))
 	})
@@ -931,7 +891,6 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			Tags:      tags,
 			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg","display_name":"qqq","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
 		}}
-		validEventNIP24.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEventNIP24, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNIP24.Event))
 	})
@@ -947,7 +906,6 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			Tags:      tags,
 			Content:   `{"display_name":"qqq","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -963,7 +921,6 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			Tags:      tags,
 			Content:   `plain text`,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -980,7 +937,6 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			Tags:      tags,
 			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1009,7 +965,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "+",
 		}}
-		validUpvoteEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validUpvoteEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validUpvoteEvent.Event))
 	})
@@ -1024,7 +979,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 		}}
-		validUpvoteEmptyContentEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validUpvoteEmptyContentEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validUpvoteEmptyContentEvent.Event))
 	})
@@ -1040,7 +994,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "-",
 		}}
-		validDownvoteEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validDownvoteEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validDownvoteEvent.Event))
 	})
@@ -1053,7 +1006,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "+",
 		}}
-		validReactionToWebsiteEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validReactionToWebsiteEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validReactionToWebsiteEvent.Event))
 	})
@@ -1068,7 +1020,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "+",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1083,7 +1034,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "+",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1099,7 +1049,6 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "+",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1127,7 +1076,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		validLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validLabelingEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validLabelingEvent.Event))
 	})
@@ -1141,7 +1089,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		validUGCLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validUGCLabelingEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validUGCLabelingEvent.Event))
 	})
@@ -1155,7 +1102,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		invalidLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidLabelingEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1169,7 +1115,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		invalidLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidLabelingEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1184,7 +1129,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		invalidLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidLabelingEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1199,7 +1143,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		invalidLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidLabelingEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1213,7 +1156,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		invalidLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidLabelingEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1228,7 +1170,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Tags:      tags,
 			Content:   "Some label long description",
 		}}
-		invalidLabelingEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidLabelingEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidLabelingEvent.Event))
 	})
@@ -1238,7 +1179,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}, []string{"l", "permies", "#t"}, []string{"L", "#a"}},
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1249,7 +1189,6 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}, []string{"l", "permies", "#t"}, []string{"L", "#t"}},
 		}}
-		validKind01EventWithLabels.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validKind01EventWithLabels, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind01EventWithLabels.Event))
 	})
@@ -1275,7 +1214,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		validReportEventWithPTagOnly.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validReportEventWithPTagOnly, privkey)
 		require.NoError(t, relay.Publish(ctx, validReportEventWithPTagOnly.Event))
 	})
@@ -1290,7 +1228,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		validReportEventWithBothTags.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validReportEventWithBothTags, privkey)
 		require.NoError(t, relay.Publish(ctx, validReportEventWithBothTags.Event))
 	})
@@ -1307,7 +1244,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		validReportEventWithLabel.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validReportEventWithLabel, privkey)
 		require.NoError(t, relay.Publish(ctx, validReportEventWithLabel.Event))
 	})
@@ -1320,7 +1256,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1334,7 +1269,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1347,7 +1281,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1361,7 +1294,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1375,7 +1307,6 @@ func TestPublishingNIP56(t *testing.T) {
 			Tags:      tags,
 			Content:   "Report description",
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1404,7 +1335,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
-		validBadgeDefinitionEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validBadgeDefinitionEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validBadgeDefinitionEvent.Event))
 	})
@@ -1418,7 +1348,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
-		validBadgeAwardEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validBadgeAwardEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validBadgeAwardEvent.Event))
 	})
@@ -1434,7 +1363,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
-		validProfileBadgesEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validProfileBadgesEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validProfileBadgesEvent.Event))
 	})
@@ -1450,7 +1378,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1466,7 +1393,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1478,7 +1404,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1491,7 +1416,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1503,7 +1427,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1519,7 +1442,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1533,7 +1455,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1548,7 +1469,6 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1576,7 +1496,6 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
-		validRelayListEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validRelayListEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validRelayListEvent.Event))
 	})
@@ -1592,7 +1511,6 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1608,7 +1526,6 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1624,7 +1541,6 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1651,7 +1567,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindMuteList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1668,7 +1583,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindMuteList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1680,7 +1594,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindPinList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1694,7 +1607,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindPinList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1710,7 +1622,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindBookmarkList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1727,7 +1638,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindBookmarkList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1743,7 +1653,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindBookmarkList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1755,7 +1664,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCommunityList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1769,7 +1677,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCommunityList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1781,7 +1688,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCommunityList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1793,7 +1699,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindPublicChatList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1807,7 +1712,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindPublicChatList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1819,7 +1723,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindBlockedRelayList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1833,7 +1736,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindBlockedRelayList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1845,7 +1747,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindSearchRelayList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1859,7 +1760,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindSearchRelayList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1871,7 +1771,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindSimpleGroupList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1885,7 +1784,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindSimpleGroupList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1898,7 +1796,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindInterestList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1913,7 +1810,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindInterestList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1927,7 +1823,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindInterestList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1941,7 +1836,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindEmojiList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1956,7 +1850,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindEmojiList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1969,7 +1862,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindEmojiList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -1981,7 +1873,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindDMRelayList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -1995,7 +1886,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindDMRelayList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2007,7 +1897,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindGoodWikiAuthorList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2021,7 +1910,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindGoodWikiAuthorList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2033,7 +1921,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindGoodWikiRelayList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2047,7 +1934,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindGoodWikiRelayList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2063,7 +1949,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2081,7 +1966,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2097,7 +1981,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindRelaySets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2115,7 +1998,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2134,7 +2016,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindBookmarkSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2155,7 +2036,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2174,7 +2054,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2191,7 +2070,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCuratedSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2210,7 +2088,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCuratedSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2228,7 +2105,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCuratedSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2244,7 +2120,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCuratedVideoSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2262,7 +2137,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCuratedVideoSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
+		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2279,7 +2154,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindCuratedVideoSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2295,7 +2169,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindMuteSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2313,7 +2186,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindMuteSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2329,7 +2201,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindInterestSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2347,7 +2218,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindInterestSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2363,7 +2233,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindEmojiSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2381,7 +2250,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindEmojiSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2399,7 +2267,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindReleaseArtifactSets,
 			Tags:      tags,
 		}}
-		validEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, validEvent, privkey)
 		validEvents = append(validEvents, validEvent)
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
@@ -2419,7 +2286,6 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 			Kind:      nostr.KindReleaseArtifactSets,
 			Tags:      tags,
 		}}
-		invalidEvent.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
@@ -2493,7 +2359,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		validEvents = append(validEvents, ev)
@@ -2516,7 +2381,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
@@ -2531,7 +2395,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
@@ -2547,7 +2410,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
@@ -2568,7 +2430,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
@@ -2589,7 +2450,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
@@ -2610,7 +2470,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			Tags:      tags,
 			Content:   "dummy",
 		}}
-		ev.SetExtra("extra", "subzero")
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})

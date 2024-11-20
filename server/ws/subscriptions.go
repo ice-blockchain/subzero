@@ -25,7 +25,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 			if err != nil {
 				return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 			}
-			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event})
+			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})
 			if wErr != nil {
 				return errors.Wrapf(wErr, "failed to write event[%+v]", event)
 			}
@@ -101,10 +101,10 @@ func (h *handler) notifyListenersAboutNewEvents(events ...*model.Event) error {
 	for writer, subs := range h.subListeners {
 		for _, sub := range subs {
 			for eventIdx := range events {
-				if sub.Filters.Match(events[eventIdx]) {
+				if sub.Filters.Match(&events[eventIdx].Event) {
 					err = multierror.Append(
 						err,
-						h.writeResponse(writer, &model.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*model.Event{events[eventIdx]}}),
+						h.writeResponse(writer, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&events[eventIdx].Event}}),
 					)
 				}
 			}
@@ -135,7 +135,7 @@ func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID
 	return nil
 }
 
-func (h *handler) handleCount(ctx context.Context, envelope *model.CountEnvelope) error {
+func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
 	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
 	if err != nil {
 		return errors.Wrap(err, "failed to count events")

@@ -81,7 +81,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
-	input, err := model.ParseMessage(msgBytes)
+	input, err := nostr.ParseMessage(msgBytes)
 	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
@@ -90,8 +90,12 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	}
 
 	switch e := input.(type) {
-	case *model.EventEnvelope:
-		err = h.handleEvents(ctx, e.Events, cfg)
+	case *nostr.EventEnvelope:
+		var events []*model.Event
+		for i := range e.Events {
+			events = append(events, &model.Event{Event: *e.Events[i]})
+		}
+		err = h.handleEvents(ctx, events, cfg)
 		for i := range e.Events {
 			resp := &nostr.OKEnvelope{
 				EventID: e.Events[i].ID,
@@ -111,9 +115,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			}
 		}
 		return
-	case *model.ReqEnvelope:
+	case *nostr.ReqEnvelope:
 		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{Filters: e.Filters}, SubscriptionID: e.SubscriptionID})
-	case *model.CountEnvelope:
+	case *nostr.CountEnvelope:
 		err = h.handleCount(ctx, e)
 		if err != nil {
 			defer respWriter.Close()

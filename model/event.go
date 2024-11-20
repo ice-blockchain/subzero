@@ -199,3 +199,5 @@ func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 
 	return s[:j]
 }
+
+func PointerOf[T any](v T) *T { return &v }
