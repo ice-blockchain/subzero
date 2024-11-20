@@ -146,7 +146,7 @@ func (ef Filter) MatchesIgnoringTimestampConstraints(event *Event) bool {
 				if values[i][j] == nil {
 					continue
 				}
-				if j > len(eventTagValues) || *values[i][j] != eventTagValues[j] {
+				if j >= len(eventTagValues) || *values[i][j] != eventTagValues[j] {
 					return false
 				}
 			}

@@ -70,6 +70,16 @@ func TestFilterMatches(t *testing.T) {
 		},
 		{
 			Filter: Filter{
+				Tags: TagMap{}.SetLiterals("e", "1", "2", "3", "4"),
+			},
+			Event: Event{
+				Event: nostr.Event{
+					Tags: Tags{{"e", "1", "2", "3"}},
+				},
+			},
+		},
+		{
+			Filter: Filter{
 				Tags: TagMap{
 					"x": nil,
 				},
