@@ -40,7 +40,7 @@ func ParseMessage(message []byte) (e nostr.Envelope, err error) {
 	}
 
 	if err := e.UnmarshalJSON(message); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal %q envelope", string(label))
+		return nil, errors.Wrapf(err, "failed to unmarshal %q envelope", e.Label())
 	}
 
 	return e, err

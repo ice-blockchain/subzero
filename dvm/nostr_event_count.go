@@ -42,12 +42,16 @@ func newNostrEventCountJob(outputRelays []*nostr.Relay, privateKey string, relay
 
 func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (payload string, err error) {
 	const zeroResponse = "0"
+	var filters model.Filters
+
+	err = json.Unmarshal([]byte(e.Content), &filters)
+	if err != nil {
+		return zeroResponse, errors.Wrapf(err, "failed to parse filters: %v", e)
+	}
+
 	queryRelays := connectToRelays(ctx, collectRelayURLs(e), n.relayConnectTLS)
 	defer closeRelays(queryRelays)
-	filters, err := parseListOfFilters(e.Content)
-	if err != nil {
-		return zeroResponse, errors.Wrapf(err, "failed to call parseListOfFilters: %v", e)
-	}
+
 	var groups []string
 	for _, tag := range e.Tags {
 		if tag.Key() == "param" && tag.Value() == "group" {
@@ -154,14 +158,6 @@ func (n *nostrEventCountJob) IsBidAmountEnough(amount string) bool {
 	}
 
 	return true
-}
-
-func parseListOfFilters(content string) (result model.Filters, err error) {
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		err = errors.Wrapf(err, "failed to parse filters: %v", content)
-	}
-
-	return
 }
 
 func countBasedOnGroups(evList []*nostr.Event, groups []string) map[string]uint64 {
