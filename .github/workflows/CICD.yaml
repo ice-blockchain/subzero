@@ -196,7 +196,7 @@ jobs:
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
       - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && apt-get install -y libvips-dev ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
       - name: Test ${{ matrix.package }}
 #TODO enable coverage
         run: |
