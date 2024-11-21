@@ -108,14 +108,7 @@ func TestRelaySubscription(t *testing.T) {
 				}
 			}
 		}
-
-		return func(yield func(*model.Event, error) bool) {
-			for i := range events {
-				if !yield(events[i], nil) {
-					return
-				}
-			}
-		}
+		return helperNewIterator(t, events)
 	})
 
 	storedEvents := []*model.Event{eventsQueue[len(eventsQueue)-1]}
@@ -260,13 +253,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Content:   "db event",
 	}}}
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
-		return func(yield func(*model.Event, error) bool) {
-			for i := range storedEvents {
-				if !yield(storedEvents[i], nil) {
-					return
-				}
-			}
-		}
+		return helperNewIterator(t, storedEvents)
 	})
 	helperSignWithMinLeadingZeroBits(t, storedEvents[len(storedEvents)-1], privkey)
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
@@ -2476,4 +2463,110 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 
 	helperMustCloseRelay(t, relay)
 	require.Equal(t, validEvents, storedEvents)
+}
+
+func helperNewIterator[T any](t *testing.T, data []T) func(func(T, error) bool) {
+	t.Helper()
+
+	return func(yield func(T, error) bool) {
+		for i := range data {
+			if !yield(data[i], nil) {
+				return
+			}
+		}
+	}
+}
+
+func TestRelayMultiEventsAndFilter(t *testing.T) {
+	var generatedEvents []*nostr.Event
+
+	privkey := nostr.GeneratePrivateKey()
+	t.Run("Generate", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: 1,
+				Kind:      nostr.KindTextNote,
+				Tags: nostr.Tags{
+					{"e", "bar", "wss://example.com", "reply"},
+				},
+				Content: "content",
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		generatedEvents = append(generatedEvents, &ev.Event)
+
+		ev = &model.Event{
+			Event: nostr.Event{
+				CreatedAt: 2,
+				Kind:      nostr.KindTextNote,
+				Tags: nostr.Tags{
+					{"e", "bar", "wss://example.com", "root"},
+				},
+				Content: "content",
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		generatedEvents = append(generatedEvents, &ev.Event)
+	})
+
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		t.Logf("received events: %v", events)
+		err := query.AcceptEvents(ctx, events...)
+		require.NoError(t, err)
+		return err
+	})
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) query.EventIterator {
+		t.Logf("received subscription: %v", subscription)
+		return query.GetStoredEvents(ctx, subscription)
+	})
+
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	t.Run("Publish", func(t *testing.T) {
+		t.Logf("publishing %v event(s)", len(generatedEvents))
+		err := relay.PublishMany(context.Background(), generatedEvents...)
+		require.NoError(t, err)
+	})
+
+	sub, err := relay.Subscribe(context.Background(), []model.Filter{
+		{
+			Kinds: []int{nostr.KindTextNote},
+			Tags: model.TagMap{}.
+				Set("e", model.PointerOf("bar"), nil, model.PointerOf("reply")),
+		},
+	})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	var receivedEvents []*model.Event
+	{
+		t.Logf("subscribed to %v", sub.GetID())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ev := range sub.Events {
+				t.Logf("received event %v via sub", ev)
+				receivedEvents = append(receivedEvents, &model.Event{Event: *ev})
+			}
+		}()
+	}
+
+	select {
+	case <-sub.EndOfStoredEvents:
+		t.Logf("received EOS")
+
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timeout waiting for EOS")
+	}
+
+	sub.Close()
+	require.Empty(t, <-sub.ClosedReason)
+
+	// Want only one event that matches the filter.
+	require.Len(t, receivedEvents, 1)
+	require.Equal(t, generatedEvents[0], &receivedEvents[0].Event)
+
+	helperMustCloseRelay(t, relay)
+	wg.Wait()
 }
