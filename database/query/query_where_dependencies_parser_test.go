@@ -292,17 +292,14 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Equal(t, "t2id2", events[1].ID)
 		for _, ev := range events[2:] {
 			t.Logf("dvm event: %+v", ev)
-			require.Equal(t, model.KindDVMCount, ev.Kind)
-			require.Equal(t, "1", ev.Content)
-			require.Len(t, ev.Tags, 2)
+			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
+			require.Equal(t, `{"+":1}`, ev.Content)
+			require.Len(t, ev.Tags, 4)
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
 			require.Truef(t, valid, "signature is invalid: %+v", ev)
+			require.NotNil(t, ev.GetTag("request"))
 		}
-		require.Equal(t, "t2pk2", events[2].Tags[0].Value())
-		require.Equal(t, "t2id2", events[2].Tags[1].Value())
-		require.Equal(t, "t2pk2", events[3].Tags[0].Value())
-		require.Equal(t, "t2id3", events[3].Tags[1].Value())
 	})
 	t.Run("kind30008+profile_badges>kind30009>kind8", func(t *testing.T) {
 		var ev model.Event

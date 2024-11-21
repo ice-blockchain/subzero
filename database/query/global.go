@@ -24,6 +24,7 @@ type (
 	config struct {
 		URL        string `yaml:"url"`
 		PrivateKey string `yaml:"private-key"`
+		RelayURL   string `yaml:"relay-url"`
 	}
 )
 
@@ -31,7 +32,8 @@ func MustInit(ctx context.Context) {
 	globalDB.Once.Do(func() {
 		globalConfig = cfg.MustGet[config]()
 		globalDB.Client = openDatabase(globalConfig.URL, true).
-			WithPrivateKey(globalConfig.PrivateKey)
+			WithPrivateKey(globalConfig.PrivateKey).
+			WithRelayURL(globalConfig.RelayURL)
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go func() {

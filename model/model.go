@@ -41,7 +41,9 @@ var (
 const (
 	CustomIONKindAttestation       = 10_100
 	CustomIONKindRelayListMetadata = 20_002
-	KindDVMCount                   = 6400
+
+	KindDVMCountRequest  = 5400
+	KindDVMCountResponse = 6400
 )
 
 const (

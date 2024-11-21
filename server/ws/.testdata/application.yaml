@@ -67,3 +67,4 @@ dvm:
 database/query:
   url: ":memory:"
   private-key: *pk
+  relay-url: "wss://localhost"

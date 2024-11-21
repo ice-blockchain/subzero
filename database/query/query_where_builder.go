@@ -3,6 +3,7 @@
 package query
 
 import (
+	"cmp"
 	"log"
 	"slices"
 	"strconv"
@@ -518,23 +519,26 @@ func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, 
 }
 
 func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
-	if filter.Reduce.Kinds[0] == model.KindDVMCount {
+	if filter.Reduce.Kinds[0] == model.KindDVMCountResponse {
 		w.WriteString(`
 union all
 select
 	6400,
-	0,
+	unixepoch(),
 	0,
 	f.reference_id,
 	coalesce(evr.pubkey, ''),
 	coalesce(evr.master_pubkey, ''),
 	'',
-	cast(f.value as text) as content,
-	'',
-	'[]' as jtags
+	case when f.kind = 7 then json_object('+', f.value) else cast(f.value as text) end as content,
+	json_object('kind', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id)) as d_tag,
+	json_array(
+		json_array('output', 'JSON'),
+		json_array('param', 'group', :` + (filterID + "context") + `
+	)) as jtags
 from
 	event_counters f
-left join events evr on f.reference_id = evr.id
+inner join events evr on f.reference_id = evr.id
 where
 `)
 	} else {
@@ -651,18 +655,23 @@ group by e.pubkey, e.master_pubkey`)
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
 		w.WriteString(")) AND e.hidden=0")
 
-	case model.KindDVMCount:
+	case model.KindDVMCountResponse:
 		w.WriteString("f.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
+		w.addParam(filterID, "ftagname", "#e")
+		w.addParam(filterID, "fkind", filter.Start.Kind)
 		var refType string
 		switch {
 		case filter.Reduce.Tag == "q":
+			w.addParam(filterID, "ftagname", "#q")
+			w.addParam(filterID, "context", filter.Reduce.Tag)
 			refType = "quote"
 
 		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
-			// Empty.
+			w.addParam(filterID, "context", cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
 
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+			w.addParam(filterID, "context", filter.Reduce.Context)
 			refType = "reply"
 		}
 		w.WriteString(" AND f.reference_type = :")

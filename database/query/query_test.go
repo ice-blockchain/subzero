@@ -25,7 +25,8 @@ func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
 	return openDatabase(":memory:", true).
-		WithPrivateKey(nostr.GeneratePrivateKey())
+		WithPrivateKey(nostr.GeneratePrivateKey()).
+		WithRelayURL("wss://localhost")
 }
 
 func TestMain(m *testing.M) {

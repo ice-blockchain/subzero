@@ -20,6 +20,7 @@ type (
 	dbClient struct {
 		*sqlx.DB
 		relayPrivateKey string
+		relayURL        string
 		stmtCacheMx     *sync.RWMutex
 		stmtCache       map[string]*sqlx.NamedStmt
 	}
@@ -122,6 +123,12 @@ func openDatabase(target string, runDDL bool) *dbClient {
 	}
 
 	return client
+}
+
+func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
+	db.relayURL = relayURL
+
+	return db
 }
 
 func (db *dbClient) WithPrivateKey(privateKey string) *dbClient {

@@ -205,6 +205,33 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 	}
 }
 
+func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
+	if event.Sig != "" {
+		return event
+	}
+
+	switch event.Kind {
+	case model.CustomIONKindRelayListMetadata:
+		db.MustSignEvent(event)
+
+	case model.KindDVMCountResponse:
+		var ev databaseEvent
+		ev.Kind = model.KindDVMCountRequest
+		ev.CreatedAt = event.CreatedAt
+		ev.Content = event.Dtag
+		ev.Tags = append(event.Tags, model.Tag{"param", "relay", db.relayURL})
+		db.MustSignEvent(&ev)
+
+		event.Tags = model.Tags{
+			{"request", ev.String()},
+			{"e", ev.ID, db.relayURL},
+		}
+		db.MustSignEvent(event)
+	}
+
+	return event
+}
+
 func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
 	limit := int64(selectDefaultBatchLimit)
 	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
@@ -213,9 +240,9 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 	}
 
 	it := &eventIterator{
-		oneShot: hasLimitFilter && limit <= selectDefaultBatchLimit,
-		signer:  db,
-		fetch: func(pivot int64) (*sqlx.Rows, error) {
+		OneShot: hasLimitFilter && limit <= selectDefaultBatchLimit,
+		Map:     db.eventTransform,
+		Fetch: func(pivot int64) (*sqlx.Rows, error) {
 			if limit <= 0 {
 				return nil, nil
 			}
@@ -227,7 +254,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 
 			stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to prepare query sql: %q", sqlQuery)
+				return nil, errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
 			}
 
 			rows, err := stmt.QueryxContext(ctx, params)

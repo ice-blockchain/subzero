@@ -72,8 +72,8 @@ order by
 limit 1000`
 
 	it := &eventIterator{
-		oneShot: true,
-		fetch: func(int64) (*sqlx.Rows, error) {
+		OneShot: true,
+		Fetch: func(int64) (*sqlx.Rows, error) {
 			stmt, err := db.prepare(context.TODO(), stmt, hashSQL(stmt))
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to prepare query sql: %v", stmt)

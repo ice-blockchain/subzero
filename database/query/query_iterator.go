@@ -15,13 +15,10 @@ import (
 type EventIterator iter.Seq2[*model.Event, error]
 
 type (
-	eventSigner interface {
-		MustSignEvent(*databaseEvent)
-	}
 	eventIterator struct {
-		fetch   func(pivot int64) (*sqlx.Rows, error)
-		signer  eventSigner
-		oneShot bool
+		Fetch   func(pivot int64) (*sqlx.Rows, error)
+		Map     func(*databaseEvent) *databaseEvent
+		OneShot bool
 	}
 )
 
@@ -48,18 +45,11 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 		return nil, errors.Wrap(err, "failed to decode tags")
 	}
 
-	if ev.Sig == "" {
-		switch ev.Kind {
-		case model.KindDVMCount, model.CustomIONKindRelayListMetadata:
-			it.signer.MustSignEvent(&ev)
-		}
-	}
-
 	return &ev, nil
 }
 
 func (it *eventIterator) scanBatch(ctx context.Context, fn func(*model.Event) error, pivot int64) (int64, error) {
-	rows, err := it.fetch(pivot)
+	rows, err := it.Fetch(pivot)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed to get events")
 	} else if rows == nil {
@@ -75,6 +65,10 @@ func (it *eventIterator) scanBatch(ctx context.Context, fn func(*model.Event) er
 
 		if pivot == 0 || event.SystemCreatedAt < pivot {
 			pivot = event.SystemCreatedAt
+		}
+
+		if it.Map != nil {
+			event = it.Map(event)
 		}
 
 		err = fn(&event.Event)
@@ -95,7 +89,7 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 			return err
 		}
 
-		if pivot == newPivot || it.oneShot {
+		if pivot == newPivot || it.OneShot {
 			return nil
 		}
 
