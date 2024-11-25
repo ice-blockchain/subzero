@@ -439,4 +439,30 @@ func TestSelectWithDependencies(t *testing.T) {
 			}
 		})
 	})
+	t.Run("kind30023>kind0", func(t *testing.T) {
+		var ev model.Event
+
+		ev.ID = "t8id1"
+		ev.Kind = nostr.KindProfileMetadata
+		ev.PubKey = "t8pk1"
+		ev.CreatedAt = 1
+		err := db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		ev.ID = "t8id2"
+		ev.Kind = nostr.KindArticle
+		ev.PubKey = "t8pk1"
+		ev.CreatedAt = 2
+		ev.Content = "content of the article"
+		err = db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"t8id2"},
+			Search: "include:dependencies:kind30023>kind0",
+		})
+		require.Len(t, events, 2)
+		require.Equal(t, "t8id2", events[0].ID)
+		require.Equal(t, "t8id1", events[1].ID)
+	})
 }
