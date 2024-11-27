@@ -418,8 +418,9 @@ func (w *whereBuilder) applyRepostFilter(filter *databaseFilterSearch, builder *
 		return
 	}
 
-	repostIdx := slices.Index(filter.Kinds, nostr.KindRepost)
-	if repostIdx == -1 {
+	if !slices.ContainsFunc(filter.Kinds, func(k int) bool {
+		return k == nostr.KindRepost || k == nostr.KindGenericRepost
+	}) {
 		// No reposts in the filter.
 		return
 	}
@@ -567,7 +568,7 @@ where
 	}
 
 	switch filter.Reduce.Kinds[0] {
-	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
 		if filter.Reduce.Author != "" {
@@ -826,7 +827,7 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				switch kinds[idx] {
 				case nostr.KindFollowList:
 					referenceType = "follower"
-				case nostr.KindTextNote, nostr.KindRepost:
+				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
 					if _, ok := filter.Tags["q"]; ok {
 						referenceType = "quote"
 					} else {
