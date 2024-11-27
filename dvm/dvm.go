@@ -47,6 +47,7 @@ type (
 		PrivateKey string `yaml:"private-key"`
 		TLSCert    string `yaml:"tls-cert"`
 		TLSKey     string `yaml:"tls-key"`
+		RelayURL   string `yaml:"relay-url" validate:"required,url"`
 	}
 )
 
@@ -292,6 +293,10 @@ func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status 
 
 func connectToRelays(ctx context.Context, relayList []string, conf *tls.Config) (resultRelays []*nostr.Relay) {
 	for _, relayUrl := range relayList {
+		if globalConfig != nil && globalConfig.RelayURL == relayUrl {
+			// Skip connecting to self.
+			continue
+		}
 		relay, err := connectToRelay(ctx, relayUrl, conf)
 		if err != nil {
 			log.Printf("ERROR: failed to connect to relay: %v, err: %v", relayUrl, err)

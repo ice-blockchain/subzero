@@ -49,7 +49,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 		return zeroResponse, errors.Wrapf(err, "failed to parse filters: %v", e)
 	}
 
-	queryRelays := connectToRelays(ctx, collectRelayURLs(e), n.relayConnectTLS)
+	queryRelays := connectToRelays(ctx, collectRelayURLsFromEvent(e), n.relayConnectTLS)
 	defer closeRelays(queryRelays)
 
 	var groups []string
@@ -198,7 +198,7 @@ func countBasedOnGroups(evList []*nostr.Event, groups []string) map[string]uint6
 	return groupCounts
 }
 
-func collectRelayURLs(e *model.Event) []string {
+func collectRelayURLsFromEvent(e *model.Event) []string {
 	var relayList []string
 	for _, tag := range e.Tags {
 		if tag.Key() == "param" && tag.Value() == "relay" {

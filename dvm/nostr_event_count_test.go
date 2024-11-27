@@ -457,7 +457,7 @@ func TestCollectRelayURLs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := collectRelayURLs(tt.event)
+			actual := collectRelayURLsFromEvent(tt.event)
 			require.Equal(t, tt.expected, actual)
 		})
 	}

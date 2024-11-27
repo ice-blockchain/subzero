@@ -24,7 +24,7 @@ type (
 	config struct {
 		URL        string `yaml:"url"`
 		PrivateKey string `yaml:"private-key"`
-		RelayURL   string `yaml:"relay-url"`
+		RelayURL   string `yaml:"relay-url" validate:"required,url"`
 	}
 )
 
