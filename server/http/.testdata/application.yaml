@@ -64,6 +64,7 @@ database:
   query:
     url: ":memory:"
     private-key: "eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9"
+    relay-url: "wss://example.com"
 
 storage:
   private-key: f2e7f1829027cf347d3ddb90e40890fcffb1ca99a3fc2564a120286570b690e548ac550ea62ab27c8c85d1f862b779b8c7dd09d733403dd9a3104be42f8ddb7b

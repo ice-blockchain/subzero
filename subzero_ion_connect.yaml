@@ -55,9 +55,13 @@ server:
     LEmxIHOYAtmTwLwU+eKFs/3gjVUxSBg4AA0h1Ox/gjA6Hb+aNZHapPW8XH+jF6Ij
     RK3+I8t8OXWV3eiFcVaUGUlc
     -----END PRIVATE KEY-----
+
 database:
   query:
     url: /var/lib/subzero_ion_connect/data/db/query.db
+    private-key: &pk eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9
+    relay-url: &self "wss://example.com"
+
 storage:
   private-key: f2e7f1829027cf347d3ddb90e40890fcffb1ca99a3fc2564a120286570b690e548ac550ea62ab27c8c85d1f862b779b8c7dd09d733403dd9a3104be42f8ddb7b
   ion-storage-config-url: https://ton.org/testnet-global.config.json
@@ -65,7 +69,9 @@ storage:
   external-adnl-address: 127.0.0.1
   external-adnl-port: 12345
   debug: true
+
 dvm:
   tls-cert: *tls-cert
   tls-key: *tls-key
-  private-key: eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9
+  private-key: *pk
+  relay-url: *self

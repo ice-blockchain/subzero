@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -292,17 +293,22 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Equal(t, "t2id2", events[1].ID)
 		for _, ev := range events[2:] {
 			t.Logf("dvm event: %+v", ev)
-			require.Equal(t, model.KindDVMCount, ev.Kind)
-			require.Equal(t, "1", ev.Content)
-			require.Len(t, ev.Tags, 2)
+			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
+			require.Equal(t, `{"+":1}`, ev.Content)
+			require.Len(t, ev.Tags, 4)
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
 			require.Truef(t, valid, "signature is invalid: %+v", ev)
+			req := ev.GetTag("request")
+			require.NotNil(t, req)
+			value := req.Value()
+			require.NotEmpty(t, value)
+			var reqEvent model.Event
+			err = json.Unmarshal([]byte(value), &reqEvent)
+			require.NoError(t, err)
+			require.NotNil(t, reqEvent.GetTag("output"))
+			require.Equal(t, "JSON", reqEvent.GetTag("output").Value())
 		}
-		require.Equal(t, "t2pk2", events[2].Tags[0].Value())
-		require.Equal(t, "t2id2", events[2].Tags[1].Value())
-		require.Equal(t, "t2pk2", events[3].Tags[0].Value())
-		require.Equal(t, "t2id3", events[3].Tags[1].Value())
 	})
 	t.Run("kind30008+profile_badges>kind30009>kind8", func(t *testing.T) {
 		var ev model.Event
@@ -441,5 +447,31 @@ func TestSelectWithDependencies(t *testing.T) {
 				require.Equalf(t, k, events[i].Kind, "event %d: %v", i, events[i])
 			}
 		})
+	})
+	t.Run("kind30023>kind0", func(t *testing.T) {
+		var ev model.Event
+
+		ev.ID = "t8id1"
+		ev.Kind = nostr.KindProfileMetadata
+		ev.PubKey = "t8pk1"
+		ev.CreatedAt = 1
+		err := db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		ev.ID = "t8id2"
+		ev.Kind = nostr.KindArticle
+		ev.PubKey = "t8pk1"
+		ev.CreatedAt = 2
+		ev.Content = "content of the article"
+		err = db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"t8id2"},
+			Search: "include:dependencies:kind30023>kind0",
+		})
+		require.Len(t, events, 2)
+		require.Equal(t, "t8id2", events[0].ID)
+		require.Equal(t, "t8id1", events[1].ID)
 	})
 }

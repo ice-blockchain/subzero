@@ -229,7 +229,7 @@ create trigger if not exists trigger_events_before_insert_unwind_repost
     before insert
     on events
     for each row
-    when new.kind = 6
+    when new.kind in (6, 16)
 begin
 insert into events
     (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, tags, d_tag, hidden)
@@ -257,7 +257,7 @@ create trigger if not exists trigger_events_after_insert_link_repost
     after insert
     on events
     for each row
-    when new.kind = 6
+    when new.kind in (6, 16)
 begin
 update events set
     reference_id = json_extract(NEW.content, '$.id')
@@ -326,8 +326,8 @@ begin
     select
         NEW.event_tag_value1, -- Either event id OR public key (kind = 3).
         case
-            when e.kind in (1, 6) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
-            when e.kind in (1, 6) and NEW.event_tag_key = 'q' then 'quote'
+            when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
             else ''
         end,
@@ -337,7 +337,7 @@ begin
         events e
     where
             (e.id = NEW.event_id)
-        and (e.kind in (1, 3, 6, 7))
+        and (e.kind in (1, 3, 6, 7, 16, 30023))
         and (e.kind = 3 OR exists (select 1 from events where id = NEW.event_tag_value1))
         and (
             case
@@ -351,7 +351,7 @@ begin
                         where
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
                     )
-                when e.kind in (1, 6) and NEW.event_tag_value3 != '' then
+                when e.kind in (1, 6, 16, 30023) and NEW.event_tag_value3 != '' then
                     NEW.event_tag_value3 in ('reply', 'root')
                 else
                     true
@@ -378,8 +378,8 @@ begin
         and event_counters.reference_id = OLD.event_tag_value1
         and event_counters.kind = e.kind
         and event_counters.reference_type = case
-            when e.kind in (1, 6) and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
-            when e.kind in (1, 6) and OLD.event_tag_key = 'q' then 'quote'
+            when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
             else ''
         end

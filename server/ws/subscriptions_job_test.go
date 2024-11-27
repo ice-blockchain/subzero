@@ -74,7 +74,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -90,7 +89,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -106,7 +104,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -122,7 +119,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -139,7 +135,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -156,7 +151,7 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
+
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -173,7 +168,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -190,7 +184,6 @@ func TestJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -283,7 +276,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -299,7 +291,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -315,7 +306,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -331,7 +321,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -348,7 +337,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -365,7 +353,7 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
+
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -383,7 +371,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		jobEvent.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, jobEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, jobEvent.Event))
 		expectedEvents = append(expectedEvents, jobEvent)
@@ -399,7 +386,6 @@ func TestJobDeletion(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -491,7 +477,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -507,7 +492,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -523,7 +507,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -539,7 +522,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -557,7 +539,6 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		jobEvent.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, jobEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, jobEvent.Event))
 		expectedEvents = append(expectedEvents, jobEvent)
@@ -641,7 +622,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -657,7 +637,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -673,7 +652,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -689,7 +667,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -706,7 +683,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -723,7 +699,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -740,7 +715,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
@@ -757,7 +731,6 @@ func TestOfflineJob(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		ev.SetExtra("extra", uuid.NewString())
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)

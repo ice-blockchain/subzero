@@ -3,6 +3,7 @@
 package query
 
 import (
+	"cmp"
 	"log"
 	"slices"
 	"strconv"
@@ -47,7 +48,7 @@ type (
 		strings.Builder
 	}
 	databaseFilterSearch struct {
-		nostr.Filter
+		model.Filter
 		Expiration   *bool
 		Videos       *bool
 		Images       *bool
@@ -248,24 +249,48 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 		return
 	}
 
-	tagID := 0
-	for tag, values := range tags {
+	var tagID int
+	for tagName, tagValues := range tags {
+		tagID++
+
 		w.maybeAND()
-		if len(values) > valuesMax {
-			log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tag, valuesMax)
-			values = values[:valuesMax]
+		tagParam := w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tagName)
+
+		// Only the tag name is specified, no values.
+		if !tags.HasValues(tagName) {
+			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
+			w.WriteString(tagParam)
+			w.WriteRune(')')
+
+			continue
 		}
 
-		tagID++
-		w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
-		w.WriteString(w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tag))
+		w.WriteRune('(')
+		for i, values := range tagValues {
+			if values.Empty() {
+				continue
+			}
 
-		for i, value := range values {
-			w.WriteString(" AND ")
-			w.WriteString("event_tag_value")
-			w.WriteString(strconv.Itoa(i + 1))
-			w.WriteString(" = :")
-			w.WriteString(w.addParam(filter.Name, "tagvalue"+strconv.Itoa(tagID<<8|i+1), value))
+			if len(values) > valuesMax {
+				log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tagName, valuesMax)
+				values = values[:valuesMax]
+			}
+
+			w.maybeOR()
+			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
+			w.WriteString(tagParam)
+			for j := range values {
+				if values[j] == nil {
+					// Skip empty values.
+					continue
+				}
+				w.WriteString(" AND ")
+				w.WriteString("event_tag_value")
+				w.WriteString(strconv.Itoa(j + 1))
+				w.WriteString(" = :")
+				w.WriteString(w.addParam(filter.Name, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
+			}
+			w.WriteRune(')')
 		}
 		w.WriteRune(')')
 	}
@@ -393,8 +418,9 @@ func (w *whereBuilder) applyRepostFilter(filter *databaseFilterSearch, builder *
 		return
 	}
 
-	repostIdx := slices.Index(filter.Kinds, nostr.KindRepost)
-	if repostIdx == -1 {
+	if !slices.ContainsFunc(filter.Kinds, func(k int) bool {
+		return k == nostr.KindRepost || k == nostr.KindGenericRepost
+	}) {
 		// No reposts in the filter.
 		return
 	}
@@ -494,23 +520,31 @@ func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, 
 }
 
 func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
-	if filter.Reduce.Kinds[0] == model.KindDVMCount {
+	if filter.Reduce.Kinds[0] == model.KindDVMCountResponse {
 		w.WriteString(`
 union all
 select
 	6400,
-	0,
+	unixepoch(),
 	0,
 	f.reference_id,
 	coalesce(evr.pubkey, ''),
 	coalesce(evr.master_pubkey, ''),
 	'',
-	cast(f.value as text) as content,
-	'',
-	'[]' as jtags
+	case when f.kind = 7 then json_object('+', f.value) else cast(f.value as text) end as content,
+	json_object('kind', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id)) as d_tag,
+	case when
+		f.kind = 7 then
+			json_array(
+				json_array('output', 'JSON'),
+				json_array('param', 'group', :` + (filterID + "context") + `
+			))
+		else
+			json_array(json_array('param', 'group', :` + (filterID + "context") + `))
+		end as jtags
 from
 	event_counters f
-left join events evr on f.reference_id = evr.id
+inner join events evr on f.reference_id = evr.id
 where
 `)
 	} else {
@@ -539,7 +573,7 @@ where
 	}
 
 	switch filter.Reduce.Kinds[0] {
-	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction:
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
 		if filter.Reduce.Author != "" {
@@ -627,18 +661,23 @@ group by e.pubkey, e.master_pubkey`)
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
 		w.WriteString(")) AND e.hidden=0")
 
-	case model.KindDVMCount:
+	case model.KindDVMCountResponse:
 		w.WriteString("f.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
+		w.addParam(filterID, "ftagname", "#e")
+		w.addParam(filterID, "fkind", filter.Start.Kind)
 		var refType string
 		switch {
 		case filter.Reduce.Tag == "q":
+			w.addParam(filterID, "ftagname", "#q")
+			w.addParam(filterID, "context", filter.Reduce.Tag)
 			refType = "quote"
 
 		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
-			// Empty.
+			w.addParam(filterID, "context", cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
 
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+			w.addParam(filterID, "context", filter.Reduce.Context)
 			refType = "reply"
 		}
 		w.WriteString(" AND f.reference_type = :")
@@ -793,7 +832,7 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				switch kinds[idx] {
 				case nostr.KindFollowList:
 					referenceType = "follower"
-				case nostr.KindTextNote, nostr.KindRepost:
+				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
 					if _, ok := filter.Tags["q"]; ok {
 						referenceType = "quote"
 					} else {

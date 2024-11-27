@@ -54,5 +54,5 @@ dvm:
     LEmxIHOYAtmTwLwU+eKFs/3gjVUxSBg4AA0h1Ox/gjA6Hb+aNZHapPW8XH+jF6Ij
     RK3+I8t8OXWV3eiFcVaUGUlc
     -----END PRIVATE KEY-----
-  private-key: |
-    eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9
+  private-key: eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9
+  relay-url: "wss://example.com"

@@ -123,9 +123,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 	}
 	attestationEventIt := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{model.Filter{
 		Kinds: []int{model.CustomIONKindAttestation},
-		Tags: model.TagMap{
-			"p": []string{t.PubKey()},
-		},
+		Tags:  model.TagMap{}.SetLiterals("p", t.PubKey()),
 	},
 	}})
 	var allowed bool

@@ -9,13 +9,14 @@ import (
 )
 
 type (
-	TagMap       = nostr.TagMap
 	Tag          = nostr.Tag
 	Tags         = nostr.Tags
+	TagMap       = nostr.TagMap
+	TagValues    = nostr.TagValues
 	Timestamp    = nostr.Timestamp
-	Kind         = int
 	Filter       = nostr.Filter
 	Filters      = nostr.Filters
+	Kind         = int
 	Subscription struct {
 		Filters Filters
 	}
@@ -40,7 +41,9 @@ var (
 const (
 	CustomIONKindAttestation       = 10_100
 	CustomIONKindRelayListMetadata = 20_002
-	KindDVMCount                   = 6400
+
+	KindDVMCountRequest  = 5400
+	KindDVMCountResponse = 6400
 )
 
 const (

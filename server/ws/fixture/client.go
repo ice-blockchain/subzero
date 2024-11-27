@@ -33,8 +33,9 @@ import (
 )
 
 func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
-	d := webtransport.Dialer{}
-	d.TLSClientConfig = ClientTLS()
+	d := webtransport.Dialer{
+		TLSClientConfig: ClientTLS(),
+	}
 	_, conn, err := d.Dial(ctx, url, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to establish webtransport conn to %v", url)
@@ -181,7 +182,6 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 
 func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 	dialer := ws.Dialer{TLSConfig: ClientTLS()}
-	dialer.TLSConfig = ClientTLS()
 	conn, _, _, err := dialer.Dial(ctx, url)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to establish websocket conn to %v", url)

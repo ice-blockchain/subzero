@@ -47,6 +47,7 @@ type (
 		PrivateKey string `yaml:"private-key"`
 		TLSCert    string `yaml:"tls-cert"`
 		TLSKey     string `yaml:"tls-key"`
+		RelayURL   string `yaml:"relay-url" validate:"required,url"`
 	}
 )
 
@@ -291,22 +292,21 @@ func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status 
 }
 
 func connectToRelays(ctx context.Context, relayList []string, conf *tls.Config) (resultRelays []*nostr.Relay) {
-	resultRelays = make([]*nostr.Relay, 0, len(relayList))
 	for _, relayUrl := range relayList {
-		establishedCount := 0
-		for ix := 0; ix < len(relayList); ix++ {
-			relay, err := connectToRelay(ctx, relayUrl, conf)
-			if err != nil {
-				log.Printf("ERROR: failed to connect to relay: %v, err: %v", relayUrl, err)
-
-				continue
-			}
-			resultRelays = append(resultRelays, relay)
-			establishedCount++
+		if globalConfig != nil && globalConfig.RelayURL == relayUrl {
+			// Skip connecting to self.
+			continue
 		}
-		log.Printf("Established %v conns to %v", establishedCount, relayUrl)
+		relay, err := connectToRelay(ctx, relayUrl, conf)
+		if err != nil {
+			log.Printf("ERROR: failed to connect to relay: %v, err: %v", relayUrl, err)
+		} else {
+			resultRelays = append(resultRelays, relay)
+		}
 	}
-
+	if len(relayList) > 0 {
+		log.Printf("Connected to %v of %v relays", len(resultRelays), len(relayList))
+	}
 	return resultRelays
 }
 

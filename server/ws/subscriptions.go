@@ -25,7 +25,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *subscri
 			if err != nil {
 				return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 			}
-			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Event: event.Event})
+			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})
 			if wErr != nil {
 				return errors.Wrapf(wErr, "failed to write event[%+v]", event)
 			}
@@ -104,7 +104,7 @@ func (h *handler) notifyListenersAboutNewEvents(events ...*model.Event) error {
 				if sub.Filters.Match(&events[eventIdx].Event) {
 					err = multierror.Append(
 						err,
-						h.writeResponse(writer, &model.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*model.Event{events[eventIdx]}}),
+						h.writeResponse(writer, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&events[eventIdx].Event}}),
 					)
 				}
 			}

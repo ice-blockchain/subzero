@@ -53,7 +53,7 @@ func (e *ReplaceableEventReference) Filter() (f Filter) {
 	f.Authors = []string{e.PubKey}
 
 	if e.DTag != "" {
-		f.Tags = TagMap{"d": {e.DTag}}
+		f.Tags = TagMap{"d": {{&e.DTag}}}
 	}
 
 	return f

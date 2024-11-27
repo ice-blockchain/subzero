@@ -54,7 +54,7 @@ func TestQueryEventsCount(t *testing.T) {
 			ev := events[rand.Int31n(int32(len(events)))]
 			count, err := db.CountEvents(context.TODO(),
 				helperNewFilterSubscription(func(apply *model.Filter) {
-					apply.Tags = model.TagMap{ev.Tags[0][0]: ev.Tags[0][1:]}
+					apply.Tags = model.TagMap{}.SetLiterals(ev.Tags[0][0], ev.Tags[0][1:]...)
 				}))
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count)
@@ -74,7 +74,7 @@ func TestQueryEventsCount(t *testing.T) {
 						apply.Authors = []string{ev2.PubKey}
 					}),
 					helperNewFilter(func(apply *model.Filter) {
-						apply.Tags = model.TagMap{ev3.Tags[0][0]: ev3.Tags[0][1:]}
+						apply.Tags = model.TagMap{}.SetLiterals(ev3.Tags[0][0], ev3.Tags[0][1:]...)
 					}),
 				},
 			},
