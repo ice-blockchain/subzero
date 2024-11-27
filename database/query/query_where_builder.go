@@ -533,10 +533,15 @@ select
 	'',
 	case when f.kind = 7 then json_object('+', f.value) else cast(f.value as text) end as content,
 	json_object('kind', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id)) as d_tag,
-	json_array(
-		json_array('output', 'JSON'),
-		json_array('param', 'group', :` + (filterID + "context") + `
-	)) as jtags
+	case when
+		f.kind = 7 then
+			json_array(
+				json_array('output', 'JSON'),
+				json_array('param', 'group', :` + (filterID + "context") + `
+			))
+		else
+			json_array(json_array('param', 'group', :` + (filterID + "context") + `))
+		end as jtags
 from
 	event_counters f
 inner join events evr on f.reference_id = evr.id

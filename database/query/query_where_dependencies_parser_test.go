@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -298,7 +299,15 @@ func TestSelectWithDependencies(t *testing.T) {
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
 			require.Truef(t, valid, "signature is invalid: %+v", ev)
-			require.NotNil(t, ev.GetTag("request"))
+			req := ev.GetTag("request")
+			require.NotNil(t, req)
+			value := req.Value()
+			require.NotEmpty(t, value)
+			var reqEvent model.Event
+			err = json.Unmarshal([]byte(value), &reqEvent)
+			require.NoError(t, err)
+			require.NotNil(t, reqEvent.GetTag("output"))
+			require.Equal(t, "JSON", reqEvent.GetTag("output").Value())
 		}
 	})
 	t.Run("kind30008+profile_badges>kind30009>kind8", func(t *testing.T) {
