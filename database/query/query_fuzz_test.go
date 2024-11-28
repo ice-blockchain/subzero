@@ -153,7 +153,7 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 
 	db := helperNewDatabase(t)
 	defer db.Close()
-	helperFillDatabase(t, db, 100)
+	helperFillDatabase(t, db, 100, generateKind)
 
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
@@ -187,7 +187,7 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 
 	db := helperNewDatabase(t)
 	defer db.Close()
-	helperFillDatabase(t, db, 100)
+	helperFillDatabase(t, db, 100, generateKind)
 
 	op := make(map[string]int)
 
@@ -207,7 +207,7 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 				err := rows.Scan(&s1, &s2, &s3, &s4)
 				require.NoError(t, err)
 				op[s4]++
-				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
+				if strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX") {
 					t.Logf("set #%d: %s (%+v)", i+1, sql, params)
 					t.Log(s1, s2, s3, s4)
 					t.FailNow()

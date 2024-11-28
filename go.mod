@@ -35,6 +35,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.0
+	github.com/tjarratt/babble v0.0.0-20210505082055-cbca2a4833c1
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.10.2
 	github.com/xssnick/tonutils-storage v0.6.5

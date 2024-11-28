@@ -21,6 +21,7 @@ import (
 	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/tjarratt/babble"
 )
 
 type testEvents struct {
@@ -43,7 +44,7 @@ func helperEnsureDatabase(t *testing.T) (*dbClient, *testEvents) {
 	const eventCount = 100
 
 	db := helperNewDatabase(t)
-	helperFillDatabase(t, db, eventCount)
+	helperFillDatabase(t, db, eventCount, generateKind)
 
 	return db, &testEvents{Events: helperPreloadDataForFilter(t, db)}
 }
@@ -185,7 +186,9 @@ func helperGenerateEvent(
 		Helper()
 	},
 	db *dbClient,
+	generateKindFunc func() int,
 	withTags bool,
+	babbler *babble.Babbler,
 ) model.Event {
 	t.Helper()
 
@@ -194,8 +197,8 @@ func helperGenerateEvent(
 	ev.ID = generateHexString()
 	ev.PubKey = generateHexString()
 	ev.CreatedAt = model.Timestamp(generateCreatedAt())
-	ev.Kind = generateKind()
-	ev.Content = generateRandomString(rand.Intn(1024))
+	ev.Kind = generateKindFunc()
+	ev.Content = babbler.Babble()
 
 	if withTags {
 		ev.Tags = []model.Tag{
@@ -212,7 +215,7 @@ func helperGenerateEvent(
 	return ev
 }
 
-func helperFillDatabase(t *testing.T, db *dbClient, size int) {
+func helperFillDatabase(t *testing.T, db *dbClient, size int, generateKindFunc func() int) {
 	t.Helper()
 
 	var eventsCount []int
@@ -227,10 +230,14 @@ func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 	need := size - eventsCount[0]
 	t.Logf("generating %d event(s)", need)
 
+	babbler := babble.NewBabbler()
+	babbler.Count = rand.Intn(10) + 1
+	babbler.Separator = " "
+
 	bar := progressbar.Default(int64(need), "generating events")
 	for range need {
 		bar.Add(1) //nolint:errcheck
-		helperGenerateEvent(t, db, true)
+		helperGenerateEvent(t, db, generateKindFunc, true, &babbler)
 	}
 }
 
@@ -321,7 +328,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {
-		helperFillDatabase(t, db, 10)
+		helperFillDatabase(t, db, 10, generateKind)
 
 		var event model.Event
 		event.Kind = nostr.KindTextNote
@@ -382,7 +389,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {
-		helperFillDatabase(t, db, 10)
+		helperFillDatabase(t, db, 10, generateKind)
 
 		var event model.Event
 		event.Kind = nostr.KindTextNote
@@ -421,7 +428,11 @@ func TestSelectEventNoTags(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	id := helperGenerateEvent(t, db, false).ID
+	babbler := babble.NewBabbler()
+	babbler.Count = rand.Intn(10) + 1
+	babbler.Separator = " "
+
+	id := helperGenerateEvent(t, db, generateKind, false, &babbler).ID
 	require.NotEmpty(t, id)
 
 	filter := helperNewFilter(func(apply *model.Filter) {
@@ -456,7 +467,7 @@ func TestGenerateDataForFile3M(t *testing.T) {
 	require.NotNil(t, db)
 	defer db.Close()
 
-	helperFillDatabase(t, db, amount)
+	helperFillDatabase(t, db, amount, generateKind)
 }
 
 func TestSelectByMimeType(t *testing.T) {
@@ -466,7 +477,7 @@ func TestSelectByMimeType(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {
-		helperFillDatabase(t, db, 100)
+		helperFillDatabase(t, db, 100, generateKind)
 
 		var event model.Event
 		event.Kind = nostr.KindTextNote
@@ -538,7 +549,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {
-		helperFillDatabase(t, db, 100)
+		helperFillDatabase(t, db, 100, generateKind)
 
 		var event model.Event
 		event.Kind = nostr.KindTextNote
@@ -823,7 +834,7 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {
-		helperFillDatabase(t, db, 10)
+		helperFillDatabase(t, db, 10, generateKind)
 
 		var event model.Event
 		event.Kind = nostr.KindRepost

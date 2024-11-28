@@ -478,10 +478,15 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.Kinds, "kind", "")
 	if len(filter.Authors) > 0 {
 		w.maybeAND()
-		w.WriteRune('(')
+		w.WriteString("((")
 		buildFromSlice(w, sqlOpCodeNONE, builder.Name, filter.Authors, "pubkey", "")
+		w.WriteString(" AND ")
+		w.WriteString(whereBuilderDefaultWhere)
+		w.WriteString(") OR (")
 		buildFromSlice(w, sqlOpCodeOR, builder.Name, filter.Authors, "master_pubkey", "pubkey")
-		w.WriteRune(')')
+		w.WriteString(" AND ")
+		w.WriteString(whereBuilderDefaultWhere)
+		w.WriteString("))")
 	}
 	if err := w.applyTimeRange(builder, filter.Since, filter.Until); err != nil {
 		return err

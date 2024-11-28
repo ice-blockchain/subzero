@@ -2,10 +2,11 @@
 
 CREATE TABLE IF NOT EXISTS events
 (
+    rid               integer primary key,
     kind              integer not null,
     created_at        integer not null,
     system_created_at integer not null,
-    id                text    not null primary key,
+    id                text    not null UNIQUE,
     pubkey            text    not null,
     master_pubkey     text    not null,
     sig               text    not null,
@@ -16,7 +17,7 @@ CREATE TABLE IF NOT EXISTS events
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
     hidden            integer not null default 0
-) strict, WITHOUT ROWID;
+) strict;
 --------
 create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
 where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
@@ -49,6 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_events_id_kind_master_pubkey_created_at_system_cr
 CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_system_created_at      ON events(pubkey, master_pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_pubkey_system_created_at             ON events(pubkey, system_created_at DESC) where hidden = 0;
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
@@ -402,3 +404,16 @@ end
 ;
 --------
 PRAGMA foreign_keys = on;
+
+-- FTS5
+-- CREATE VIRTUAL TABLE IF NOT EXISTS events_fts5_index USING fts5(rid, content, content='events', content_rowid='rid');
+-- CREATE TRIGGER IF NOT EXISTS trigger_events_fts5_insert AFTER INSERT ON events BEGIN
+--   INSERT INTO events_fts5_index(rid, content) VALUES (new.rid, new.content);
+-- END;
+-- CREATE TRIGGER IF NOT EXISTS trigger_events_fts5_delete AFTER DELETE ON events BEGIN
+--   INSERT INTO events_fts5_index(events_fts5_index, rowid, content) VALUES('delete', old.rid, old.content);
+-- END;
+-- CREATE TRIGGER IF NOT EXISTS trigger_events_fts5_update AFTER UPDATE ON events BEGIN
+--   INSERT INTO events_fts5_index(events_fts5_index, rowid, content) VALUES('delete', old.rid, old.content);
+--   INSERT INTO events_fts5_index(rowid, content) VALUES (new.rid, new.content);
+-- END;

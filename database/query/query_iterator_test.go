@@ -46,7 +46,7 @@ func TestIteratorSelectEvents(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
-	helperFillDatabase(t, db, 300)
+	helperFillDatabase(t, db, 300, generateKind)
 
 	t.Run("Limit", func(t *testing.T) {
 		for _, limit := range []int{1, 10, 15, 100, 125, selectDefaultBatchLimit + 1, 200, 222, 300} {

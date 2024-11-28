@@ -9,6 +9,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+	"github.com/tjarratt/babble"
 	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -26,8 +27,11 @@ func TestQueryEventsCount(t *testing.T) {
 	events := make([]model.Event, 0, totalEvents)
 
 	t.Run("Generate", func(t *testing.T) {
+		babbler := babble.NewBabbler()
+		babbler.Count = rand.Intn(10) + 1
+		babbler.Separator = " "
 		for range totalEvents {
-			event := helperGenerateEvent(t, db, true)
+			event := helperGenerateEvent(t, db, generateKind, true, &babbler)
 			authors[event.PubKey]++
 			ids[event.ID] = event
 			events = append(events, event)
@@ -99,7 +103,7 @@ func TestEventCounters(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	helperFillDatabase(t, db, 10)
+	helperFillDatabase(t, db, 10, generateKind)
 
 	t.Run("Quote", func(t *testing.T) {
 		t.Run("Post", func(t *testing.T) {
