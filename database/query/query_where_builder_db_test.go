@@ -18,10 +18,10 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
+	"github.com/tjarratt/babble"
 	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/tjarratt/babble"
 )
 
 type testEvents struct {
