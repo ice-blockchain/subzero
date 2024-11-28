@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"path/filepath"
 	"sync"
 	"time"
@@ -187,7 +188,11 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 
 func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bootstrap string) (string, error) {
 	if globalConfig.IONLibertyDisabled {
-		return fmt.Sprintf("https://%v:%v/files/%v:%v", globalConfig.ExternalADNLAddress, globalConfig.WsServerPort, masterPubkey, fileHash), nil
+		relayUrl, err := url.Parse(globalConfig.RelayURL)
+		if err != nil {
+			return "", errors.Wrapf(err, "invalid relay-url configured %v", globalConfig.RelayURL)
+		}
+		return fmt.Sprintf("https://%v:%v/files/%v:%v", relayUrl.Hostname(), relayUrl.Port(), masterPubkey, fileHash), nil
 	}
 	url := fmt.Sprintf("http://%v.bag/%v?bootstrap=%v", bagID, relativePath, bootstrap)
 

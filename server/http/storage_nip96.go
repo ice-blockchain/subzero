@@ -41,8 +41,9 @@ type (
 var nip96Info string
 
 type storageHandler struct {
-	storageClient storage.StorageClient
-	auth          AuthClient
+	storageClient      storage.StorageClient
+	auth               AuthClient
+	ionLibertyDisabled bool
 }
 
 const mediaEndpointTimeout = 60 * time.Second
@@ -267,7 +268,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 }
 
 func (s *storageHandler) Download() gin.HandlerFunc {
-	if s.storageClient.IONLibertyDisabled() {
+	if s.ionLibertyDisabled {
 		return s.serveFileFromStorage()
 	}
 	return s.redirectToDistributedStorageUrl()
@@ -360,7 +361,7 @@ func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
-func NewUploadHandler(ctx context.Context, serverPort uint16) Uploader {
-	s := &storageHandler{storageClient: storage.Client(serverPort), auth: NewAuth()}
+func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool) Uploader {
+	s := &storageHandler{storageClient: storage.Client(), auth: NewAuth(), ionLibertyDisabled: ionLibertyDisabled}
 	return s
 }

@@ -49,7 +49,7 @@ func TestNIP96(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	defer func() {
-		require.NoError(t, storage.Client(9996).Close())
+		require.NoError(t, storage.Client().Close())
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
 		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
 	}()

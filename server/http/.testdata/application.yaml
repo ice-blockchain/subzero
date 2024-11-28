@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: ice License 1.0
 
 server:
+  ion-liberty-disabled: false
   http:
     tls-cert: &ws-cert |
       -----BEGIN CERTIFICATE-----
@@ -74,4 +75,4 @@ storage:
   external-adnl-port: 12345
   debug: true
   ion-liberty-disabled: false
-  ws-server-port: 9996
+  relay-url: "-"

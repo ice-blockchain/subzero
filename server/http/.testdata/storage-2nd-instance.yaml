@@ -8,7 +8,7 @@ storage:
   external-adnl-port: 12347
   debug: true
   ion-liberty-disabled: false
-  ws-server-port: 9996
+  relay-url: "-"
 database:
   query:
     url: ":memory:"

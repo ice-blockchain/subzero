@@ -39,7 +39,6 @@ type (
 		FilePath(masterKey, fileSha256 string) (string, error)
 		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
 		Delete(userPubkey, masterKey string, fileSha256 string) error
-		IONLibertyDisabled() bool
 	}
 	Bootstrap struct {
 		Overlay *overlay.Node
@@ -88,10 +87,6 @@ var (
 	ErrNotFound  = storage.ErrFileNotExist
 	ErrForbidden = errors.New("forbidden")
 )
-
-func (c *client) IONLibertyDisabled() bool {
-	return globalConfig.IONLibertyDisabled
-}
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData
