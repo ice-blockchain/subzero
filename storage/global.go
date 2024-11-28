@@ -47,6 +47,8 @@ type (
 		ExternalADNLAddress     string `yaml:"external-adnl-address"`
 		ExternalADNLPort        int    `yaml:"external-adnl-port"`
 		Debug                   bool   `yaml:"debug"`
+		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
+		RelayURL                string `yaml:"relay-url"`
 	}
 )
 

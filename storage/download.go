@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
-	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -17,10 +17,10 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func (c *client) DownloadUrl(userPubkey string, fileHash string) (string, error) {
-	bag, err := c.bagByUser(userPubkey)
+func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, error) {
+	bag, err := c.bagByUser(masterPubkey)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get bagID for the user %v", userPubkey)
+		return "", errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)
 	}
 	if bag == nil {
 		return "", ErrNotFound
@@ -33,27 +33,29 @@ func (c *client) DownloadUrl(userPubkey string, fileHash string) (string, error)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	return c.buildUrl(hex.EncodeToString(bag.BagID), file, []*Bootstrap{bs})
+	b, err := json.Marshal([]*Bootstrap{bs})
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to marshal %#v", bs)
+	}
+	bootstrap := base64.StdEncoding.EncodeToString(b)
+	return c.buildUrl(hex.EncodeToString(bag.BagID), file, masterPubkey, fileHash, bootstrap)
 }
 
 func acceptNewBag(ctx context.Context, event *model.Event) error {
 	infohash := ""
-	var fileUrl *url.URL
 	var err error
 	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {
 		infohash = iTag.Value()
 	} else {
 		return errors.Newf("malformed i tag %v", iTag)
 	}
-	if urlTag := event.Tags.GetFirst([]string{"url"}); urlTag != nil && len(*urlTag) > 1 {
-		fileUrl, err = url.Parse(urlTag.Value())
-		if err != nil {
-			return errors.Wrapf(err, "malformed url in url tag %v", *urlTag)
-		}
-	} else {
-		return errors.Newf("malformed url tag %v", urlTag)
+
+	bootstrap := ""
+	spl := strings.Split(infohash, ":")
+	if len(spl) == 2 {
+		infohash = spl[0]
+		bootstrap = spl[1]
 	}
-	bootstrap := fileUrl.Query().Get("bootstrap")
 	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap); err != nil {
 		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, event.PubKey)
 	}
@@ -65,7 +67,7 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 	if err != nil {
 		return errors.Wrapf(err, "failed to find existing bag for user %s", user)
 	}
-	if existingBagForUser != nil {
+	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
 		log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
 		existingBagForUser.Stop()
 		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {

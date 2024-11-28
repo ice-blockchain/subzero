@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"path/filepath"
 	"sync"
 	"time"
@@ -69,11 +70,17 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 		fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
 		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
 	}
-	url, err = c.buildUrl(bagID, relativePathToFileForUrl, bs)
+	b, err := json.Marshal(bs)
+	if err != nil {
+		return "", "", false, errors.Wrapf(err, "failed to marshal %#v", bs)
+	}
+	bootstrap := base64.StdEncoding.EncodeToString(b)
+	url, err = c.buildUrl(bagID, relativePathToFileForUrl, masterPubKey, hash, bootstrap)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
-	return bagID, url, existed, err
+
+	return bagID + ":" + bootstrap, url, existed, err
 }
 
 func (c *client) upload(ctx context.Context, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
@@ -179,12 +186,14 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 	}, nil
 }
 
-func (c *client) buildUrl(bagID, relativePath string, bs []*Bootstrap) (string, error) {
-	b, err := json.Marshal(bs)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to marshal %#v", bs)
+func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bootstrap string) (string, error) {
+	if globalConfig.IONLibertyDisabled {
+		relayUrl, err := url.Parse(globalConfig.RelayURL)
+		if err != nil {
+			return "", errors.Wrapf(err, "invalid relay-url configured %v", globalConfig.RelayURL)
+		}
+		return fmt.Sprintf("https://%v:%v/files/%v:%v", relayUrl.Hostname(), relayUrl.Port(), masterPubkey, fileHash), nil
 	}
-	bootstrap := base64.StdEncoding.EncodeToString(b)
 	url := fmt.Sprintf("http://%v.bag/%v?bootstrap=%v", bagID, relativePath, bootstrap)
 
 	return url, nil

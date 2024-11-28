@@ -4,6 +4,7 @@ package storage
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -35,6 +36,7 @@ type (
 		StartUpload(ctx context.Context, userPubKey, masterKey, relativePathToFileForUrl, fileHash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error)
 		BuildUserPath(masterKey, contentType string) (string, string)
 		DownloadUrl(masterKey, fileSha256 string) (string, error)
+		FilePath(masterKey, fileSha256 string) (string, error)
 		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
 		Delete(userPubkey, masterKey string, fileSha256 string) error
 	}
@@ -179,7 +181,12 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 		if !hasMD {
 			continue
 		}
-		url, _ := c.buildUrl(hex.EncodeToString(bag.BagID), f, []*Bootstrap{bs})
+		b, err := json.Marshal([]*Bootstrap{bs})
+		if err != nil {
+			return 0, nil, errors.Wrapf(err, "failed to marshal %#v", bs)
+		}
+		bootstrap := base64.StdEncoding.EncodeToString(b)
+		url, _ := c.buildUrl(hex.EncodeToString(bag.BagID), f, metadata.Master, hex.EncodeToString(md.Hash), bootstrap)
 		res = append(res, &FileMetadata{
 			FileMetadata: &nip94.FileMetadata{
 				Size:            strconv.FormatUint(uint64(fileInfo.Size), 10),
@@ -225,6 +232,27 @@ func (c *client) Delete(userPubKey, masterKey, fileHash string) error {
 		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
 	}
 	return nil
+}
+
+func (c *client) FilePath(masterKey, fileHash string) (string, error) {
+	bag, err := c.bagByUser(masterKey)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get bagID for the user %v", masterKey)
+	}
+	if bag == nil {
+		return "", ErrNotFound
+	}
+	var metadata *headerData
+	metadata, err = c.fileMeta(bag)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
+	}
+	file, err := c.detectFileFromMeta(bag, metadata, fileHash)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
+	}
+	userPath, _ := c.BuildUserPath(masterKey, "")
+	return filepath.Join(userPath, file), nil
 }
 
 func (c *client) Close() error {
