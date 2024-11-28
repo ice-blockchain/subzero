@@ -158,8 +158,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+      - name: Install libvips, ffmpeg and wbritish workd package for meta extraction
+        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg wbritish
       - name: Build all
         run: make build-all@ci/cd
       - name: Slack Notification For Failure/Cancellation
