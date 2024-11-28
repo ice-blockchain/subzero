@@ -210,7 +210,8 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		return
 	}
 }
-func (s *storageHandler) Download() gin.HandlerFunc {
+
+func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
 		authHeader := getAuthHeader(gCtx)
@@ -237,6 +238,39 @@ func (s *storageHandler) Download() gin.HandlerFunc {
 		}
 		gCtx.Redirect(http.StatusFound, url)
 	}
+}
+func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
+	return func(gCtx *gin.Context) {
+		file := gCtx.Param("file")
+		if strings.TrimSpace(file) == "" {
+			gCtx.JSON(http.StatusBadRequest, uploadErr("filename is required"))
+			return
+		}
+		var masterPubkey string
+		spl := strings.Split(file, ":")
+		if len(spl) == 2 {
+			masterPubkey = spl[0]
+			file = spl[1]
+		}
+		filePath, err := s.storageClient.FilePath(masterPubkey, file)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				gCtx.Status(http.StatusNotFound)
+				return
+			}
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			return
+		}
+		gCtx.File(filePath)
+	}
+}
+
+func (s *storageHandler) Download() gin.HandlerFunc {
+	if s.storageClient.IONLibertyDisabled() {
+		return s.serveFileFromStorage()
+	}
+	return s.redirectToDistributedStorageUrl()
 }
 func (s *storageHandler) Delete() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
@@ -326,7 +360,7 @@ func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
-func NewUploadHandler(ctx context.Context) Uploader {
-	s := &storageHandler{storageClient: storage.Client(), auth: NewAuth()}
+func NewUploadHandler(ctx context.Context, serverPort uint16) Uploader {
+	s := &storageHandler{storageClient: storage.Client(serverPort), auth: NewAuth()}
 	return s
 }

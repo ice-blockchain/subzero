@@ -42,7 +42,7 @@ func MustListenAndServe(ctx context.Context) {
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
-	uploader := httpserver.NewUploadHandler(ctx)
+	uploader := httpserver.NewUploadHandler(ctx, globalConfig.Port)
 	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: 1111}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).

@@ -73,3 +73,5 @@ storage:
   external-adnl-address: 127.0.0.1
   external-adnl-port: 12345
   debug: true
+  ion-liberty-disabled: false
+  ws-server-port: 9996

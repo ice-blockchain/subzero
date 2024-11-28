@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 
 func initServer(serverCtx context.Context, port uint16) {
 	initStorage(serverCtx)
-	uploader := NewUploadHandler(serverCtx)
+	uploader := NewUploadHandler(serverCtx, port)
 	type globalCfg struct {
 		TLSCert string `yaml:"tls-cert"`
 		TLSKey  string `yaml:"tls-key"`

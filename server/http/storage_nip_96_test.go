@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func TestNIP96(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	defer func() {
-		require.NoError(t, storage.Client().Close())
+		require.NoError(t, storage.Client(9996).Close())
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
 		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
 	}()
@@ -211,6 +212,9 @@ func verifyFile(t *testing.T, content string, tags nostr.Tags) {
 	expected := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(content).Nip94Event.Tags})
 	url := md.URL
 	bagID := md.TorrentInfoHash
+	if strings.Contains(bagID, ":") {
+		bagID = strings.Split(bagID, ":")[0]
+	}
 	expectedFileName := expected.Summary
 	expected.Summary = ""
 	md.URL = ""

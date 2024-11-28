@@ -47,6 +47,8 @@ type (
 		ExternalADNLAddress     string `yaml:"external-adnl-address"`
 		ExternalADNLPort        int    `yaml:"external-adnl-port"`
 		Debug                   bool   `yaml:"debug"`
+		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
+		WsServerPort            uint16 `yaml:"ws-server-port"`
 	}
 )
 
@@ -54,7 +56,8 @@ var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
 const threadsPerBagForDownloading = 7
 
-func Client() StorageClient {
+func Client(wsServerPort uint16) StorageClient {
+	globalConfig.WsServerPort = wsServerPort
 	return globalClient
 }
 
