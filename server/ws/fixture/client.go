@@ -193,7 +193,10 @@ func NewWebsocketClient(ctx context.Context, url string) (Client, error) {
 }
 
 func NewRelayClient(ctx context.Context, url string) (*nostr.Relay, error) {
-	relay := nostr.NewRelay(ctx, url)
+	relay := nostr.NewRelay(ctx, url, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
+		// Accept all events.
+		return true
+	}))
 	err := relay.ConnectWithTLS(ctx, ClientTLS())
 	return relay, err
 }

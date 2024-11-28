@@ -84,7 +84,7 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 func TestRelaySubscription(t *testing.T) {
 	var eventsQueue []*model.Event
 
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	ev := &model.Event{
 		Event: nostr.Event{
 			ID:        uuid.NewString(),
@@ -125,9 +125,7 @@ func TestRelaySubscription(t *testing.T) {
 	defer subCancel()
 
 	sub, err := relay.Subscribe(subCtx, filters)
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
 
 	var receivedEvents []*model.Event
 	var wg sync.WaitGroup
@@ -147,7 +145,7 @@ func TestRelaySubscription(t *testing.T) {
 	case <-sub.EndOfStoredEvents:
 		t.Logf("received EOS")
 	case <-ctx.Done():
-		log.Panic(errors.Wrap(ctx.Err(), "EOS not received"))
+		t.Fatalf("EOS not received: %v", ctx.Err())
 	}
 
 	eventsQueue = append(eventsQueue, &model.Event{
@@ -172,9 +170,9 @@ func TestRelaySubscription(t *testing.T) {
 	}}
 	eventsQueue = append(eventsQueue, eventBy3rdParty)
 	storedEvents = append(storedEvents, eventBy3rdParty)
-	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
-	require.NoError(t, eventsQueue[len(eventsQueue)-1].Event.Sign(privkey))
+	require.NoError(t, eventsQueue[len(eventsQueue)-1].SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, notifySubscriptions(eventBy3rdParty))
 
 	repostedPubkey := "pubkey1"
@@ -185,9 +183,9 @@ func TestRelaySubscription(t *testing.T) {
 		Tags:      nostr.Tags{[]string{"e", repostedID, "relay"}, []string{"p", repostedPubkey}},
 		Content:   fmt.Sprintf(`{"kind":1,"id":"%v","pubkey":"%v"}`, repostedID, repostedPubkey),
 	}}
-	require.NoError(t, notMatchingEvent.Sign(privkey))
+	require.NoError(t, notMatchingEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, notMatchingEvent.GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
-	require.NoError(t, notMatchingEvent.Sign(privkey))
+	require.NoError(t, notMatchingEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, relay.Publish(ctx, notMatchingEvent.Event))
 
 	// Replacing of subscription by another subscription with another filter: smth broken from go-nostr v0.36.0 to write the message to change filters directly.
@@ -198,9 +196,7 @@ func TestRelaySubscription(t *testing.T) {
 		Kinds: []int{nostr.KindArticle},
 		Limit: 1,
 	}})
-	if err != nil {
-		log.Panic(err)
-	}
+	require.NoError(t, err)
 	{
 		t.Logf("subscribed to %v", sub.GetID())
 		wg.Add(1)
@@ -217,7 +213,7 @@ func TestRelaySubscription(t *testing.T) {
 	case <-sub.EndOfStoredEvents:
 		t.Logf("received EOS")
 	case <-ctx.Done():
-		log.Panic(errors.Wrap(ctx.Err(), "EOS not received"))
+		t.Fatalf("EOS not received: %v", ctx.Err())
 	}
 
 	eventMatchingReplacedSub := &model.Event{Event: nostr.Event{
@@ -246,7 +242,7 @@ func TestRelaySubscription(t *testing.T) {
 func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindTextNote,
@@ -285,15 +281,17 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			subsForConn[sub] = struct{}{}
 		}
 	}
-	newRealtimeEvent := nostr.Event{
-		Kind:    nostr.KindTextNote,
-		Content: "new realtime event",
+	newRealtimeEvent := model.Event{
+		Event: nostr.Event{
+			Kind:    nostr.KindTextNote,
+			Content: "new realtime event",
+		},
 	}
-	require.NoError(t, newRealtimeEvent.Sign(privkey))
-	tag, err := nip13.DoWork(ctx, newRealtimeEvent, NIP13MinLeadingZeroBits)
+	require.NoError(t, newRealtimeEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	tag, err := nip13.DoWork(ctx, newRealtimeEvent.Event, NIP13MinLeadingZeroBits)
 	require.NoError(t, err)
 	newRealtimeEvent.Tags = append(newRealtimeEvent.Tags, tag)
-	require.NoError(t, newRealtimeEvent.Sign(privkey))
+	require.NoError(t, newRealtimeEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	var wg sync.WaitGroup
 	eosCh := make(chan struct{})
 	for _, subsForConn := range subs {
@@ -357,7 +355,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		}
 	}
 	close(eosCh)
-	require.NoError(t, randomRelay.Publish(ctx, newRealtimeEvent))
+	require.NoError(t, randomRelay.Publish(ctx, newRealtimeEvent.Event))
 	wg.Wait()
 	for r := range subs {
 		require.NoError(t, r.Close())
@@ -366,7 +364,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 }
 
 func TestPublishingEvents(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -424,17 +422,19 @@ func TestPublishingEvents(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, validEvent.Event))
 	})
 	t.Run("ephemeral event", func(t *testing.T) {
-		ephemeralEvent := nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindClientAuthentication,
-			Content:   "bogus",
+		ephemeralEvent := model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindClientAuthentication,
+				Content:   "bogus",
+			},
 		}
-		require.NoError(t, ephemeralEvent.Sign(privkey))
-		tag, err := nip13.DoWork(ctx, ephemeralEvent, NIP13MinLeadingZeroBits)
+		require.NoError(t, ephemeralEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		tag, err := nip13.DoWork(ctx, ephemeralEvent.Event, NIP13MinLeadingZeroBits)
 		require.NoError(t, err)
 		ephemeralEvent.Tags = append(ephemeralEvent.Tags, tag)
-		require.NoError(t, ephemeralEvent.Sign(privkey))
-		require.NoError(t, relay.Publish(ctx, ephemeralEvent))
+		require.NoError(t, ephemeralEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, relay.Publish(ctx, ephemeralEvent.Event))
 	})
 	t.Run("wrong kind 03 follow list tag parameters", func(t *testing.T) {
 		inValidKind03Event := &model.Event{Event: nostr.Event{
@@ -465,9 +465,9 @@ func TestPublishingEvents(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, validKind03Event, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind03Event.Event))
 	})
-	master := "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
-	userPubKey, _ := nostr.GetPublicKey(privkey)
-	masterPubKey, _ := nostr.GetPublicKey(master)
+	master := model.GeneratePrivateKey()
+	userPubKey, _ := model.GetPublicKey(privkey)
+	masterPubKey, _ := model.GetPublicKey(master)
 	attestationEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindAttestation,
 		CreatedAt: 1,
@@ -485,7 +485,7 @@ func TestPublishingEvents(t *testing.T) {
 	}
 	t.Run("valid on behalf event", func(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &onBehalfEvent, privkey)
-		require.NoError(t, onBehalfEvent.Sign(privkey))
+		require.NoError(t, onBehalfEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, relay.Publish(ctx, onBehalfEvent.Event))
 	})
 	helperMustCloseRelay(t, relay)
@@ -493,7 +493,7 @@ func TestPublishingEvents(t *testing.T) {
 }
 
 func TestPublishingNIP09Events(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -568,7 +568,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 }
 
 func TestPublishingNIP10Events(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -628,7 +628,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 }
 
 func TestPublishingNIP18Events(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -766,7 +766,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 }
 
 func TestPublishingNIP23Events(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -844,7 +844,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 }
 
 func TestPublishingNIP01NIP24Events(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -933,7 +933,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 }
 
 func TestPublishingNIP24ReactionEvents(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -1045,7 +1045,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 }
 
 func TestPublishingNIP32LabelingEvents(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -1185,7 +1185,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 }
 
 func TestPublishingNIP56(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -1303,7 +1303,7 @@ func TestPublishingNIP56(t *testing.T) {
 }
 
 func TestPublishingNIP58Badges(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -1465,7 +1465,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 }
 
 func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -1536,7 +1536,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 }
 
 func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -2282,7 +2282,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 }
 
 func TestCountEvents(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		t.Logf("received events: %v", events)
 		return query.AcceptEvents(ctx, events...)
@@ -2292,7 +2292,7 @@ func TestCountEvents(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	t.Run("SaveEvent", func(t *testing.T) {
-		pk, err := nostr.GetPublicKey(privkey)
+		pk, err := model.GetPublicKey(privkey)
 		require.NoError(t, err)
 
 		ev := &model.Event{Event: nostr.Event{
@@ -2316,13 +2316,13 @@ func TestCountEvents(t *testing.T) {
 
 func helperSignWithMinLeadingZeroBits(t *testing.T, event *model.Event, privkey string) {
 	t.Helper()
-	require.NoError(t, event.Sign(privkey))
+	require.NoError(t, event.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, event.GenerateNIP13(context.Background(), NIP13MinLeadingZeroBits))
-	require.NoError(t, event.Sign(privkey))
+	require.NoError(t, event.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 }
 
 func TestPublishingNIP92IMetaTag(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
@@ -2480,7 +2480,7 @@ func helperNewIterator[T any](t *testing.T, data []T) func(func(T, error) bool) 
 func TestRelayMultiEventsAndFilter(t *testing.T) {
 	var generatedEvents []*nostr.Event
 
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	t.Run("Generate", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{

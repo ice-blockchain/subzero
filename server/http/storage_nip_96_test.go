@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -53,15 +52,12 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
 		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
 	}()
-	master := "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
-	masterPubKey, _ := nostr.GetPublicKey(master)
-	user1 := "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
-	user2 := "cea41ff6c6e9eb0cde6740a1fbe8c134bda650ce819e43b68bf61add2c68f8d9"
+	master, masterPubKey := model.GenerateKeyPair()
+	user1, user1PubKey := model.GenerateKeyPair()
+	user2, user2PubKey := model.GenerateKeyPair()
 	var tagsToBroadcast nostr.Tags
 	var contentToBroadcast string
 	t.Run("create on-behalf attestations", func(t *testing.T) {
-		user1PubKey, _ := nostr.GetPublicKey(user1)
-		user2PubKey, _ := nostr.GetPublicKey(user2)
 		var ev model.Event
 		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
@@ -69,7 +65,7 @@ func TestNIP96(t *testing.T) {
 			{model.TagAttestationName, user1PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
 			{model.TagAttestationName, user2PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
 		}
-		require.NoError(t, ev.Sign(master))
+		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(ctx, &ev))
 	})
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
@@ -102,7 +98,7 @@ func TestNIP96(t *testing.T) {
 			Tags:      tagsToBroadcast,
 			Content:   contentToBroadcast,
 		}}
-		require.NoError(t, nip94EventToSign.Sign(user1))
+		require.NoError(t, nip94EventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
 		cfg.MustInit("./../../server/http/.testdata/storage-2nd-instance.yaml")
 		initStorage(ctx)
@@ -175,7 +171,7 @@ func TestNIP96(t *testing.T) {
 				nostr.Tag{"b", masterPubKey},
 			},
 		}}
-		require.NoError(t, deletionEventToSign.Sign(user1))
+		require.NoError(t, deletionEventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})
@@ -193,7 +189,7 @@ func TestNIP96(t *testing.T) {
 				nostr.Tag{"b", masterPubKey},
 			},
 		}}
-		require.NoError(t, deletionEventToSign.Sign(user1))
+		require.NoError(t, deletionEventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})
@@ -303,21 +299,23 @@ func deleteFile(t *testing.T, ctx context.Context, sk string, fileHash string, m
 
 func authorizedReq(t *testing.T, ctx context.Context, sk, method, url, fileHash, contentType string, body io.Reader, masterKey ...string) *http.Response {
 	t.Helper()
+
 	uploadReq, err := http.NewRequest(method, url, body)
+	require.NoError(t, err)
+
 	uploadReq.Header.Set("Content-Type", contentType)
-	require.NoError(t, err)
-	auth, err := generateAuthHeader(t, sk, method, fileHash, uploadReq.URL, masterKey...)
-	require.NoError(t, err)
-	uploadReq.Header.Set("Authorization", auth)
+	uploadReq.Header.Set("Authorization", generateAuthHeader(t, sk, method, fileHash, uploadReq.URL, masterKey...))
+
 	resp, err := http.DefaultClient.Do(uploadReq.WithContext(ctx))
 	require.NoError(t, err)
 	require.NotNil(t, resp)
+
 	return resp
 }
 
 func expectedResponse(caption string) *nip96.UploadResponse {
 	expectedResponses := map[string]*nip96.UploadResponse{
-		"ice profile pic": &nip96.UploadResponse{
+		"ice profile pic": {
 			Status:        "success",
 			Message:       "Upload successful.",
 			ProcessingURL: "",
@@ -335,7 +333,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content: "ice profile pic",
 			},
 		},
-		"ice logo": &nip96.UploadResponse{
+		"ice logo": {
 			Status:        "success",
 			Message:       "Upload successful.",
 			ProcessingURL: "",
@@ -353,7 +351,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content: "ice profile pic",
 			},
 		},
-		"text file": &nip96.UploadResponse{
+		"text file": {
 			Status:        "success",
 			Message:       "Upload successful.",
 			ProcessingURL: "",
@@ -371,7 +369,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content: "text file",
 			},
 		},
-		"master's file": &nip96.UploadResponse{
+		"master's file": {
 			Status:        "success",
 			Message:       "Upload successful.",
 			ProcessingURL: "",
@@ -400,36 +398,33 @@ func initStorage(ctx context.Context) {
 	http.DefaultClient.Transport = transportOverride
 }
 
-func generateAuthHeader(t *testing.T, sk, method, fileHash string, urlValue *url.URL, masterPubkey ...string) (string, error) {
+func generateAuthHeader(t *testing.T, sk, method, fileHash string, urlValue *url.URL, masterPubkey ...string) string {
 	t.Helper()
-	pk, err := nostr.GetPublicKey(sk)
-	if err != nil {
-		return "", fmt.Errorf("nostr.GetPublicKey: %w", err)
-	}
 
-	event := nostr.Event{
-		Kind:      nostrHttpAuthKind,
-		PubKey:    pk,
-		CreatedAt: nostr.Now(),
-		Tags: nostr.Tags{
-			nostr.Tag{"u", urlValue.String()},
-			nostr.Tag{"method", method},
-			nostr.Tag{"payload", fileHash},
+	pk, err := model.GetPublicKey(sk)
+	require.NoError(t, err)
+
+	event := model.Event{
+		Event: nostr.Event{
+			Kind:      nostrHttpAuthKind,
+			PubKey:    pk,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				model.Tag{"u", urlValue.String()},
+				model.Tag{"method", method},
+				model.Tag{"payload", fileHash},
+			},
 		},
 	}
 	if len(masterPubkey) > 0 && masterPubkey[0] != "" {
-		event.Tags = append(event.Tags, nostr.Tag{"b", masterPubkey[0]})
+		event.Tags = append(event.Tags, model.Tag{"b", masterPubkey[0]})
 	}
-	require.NoError(t, event.Sign(sk))
+	require.NoError(t, event.SignWithAlg(sk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	b, err := json.Marshal(event)
-	if err != nil {
-		return "", fmt.Errorf("json.Marshal: %w", err)
-	}
+	require.NoError(t, err)
 
-	payload := base64.StdEncoding.EncodeToString(b)
-
-	return fmt.Sprintf("Nostr %s", payload), nil
+	return `Nostr ` + base64.StdEncoding.EncodeToString(b)
 }
 
 const benchParallelism = 100
@@ -448,7 +443,7 @@ func BenchmarkUploadFiles(b *testing.B) {
 	b.SetParallelism(benchParallelism)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			sk := nostr.GeneratePrivateKey()
+			sk := model.GeneratePrivateKey()
 			img, _ := testdata.Open(".testdata/image2.png")
 			defer img.Close()
 			start := time.Now()
@@ -468,16 +463,14 @@ func BenchmarkUploadFiles(b *testing.B) {
 				Kind:      nostr.KindFileMetadata,
 				Tags:      resp.Nip94Event.Tags,
 			}}
-			require.NoError(b, nip94Event.Sign(sk))
+			require.NoError(b, nip94Event.SignWithAlg(sk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			relay := nostr.NewRelay(ctx, "wss://localhost:9998/")
-			err = relay.ConnectWithTLS(ctx, &tls.Config{})
-			if err = nip94Event.Sign(sk); err != nil {
-				log.Panic(err)
-			}
-			if err = relay.Publish(ctx, nip94Event.Event); err != nil {
-				log.Panic(err)
-			}
+			relay := nostr.NewRelay(ctx, "wss://localhost:9998/", nostr.WithSignatureChecker(func(e *nostr.Event) bool {
+				return true
+			}))
+			require.NoError(b, relay.ConnectWithTLS(ctx, &tls.Config{}))
+			require.NoError(b, relay.Publish(ctx, nip94Event.Event))
+			require.NoError(b, relay.Close())
 			b.Log(nip94Event)
 		}
 	})

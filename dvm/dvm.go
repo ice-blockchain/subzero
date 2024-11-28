@@ -122,7 +122,7 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
 }
 
 func (d *dvm) isServiceProviderCustomerInterestedIn(event *model.Event) (res bool, err error) {
-	pubKey, err := nostr.GetPublicKey(d.privateKey)
+	pubKey, err := model.GetPublicKey(d.privateKey)
 	if err != nil {
 		return false, errors.Wrap(err, "can't get public key")
 	}
@@ -231,7 +231,7 @@ func (d *dvm) publishJobResult(ctx context.Context, incomingEvent *model.Event, 
 	if reqiredPaymentAmount > 0 {
 		result.Tags = append(result.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
 	}
-	if err := result.Sign(d.privateKey); err != nil {
+	if err := result.SignWithAlg(d.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		return errors.Wrapf(err, "failed to sign event: %v", result)
 	}
 	eg := errgroup.Group{}
@@ -261,7 +261,7 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 	), "can't publish error feedback: %v", event)
 }
 
-func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status JobFeedbackStatus, relays []*nostr.Relay, serviceProviderPrivateKey, payload string, reqiredPaymentAmount float64) error {
+func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status JobFeedbackStatus, relays []*nostr.Relay, serviceProviderPrivateKey string, payload string, reqiredPaymentAmount float64) error {
 	result := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -277,7 +277,7 @@ func publishJobFeedback(ctx context.Context, incomingEvent *model.Event, status 
 	if reqiredPaymentAmount > 0 {
 		result.Tags = append(result.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
 	}
-	if err := result.Sign(serviceProviderPrivateKey); err != nil {
+	if err := result.SignWithAlg(serviceProviderPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		return errors.Wrapf(err, "failed to sign event: %v", result)
 	}
 	eg := errgroup.Group{}
@@ -311,7 +311,12 @@ func connectToRelays(ctx context.Context, relayList []string, conf *tls.Config) 
 }
 
 func connectToRelay(ctx context.Context, url string, conf *tls.Config) (*nostr.Relay, error) {
-	relay := nostr.NewRelay(ctx, url)
+	relay := nostr.NewRelay(ctx, url, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
+		subzeroEvent := model.Event{Event: *e}
+		ok, _ := subzeroEvent.CheckSignature()
+
+		return ok
+	}))
 	err := relay.ConnectWithTLS(ctx, conf)
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't connect to the relays")

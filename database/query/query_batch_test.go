@@ -19,7 +19,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	pk := nostr.GeneratePrivateKey()
+	pk := model.GeneratePrivateKey()
 	require.NotEmpty(t, pk)
 
 	var req databaseBatchRequest
@@ -31,7 +31,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 			ev.CreatedAt = model.Timestamp(i)
 			ev.Content = "content" + strconv.FormatInt(i, 10)
 			ev.Kind = nostr.KindTextNote
-			require.NoError(t, ev.Sign(pk))
+			require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, req.Save(&ev))
 		}
 
@@ -48,7 +48,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 		for i := range req.InsertOrReplace {
 			ev.Tags = append(ev.Tags, model.Tag{"e", req.InsertOrReplace[i].ID})
 		}
-		require.NoError(t, ev.Sign(pk))
+		require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, req.Remove(&ev))
 
 		req.InsertOrReplace = nil
@@ -69,7 +69,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 			ev.CreatedAt = model.Timestamp(i)
 			ev.Content = "content" + strconv.FormatInt(i, 10)
 			ev.Kind = nostr.KindTextNote
-			require.NoError(t, ev.Sign(pk))
+			require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, req.Save(&ev))
 		}
 
@@ -80,7 +80,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 			del.Tags = append(del.Tags, model.Tag{"e", req.InsertOrReplace[i].ID})
 		}
 
-		require.NoError(t, del.Sign(pk))
+		require.NoError(t, del.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, req.Remove(&del))
 
 		require.NoError(t, db.executeBatch(context.Background(), &req))

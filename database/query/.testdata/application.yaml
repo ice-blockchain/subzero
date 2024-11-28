@@ -3,5 +3,5 @@
 database:
   query:
     url: ":memory:"
-    private-key: "eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9"
+    private-key: "97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e"
     relay-url: "wss://localhost"
