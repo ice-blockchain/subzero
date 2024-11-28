@@ -19,8 +19,8 @@ BENCH_INSERT_DB_LIST  := testdb_3M
 
 benchdb_insert:
 	set -e; \
-	for db in $(BENCH_DB_LIST); do \
-		for p in $(BENCH_P_LIST); do \
+	for db in $(BENCH_INSERT_DB_LIST); do \
+		for p in $(BENCH_INSERT_P_LIST); do \
 			echo "===> Parallelism: $${p}"; \
 			BENCHDB=yes \
 			BENCHDB_PARALLELISM=$${p} \

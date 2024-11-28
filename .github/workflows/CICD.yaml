@@ -195,7 +195,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips, ffmpeg and wbritish workd package for meta extraction
+      - name: Install libvips, ffmpeg and wbritish word package for meta extraction
         run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg wbritish
       - name: Test ${{ matrix.package }}
 #TODO enable coverage
