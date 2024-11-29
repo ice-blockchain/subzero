@@ -861,7 +861,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
-			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
+			Content:   `{"name":"qwerty","display_name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validEventNIP01, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNIP01.Event))
@@ -891,7 +891,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
-			Content:   `{"display_name":"qqq","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
+			Content:   `{"display_name":"","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
