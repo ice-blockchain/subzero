@@ -25,7 +25,7 @@ func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
 	return openDatabase(":memory:", true).
-		WithPrivateKey(nostr.GeneratePrivateKey()).
+		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 }
 
@@ -502,7 +502,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 	t.Parallel()
 
-	pk := nostr.GeneratePrivateKey()
+	pk := model.GeneratePrivateKey()
 	require.NotEmpty(t, pk)
 
 	var ev model.Event
@@ -511,7 +511,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 	ev.CreatedAt = 1
 	ev.Kind = nostr.KindTextNote
 
-	require.NoError(t, ev.Sign(pk))
+	require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	t.Logf("event id: %s (sign %v)", ev.ID, ev.Sig)
 
 	ok, err := ev.CheckSignature()
@@ -549,7 +549,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 	t.Run("RepostEvent", func(t *testing.T) {
 		var repostEvent model.Event
 
-		pk2 := nostr.GeneratePrivateKey()
+		pk2 := model.GeneratePrivateKey()
 		require.NotEmpty(t, pk2)
 
 		data, err := ev.MarshalJSON()
@@ -559,7 +559,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 		repostEvent.CreatedAt = 2
 		repostEvent.Kind = nostr.KindRepost
 
-		require.NoError(t, repostEvent.Sign(pk2))
+		require.NoError(t, repostEvent.SignWithAlg(pk2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event id: %s (sign %v)", repostEvent.ID, repostEvent.Sig)
 
 		db := helperNewDatabase(t)
@@ -602,16 +602,8 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 func TestQueryEventAttestation(t *testing.T) {
 	t.Parallel()
 
-	const (
-		master = "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
-		active = "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
-	)
-
-	masterPk, err := nostr.GetPublicKey(master)
-	require.NoError(t, err)
-
-	activePk, err := nostr.GetPublicKey(active)
-	require.NoError(t, err)
+	master, masterPk := model.GenerateKeyPair()
+	active, activePk := model.GenerateKeyPair()
 
 	t.Logf("master   public key: %s", masterPk)
 	t.Logf("onbehalf public key: %s", activePk)
@@ -628,7 +620,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
 		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
-		require.NoError(t, ev.Sign(master))
+		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 
@@ -645,7 +637,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Tags = model.Tags{
 				{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
 			}
-			require.NoError(t, ev.Sign(master))
+			require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
 			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), ErrAttestationUpdateRejected)
 		})
@@ -659,7 +651,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
 			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
 		}
-		require.NoError(t, ev.Sign(master))
+		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 
@@ -677,7 +669,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = nostr.KindTextNote
 			ev.CreatedAt = 1
 			ev.Content = "hello world"
-			require.NoError(t, ev.Sign(master))
+			require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 		})
 		t.Run("OnBehalf", func(t *testing.T) {
@@ -686,7 +678,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.CreatedAt = 2
 			ev.Content = "hello world from active"
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPk}}
-			require.NoError(t, ev.Sign(active))
+			require.NoError(t, ev.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
 			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 		})
@@ -695,8 +687,8 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = nostr.KindTextNote
 			ev.CreatedAt = 3
 			ev.Content = "hello world from non-existing user"
-			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, nostr.GeneratePrivateKey()}}
-			require.NoError(t, ev.Sign(active))
+			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, model.GeneratePrivateKey()}}
+			require.NoError(t, ev.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
 			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
 		})
@@ -715,19 +707,10 @@ func TestQueryEventAttestation(t *testing.T) {
 func TestEventDeleteWithAttestation(t *testing.T) {
 	t.Parallel()
 
-	const (
-		masterPrivate = "c24f7ab5b42254d6558e565ec1c170b266a7cd2be1edf9f42bfb375640f7f559"
-		masterPublic  = "e08ab1786373d6bde8ce1d790a08730536bab1b5dbc6fb603def1d6110a707f9"
-
-		user1Private = "3c00c01e6556c4b603b4c49d12059e02c42161d055b658e5635fa6206f594306"
-		user1Public  = "9c7e93ead06f045703bdcbbab442b158a2093b3b0e1e389cc5b0d4884849c6a9"
-
-		user2Private = "cea41ff6c6e9eb0cde6740a1fbe8c134bda650ce819e43b68bf61add2c68f8d9"
-		user2Public  = "32d45e035d10fd630bd315215370cc2c694f2eb79487bb84abc30c855503a98c"
-
-		hackerPrivate = "e8eb18e16a3bf3ad88c448551d026e586fa996a27aaeda908fe714779cda4017"
-		hackerPublic  = "48cc7f09058b32f2bfe31bee016098a2b6b302dc02724986b38d7763e849ca84"
-	)
+	masterPrivate, masterPublic := model.GenerateKeyPair()
+	user1Private, user1Public := model.GenerateKeyPair()
+	user2Private, user2Public := model.GenerateKeyPair()
+	hackerPrivate, hackerPublic := model.GenerateKeyPair()
 
 	db := helperNewDatabase(t)
 	defer db.Close()
@@ -763,7 +746,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
 		ev.Tags = baseAttestation
-		require.NoError(t, ev.Sign(masterPrivate))
+		require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 	})
 	t.Run("AddEvents", func(t *testing.T) {
@@ -773,7 +756,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.Kind = nostr.KindTextNote
 				ev.CreatedAt = model.Timestamp(3 + n)
 				ev.Content = "hello world" + strconv.Itoa(n)
-				require.NoError(t, ev.Sign(masterPrivate))
+				require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				masterMessageIds = append(masterMessageIds, ev.ID)
 				require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 			}
@@ -785,7 +768,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.CreatedAt = model.Timestamp(5 + n)
 				ev.Content = "hello world from user1 number" + strconv.Itoa(n)
 				ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}}
-				require.NoError(t, ev.Sign(user1Private))
+				require.NoError(t, ev.SignWithAlg(user1Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				user1MessageIds = append(user1MessageIds, ev.ID)
 				require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 			}
@@ -798,7 +781,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.CreatedAt = model.Timestamp(7 + n)
 				ev.Content = "hello world from user2 number" + strconv.Itoa(n)
 				ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}}
-				require.NoError(t, ev.Sign(user2Private))
+				require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				user2MessageIds = append(user2MessageIds, ev.ID)
 				require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 			}
@@ -814,7 +797,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Tags = append(ev.Tags, baseAttestation...)
 			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
 			ev.Tags = append(ev.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterPublic})
-			require.NoError(t, ev.Sign(user2Private))
+			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
 		})
 	})
@@ -824,7 +807,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 10
 			ev.Tags = model.Tags{{"e", user1MessageIds[0]}}
-			require.NoError(t, ev.Sign(masterPrivate))
+			require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 
 			mustBeZero(t, user1MessageIds[0])
@@ -835,7 +818,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
-			require.NoError(t, ev.Sign(user2Private))
+			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 
 			mustBeZero(t, user1MessageIds[1])
@@ -846,11 +829,11 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
-			require.NoError(t, ev.Sign(hackerPrivate))
+			require.NoError(t, ev.SignWithAlg(hackerPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
 
 			ev.Tags = model.Tags{{"e", masterMessageIds[0]}}
-			require.NoError(t, ev.Sign(hackerPrivate))
+			require.NoError(t, ev.SignWithAlg(hackerPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
 		})
 		t.Run("User1 could not remove master events", func(t *testing.T) {
@@ -858,7 +841,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", masterMessageIds[1]}}
-			require.NoError(t, ev.Sign(user2Private))
+			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
 			mustBeOne(t, masterMessageIds[1])
 			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
@@ -871,7 +854,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 12
 			ev.Tags = append(ev.Tags, baseAttestation...)
 			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, user1Public, "", model.CustomIONAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
-			require.NoError(t, ev.Sign(masterPrivate))
+			require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 		})
 		t.Run("User1 could not remove events of user2", func(t *testing.T) {
@@ -879,7 +862,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
-			require.NoError(t, ev.Sign(user1Private))
+			require.NoError(t, ev.SignWithAlg(user1Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
 			mustBeOne(t, user2MessageIds[0])
 		})

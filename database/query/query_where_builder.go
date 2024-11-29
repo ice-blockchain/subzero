@@ -532,7 +532,7 @@ select
 	coalesce(evr.master_pubkey, ''),
 	'',
 	case when f.kind = 7 then json_object('+', f.value) else cast(f.value as text) end as content,
-	json_object('kind', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id)) as d_tag,
+	json_array(json_object('kinds', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id))) as d_tag,
 	case when
 		f.kind = 7 then
 			json_array(
@@ -544,7 +544,7 @@ select
 		end as jtags
 from
 	event_counters f
-inner join events evr on f.reference_id = evr.id
+inner join events evr on f.reference_id in (evr.id, evr.pubkey)
 where
 `)
 	} else {
@@ -665,7 +665,7 @@ group by e.pubkey, e.master_pubkey`)
 		w.WriteString("f.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
 		w.addParam(filterID, "ftagname", "#e")
-		w.addParam(filterID, "fkind", filter.Start.Kind)
+		w.addParam(filterID, "fkind", filter.Reduce.Kinds[1])
 		var refType string
 		switch {
 		case filter.Reduce.Tag == "q":
@@ -679,11 +679,20 @@ group by e.pubkey, e.master_pubkey`)
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
 			w.addParam(filterID, "context", filter.Reduce.Context)
 			refType = "reply"
+
+		case filter.Reduce.Tag == "p":
+			w.addParam(filterID, "ftagname", "#p")
+			w.addParam(filterID, "context", filter.Reduce.Tag)
+			refType = "follower"
 		}
 		w.WriteString(" AND f.reference_type = :")
 		w.WriteString(w.addParam(filterID, "rref", refType))
 		w.WriteString(" AND f.reference_id IN (")
-		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		if filter.Reduce.Kinds[1] == nostr.KindFollowList {
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		} else {
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		}
 		w.WriteString(")")
 	}
 }

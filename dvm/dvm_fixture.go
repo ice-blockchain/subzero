@@ -4,8 +4,8 @@
 
 package dvm
 
-import "github.com/nbd-wtf/go-nostr"
+import "github.com/ice-blockchain/subzero/model"
 
 func PublicKey() (string, error) {
-	return nostr.GetPublicKey(globalDVM.privateKey)
+	return model.GetPublicKey(globalDVM.privateKey)
 }

@@ -199,7 +199,7 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.MasterPubKey})
 	}
 
-	err := event.Sign(db.relayPrivateKey)
+	err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
 	if err != nil {
 		panic(errors.Wrap(err, "failed to sign event"))
 	}

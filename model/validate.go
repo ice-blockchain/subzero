@@ -172,9 +172,6 @@ func (e *Event) Validate() error {
 	case nostr.KindRepost, nostr.KindGenericRepost:
 		return validateKindRepostEvent(e)
 	case nostr.KindFollowList:
-		if len(e.Tags) == 0 || len(e.Tags.GetAll([]string{"p"})) == 0 || e.Content != "" {
-			return errors.Wrapf(ErrWrongEventParams, "nip-02 params: %+v", e)
-		}
 		for _, tag := range e.Tags {
 			if tag.Key() == "p" && tag.Value() == "" {
 				return errors.Wrapf(ErrWrongEventParams, "nip-02 params, no required pubkey %+v", e)

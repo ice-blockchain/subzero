@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -21,7 +20,7 @@ import (
 )
 
 func TestJob(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	dvm.MustInit()
 	serivceProviderPubKey, err := dvm.PublicKey()
@@ -42,7 +41,7 @@ func TestJob(t *testing.T) {
 				return nil
 			}
 		}
-		assert.False(t, events[0].IsEphemeral())
+		require.False(t, events[0].IsEphemeral())
 		storedEvents = append(storedEvents, events[0])
 
 		return nil
@@ -223,7 +222,7 @@ func TestJob(t *testing.T) {
 }
 
 func TestJobDeletion(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	dvm.MustInit()
 	serivceProviderPubKey, err := dvm.PublicKey()
@@ -244,7 +243,7 @@ func TestJobDeletion(t *testing.T) {
 				return nil
 			}
 		}
-		assert.False(t, events[0].IsEphemeral())
+		require.False(t, events[0].IsEphemeral())
 		storedEvents = append(storedEvents, events[0])
 
 		return nil
@@ -424,10 +423,9 @@ func TestJobDeletion(t *testing.T) {
 }
 
 func TestErrorFeedback(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
-	privKeyHex := nostr.GeneratePrivateKey()
-	serivceProviderPubKey, err := nostr.GetPublicKey(privKeyHex)
+	privKeyHex := model.GeneratePrivateKey()
+	serivceProviderPubKey, err := model.GetPublicKey(privKeyHex)
 	require.NoError(t, err)
 	dvm.MustInit()
 	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
@@ -446,7 +444,7 @@ func TestErrorFeedback(t *testing.T) {
 				return nil
 			}
 		}
-		assert.False(t, events[0].IsEphemeral())
+		require.False(t, events[0].IsEphemeral())
 		storedEvents = append(storedEvents, events[0])
 
 		return nil
@@ -477,7 +475,7 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
 	})
@@ -492,7 +490,7 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
 	})
@@ -507,7 +505,7 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
 	})
@@ -522,7 +520,7 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
 		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
 		expectedEvents = append(expectedEvents, ev)
 	})
@@ -539,7 +537,7 @@ func TestErrorFeedback(t *testing.T) {
 				Sig:       uuid.NewString(),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, jobEvent, privkey)
+		helperSignWithMinLeadingZeroBits(t, jobEvent, privKeyHex)
 		require.NoError(t, relay.Publish(ctx, jobEvent.Event))
 		expectedEvents = append(expectedEvents, jobEvent)
 	})
@@ -570,7 +568,7 @@ func TestErrorFeedback(t *testing.T) {
 }
 
 func TestOfflineJob(t *testing.T) {
-	privkey := nostr.GeneratePrivateKey()
+	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	serivceProviderPubKey, err := dvm.PublicKey()
 	require.NoError(t, err)
@@ -591,7 +589,7 @@ func TestOfflineJob(t *testing.T) {
 				return nil
 			}
 		}
-		assert.False(t, events[0].IsEphemeral())
+		require.False(t, events[0].IsEphemeral())
 		storedEvents = append(storedEvents, events[0])
 
 		return nil

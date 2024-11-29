@@ -59,11 +59,11 @@ server:
 database:
   query:
     url: /var/lib/subzero_ion_connect/data/db/query.db
-    private-key: &pk eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9
+    private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
     relay-url: &self "wss://example.com"
 
 storage:
-  private-key: f2e7f1829027cf347d3ddb90e40890fcffb1ca99a3fc2564a120286570b690e548ac550ea62ab27c8c85d1f862b779b8c7dd09d733403dd9a3104be42f8ddb7b
+  private-key: *pk
   ion-storage-config-url: https://ton.org/testnet-global.config.json
   absolute-root-storage-path: /var/lib/subzero_ion_connect/data/file_storage
   external-adnl-address: 127.0.0.1

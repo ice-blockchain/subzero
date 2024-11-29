@@ -45,6 +45,17 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
+			Input: "kind3>kind0",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 3,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds: []int{0},
+				},
+			},
+		},
+		{
 			Input: "kind1+q>kind10002",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
@@ -132,6 +143,19 @@ func TestParseDepRequest(t *testing.T) {
 					Kinds: []int{6400, 1},
 					Group: true,
 					Tag:   "q",
+				},
+			},
+		},
+		{
+			Input: "kind0>kind6400+kind3+group+p",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 0,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds: []int{6400, 3},
+					Group: true,
+					Tag:   "p",
 				},
 			},
 		},
@@ -473,5 +497,106 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Len(t, events, 2)
 		require.Equal(t, "t8id2", events[0].ID)
 		require.Equal(t, "t8id1", events[1].ID)
+	})
+	t.Run("kind0>kind6400+kind3+group+p", func(t *testing.T) {
+		// Celebrity 1, and two fans.
+		require.NoError(t, db.AcceptEvents(context.Background(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t9id1",
+					Kind:      nostr.KindProfileMetadata,
+					PubKey:    "t9pk1",
+					CreatedAt: 1,
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t9id2",
+					Kind:      nostr.KindFollowList,
+					PubKey:    "t9pk2",
+					CreatedAt: 2,
+					Tags: model.Tags{
+						{"p", "t9pk1"},
+					},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t9id3",
+					Kind:      nostr.KindFollowList,
+					PubKey:    "t9pk3",
+					CreatedAt: 2,
+					Tags: model.Tags{
+						{"p", "t9pk1"},
+					},
+				},
+			},
+		))
+		// Celebrity 2, and single fan.
+		require.NoError(t, db.AcceptEvents(context.Background(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t9id4",
+					Kind:      nostr.KindProfileMetadata,
+					PubKey:    "t9pk4",
+					CreatedAt: 1,
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t9id5",
+					Kind:      nostr.KindFollowList,
+					PubKey:    "t9pk5",
+					CreatedAt: 2,
+					Tags: model.Tags{
+						{"p", "t9pk4"},
+					},
+				},
+			},
+		))
+		helperMustBePrecalculatedCount(t, db, 2, model.Filter{Authors: []string{"t9pk1"}, Kinds: []int{nostr.KindFollowList}})
+		helperMustBePrecalculatedCount(t, db, 1, model.Filter{Authors: []string{"t9pk4"}, Kinds: []int{nostr.KindFollowList}})
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"t9id1", "t9id4"},
+			Search: "include:dependencies:kind0>kind6400+kind3+group+p",
+		})
+		require.Len(t, events, 4)
+		for _, ev := range events {
+			t.Logf("dvm event: %+v", ev)
+			switch ev.Kind {
+			case model.KindDVMCountResponse:
+				req := ev.GetTag("request")
+				require.NotNil(t, req)
+				value := req.Value()
+				require.NotEmpty(t, value)
+
+				var reqEvent model.Event
+				err := json.Unmarshal([]byte(value), &reqEvent)
+				require.NoError(t, err)
+				t.Logf("request event: %+v", reqEvent)
+
+				var filters model.Filters
+				err = json.Unmarshal([]byte(reqEvent.Content), &filters)
+				require.NoError(t, err)
+				require.Len(t, filters, 1)
+				t.Logf("filters: %+v", filters)
+				require.Len(t, filters[0].Kinds, 1)
+				require.Equal(t, nostr.KindFollowList, filters[0].Kinds[0])
+				require.Len(t, filters[0].Tags, 1)
+
+				keys, ok := filters[0].Tags["p"]
+				require.True(t, ok)
+				require.Len(t, keys, 1)
+				require.Len(t, keys[0], 1)
+				switch *keys[0][0] {
+				case "t9pk1":
+					require.Equal(t, "2", ev.Content)
+				case "t9pk4":
+					require.Equal(t, "1", ev.Content)
+				default:
+					t.Fatalf("unexpected author: %s", filters[0].Authors[0])
+				}
+			}
+		}
 	})
 }

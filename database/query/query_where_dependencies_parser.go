@@ -49,6 +49,8 @@ const (
 
 	tokenLiteralTagE
 	tokenLiteralTagQ
+
+	tokenLiteralGroupTagDetailP
 )
 
 var (
@@ -67,6 +69,8 @@ var (
 
 		tokenLiteralTagE: {"e"},
 		tokenLiteralTagQ: {"q"},
+
+		tokenLiteralGroupTagDetailP: {"group+p"},
 	}
 
 	parserKnownSequences = []filterSequence{
@@ -178,6 +182,19 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
+		// kind0>kind6400+kind3+group+p.
+		{
+			Tokens: []token{
+				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenCondDetail,
+				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenCondDetail,
+				tokenLiteralGroupTagDetailP,
+				tokenizer.TokenUndef,
+			},
+		},
 		// kind1>kind6400+kind7+group+content.
 		{
 			Tokens: []token{
@@ -193,7 +210,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kind1>kind0 / kind6>kind10002.
+		// kind1>kind0 / kind6>kind10002 / kind3>kind0.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenInteger,
@@ -247,6 +264,9 @@ func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependencies, e
 			} else {
 				filter.Reduce.Tag = stream.CurrentToken().ValueString()
 			}
+		case tokenLiteralGroupTagDetailP:
+			filter.Reduce.Tag = "p"
+			filter.Reduce.Group = true
 
 		case tokenLiteralGroup:
 			filter.Reduce.Group = true

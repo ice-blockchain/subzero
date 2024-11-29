@@ -73,7 +73,7 @@ func TestIteratorScanTagsWithGaps(t *testing.T) {
 	defer db.Close()
 
 	tags := model.Tags{{"a", "", "b", "c"}, {"1", "2", "3", "", "", "4"}}
-	key := nostr.GeneratePrivateKey()
+	key := model.GeneratePrivateKey()
 
 	t.Run("Save", func(t *testing.T) {
 		var ev model.Event
@@ -82,7 +82,7 @@ func TestIteratorScanTagsWithGaps(t *testing.T) {
 		ev.CreatedAt = 1
 		ev.Content = "content"
 		ev.Tags = tags
-		require.NoError(t, ev.Sign(key))
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 	})
 	t.Run("Select", func(t *testing.T) {
