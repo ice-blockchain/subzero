@@ -16,7 +16,7 @@ func GeneratePrivateKey() string {
 	return priv
 }
 
-func GenerateKeyPair() (string, string) {
+func GenerateKeyPair() (private string, public string) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		log.Panicf("failed to generate private key: %v", err)
