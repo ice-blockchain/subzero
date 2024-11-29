@@ -216,7 +216,7 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 
 	case model.KindDVMCountResponse:
 		var ev databaseEvent
-		ev.Kind = model.KindDVMCountRequest
+		ev.Kind = model.KindJobNostrEventCount
 		ev.CreatedAt = event.CreatedAt
 		ev.Content = event.Dtag
 		ev.Tags = append(event.Tags, model.Tag{"param", "relay", db.relayURL})

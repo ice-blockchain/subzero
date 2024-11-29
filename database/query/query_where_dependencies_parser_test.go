@@ -598,5 +598,83 @@ func TestSelectWithDependencies(t *testing.T) {
 				}
 			}
 		}
+		t.Run("Delegated", func(t *testing.T) {
+			const (
+				masterPrivate = `612be8342c593ba8a592f34c462e65a63c8233bad13aea022c5dcb3656a975d560f97174e3fc1c8decee03bfed97157a1a8db0d1140b8792958cd57f6de252e0`
+				userPrivate   = `f66568ed325fac494593d5a191a591ca0e3cd4b04141350aa4703776f603e5769c1a22718581dc75961acc4b49f43935356bbecfc4cdb4229b12c31017a8a70c`
+			)
+			masterPublic, err := model.GetPublicKey(masterPrivate)
+			require.NoError(t, err)
+			userPublic, err := model.GetPublicKey(userPrivate)
+			require.NoError(t, err)
+
+			t.Logf("master public key: %s", masterPublic)
+			t.Logf("user public key:   %s", userPublic)
+
+			ev := &model.Event{
+				Event: nostr.Event{
+					Kind:      model.CustomIONKindAttestation,
+					CreatedAt: 1,
+					Tags:      model.Tags{{model.TagAttestationName, userPublic, "", model.CustomIONAttestationKindActive + ":1"}},
+				},
+			}
+			require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(context.TODO(), ev))
+
+			meta := &model.Event{
+				Event: nostr.Event{
+					Kind:      nostr.KindProfileMetadata,
+					CreatedAt: 2,
+					Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}},
+				},
+			}
+			require.NoError(t, meta.SignWithAlg(userPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(context.TODO(), meta))
+
+			require.NoError(t, db.AcceptEvents(context.Background(),
+				&model.Event{
+					Event: nostr.Event{
+						ID:        "t10id1",
+						Kind:      nostr.KindFollowList,
+						PubKey:    "t10pk1",
+						CreatedAt: 3,
+						Tags: model.Tags{
+							{"p", masterPublic},
+						},
+					},
+				},
+				&model.Event{
+					Event: nostr.Event{
+						ID:        "t10id2",
+						Kind:      nostr.KindFollowList,
+						PubKey:    "t10pk2",
+						CreatedAt: 4,
+						Tags: model.Tags{
+							{"p", masterPublic},
+						},
+					},
+				},
+				&model.Event{
+					Event: nostr.Event{
+						ID:        "t10id3",
+						Kind:      nostr.KindFollowList,
+						PubKey:    "t10pk3",
+						CreatedAt: 5,
+						Tags: model.Tags{
+							{"p", masterPublic},
+						},
+					},
+				},
+			))
+			events := helperSelectEvents(t, db, model.Filter{
+				Authors: []string{masterPublic},
+				Search:  "include:dependencies:kind0>kind6400+kind3+group+p",
+			})
+			require.Len(t, events, 3) // Attestation, Profile metadata, follower count.
+			for i, kind := range []int{nostr.KindProfileMetadata, model.CustomIONKindAttestation, model.KindDVMCountResponse} {
+				require.Equalf(t, kind, events[i].Kind, "event %d: %v", i, events[i])
+			}
+			require.Equal(t, "3", events[2].Content)
+		})
 	})
 }
