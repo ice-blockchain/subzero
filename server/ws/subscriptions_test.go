@@ -436,14 +436,14 @@ func TestPublishingEvents(t *testing.T) {
 		require.NoError(t, ephemeralEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, relay.Publish(ctx, ephemeralEvent.Event))
 	})
-	t.Run("wrong kind 03 follow list tag parameters", func(t *testing.T) {
-		inValidKind03Event := &model.Event{Event: nostr.Event{
+	var emptyKind03Event *model.Event
+	t.Run("empty kind 03 follow list tag parameters", func(t *testing.T) {
+		emptyKind03Event = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindFollowList,
-			Tags:      nil,
 		}}
-		helperSignWithMinLeadingZeroBits(t, inValidKind03Event, privkey)
-		require.Error(t, relay.Publish(ctx, inValidKind03Event.Event))
+		helperSignWithMinLeadingZeroBits(t, emptyKind03Event, privkey)
+		require.NoError(t, relay.Publish(ctx, emptyKind03Event.Event))
 	})
 	t.Run("wrong kind 03 follow list content", func(t *testing.T) {
 		inValidKind03Event := &model.Event{Event: nostr.Event{
@@ -489,7 +489,7 @@ func TestPublishingEvents(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, onBehalfEvent.Event))
 	})
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validEvent, validKind03Event, attestationEvent, &onBehalfEvent}, storedEvents)
+	require.Equal(t, []*model.Event{validEvent, emptyKind03Event, validKind03Event, attestationEvent, &onBehalfEvent}, storedEvents)
 }
 
 func TestPublishingNIP09Events(t *testing.T) {
