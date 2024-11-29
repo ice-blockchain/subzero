@@ -514,7 +514,7 @@ func validateKindProfileMetadataEvent(e *Event) error {
 	if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01,nip-24: wrong json fields for: %+v", e)
 	}
-	if parsedContent.Name == "" || parsedContent.About == "" || parsedContent.Picture == "" {
+	if parsedContent.Name == "" || parsedContent.DisplayName == "" {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
 	}
 
