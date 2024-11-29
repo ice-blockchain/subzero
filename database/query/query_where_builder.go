@@ -527,7 +527,7 @@ select
 	6400,
 	unixepoch(),
 	0,
-	f.reference_id,
+	case when f.kind = 3 then '' else f.reference_id end as id,
 	coalesce(evr.pubkey, ''),
 	coalesce(evr.master_pubkey, ''),
 	'',
@@ -544,7 +544,7 @@ select
 		end as jtags
 from
 	event_counters f
-inner join events evr on f.reference_id in (evr.id, evr.pubkey)
+inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + ` and f.reference_id in (evr.id, evr.pubkey, evr.master_pubkey)
 where
 `)
 	} else {
@@ -690,6 +690,8 @@ group by e.pubkey, e.master_pubkey`)
 		w.WriteString(" AND f.reference_id IN (")
 		if filter.Reduce.Kinds[1] == nostr.KindFollowList {
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+			w.WriteString(" UNION ALL ")
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
 		} else {
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
 		}
