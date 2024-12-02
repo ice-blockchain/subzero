@@ -123,6 +123,10 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("file required"))
 			return
 		}
+		if upload.File.Filename == "" || strings.Contains(upload.File.Filename, "..") {
+			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid filename, must be provided"))
+			return
+		}
 		if upload.MediaType != "" && upload.MediaType != mediaTypeAvatar && upload.MediaType != mediaTypeBanner {
 			gCtx.JSON(http.StatusBadRequest, uploadErr(fmt.Sprintf("unsupported media type %v", upload.MediaType)))
 			return
@@ -252,6 +256,9 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 		if len(spl) == 2 {
 			masterPubkey = spl[0]
 			file = spl[1]
+		}
+		if strings.Contains(file, ".") {
+			file = strings.TrimSuffix(file, filepath.Ext(file))
 		}
 		filePath, err := s.storageClient.FilePath(masterPubkey, file)
 		if err != nil {

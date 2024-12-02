@@ -192,7 +192,7 @@ func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bo
 		if err != nil {
 			return "", errors.Wrapf(err, "invalid relay-url configured %v", globalConfig.RelayURL)
 		}
-		return fmt.Sprintf("https://%v:%v/files/%v:%v", relayUrl.Hostname(), relayUrl.Port(), masterPubkey, fileHash), nil
+		return fmt.Sprintf("https://%v:%v/files/%v:%v%v", relayUrl.Hostname(), relayUrl.Port(), masterPubkey, fileHash, filepath.Ext(relativePath)), nil
 	}
 	url := fmt.Sprintf("http://%v.bag/%v?bootstrap=%v", bagID, relativePath, bootstrap)
 
