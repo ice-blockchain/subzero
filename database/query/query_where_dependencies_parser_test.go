@@ -5,7 +5,9 @@ package query
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
@@ -677,4 +679,75 @@ func TestSelectWithDependencies(t *testing.T) {
 			require.Equal(t, "3", events[2].Content)
 		})
 	})
+}
+
+func TestSelectExpirationWithDependencies(t *testing.T) {
+	t.Parallel()
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := time.Now().Unix()
+	expiration := strconv.FormatInt(now+3600, 10)
+
+	t.Run("Insert", func(t *testing.T) {
+		require.NoError(t, db.AcceptEvents(context.Background(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t1id1",
+					PubKey:    "t1pk1",
+					Content:   "content1",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 1,
+					Tags:      model.Tags{{"expiration", expiration}},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t1id2",
+					PubKey:    "t1pk2",
+					Content:   "content2",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 2,
+					Tags:      model.Tags{{"expiration", expiration}},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t1id3",
+					PubKey:    "t1pk2",
+					Content:   "content3",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 3,
+					Tags:      model.Tags{{"expiration", expiration}},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t1id4",
+					PubKey:    "t1pk4",
+					Content:   "content4",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 4,
+					Tags:      model.Tags{{"expiration", expiration}},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "t1id5",
+					PubKey:    "t1pk1",
+					Content:   "content5",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 5,
+					Tags:      model.Tags{{"expiration", expiration}},
+				},
+			},
+		))
+	})
+
+	events := helperSelectEvents(t, db, model.Filter{Limit: 2, Search: "expiration:true"})
+	require.Len(t, events, 3) // main: (t1pk1 + t1pk4) + dep: (t1pk1 / t1id1).
+	for i, pubkey := range []string{"t1pk1", "t1pk4", "t1pk1"} {
+		t.Logf("event %d: %+v", i, events[i])
+		require.Equal(t, pubkey, events[i].PubKey)
+	}
 }
