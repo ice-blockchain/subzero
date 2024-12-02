@@ -574,52 +574,56 @@ where
 
 	if filter.Expiration != nil && *filter.Expiration {
 		w.WriteString(`e.master_pubkey IN (select master_pubkey from ` + cteName + `)
-and hidden=0
+and e.hidden=0
+and e.kind in (1, 30023)
 and exists (select true from event_tags where event_id = e.id and event_tag_key = 'expiration' and cast(` + tagValueExpiration + ` as integer) > unixepoch())`)
-	} else {
-		switch filter.Reduce.Kinds[0] {
-		case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost:
-			w.WriteString("e.kind = :")
-			w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-			if filter.Reduce.Author != "" {
-				w.WriteString(" AND :")
-				w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
-				w.WriteString(" IN (e.pubkey, e.master_pubkey) AND ")
-			}
-			tag := filter.Reduce.Tag
-			if tag == "" {
-				// Repost, reaction.
-				tag = "e"
-			}
-			w.WriteString("e.id in (select event_id from event_tags where event_tag_key = :")
-			w.WriteString(w.addParam(filterID, "rtag", tag))
-			w.WriteString(" and event_tag_value1 in (")
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
-			w.WriteRune(')')
-			if filter.Reduce.Context != "" {
-				w.WriteString(" and event_tag_value3 = :")
-				w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
-			}
-			w.WriteString(" group by event_tag_value1) AND e.hidden=0")
 
-		case nostr.KindBadgeDefinition:
-			startFilter := w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start)
-			w.WriteString("e.id in ((select event_tag_value1 from event_tags where event_id in (")
-			w.WriteString(startFilter)
-			w.WriteString(") and event_tag_key = 'e'),")
-			w.WriteString(`(select ee.id from (select subzero_nostr_tag_a_get_pk(event_tag_value1) as pk, subzero_nostr_tag_a_get_dtag(event_tag_value1) as name from event_tags where event_id in (`)
-			w.WriteString(startFilter)
-			w.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = 0)) AND e.hidden=0")
+		return
+	}
 
-		case nostr.KindRelayListMetadata:
-			w.WriteString("e.kind = :")
-			w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-			w.WriteString(" AND ( master_pubkey IN (")
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
-			w.WriteString(") OR pubkey IN (")
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
-			w.WriteString(")) AND e.hidden=0")
-			w.WriteString(`
+	switch filter.Reduce.Kinds[0] {
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		if filter.Reduce.Author != "" {
+			w.WriteString(" AND :")
+			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
+			w.WriteString(" IN (e.pubkey, e.master_pubkey) AND ")
+		}
+		tag := filter.Reduce.Tag
+		if tag == "" {
+			// Repost, reaction.
+			tag = "e"
+		}
+		w.WriteString("e.id in (select event_id from event_tags where event_tag_key = :")
+		w.WriteString(w.addParam(filterID, "rtag", tag))
+		w.WriteString(" and event_tag_value1 in (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		w.WriteRune(')')
+		if filter.Reduce.Context != "" {
+			w.WriteString(" and event_tag_value3 = :")
+			w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
+		}
+		w.WriteString(" group by event_tag_value1) AND e.hidden=0")
+
+	case nostr.KindBadgeDefinition:
+		startFilter := w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start)
+		w.WriteString("e.id in ((select event_tag_value1 from event_tags where event_id in (")
+		w.WriteString(startFilter)
+		w.WriteString(") and event_tag_key = 'e'),")
+		w.WriteString(`(select ee.id from (select subzero_nostr_tag_a_get_pk(event_tag_value1) as pk, subzero_nostr_tag_a_get_dtag(event_tag_value1) as name from event_tags where event_id in (`)
+		w.WriteString(startFilter)
+		w.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = 0)) AND e.hidden=0")
+
+	case nostr.KindRelayListMetadata:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(" AND ( master_pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		w.WriteString(") OR pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		w.WriteString(")) AND e.hidden=0")
+		w.WriteString(`
 union all
 select
 	20002,
@@ -635,19 +639,19 @@ select
 from
 	events e
 inner join `)
+		w.WriteString(cteName)
+		w.WriteString(` on e.id = `)
+		w.WriteString(cteName)
+		w.WriteString(`.id where e.kind =:`)
+		w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
+		if filter.Start.Tag != "" {
+			w.WriteString(" AND EXISTS (select true from event_tags where event_id = ")
 			w.WriteString(cteName)
-			w.WriteString(` on e.id = `)
-			w.WriteString(cteName)
-			w.WriteString(`.id where e.kind =:`)
-			w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
-			if filter.Start.Tag != "" {
-				w.WriteString(" AND EXISTS (select true from event_tags where event_id = ")
-				w.WriteString(cteName)
-				w.WriteString(".id AND event_tag_key = :")
-				w.WriteString(w.addParam(filterID, "tag", filter.Start.Tag))
-				w.WriteString(")")
-			}
-			w.WriteString(` AND
+			w.WriteString(".id AND event_tag_key = :")
+			w.WriteString(w.addParam(filterID, "tag", filter.Start.Tag))
+			w.WriteString(")")
+		}
+		w.WriteString(` AND
 not exists (select true from events subev where subev.kind = 10002 and
 (
 	(subev.pubkey = e.pubkey               and subev.hidden = 0) or
@@ -657,51 +661,50 @@ not exists (select true from events subev where subev.kind = 10002 and
 )) and e.hidden=0
 group by e.pubkey, e.master_pubkey`)
 
-		case nostr.KindProfileMetadata:
-			w.WriteString("e.kind = :")
-			w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-			w.WriteString(" AND ( master_pubkey IN (")
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
-			w.WriteString(") OR pubkey IN (")
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
-			w.WriteString(")) AND e.hidden=0")
+	case nostr.KindProfileMetadata:
+		w.WriteString("e.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(" AND ( master_pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		w.WriteString(") OR pubkey IN (")
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+		w.WriteString(")) AND e.hidden=0")
 
-		case model.KindDVMCountResponse:
-			w.WriteString("f.kind = :")
-			w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
-			w.addParam(filterID, "ftagname", "#e")
-			w.addParam(filterID, "fkind", filter.Reduce.Kinds[1])
-			var refType string
-			switch {
-			case filter.Reduce.Tag == "q":
-				w.addParam(filterID, "ftagname", "#q")
-				w.addParam(filterID, "context", filter.Reduce.Tag)
-				refType = "quote"
+	case model.KindDVMCountResponse:
+		w.WriteString("f.kind = :")
+		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
+		w.addParam(filterID, "ftagname", "#e")
+		w.addParam(filterID, "fkind", filter.Reduce.Kinds[1])
+		var refType string
+		switch {
+		case filter.Reduce.Tag == "q":
+			w.addParam(filterID, "ftagname", "#q")
+			w.addParam(filterID, "context", filter.Reduce.Tag)
+			refType = "quote"
 
-			case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
-				w.addParam(filterID, "context", cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
+		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
+			w.addParam(filterID, "context", cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
 
-			case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
-				w.addParam(filterID, "context", filter.Reduce.Context)
-				refType = "reply"
+		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+			w.addParam(filterID, "context", filter.Reduce.Context)
+			refType = "reply"
 
-			case filter.Reduce.Tag == "p":
-				w.addParam(filterID, "ftagname", "#p")
-				w.addParam(filterID, "context", filter.Reduce.Tag)
-				refType = "follower"
-			}
-			w.WriteString(" AND f.reference_type = :")
-			w.WriteString(w.addParam(filterID, "rref", refType))
-			w.WriteString(" AND f.reference_id IN (")
-			if filter.Reduce.Kinds[1] == nostr.KindFollowList {
-				w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
-				w.WriteString(" UNION ALL ")
-				w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
-			} else {
-				w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
-			}
-			w.WriteString(")")
+		case filter.Reduce.Tag == "p":
+			w.addParam(filterID, "ftagname", "#p")
+			w.addParam(filterID, "context", filter.Reduce.Tag)
+			refType = "follower"
 		}
+		w.WriteString(" AND f.reference_type = :")
+		w.WriteString(w.addParam(filterID, "rref", refType))
+		w.WriteString(" AND f.reference_id IN (")
+		if filter.Reduce.Kinds[1] == nostr.KindFollowList {
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+			w.WriteString(" UNION ALL ")
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+		} else {
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		}
+		w.WriteString(")")
 	}
 }
 
