@@ -147,13 +147,13 @@ var (
 	// Tag name -> required.
 	SupportedIMetaKeys = map[string]bool{
 		"url":      true,
-		"m":        false,
+		"m":        true,
 		"x":        false,
 		"ox":       false,
 		"size":     false,
-		"dim":      true,
+		"dim":      false,
 		"magnet":   false,
-		"i":        false,
+		"i":        true,
 		"blurhash": false,
 		"thumb":    false,
 		"image":    false,
@@ -703,7 +703,7 @@ func validateIMetaTag(tag nostr.Tag) error {
 			if strings.ToLower(value) != value {
 				return errors.Wrapf(ErrWrongEventParams, "wrong imeta value: %s, should be lowercase", key)
 			} else if strings.HasPrefix(value, "video") {
-				for _, videoKey := range []string{"thumb", "image"} {
+				for _, videoKey := range []string{"thumb", "image", "dim"} {
 					if values[videoKey] == "" {
 						return errors.Wrapf(ErrWrongEventParams, "missing required imeta value: %s for video content", videoKey)
 					}
