@@ -114,6 +114,12 @@ func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 		return nil, err
 	}
 
+	if f.Expiration != nil && *f.Expiration {
+		f.Dependencies = append(f.Dependencies, &filterDependencies{
+			Expiration: f.Expiration,
+		})
+	}
+
 	f.Search = strings.TrimSpace(f.Search)
 
 	return f, nil

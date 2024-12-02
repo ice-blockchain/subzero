@@ -520,7 +520,7 @@ func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, 
 }
 
 func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
-	if filter.Reduce.Kinds[0] == model.KindDVMCountResponse {
+	if len(filter.Reduce.Kinds) > 0 && filter.Reduce.Kinds[0] == model.KindDVMCountResponse {
 		w.WriteString(`
 union all
 select
@@ -570,6 +570,15 @@ where
 		w.WriteString(`.id from `)
 		w.WriteString(cteName)
 		w.WriteString(`) AND `)
+	}
+
+	if filter.Expiration != nil && *filter.Expiration {
+		w.WriteString(`e.master_pubkey IN (select master_pubkey from ` + cteName + `)
+and e.hidden=0
+and e.kind in (1, 30023)
+and exists (select true from event_tags where event_id = e.id and event_tag_key = 'expiration' and cast(` + tagValueExpiration + ` as integer) > unixepoch())`)
+
+		return
 	}
 
 	switch filter.Reduce.Kinds[0] {

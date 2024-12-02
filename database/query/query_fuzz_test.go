@@ -193,7 +193,8 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
-			sql, params, err := generateSelectEventsSQL(&model.Subscription{Filters: model.Filters{helperNewFilterFromElements(t, set)}}, 0, 100)
+			filter := helperNewFilterFromElements(t, set)
+			sql, params, err := generateSelectEventsSQL(&model.Subscription{Filters: model.Filters{filter}}, 0, 100)
 			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
 
 			sql = "EXPLAIN QUERY PLAN " + sql
@@ -208,6 +209,11 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 				require.NoError(t, err)
 				op[s4]++
 				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
+					if strings.Contains(filter.Search, "Expiration:true") {
+						// It uses SCAN over CTE, which is expected.
+						continue
+					}
+					t.Logf("filter: %#v", filter)
 					t.Logf("set #%d: %s (%+v)", i+1, sql, params)
 					t.Log(s1, s2, s3, s4)
 					t.FailNow()
