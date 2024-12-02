@@ -82,66 +82,66 @@ var (
 	ErrWrongEventParams = errors.New("wrong event params")
 	ErrUnsupportedTag   = errors.New("unsupported tag")
 	ErrUnsupportedJob   = errors.New("unsupported job")
-
-	KindSupportedTags = map[Kind][]string{
-		nostr.KindProfileMetadata:       {"e", "p", "a", "alt"},
-		nostr.KindTextNote:              {"e", "p", "q", "l", "L", "imeta"},
-		nostr.KindFollowList:            {"p"},
-		nostr.KindDeletion:              {"a", "e", "k"},
-		nostr.KindRepost:                {"e", "p"},
-		nostr.KindReaction:              {"e", "p", "a", "k"},
-		nostr.KindBadgeAward:            {"a", "p"},
-		nostr.KindGenericRepost:         {"k", "e", "p"},
-		nostr.KindReactionToWebsite:     {"r"},
-		nostr.KindMuteList:              {"p", "t", "word", "e"},
-		nostr.KindPinList:               {"e"},
-		nostr.KindBookmarkList:          {"e", "a", "t", "r"},
-		nostr.KindCommunityList:         {"a"},
-		nostr.KindPublicChatList:        {"e"},
-		nostr.KindBlockedRelayList:      {"relay"},
-		nostr.KindSearchRelayList:       {"relay"},
-		nostr.KindSimpleGroupList:       {"group"},
-		nostr.KindInterestList:          {"t", "a"},
-		nostr.KindEmojiList:             {"emoji", "a"},
-		nostr.KindDMRelayList:           {"relay"},
-		nostr.KindGoodWikiAuthorList:    {"p"},
-		nostr.KindGoodWikiRelayList:     {"relay"},
-		nostr.KindCategorizedPeopleList: {"p", "d", "title", "image", "description"},
-		nostr.KindRelaySets:             {"relay", "d", "title", "image", "description"},
-		nostr.KindBookmarkSets:          {"e", "a", "t", "r", "d", "title", "image", "description"},
-		nostr.KindCuratedSets:           {"a", "e", "d", "title", "image", "description"},
-		nostr.KindCuratedVideoSets:      {"a", "d", "title", "image", "description"},
-		nostr.KindMuteSets:              {"p", "d", "title", "image", "description"},
-		nostr.KindInterestSets:          {"t", "d", "title", "image", "description"},
-		nostr.KindEmojiSets:             {"emoji", "d", "title", "image", "description"},
-		nostr.KindReleaseArtifactSets:   {"e", "i", "version", "d", "title", "image", "description"},
-		nostr.KindLabel:                 {"L", "l", "e", "p", "a", "r", "t"},
-		nostr.KindRelayListMetadata:     {"r"},
-		nostr.KindProfileBadges:         {"d", "a", "e"},
-		nostr.KindBadgeDefinition:       {"d", "name", "image", "description", "thumb"},
-		nostr.KindArticle:               {"a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"},
-		nostr.KindDraftArticle:          {"a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"},
+	CommongTags         = tagsTable("nonce", "expiration", "imeta", CustomIONTagOnBehalfOf)
+	KindSupportedTags   = map[Kind]map[string]struct{}{
+		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", "imeta"),
+		nostr.KindFollowList:            tagsTable("p"),
+		nostr.KindDeletion:              tagsTable("a", "e", "k"),
+		nostr.KindRepost:                tagsTable("e", "p"),
+		nostr.KindReaction:              tagsTable("e", "p", "a", "k"),
+		nostr.KindBadgeAward:            tagsTable("a", "p"),
+		nostr.KindGenericRepost:         tagsTable("k", "e", "p"),
+		nostr.KindReactionToWebsite:     tagsTable("r"),
+		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
+		nostr.KindPinList:               tagsTable("e"),
+		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
+		nostr.KindCommunityList:         tagsTable("a"),
+		nostr.KindPublicChatList:        tagsTable("e"),
+		nostr.KindBlockedRelayList:      tagsTable("relay"),
+		nostr.KindSearchRelayList:       tagsTable("relay"),
+		nostr.KindSimpleGroupList:       tagsTable("group"),
+		nostr.KindInterestList:          tagsTable("t", "a"),
+		nostr.KindEmojiList:             tagsTable("emoji", "a"),
+		nostr.KindDMRelayList:           tagsTable("relay"),
+		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
+		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
+		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
+		nostr.KindRelaySets:             tagsTable("relay", "d", "title", "image", "description"),
+		nostr.KindBookmarkSets:          tagsTable("e", "a", "t", "r", "d", "title", "image", "description"),
+		nostr.KindCuratedSets:           tagsTable("a", "e", "d", "title", "image", "description"),
+		nostr.KindCuratedVideoSets:      tagsTable("a", "d", "title", "image", "description"),
+		nostr.KindMuteSets:              tagsTable("p", "d", "title", "image", "description"),
+		nostr.KindInterestSets:          tagsTable("t", "d", "title", "image", "description"),
+		nostr.KindEmojiSets:             tagsTable("emoji", "d", "title", "image", "description"),
+		nostr.KindReleaseArtifactSets:   tagsTable("e", "i", "version", "d", "title", "image", "description"),
+		nostr.KindLabel:                 tagsTable("L", "l", "e", "p", "a", "r", "t"),
+		nostr.KindRelayListMetadata:     tagsTable("r"),
+		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
+		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"),
+		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"),
 
 		// --- Jobs
-		KindJobTextExtraction:            {"i", "output", "param", "bid", "relays", "p"},
-		KindJobSummarization:             {"i", "output", "param", "bid", "relays", "p"},
-		KindJobTranslation:               {"i", "output", "param", "bid", "relays", "p"},
-		KindJobTextGeneration:            {"i", "output", "param", "bid", "relays", "p"},
-		KindJobImageGeneration:           {"i", "output", "param", "bid", "relays", "p"},
-		KindJobVideoConversion:           {"i", "output", "param", "bid", "relays", "p"},
-		KindJobVideoTranslation:          {"i", "output", "param", "bid", "relays", "p"},
-		KindJobImageToVideoConversion:    {"i", "output", "param", "bid", "relays", "p"},
-		KindJobTextToSpeechGeneration:    {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrContentDiscovery:     {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrPeopleDiscovery:      {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrContentSearch:        {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrPeopleSearch:         {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrEventCount:           {"i", "output", "param", "bid", "relays", "p"},
-		KindJobMalwareScanning:           {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrEventTimeStamping:    {"i", "output", "param", "bid", "relays", "p"},
-		KindJobOpReturnCreation:          {"i", "output", "param", "bid", "relays", "p"},
-		KindJobNostrEventPublishSchedule: {"i", "output", "param", "bid", "relays", "p", "encrypted"},
-		nostr.KindJobFeedback:            {"status", "amount", "e", "p"},
+		KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobSummarization:             tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobTranslation:               tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobTextGeneration:            tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobImageGeneration:           tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobVideoConversion:           tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobVideoTranslation:          tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobImageToVideoConversion:    tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobTextToSpeechGeneration:    tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrContentDiscovery:     tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrPeopleDiscovery:      tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrContentSearch:        tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrPeopleSearch:         tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrEventCount:           tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobMalwareScanning:           tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrEventTimeStamping:    tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobOpReturnCreation:          tagsTable("i", "output", "param", "bid", "relays", "p"),
+		KindJobNostrEventPublishSchedule: tagsTable("i", "output", "param", "bid", "relays", "p", "encrypted"),
+		nostr.KindJobFeedback:            tagsTable("status", "amount", "e", "p"),
 	}
 	SupportedIMetaKeys = []string{"url", "m", "x", "ox", "size", "dim", "magnet", "i", "blurhash", "thumb", "image", "summary", "alt", "fallback"}
 
@@ -158,8 +158,8 @@ func (e *Event) Validate() error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.New("wrong kind value")
 	}
-	if !areTagsSupported(e) {
-		return errors.Wrapf(ErrUnsupportedTag, "unsupported tag for this event kind: %+v", e)
+	if err := validateEventTags(e); err != nil {
+		return errors.Wrapf(err, "event: %+v", e)
 	}
 	e.normalizeTags()
 	switch e.Kind {
@@ -283,9 +283,6 @@ func (e *Event) Validate() error {
 	case nostr.KindArticle, nostr.KindDraftArticle:
 		if e.Content == "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
-		}
-		if err := validateIMetaTag(e.Tags); err != nil {
-			return errors.Wrapf(ErrWrongEventParams, "nip-92: %w", err)
 		}
 	default:
 		if e.Kind >= 6000 && e.Kind <= 6999 {
@@ -549,9 +546,6 @@ func validateKindTextNoteEvent(e *Event) error {
 			}
 		}
 	}
-	if err := validateIMetaTag(e.Tags); err != nil {
-		return errors.Wrapf(err, "wrong imeta tag: %+v", e)
-	}
 
 	return nil
 }
@@ -646,82 +640,76 @@ func validateKindFeedbackJob(e *Event) error {
 	return nil
 }
 
-func validateIMetaTag(tags nostr.Tags) error {
-	if tags == nil {
+func validateIMetaTag(tag nostr.Tag) error {
+	if tag == nil {
 		return nil
 	}
-	var iMetaTagCount int
-	for _, tag := range tags {
-		if tag.Key() != "imeta" {
-			continue
-		}
-		iMetaTagCount++
-		if len(tag) < 3 {
-			return errors.Wrapf(ErrWrongEventParams, "imeta tag should have at least 2 values: %+v", tag)
-		}
-		for ix, val := range tag {
-			if ix == 0 {
-				continue
-			}
-			parts := strings.Split(val, " ")
-			if len(parts) < 2 {
-				return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
-			}
-			var (
-				key            = parts[0]
-				val            = parts[1]
-				isKeySupported = false
-			)
-			for _, supportedIMetaKey := range SupportedIMetaKeys {
-				if key == supportedIMetaKey {
-					isKeySupported = true
 
-					break
-				}
+	if len(tag) < 3 {
+		return errors.Wrapf(ErrWrongEventParams, "imeta tag should have at least 2 values: %+v", tag)
+	}
+	for _, val := range tag[1:] {
+		parts := strings.Split(val, " ")
+		if len(parts) < 2 {
+			return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+		}
+
+		var (
+			key            = parts[0]
+			val            = parts[1]
+			isKeySupported = false
+		)
+		for _, supportedIMetaKey := range SupportedIMetaKeys {
+			if key == supportedIMetaKey {
+				isKeySupported = true
+
+				break
 			}
-			if !isKeySupported {
-				return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+		}
+		if !isKeySupported {
+			return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+		}
+		if key == "url" && !strings.HasPrefix(val, "http") {
+			return errors.Wrapf(ErrWrongEventParams, "wrong url value in imeta tag: %+v", tag)
+		} else if key == "m" && strings.ToLower(val) != val {
+			return errors.Wrapf(ErrWrongEventParams, "wrong m value in imeta tag: %+v", tag)
+		} else if key == "x" || key == "ox" {
+			if _, err := hex.DecodeString(val); err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "wrong x value in imeta tag: %+v, should be hex", tag)
 			}
-			if key == "url" && !strings.HasPrefix(val, "http") {
-				return errors.Wrapf(ErrWrongEventParams, "wrong url value in imeta tag: %+v", tag)
-			} else if key == "m" && strings.ToLower(val) != val {
-				return errors.Wrapf(ErrWrongEventParams, "wrong m value in imeta tag: %+v", tag)
-			} else if key == "x" || key == "ox" {
-				if _, err := hex.DecodeString(val); err != nil {
-					return errors.Wrapf(ErrWrongEventParams, "wrong x value in imeta tag: %+v, should be hex", tag)
-				}
-			} else if key == "dim" && len(strings.Split(val, "x")) != 2 {
-				return errors.Wrapf(ErrWrongEventParams, "wrong dim value in imeta tag: %+v", tag)
-			}
+		} else if key == "dim" && len(strings.Split(val, "x")) != 2 {
+			return errors.Wrapf(ErrWrongEventParams, "wrong dim value in imeta tag: %+v", tag)
 		}
 	}
-	if iMetaTagCount > 1 {
-		return errors.Wrapf(ErrWrongEventParams, "wrong count of imeta tag: %+v", tags)
-	}
-
 	return nil
 }
 
-func areTagsSupported(e *Event) bool {
+func validateEventTags(e *Event) error {
 	supportedTags, ok := KindSupportedTags[e.Kind]
 	if !ok {
-		return true
+		return nil
 	}
-next:
+
+	var imetaCount int
 	for _, tag := range e.Tags {
-		if tag.Key() == "nonce" || tag.Key() == "expiration" || tag.Key() == CustomIONTagOnBehalfOf {
-			continue next
-		}
-		for _, supportedTag := range supportedTags {
-			if tag.Key() == supportedTag {
-				continue next
-			}
+		_, isCommon := CommongTags[tag.Key()]
+		if _, ok := supportedTags[tag.Key()]; !ok && !isCommon {
+			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
 		}
 
-		return false
+		if tag.Key() == "imeta" {
+			if err := validateIMetaTag(tag); err != nil {
+				return errors.Join(ErrUnsupportedTag, err)
+			}
+			imetaCount++
+		}
 	}
 
-	return true
+	if imetaCount > 1 {
+		return errors.Wrapf(ErrWrongEventParams, "only one imeta tag is allowed, but found %d", imetaCount)
+	}
+
+	return nil
 }
 
 func (e *Event) normalizeTags() {
@@ -733,4 +721,12 @@ func (e *Event) normalizeTags() {
 			}
 		}
 	}
+}
+
+func tagsTable(tags ...string) map[string]struct{} {
+	table := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		table[tag] = struct{}{}
+	}
+	return table
 }
