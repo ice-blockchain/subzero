@@ -2449,7 +2449,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"dim 3024x4032",
 			"alt A scenic photo overlooking the coast of Costa Rica",
 			"ox a",
-			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
 		})
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),

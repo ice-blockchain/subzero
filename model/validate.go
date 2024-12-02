@@ -85,7 +85,7 @@ var (
 	CommongTags         = tagsTable("nonce", "expiration", "imeta", CustomIONTagOnBehalfOf)
 	KindSupportedTags   = map[Kind]map[string]struct{}{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", "imeta"),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L"),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              tagsTable("a", "e", "k"),
 		nostr.KindRepost:                tagsTable("e", "p"),
@@ -119,8 +119,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"),
-		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", "imeta"),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at"),
+		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at"),
 
 		// --- Jobs
 		KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
@@ -143,7 +143,24 @@ var (
 		KindJobNostrEventPublishSchedule: tagsTable("i", "output", "param", "bid", "relays", "p", "encrypted"),
 		nostr.KindJobFeedback:            tagsTable("status", "amount", "e", "p"),
 	}
-	SupportedIMetaKeys = []string{"url", "m", "x", "ox", "size", "dim", "magnet", "i", "blurhash", "thumb", "image", "summary", "alt", "fallback"}
+
+	// Tag name -> required.
+	SupportedIMetaKeys = map[string]bool{
+		"url":      true,
+		"m":        false,
+		"x":        false,
+		"ox":       false,
+		"size":     false,
+		"dim":      true,
+		"magnet":   false,
+		"i":        false,
+		"blurhash": false,
+		"thumb":    false,
+		"image":    false,
+		"summary":  false,
+		"alt":      true,
+		"fallback": false,
+	}
 
 	JobFeedbackStatusValues = map[string]struct{}{
 		JobFeedbackStatusPaymentRequired: {},
@@ -645,42 +662,60 @@ func validateIMetaTag(tag nostr.Tag) error {
 		return nil
 	}
 
-	if len(tag) < 3 {
-		return errors.Wrapf(ErrWrongEventParams, "imeta tag should have at least 2 values: %+v", tag)
-	}
+	values := make(map[string]string)
+	// Parse tag values and check for all unsupported values.
 	for _, val := range tag[1:] {
 		parts := strings.Split(val, " ")
 		if len(parts) < 2 {
 			return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+		} else if _, ok := SupportedIMetaKeys[parts[0]]; !ok {
+			return errors.Wrapf(ErrWrongEventParams, "not supported imeta value: %s", parts[0])
+		} else if _, ok := values[parts[0]]; ok {
+			return errors.Wrapf(ErrWrongEventParams, "duplicate imeta value: %s", parts[0])
 		}
+		values[parts[0]] = parts[1]
+	}
 
-		var (
-			key            = parts[0]
-			val            = parts[1]
-			isKeySupported = false
-		)
-		for _, supportedIMetaKey := range SupportedIMetaKeys {
-			if key == supportedIMetaKey {
-				isKeySupported = true
-
-				break
-			}
-		}
-		if !isKeySupported {
-			return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
-		}
-		if key == "url" && !strings.HasPrefix(val, "http") {
-			return errors.Wrapf(ErrWrongEventParams, "wrong url value in imeta tag: %+v", tag)
-		} else if key == "m" && strings.ToLower(val) != val {
-			return errors.Wrapf(ErrWrongEventParams, "wrong m value in imeta tag: %+v", tag)
-		} else if key == "x" || key == "ox" {
-			if _, err := hex.DecodeString(val); err != nil {
-				return errors.Wrapf(ErrWrongEventParams, "wrong x value in imeta tag: %+v, should be hex", tag)
-			}
-		} else if key == "dim" && len(strings.Split(val, "x")) != 2 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong dim value in imeta tag: %+v", tag)
+	// Check for all required values.
+	for key, required := range SupportedIMetaKeys {
+		if required && values[key] == "" {
+			return errors.Wrapf(ErrWrongEventParams, "missing required imeta value: %s", key)
 		}
 	}
+
+	// Either x or ox should be present and they should be hex.
+	if values["x"] == "" && values["ox"] == "" {
+		return errors.Wrapf(ErrWrongEventParams, "missing required imeta value: x or ox")
+	}
+
+	// Check for values correctness.
+	for key, value := range values {
+		switch key {
+		case "x", "ox":
+			if _, err := hex.DecodeString(value); err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "wrong imeta value: %s, should be hex", key)
+			}
+		case "url":
+			if !strings.HasPrefix(value, "http") {
+				return errors.Wrapf(ErrWrongEventParams, "wrong imeta value: %s, should be url", key)
+			}
+		case "m":
+			if strings.ToLower(value) != value {
+				return errors.Wrapf(ErrWrongEventParams, "wrong imeta value: %s, should be lowercase", key)
+			} else if strings.HasPrefix(value, "video") {
+				for _, videoKey := range []string{"thumb", "image"} {
+					if values[videoKey] == "" {
+						return errors.Wrapf(ErrWrongEventParams, "missing required imeta value: %s for video content", videoKey)
+					}
+				}
+			}
+		case "dim":
+			if len(strings.Split(value, "x")) != 2 {
+				return errors.Wrapf(ErrWrongEventParams, "wrong imeta value: %s, should be in format: 123x123", key)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -690,7 +725,6 @@ func validateEventTags(e *Event) error {
 		return nil
 	}
 
-	var imetaCount int
 	for _, tag := range e.Tags {
 		_, isCommon := CommongTags[tag.Key()]
 		if _, ok := supportedTags[tag.Key()]; !ok && !isCommon {
@@ -701,12 +735,7 @@ func validateEventTags(e *Event) error {
 			if err := validateIMetaTag(tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
-			imetaCount++
 		}
-	}
-
-	if imetaCount > 1 {
-		return errors.Wrapf(ErrWrongEventParams, "only one imeta tag is allowed, but found %d", imetaCount)
 	}
 
 	return nil
