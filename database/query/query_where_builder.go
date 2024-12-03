@@ -5,10 +5,8 @@ package query
 import (
 	"cmp"
 	"log"
-	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -70,34 +68,7 @@ type (
 		Tag    string
 		Marker string
 	}
-	filterBuilder struct {
-		Name           string
-		EventIds       []string
-		EventIdsString string
-		sync.Once
-	}
 )
-
-func (f *filterBuilder) HasEvents() bool {
-	return len(f.EventIds) > 0
-}
-
-func (f *filterBuilder) BuildEvents(w *whereBuilder) string {
-	f.Do(func() {
-		f.EventIdsString = buildFromSlice(
-			&whereBuilder{
-				Params: w.Params,
-			},
-			sqlOpCodeAND,
-			f.Name,
-			f.EventIds,
-			"event_id",
-			"",
-		).String()
-	})
-
-	return f.EventIdsString
-}
 
 func parseEventAsFilterForDelete(e *model.Event) (*databaseFilterDelete, error) {
 	filter := databaseFilterDelete{
@@ -174,7 +145,8 @@ func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string
 	}
 
 	maybeOpCode(builder, op)
-	if len(s) > 1 && (name == "id" || name == "pubkey") {
+	if len(s) > 1 && (name == "id" || name == "pubkey" || name == "master_pubkey") {
+		// Force the index usage.
 		builder.WriteRune('+')
 	}
 	builder.WriteString(name)
@@ -227,7 +199,7 @@ func (w *whereBuilder) maybeOR() {
 	w.WriteString(" OR ")
 }
 
-func (w *whereBuilder) applyFilterTagMarkers(filter *filterBuilder, markers []databaseFilterMarker) {
+func (w *whereBuilder) applyFilterTagMarkers(name string, markers []databaseFilterMarker) {
 	if len(markers) == 0 {
 		return
 	}
@@ -235,14 +207,14 @@ func (w *whereBuilder) applyFilterTagMarkers(filter *filterBuilder, markers []da
 	for id, marker := range markers {
 		w.maybeAND()
 		w.WriteString("EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = :")
-		w.WriteString(w.addParam(filter.Name, "mtag"+strconv.Itoa(id), marker.Tag))
+		w.WriteString(w.addParam(name, "mtag"+strconv.Itoa(id), marker.Tag))
 		w.WriteString(" AND event_tag_value3 = :")
-		w.WriteString(w.addParam(filter.Name, "mtagvalue"+strconv.Itoa(id), marker.Marker))
+		w.WriteString(w.addParam(name, "mtagvalue"+strconv.Itoa(id), marker.Marker))
 		w.WriteRune(')')
 	}
 }
 
-func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap) {
+func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 	const valuesMax = 21
 
 	if len(tags) == 0 {
@@ -254,7 +226,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 		tagID++
 
 		w.maybeAND()
-		tagParam := w.addParam(filter.Name, "tag"+strconv.Itoa(tagID), tagName)
+		tagParam := w.addParam(name, "tag"+strconv.Itoa(tagID), tagName)
 
 		// Only the tag name is specified, no values.
 		if !tags.HasValues(tagName) {
@@ -288,7 +260,7 @@ func (w *whereBuilder) applyFilterTags(filter *filterBuilder, tags model.TagMap)
 				w.WriteString("event_tag_value")
 				w.WriteString(strconv.Itoa(j + 1))
 				w.WriteString(" = :")
-				w.WriteString(w.addParam(filter.Name, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
+				w.WriteString(w.addParam(name, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
 			}
 			w.WriteRune(')')
 		}
@@ -311,12 +283,12 @@ func isFilterEmpty(filter *databaseFilterSearch) bool {
 		filter.Images == nil
 }
 
-func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model.Timestamp) error {
+func (w *whereBuilder) applyTimeRange(name string, since, until *model.Timestamp) error {
 	if since != nil && until != nil {
 		if *since == *until {
 			w.maybeAND()
 			w.WriteString("created_at = :")
-			w.WriteString(w.addParam(filter.Name, "timestamp", *since))
+			w.WriteString(w.addParam(name, "timestamp", *since))
 
 			return nil
 		} else if *since > *until {
@@ -328,14 +300,14 @@ func (w *whereBuilder) applyTimeRange(filter *filterBuilder, since, until *model
 	if since != nil && *since > 0 {
 		w.maybeAND()
 		w.WriteString("created_at >= :")
-		w.WriteString(w.addParam(filter.Name, "since", *since))
+		w.WriteString(w.addParam(name, "since", *since))
 	}
 
 	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
 	if until != nil && *until > 0 {
 		w.maybeAND()
 		w.WriteString("created_at <= :")
-		w.WriteString(w.addParam(filter.Name, "until", *until))
+		w.WriteString(w.addParam(name, "until", *until))
 	}
 
 	return nil
@@ -368,22 +340,24 @@ func filterHasExtensions(filter *databaseFilterSearch) (positive, negative int) 
 	return
 }
 
-func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch, builder *filterBuilder, include bool) {
+func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch, include bool) {
 	separator := w.maybeOR
-	w.WriteString("select event_id from event_tags where ")
-	if include && builder.HasEvents() {
-		w.WriteString(builder.BuildEvents(w))
-		w.maybeAND()
+	if !include {
+		w.WriteString("NOT ")
 	}
+	w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND (")
 
-	w.WriteRune('(')
 	if filter.Quotes != nil && *filter.Quotes == include {
 		separator()
 		w.WriteString("(event_tag_key = 'q')")
 	}
 	if filter.References != nil && *filter.References == include {
 		separator()
-		w.WriteString("(event_tag_key = 'e')")
+		result := "true"
+		if !include {
+			result = "false"
+		}
+		w.WriteString("(case when e.reference_id is not null then " + result + " else event_tag_key = 'e' end)")
 	}
 	if filter.Images != nil && *filter.Images == include {
 		separator()
@@ -409,42 +383,7 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch, bu
 			w.WriteString(" as integer) > unixepoch())")
 		}
 	}
-	w.WriteRune(')')
-}
-
-func (w *whereBuilder) applyRepostFilter(filter *databaseFilterSearch, builder *filterBuilder, positiveExtensions, negativeExtensions *int) (applied bool) {
-	if (*positiveExtensions + *negativeExtensions) == 0 {
-		// No extensions in the filter.
-		return
-	}
-
-	if !slices.ContainsFunc(filter.Kinds, func(k int) bool {
-		return k == nostr.KindRepost || k == nostr.KindGenericRepost
-	}) {
-		// No reposts in the filter.
-		return
-	}
-
-	// Not allowed.
-	filter.References = nil
-	*positiveExtensions &= ^extensionReferences
-	*negativeExtensions &= ^extensionReferences
-
-	if *positiveExtensions > 0 {
-		w.maybeAND()
-		w.WriteString("(+id IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
-		w.applyFilterForExtensions(filter, builder, true)
-		w.WriteString(")))")
-	}
-
-	if *negativeExtensions > 0 {
-		w.maybeAND()
-		w.WriteString("(+id NOT IN (select e.id from events subev where subev.id = e.reference_id and subev.kind = 1 and exists (")
-		w.applyFilterForExtensions(filter, builder, false)
-		w.WriteString(")))")
-	}
-
-	return (*positiveExtensions + *negativeExtensions) > 0
+	w.WriteString("))")
 }
 
 func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error {
@@ -452,42 +391,31 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		return nil
 	}
 
-	builder := &filterBuilder{
-		Name:     "filter" + strconv.Itoa(idx) + "_",
-		EventIds: filter.IDs,
-	}
+	name := "filter" + strconv.Itoa(idx) + "_"
 	positiveExtensions, negativeExtensions := filterHasExtensions(filter)
 	w.WriteRune('(') // Begin the filter section.
-	if w.applyRepostFilter(filter, builder, &positiveExtensions, &negativeExtensions) {
-		buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.IDs, "id", "")
-	} else {
-		if positiveExtensions > 0 {
-			w.WriteString("+id IN (")
-			w.applyFilterForExtensions(filter, builder, true)
-			w.WriteRune(')')
-		} else {
-			buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.IDs, "id", "")
-		}
-		if negativeExtensions > 0 {
-			w.maybeAND()
-			w.WriteString("(+id NOT IN (")
-			w.applyFilterForExtensions(filter, builder, false)
-			w.WriteString("))")
-		}
+	buildFromSlice(w, sqlOpCodeNONE, name, filter.IDs, "id", "")
+	buildFromSlice(w, sqlOpCodeAND, name, filter.Kinds, "kind", "")
+	if positiveExtensions > 0 {
+		w.maybeAND()
+		w.applyFilterForExtensions(filter, true)
 	}
-	buildFromSlice(w, sqlOpCodeAND, builder.Name, filter.Kinds, "kind", "")
+	if negativeExtensions > 0 {
+		w.maybeAND()
+		w.applyFilterForExtensions(filter, false)
+	}
 	if len(filter.Authors) > 0 {
 		w.maybeAND()
 		w.WriteRune('(')
-		buildFromSlice(w, sqlOpCodeNONE, builder.Name, filter.Authors, "pubkey", "")
-		buildFromSlice(w, sqlOpCodeOR, builder.Name, filter.Authors, "master_pubkey", "pubkey")
+		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "pubkey", "")
+		buildFromSlice(w, sqlOpCodeOR, name, filter.Authors, "master_pubkey", "pubkey")
 		w.WriteRune(')')
 	}
-	if err := w.applyTimeRange(builder, filter.Since, filter.Until); err != nil {
+	if err := w.applyTimeRange(name, filter.Since, filter.Until); err != nil {
 		return err
 	}
-	w.applyFilterTags(builder, filter.Tags)
-	w.applyFilterTagMarkers(builder, filter.TagMarkers)
+	w.applyFilterTags(name, filter.Tags)
+	w.applyFilterTagMarkers(name, filter.TagMarkers)
 
 	w.WriteRune(')') // End the filter section.
 
