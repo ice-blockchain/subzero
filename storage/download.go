@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -54,19 +53,17 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 		return errors.Newf("malformed i tag %v", iTag)
 	}
 
-	bootstrap := ""
-	createdAt := int64(math.MaxInt64)
 	spl := strings.Split(infohash, ":")
-	if len(spl) >= 2 {
-		infohash = spl[0]
-		bootstrap = spl[1]
-		if len(spl) >= 3 {
-			if createdAt, err = strconv.ParseInt(spl[2], 10, 64); err != nil {
-				createdAt = 0
-			}
-
-		}
+	if len(spl) != 3 {
+		return errors.Newf("malformed i tag %v, cannot detect bootstrap and createdAt", infohash)
 	}
+	infohash = spl[0]
+	bootstrap := spl[1]
+	createdAt, cErr := strconv.ParseInt(spl[2], 10, 64)
+	if cErr != nil {
+		return errors.Wrapf(err, "malformed i tag %v, cannot createdAt", infohash)
+	}
+
 	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap, createdAt); err != nil {
 		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, event.PubKey)
 	}
