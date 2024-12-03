@@ -145,13 +145,9 @@ func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string
 	}
 
 	maybeOpCode(builder, op)
-	if len(s) > 1 && (name == "id" || name == "pubkey" || name == "master_pubkey") {
-		// Force the index usage.
-		builder.WriteRune('+')
-	}
 	builder.WriteString(name)
 	s = model.DeduplicateSlice(s, func(elem T) T { return elem })
-	if len(s) == 1 && name != "kind" {
+	if len(s) == 1 {
 		// X = :X_name.
 		builder.WriteString(" = :")
 		builder.WriteString(builder.addParam(filterID, paramName, s[0]))
@@ -386,6 +382,26 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch, in
 	w.WriteString("))")
 }
 
+func filterMainIndexField(filter *databaseFilterSearch) string {
+	if len(filter.Authors) > 0 {
+		return "master_pubkey"
+	}
+
+	if len(filter.Kinds) > 0 {
+		return "kind"
+	}
+
+	return ""
+}
+
+func filterMaybeForceIndex(filter *databaseFilterSearch, field string) string {
+	main := filterMainIndexField(filter)
+	if main == field {
+		field = "+" + field
+	}
+	return field
+}
+
 func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
@@ -395,7 +411,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	positiveExtensions, negativeExtensions := filterHasExtensions(filter)
 	w.WriteRune('(') // Begin the filter section.
 	buildFromSlice(w, sqlOpCodeNONE, name, filter.IDs, "id", "")
-	buildFromSlice(w, sqlOpCodeAND, name, filter.Kinds, "kind", "")
+	buildFromSlice(w, sqlOpCodeAND, name, filter.Kinds, filterMaybeForceIndex(filter, "kind"), "kind")
 	if positiveExtensions > 0 {
 		w.maybeAND()
 		w.applyFilterForExtensions(filter, true)
@@ -408,8 +424,9 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		w.maybeAND()
 		w.WriteRune('(')
 		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "pubkey", "")
-		buildFromSlice(w, sqlOpCodeOR, name, filter.Authors, "master_pubkey", "pubkey")
-		w.WriteRune(')')
+		w.WriteString(" and hidden=0 OR ")
+		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "master_pubkey", "pubkey")
+		w.WriteString(" and hidden=0)")
 	}
 	if err := w.applyTimeRange(name, filter.Since, filter.Until); err != nil {
 		return err

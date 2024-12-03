@@ -22,6 +22,8 @@ type structElement struct {
 	Name []string
 	// Full index of the field.
 	Addr []int
+	// Number of elements to generate for this slice, if applicable.
+	NumElem int
 }
 
 func (f *structElement) Clone() *structElement {
@@ -30,8 +32,9 @@ func (f *structElement) Clone() *structElement {
 	}
 
 	return &structElement{
-		Name: append([]string{}, f.Name...),
-		Addr: append([]int{}, f.Addr...),
+		Name:    append([]string{}, f.Name...),
+		Addr:    append([]int{}, f.Addr...),
+		NumElem: f.NumElem,
 	}
 }
 
@@ -60,7 +63,13 @@ func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *structEleme
 			el := parent.Clone()
 			el.Name = append(el.Name, field.Name)
 			el.Addr = append(el.Addr, field.Index...)
+			el.NumElem = 1
 			fields = append(fields, el)
+			if field.Type.Kind() == reflect.Slice {
+				next := el.Clone()
+				next.NumElem = int(rand.Int31n(6)) + 1
+				fields = append(fields, next)
+			}
 
 		case reflect.String:
 			for _, v := range []string{"Images", "Quotes", "References", "Videos", "Expiration"} {
@@ -93,23 +102,25 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 		value := reflect.ValueOf(&f).Elem().FieldByIndex(field.GetAddress())
 		switch field.GetName() {
 		case "Authors", "IDs":
-			n := rand.Int31n(4)
-			vals := make([]string, n)
-			for i := range n {
+			vals := make([]string, field.NumElem)
+			for i := range field.NumElem {
 				vals[i] = generateHexString()
 			}
 			value.Set(reflect.ValueOf(vals))
 
 		case "Kinds":
-			k := []int{generateKind()}
-			value.Set(reflect.ValueOf(k))
+			vals := make([]int, field.NumElem)
+			for i := range field.NumElem {
+				vals[i] = generateKind()
+			}
+			value.Set(reflect.ValueOf(vals))
 
 		case "Tags":
-			values := []string{}
-			for range rand.Intn(3) {
-				values = append(values, generateHexString())
+			vals := make([]string, field.NumElem)
+			for i := range field.NumElem {
+				vals[i] = generateHexString()
 			}
-			m := model.TagMap{}.SetLiterals("e", values...)
+			m := model.TagMap{}.SetLiterals("e", vals...)
 
 			value.Set(reflect.ValueOf(m))
 
@@ -203,14 +214,21 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 
 			rows, err := stmt.QueryContext(context.Background(), params)
 			require.NoError(t, err)
+			var hasPK bool
 			for rows.Next() {
 				var s1, s2, s3, s4 string
 				err := rows.Scan(&s1, &s2, &s3, &s4)
 				require.NoError(t, err)
 				op[s4]++
+				if strings.Contains(s4, "SEARCH e USING PRIMARY KEY") {
+					hasPK = true
+				}
 				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
 					if strings.Contains(filter.Search, "Expiration:true") {
 						// It uses SCAN over CTE, which is expected.
+						continue
+					} else if (hasPK || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
+						// Allow B-TREE for ORDER BY if there are multiple authors or PK is used.
 						continue
 					}
 					t.Logf("filter: %#v", filter)
