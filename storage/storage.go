@@ -90,10 +90,20 @@ var (
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData
+	var hData []byte
 	if bag.Header == nil {
-		return nil, errors.Errorf("No header fetched yet for %v", hex.EncodeToString(bag.BagID))
+		var err error
+		hData, err = c.latestHeaderForBag(bag.BagID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "No header fetched yet for %v and failed to get stored", hex.EncodeToString(bag.BagID))
+		}
+		if hData == nil {
+			return nil, errors.Errorf("No header fetched yet for %v", hex.EncodeToString(bag.BagID))
+		}
+	} else {
+		hData = bag.Header.Data
 	}
-	hData := bag.Header.Data
+
 	if len(hData) == 0 {
 		hData = []byte("{}")
 	}
@@ -141,6 +151,16 @@ func (c *client) bootstrapForBag(bagID []byte) (string, error) {
 		return "", errors.Wrapf(err, "failed to read stored bootstrap node for %v =, will wait for DHT discovery", hex.EncodeToString(bagID))
 	}
 	return string(bs), nil
+}
+func (c *client) latestHeaderForBag(bagID []byte) ([]byte, error) {
+	k := make([]byte, 3+32)
+	copy(k, "th:")
+	copy(k[3:], bagID)
+	th, err := c.db.Get(k, nil)
+	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
+		return nil, errors.Wrapf(err, "failed to read stored header for %v, will wait downloading header", hex.EncodeToString(bagID))
+	}
+	return th, nil
 }
 
 func (c *client) BuildUserPath(userPubKey string, contentType string) (userStorage string, uploadPath string) {
