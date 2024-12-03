@@ -907,3 +907,28 @@ func TestWhereBuilderSyntaxForCounter(t *testing.T) {
 		)
 	})
 }
+
+func TestTagMarkerWithRepost(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Insert", func(t *testing.T) {
+		var event model.Event
+		event.Kind = nostr.KindGenericRepost
+		event.ID = "1"
+		event.PubKey = "1"
+		event.Tags = model.Tags{{"e", "1"}, {"q", "2"}}
+		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build"], ["e", "foo", "", "root"]],"content":"foo","sig":"sig"}`
+		event.CreatedAt = 1
+
+		err := db.AcceptEvents(context.TODO(), &event)
+		require.NoError(t, err)
+	})
+	t.Run("Select", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Search: "emarker:root"})
+		require.Len(t, events, 1)
+		require.Equal(t, "1", events[0].ID)
+	})
+}

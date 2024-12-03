@@ -202,7 +202,7 @@ func (w *whereBuilder) applyFilterTagMarkers(name string, markers []databaseFilt
 
 	for id, marker := range markers {
 		w.maybeAND()
-		w.WriteString("EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = :")
+		w.WriteString("EXISTS (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = :")
 		w.WriteString(w.addParam(name, "mtag"+strconv.Itoa(id), marker.Tag))
 		w.WriteString(" AND event_tag_value3 = :")
 		w.WriteString(w.addParam(name, "mtagvalue"+strconv.Itoa(id), marker.Marker))
