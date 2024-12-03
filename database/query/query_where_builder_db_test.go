@@ -740,7 +740,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Kind = nostr.KindTextNote
 		event.ID = "expired"
 		event.PubKey = "1"
-		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
+		event.Tags = model.Tags{{"expiration", "1"}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
 		err := db.AcceptEvents(context.TODO(), &event)
@@ -749,7 +749,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Kind = nostr.KindTextNote
 		event.ID = "alive"
 		event.PubKey = "2"
-		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
+		event.Tags = model.Tags{{"expiration", "2177366400"}, {"e", "bar"}}
 		event.CreatedAt = 1
 
 		err = db.AcceptEvents(context.TODO(), &event)
@@ -801,15 +801,15 @@ func TestSelectRepostWithReference(t *testing.T) {
 		event.ID = "1"
 		event.PubKey = "1"
 		event.Tags = model.Tags{{"e", "fooo"}, {"bar", "foo"}}
+		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
 		event.CreatedAt = 1
 
 		err := db.AcceptEvents(context.TODO(), &event)
 		require.NoError(t, err)
 	})
-	t.Run("SelectRepost", func(t *testing.T) {
+	t.Run("Reference extension must be ignored for reposts", func(t *testing.T) {
 		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
 			apply.Search = "references:false"
-			apply.Kinds = []int{nostr.KindRepost}
 		}))
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
@@ -839,7 +839,6 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 	t.Run("SelectRepost", func(t *testing.T) {
 		filter := helperNewFilterSubscription(func(apply *model.Filter) {
 			apply.Search = "images:yes"
-			apply.Kinds = []int{nostr.KindRepost}
 		})
 		t.Run("Count", func(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), filter)
