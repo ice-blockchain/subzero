@@ -43,8 +43,7 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 }
 
 func acceptNewBag(ctx context.Context, event *model.Event) error {
-	jevent, _ := json.Marshal(event)
-	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), string(jevent))
+	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), event.String())
 	infohash := ""
 	var err error
 	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {

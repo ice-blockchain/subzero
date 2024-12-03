@@ -5,7 +5,6 @@ package storage
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -109,8 +108,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	if originalEvent == nil {
 		return nil
 	}
-	jevent, _ := json.Marshal(event)
-	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v", event.GetMasterPublicKey(), string(jevent))
+	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
 	fileHash := ""
 	if xTag := originalEvent.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
 		fileHash = xTag.Value()
