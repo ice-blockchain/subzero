@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -29,9 +30,17 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to find existing bag for user %s", masterPubKey)
 	}
+	var existingHDData []byte
 	var existingHD headerData
 	if existingBagForUser != nil {
-		if len(existingBagForUser.Header.Data) > 0 {
+		if existingBagForUser.Header != nil && len(existingBagForUser.Header.Data) > 0 {
+			existingHDData = existingBagForUser.Header.Data
+		} else {
+			if existingHDData, err = c.latestHeaderForBag(existingBagForUser.BagID); err != nil {
+				return "", "", false, errors.Wrapf(err, "failed to get header for bag %v", hex.EncodeToString(existingBagForUser.BagID))
+			}
+		}
+		if len(existingHDData) > 0 {
 			if err = json.Unmarshal(existingBagForUser.Header.Data, &existingHD); err != nil {
 				return "", "", false, errors.Wrapf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
@@ -80,7 +89,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
 
-	return bagID + ":" + bootstrap, url, existed, err
+	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(bag.CreatedAt.UnixNano(), 10), url, existed, err
 }
 
 func (c *client) upload(ctx context.Context, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 }
 
 func acceptNewBag(ctx context.Context, event *model.Event) error {
+	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), event.String())
 	infohash := ""
 	var err error
 	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {
@@ -50,24 +52,29 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 		return errors.Newf("malformed i tag %v", iTag)
 	}
 
-	bootstrap := ""
 	spl := strings.Split(infohash, ":")
-	if len(spl) == 2 {
-		infohash = spl[0]
-		bootstrap = spl[1]
+	if len(spl) != 3 {
+		return errors.Newf("malformed i tag %v, cannot detect bootstrap and createdAt", infohash)
 	}
-	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap); err != nil {
+	infohash = spl[0]
+	bootstrap := spl[1]
+	createdAt, cErr := strconv.ParseInt(spl[2], 10, 64)
+	if cErr != nil {
+		return errors.Wrapf(err, "malformed i tag %v, cannot createdAt", infohash)
+	}
+
+	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap, createdAt); err != nil {
 		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, event.PubKey)
 	}
 	return nil
 }
 
-func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, bootstap *string) error {
+func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, bootstap *string, newCreatedAt int64) error {
 	existingBagForUser, err := c.bagByUser(user)
 	if err != nil {
 		return errors.Wrapf(err, "failed to find existing bag for user %s", user)
 	}
-	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
+	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID && existingBagForUser.CreatedAt.UnixNano() < newCreatedAt {
 		log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
 		existingBagForUser.Stop()
 		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
@@ -197,6 +204,14 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 		copy(k[3:], tr.BagID)
 		if err := c.db.Put(k, []byte(*bs), nil); err != nil {
 			return errors.Wrapf(err, "failed to save bootstrap node for bag %v", hex.EncodeToString(tr.BagID))
+		}
+	}
+	if tr.Header != nil && len(tr.Header.Data) > 0 {
+		k := make([]byte, 3+32)
+		copy(k, "th:")
+		copy(k[3:], tr.BagID)
+		if err := c.db.Put(k, []byte(tr.Header.Data), nil); err != nil {
+			return errors.Wrapf(err, "failed to save header for bag %v", hex.EncodeToString(tr.BagID))
 		}
 	}
 

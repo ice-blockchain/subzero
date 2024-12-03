@@ -99,7 +99,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 		if fileEvent.Kind != nostr.KindFileMetadata {
 			return errors.Errorf("event mismatch: event %v is %v not file metadata (%v)", fileEvent.ID, fileEvent.Kind, nostr.KindFileMetadata)
 		}
-		if fileEvent.PubKey != event.PubKey {
+		if fileEvent.GetMasterPublicKey() != event.GetMasterPublicKey() {
 			return errors.Errorf("user mismatch: event %v is signed by %v not %v", fileEvent.ID, fileEvent.PubKey, event.PubKey)
 		}
 		originalEvent = fileEvent
@@ -108,6 +108,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	if originalEvent == nil {
 		return nil
 	}
+	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
 	fileHash := ""
 	if xTag := originalEvent.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
 		fileHash = xTag.Value()
