@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -69,12 +70,6 @@ type (
 		Website     string `json:"website" example:"https://ice.io"`
 		Banner      string `json:"banner" example:"https://example.com/banner.jpg"`
 		Bot         bool   `json:"bot" example:"false"`
-	}
-
-	RepostContent struct {
-		ID     string `json:"id" example:"abcde"`
-		PubKey string `json:"pubkey" example:"pubkey"`
-		Kind   int    `json:"kind" example:"1"`
 	}
 )
 
@@ -567,29 +562,39 @@ func validateKindTextNoteEvent(e *Event) error {
 	return nil
 }
 func validateKindRepostEvent(e *Event) error {
+	var repostedEvent Event
+
 	if !json.Valid([]byte(e.Content)) {
-		return errors.Wrapf(ErrWrongEventParams, "nip-18: content field should be stringified json: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: content field should be stringified json: %q", e.Content)
 	}
-	var parsedContent RepostContent
-	if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
-		return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong json fields for: %+v", e)
-	}
-	if e.Kind == nostr.KindRepost {
-		if parsedContent.Kind != nostr.KindTextNote {
-			return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong kind of repost event: %+v", e)
-		}
-	} else {
-		if kTag := e.Tags.GetFirst([]string{"k"}); kTag == nil || kTag.Value() != fmt.Sprint(parsedContent.Kind) {
-			return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong kind of reposted event: %+v", e)
-		}
-	}
-	if eTag := e.Tags.GetFirst([]string{"e"}); eTag == nil || len(*eTag) < 3 || eTag.Value() != parsedContent.ID {
-		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note and relay value: %+v", e)
-	}
-	if pTag := e.Tags.GetFirst([]string{"p"}); pTag == nil || len(*pTag) < 2 || pTag.Value() != parsedContent.PubKey {
-		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include p tag with pubkey of the event being reposted: %+v", e)
+	if err := repostedEvent.UnmarshalJSON([]byte(e.Content)); err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong json fields: %v", err)
+	} else if err := repostedEvent.Validate(); err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: invalid reposted event: %v", err)
 	}
 
+	if e.Kind == nostr.KindRepost {
+		if repostedEvent.Kind != nostr.KindTextNote {
+			return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong kind of reposted event: found %d, expected %d", repostedEvent.Kind, nostr.KindTextNote)
+		}
+	} else {
+		if kTag := e.GetTag("k"); kTag.Value() != strconv.Itoa(repostedEvent.Kind) {
+			return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong kind of generic reposted event: found %q, expected %d", kTag.Value(), repostedEvent.Kind)
+		}
+	}
+
+	eTag := e.GetTag("e")
+	if eTag.Value() != repostedEvent.ID {
+		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note: found %q, expected %q", eTag.Value(), repostedEvent.ID)
+	} else if eTag.Relay() == "" {
+		return errors.Wrap(ErrWrongEventParams, "nip-18: repost must include e tag with relay value")
+	}
+
+	if pTag := e.GetTag("p"); pTag.Value() != repostedEvent.GetMasterPublicKey() {
+		return errors.Wrapf(ErrWrongEventParams,
+			"nip-18: repost must include p tag with pubkey of the event being reposted: found %q, expected %q",
+			pTag.Value(), repostedEvent.GetMasterPublicKey())
+	}
 	return nil
 }
 
