@@ -583,11 +583,8 @@ func validateKindRepostEvent(e *Event) error {
 		}
 	}
 
-	eTag := e.GetTag("e")
-	if eTag.Value() != repostedEvent.ID {
+	if eTag := e.GetTag("e"); eTag.Value() != repostedEvent.ID {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note: found %q, expected %q", eTag.Value(), repostedEvent.ID)
-	} else if eTag.Relay() == "" {
-		return errors.Wrap(ErrWrongEventParams, "nip-18: repost must include e tag with relay value")
 	}
 
 	if pTag := e.GetTag("p"); pTag.Value() != repostedEvent.GetMasterPublicKey() {

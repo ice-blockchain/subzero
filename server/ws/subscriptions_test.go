@@ -645,7 +645,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID, "relay"}, model.Tag{"p", originalEvent.GetMasterPublicKey()}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", originalEvent.GetMasterPublicKey()}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -666,17 +666,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID, "relay"}},
-			Content:   originalEvent.String(),
-		}}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.Error(t, relay.Publish(ctx, ev.Event))
-	})
-	t.Run("kind 6 (NIP-18): invalid event, no enough e tag parameters", func(t *testing.T) {
-		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", originalEvent.GetMasterPublicKey()}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -686,7 +676,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID, "relay"}, model.Tag{"p"}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p"}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -696,7 +686,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID, "relay"}, model.Tag{"p", "foo"}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", "foo"}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -712,7 +702,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", subEv.ID, "relay"}, model.Tag{"p", subEv.GetMasterPublicKey()}},
+			Tags:      model.Tags{model.Tag{"e", subEv.ID}, model.Tag{"p", subEv.GetMasterPublicKey()}},
 			Content:   subEv.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -731,7 +721,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindGenericRepost,
 			Tags: model.Tags{
-				model.Tag{"e", subEv.ID, "relay"},
+				model.Tag{"e", subEv.ID},
 				model.Tag{"p", subEv.GetMasterPublicKey()},
 				model.Tag{"k", strconv.Itoa(subEv.Kind)},
 			},
@@ -753,7 +743,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindGenericRepost,
 			Tags: model.Tags{
-				model.Tag{"e", subEv.ID, "relay"},
+				model.Tag{"e", subEv.ID},
 				model.Tag{"p", subEv.GetMasterPublicKey()},
 				model.Tag{"k", "foo"},
 			},
