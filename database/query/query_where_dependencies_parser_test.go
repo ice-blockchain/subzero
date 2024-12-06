@@ -751,3 +751,39 @@ func TestSelectExpirationWithDependencies(t *testing.T) {
 		require.Equal(t, pubkey, events[i].PubKey)
 	}
 }
+
+func TestSelectDependenciesQuote(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	user1Priv, user1Pub := model.GenerateKeyPair()
+	user2Priv, _ := model.GenerateKeyPair()
+
+	var event1 model.Event
+	event1.Kind = nostr.KindTextNote
+	event1.Content = "Hey"
+	event1.CreatedAt = 1
+	require.NoError(t, event1.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var event2 model.Event
+	event2.Kind = nostr.KindTextNote
+	event2.Content = "Repost"
+	event2.CreatedAt = 2
+	event2.Tags = model.Tags{
+		{"q", event1.ID, "", user1Pub},
+	}
+	require.NoError(t, event2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(context.Background(), &event1, &event2))
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
+		Search: "include:dependencies:kind1>kind6400+kind1+group+q",
+		Limit:  10,
+	})
+	require.Len(t, events, 3) // 2 notes, 1 dvm event.
+	t.Logf("dvm event: %+v", events[2])
+	require.Equal(t, model.KindDVMCountResponse, events[2].Kind)
+	require.Equal(t, "1", events[2].Content)
+}

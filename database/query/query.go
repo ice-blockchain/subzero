@@ -216,10 +216,14 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 
 	case model.KindDVMCountResponse:
 		var ev databaseEvent
+		pubkey, _ := model.GetPublicKey(db.relayPrivateKey)
 		ev.Kind = model.KindJobNostrEventCount
 		ev.CreatedAt = event.CreatedAt
 		ev.Content = event.Dtag
-		ev.Tags = append(event.Tags, model.Tag{"param", "relay", db.relayURL})
+		ev.Tags = append(event.Tags,
+			model.Tag{"param", "relay", db.relayURL},
+			model.Tag{model.CustomIONTagOnBehalfOf, pubkey},
+		)
 		db.MustSignEvent(&ev)
 
 		event.Tags = model.Tags{
