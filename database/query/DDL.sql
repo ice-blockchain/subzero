@@ -298,12 +298,14 @@ begin
 end
 ;
 --------
+drop   trigger if     exists trigger_events_before_delete_remove_tags_explicit;
 create trigger if not exists trigger_events_before_delete_remove_tags_explicit
     before delete
     on events
     for each row
 begin
     delete from event_tags where event_id = OLD.id;
+    delete from event_counters where reference_id = OLD.id;
 end
 ;
 --------
@@ -316,6 +318,9 @@ CREATE TABLE IF NOT EXISTS event_counters
     primary key (kind, reference_type, reference_id)
 ) strict, WITHOUT ROWID;
 --------
+create index if not exists idx_event_counters_reference_id on event_counters(reference_id);
+--------
+drop   trigger if     exists trigger_event_tags_after_insert_inc_counter;
 create trigger if not exists trigger_event_tags_after_insert_inc_counter
     after insert
     on event_tags
@@ -351,7 +356,7 @@ begin
                         where
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
                     )
-                when e.kind in (1, 6, 16, 30023) and NEW.event_tag_value3 != '' then
+                when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 != '' then
                     NEW.event_tag_value3 in ('reply', 'root')
                 else
                     true
