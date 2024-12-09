@@ -312,7 +312,7 @@ end
 CREATE TABLE IF NOT EXISTS event_counters
 (
     reference_id   text    not null,
-    reference_type text    not null DEFAULT '',
+    reference_type text    not null DEFAULT '', -- for kind 7 events, it contains the actual reaction to the event, like `+` or `-`.
     kind           integer not null,
     value          integer not null DEFAULT 0,
     primary key (kind, reference_type, reference_id)
@@ -334,6 +334,7 @@ begin
             when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
             when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
+            when e.kind = 7 then e.content -- reaction type
             else ''
         end,
         e.kind,
@@ -368,6 +369,7 @@ begin
 end
 ;
 --------
+drop   trigger if     exists trigger_event_tags_after_delete_dec_counter;
 create trigger if not exists trigger_event_tags_after_delete_dec_counter
     after delete
     on event_tags
@@ -386,6 +388,7 @@ begin
             when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
             when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
+            when e.kind = 7 then e.content
             else ''
         end
         and (

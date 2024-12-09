@@ -480,8 +480,13 @@ select
 	coalesce(evr.pubkey, ''),
 	coalesce(evr.master_pubkey, ''),
 	'',
-	case when f.kind = 7 then json_object('+', f.value) else cast(f.value as text) end as content,
-	json_array(json_object('kinds', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id))) as d_tag,
+`)
+		if filter.Reduce.Group && len(filter.Reduce.Kinds) > 1 && filter.Reduce.Kinds[1] == nostr.KindReaction {
+			w.WriteString(`json_group_object(coalesce(nullif(f.reference_type, ''), '+'), f.value) as content,`)
+		} else {
+			w.WriteString(`cast(f.value as text) as content,`)
+		}
+		w.WriteString(`json_array(json_object('kinds', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id))) as d_tag,
 	case when
 		f.kind = 7 then
 			json_array(
@@ -643,8 +648,10 @@ group by e.pubkey, e.master_pubkey`)
 			w.addParam(filterID, "context", filter.Reduce.Tag)
 			refType = "follower"
 		}
-		w.WriteString(" AND f.reference_type = :")
-		w.WriteString(w.addParam(filterID, "rref", refType))
+		if !filter.Reduce.Group && filter.Reduce.Kinds[1] != nostr.KindReaction {
+			w.WriteString(" AND f.reference_type = :")
+			w.WriteString(w.addParam(filterID, "rref", refType))
+		}
 		w.WriteString(" AND f.reference_id IN (")
 		if filter.Reduce.Kinds[1] == nostr.KindFollowList {
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
@@ -796,20 +803,21 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				w.maybeOR()
 				w.WriteString("kind = :")
 				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(idx), kinds[idx]))
-				w.WriteString(" AND reference_type = :")
-				var referenceType string
-				switch kinds[idx] {
-				case nostr.KindFollowList:
-					referenceType = "follower"
-				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
-					if _, ok := filter.Tags["q"]; ok {
-						referenceType = "quote"
-					} else {
-						referenceType = "reply"
+				if kinds[idx] != nostr.KindReaction {
+					w.WriteString(" AND reference_type = :")
+					var referenceType string
+					switch kinds[idx] {
+					case nostr.KindFollowList:
+						referenceType = "follower"
+					case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
+						if _, ok := filter.Tags["q"]; ok {
+							referenceType = "quote"
+						} else {
+							referenceType = "reply"
+						}
 					}
+					w.WriteString(w.addParam(filterID, "reference_type"+strconv.Itoa(idx), referenceType))
 				}
-				w.WriteString(w.addParam(filterID, "reference_type"+strconv.Itoa(idx), referenceType))
-
 			}
 			w.WriteRune(')')
 		}

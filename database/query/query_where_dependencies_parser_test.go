@@ -294,7 +294,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.CreatedAt = 13
 		ev.Content = "+"
 		ev.Tags = model.Tags{
-			{"e", "t2id2"},
+			{"e", "t2id3"},
 		}
 		err := db.AcceptEvents(context.Background(), &ev)
 		require.NoError(t, err)
@@ -303,24 +303,25 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Kind = nostr.KindReaction
 		ev.PubKey = "t3pk2"
 		ev.CreatedAt = 13
-		ev.Content = "+"
+		ev.Content = "*"
 		ev.Tags = model.Tags{
 			{"e", "t2id3"},
 		}
 		err = db.AcceptEvents(context.Background(), &ev)
 		require.NoError(t, err)
+		helperMustBePrecalculatedCount(t, db, 2, model.Filter{IDs: []string{"t2id3"}, Kinds: []int{nostr.KindReaction}})
 
 		events := helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"t2id2", "t2id3"},
 			Search: "include:dependencies:kind1>kind6400+kind7+group+content",
 		})
-		require.Len(t, events, 4)
+		require.Len(t, events, 3)
 		require.Equal(t, "t2id3", events[0].ID)
 		require.Equal(t, "t2id2", events[1].ID)
 		for _, ev := range events[2:] {
 			t.Logf("dvm event: %+v", ev)
 			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
-			require.Equal(t, `{"+":1}`, ev.Content)
+			require.Equal(t, `{"*":1,"+":1}`, ev.Content)
 			require.Len(t, ev.Tags, 4)
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
