@@ -330,3 +330,57 @@ func TestEventCounters(t *testing.T) {
 		})
 	})
 }
+
+func TestEventMultiReactions(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var ev model.Event
+	ev.ID = "t1id1"
+	ev.Content = "hello world"
+	ev.CreatedAt = 1
+	ev.PubKey = "t1pub1"
+	require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+	helperMustBePrecalculatedCount(t, db, 0, model.Filter{IDs: []string{ev.ID}, Kinds: []int{nostr.KindReaction}})
+
+	for _, r := range []string{"+", "-", "*"} {
+		t.Run(r, func(t *testing.T) {
+			const num = 2
+			for i := range num {
+				var reaction model.Event
+				reaction.ID = r + "reaction" + strconv.Itoa(i)
+				reaction.Kind = nostr.KindReaction
+				reaction.PubKey = r + "pubkeyr" + strconv.Itoa(i)
+				reaction.CreatedAt = model.Timestamp(i)
+				reaction.Content = r
+				reaction.Tags = model.Tags{{"e", "t1id1"}, {"p", "t1pub1"}}
+				require.NoError(t, db.AcceptEvents(context.Background(), &reaction))
+			}
+		})
+	}
+	helperMustBePrecalculatedCount(t, db, 6, model.Filter{IDs: []string{ev.ID}, Kinds: []int{nostr.KindReaction}})
+
+	// Remove one `-` reaction.
+	var deleteEv model.Event
+	deleteEv.Kind = nostr.KindDeletion
+	deleteEv.PubKey = "-pubkeyr1"
+	deleteEv.Tags = model.Tags{{"e", "-reaction1"}}
+	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+	helperMustBePrecalculatedCount(t, db, 5, model.Filter{IDs: []string{ev.ID}, Kinds: []int{nostr.KindReaction}})
+
+	// Remove one `*` reaction.
+	deleteEv.Kind = nostr.KindDeletion
+	deleteEv.PubKey = "*pubkeyr0"
+	deleteEv.Tags = model.Tags{{"e", "*reaction0"}}
+	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+	helperMustBePrecalculatedCount(t, db, 4, model.Filter{IDs: []string{ev.ID}, Kinds: []int{nostr.KindReaction}})
+
+	// Remove original event.
+	deleteEv.Kind = nostr.KindDeletion
+	deleteEv.PubKey = "t1pub1"
+	deleteEv.Tags = model.Tags{{"e", "t1id1"}}
+	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+	helperMustBePrecalculatedCount(t, db, 0, model.Filter{IDs: []string{ev.ID}, Kinds: []int{nostr.KindReaction}})
+}

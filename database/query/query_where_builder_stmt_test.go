@@ -373,6 +373,17 @@ func TestParseNostrFilter(t *testing.T) {
 		require.Len(t, f.TagMarkers, 3)
 		require.Equal(t, []databaseFilterMarker{{Tag: "a", Marker: "aval"}, {Tag: "b", Marker: "bval"}, {Tag: "c", Marker: "cval"}}, f.TagMarkers)
 	})
+	t.Run("One negative marker and one positive and images", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "amarker:aval images:true some !bmarker:bval content here marker:invalid x",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Images)
+		require.True(t, *f.Images)
+		require.Equal(t, "some content here marker:invalid x", f.Filter.Search)
+		require.Len(t, f.TagMarkers, 2)
+		require.Equal(t, []databaseFilterMarker{{Tag: "a", Marker: "aval"}, {Tag: "b", Marker: "bval", Exclude: true}}, f.TagMarkers)
+	})
 }
 
 func TestBuildLiteFilter(t *testing.T) {

@@ -932,3 +932,50 @@ func TestTagMarkerWithRepost(t *testing.T) {
 		require.Equal(t, "1", events[0].ID)
 	})
 }
+
+func TestTagMarkerNegative(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Insert", func(t *testing.T) {
+		err := db.AcceptEvents(context.TODO(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "1id",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 1,
+					Content:   "foo",
+					PubKey:    "fookey",
+					Tags: model.Tags{
+						{"e", "2", "", "root"},
+						{"q", "2"},
+					},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "2id",
+					Kind:      nostr.KindTextNote,
+					CreatedAt: 1,
+					Content:   "bar",
+					PubKey:    "barkey",
+					Tags: model.Tags{
+						{"e", "2", "", "reply"},
+						{"q", "2"},
+					},
+				},
+			},
+		)
+		require.NoError(t, err)
+		count, err := db.CountEvents(context.Background(), nil)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), count)
+	})
+	t.Run("Select", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Search: "!emarker:root"})
+		require.Len(t, events, 1)
+		require.Equal(t, "2id", events[0].ID)
+	})
+}

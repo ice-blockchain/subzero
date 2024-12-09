@@ -596,9 +596,6 @@ func validateKindRepostEvent(e *Event) error {
 }
 
 func validateKindReactionEvent(e *Event) error {
-	if e.Content != "+" && e.Content != "-" && e.Content != "" {
-		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
-	}
 	if eTag := e.Tags.GetLast([]string{"e"}); eTag == nil || eTag.Value() == "" {
 		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong e tag value: %+v", e)
 	}

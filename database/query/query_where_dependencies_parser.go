@@ -56,6 +56,7 @@ const (
 
 var (
 	errDepParserUnexpectedToken = errors.New("unexpected token")
+	errDepParserInvalidToken    = errors.New("invalid token")
 
 	parserTokens = map[token][]string{
 		tokenSearchExpr:  {">"},
@@ -78,35 +79,35 @@ var (
 		// kind30008+profile_badges>kind30009>kind8.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralProfileBadges,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenizer.TokenUndef,
 			},
 		},
 		// kind1+q>kind10002.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralTagQ,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenizer.TokenUndef,
 			},
 		},
 		// kind1>$logged_in_user_pubkey@kind1+e+root/reply.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
 				tokenizer.TokenKeyword,
 				tokenCondInclude,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralTagE,
 				tokenCondDetail,
@@ -117,11 +118,11 @@ var (
 		// kind1>$logged_in_user_pubkey@kind1+q.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
 				tokenizer.TokenKeyword,
 				tokenCondInclude,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralTagQ,
 				tokenizer.TokenUndef,
@@ -130,22 +131,22 @@ var (
 		// kind1>$logged_in_user_pubkey@kind6 / kind1>$logged_in_user_pubkey@kind7.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
 				tokenizer.TokenKeyword,
 				tokenCondInclude,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenizer.TokenUndef,
 			},
 		},
 		// kind1>kind6400+kind1+group+root/reply.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralGroup,
 				tokenCondDetail,
@@ -156,11 +157,11 @@ var (
 		// kind1>kind6400+kind6+group+e.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralGroup,
 				tokenCondDetail,
@@ -171,11 +172,11 @@ var (
 		// kind1>kind6400+kind1+group+q.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralGroup,
 				tokenCondDetail,
@@ -186,11 +187,11 @@ var (
 		// kind0>kind6400+kind3+group+p.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralGroupTagDetailP,
 				tokenizer.TokenUndef,
@@ -199,11 +200,11 @@ var (
 		// kind1>kind6400+kind7+group+content.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralGroup,
 				tokenCondDetail,
@@ -214,9 +215,9 @@ var (
 		// kind1>kind0 / kind6>kind10002 / kind3>kind0.
 		{
 			Tokens: []token{
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenSearchExpr,
-				tokenLiteralKind, tokenizer.TokenInteger,
+				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenizer.TokenUndef,
 			},
 		},
@@ -228,10 +229,7 @@ var (
 func init() {
 	dependenciesParser = tokenizer.New()
 	dependenciesParser.SetWhiteSpaces([]byte{' ', '\t'})
-	dependenciesParser.
-		AllowNumberUnderscore().
-		AllowKeywordUnderscore().
-		AllowNumbersInKeyword()
+	dependenciesParser.AllowKeywordSymbols(tokenizer.Numbers, tokenizer.Numbers)
 	for k, v := range parserTokens {
 		dependenciesParser.DefineTokens(k, v)
 	}
@@ -276,17 +274,24 @@ func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependencies, e
 			start = false
 
 		case tokenizer.TokenKeyword:
+			if stream.PrevToken().Is(tokenLiteralKind) {
+				break
+			}
 			filter.Reduce.Author = stream.CurrentToken().ValueString()
 
 		case tokenLiteralProfileBadges:
 			filter.Start.ProfileBadges = true
 
 		case tokenLiteralKind:
-			val := int(stream.NextToken().ValueInt64())
+			str := stream.NextToken().ValueString()
+			val, err := strconv.ParseInt(str, 10, 64)
+			if err != nil {
+				return nil, errors.Wrapf(errDepParserInvalidToken, "failed to parse kind value %q: %v", str, err)
+			}
 			if start {
-				filter.Start.Kind = val
+				filter.Start.Kind = int(val)
 			} else {
-				filter.Reduce.Kinds = append(filter.Reduce.Kinds, val)
+				filter.Reduce.Kinds = append(filter.Reduce.Kinds, int(val))
 			}
 		}
 
