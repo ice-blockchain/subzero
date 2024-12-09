@@ -214,7 +214,7 @@ func (w *whereBuilder) applyFilterTagMarkers(name string, markers []databaseFilt
 	}
 }
 
-func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
+func (w *whereBuilder) applyFilterTags(filterID string, tags model.TagMap) {
 	const valuesMax = 21
 
 	if len(tags) == 0 {
@@ -225,11 +225,21 @@ func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 	for tagName, tagValues := range tags {
 		tagID++
 
+		queryTagName := tagName
+		exclude := false
+		if tagName != "" && tagName[0] == '!' {
+			exclude = true
+			queryTagName = tagName[1:]
+		}
+
 		w.maybeAND()
-		tagParam := w.addParam(name, "tag"+strconv.Itoa(tagID), tagName)
+		tagParam := w.addParam(filterID, "tag"+strconv.Itoa(tagID), queryTagName)
 
 		// Only the tag name is specified, no values.
 		if !tags.HasValues(tagName) {
+			if exclude {
+				w.WriteString("NOT ")
+			}
 			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
 			w.WriteString(tagParam)
 			w.WriteRune(')')
@@ -249,6 +259,9 @@ func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 			}
 
 			w.maybeOR()
+			if exclude {
+				w.WriteString("NOT ")
+			}
 			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
 			w.WriteString(tagParam)
 			for j := range values {
@@ -260,7 +273,7 @@ func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 				w.WriteString("event_tag_value")
 				w.WriteString(strconv.Itoa(j + 1))
 				w.WriteString(" = :")
-				w.WriteString(w.addParam(name, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
+				w.WriteString(w.addParam(filterID, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
 			}
 			w.WriteRune(')')
 		}
