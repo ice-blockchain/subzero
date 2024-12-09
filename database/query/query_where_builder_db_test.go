@@ -986,3 +986,14 @@ func TestFilterTagsNegative(t *testing.T) {
 		require.Equal(t, "2id", events[0].ID)
 	})
 }
+
+func TestGetReplyTypeFromValues(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, getReplyTypeFromValues(nil))
+	require.Empty(t, getReplyTypeFromValues([]model.TagValues{}))
+	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{}}))
+	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{nil, nil}}))
+	require.Equal(t, "root", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("root")}}))
+	require.Equal(t, "reply", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("reply")}}))
+}

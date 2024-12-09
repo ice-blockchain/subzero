@@ -331,7 +331,7 @@ begin
     select
         NEW.event_tag_value1, -- Either event id OR public key (kind = 3).
         case
-            when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then NEW.event_tag_value3
             when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
             when e.kind = 7 then e.content -- reaction type

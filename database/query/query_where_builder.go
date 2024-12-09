@@ -654,7 +654,7 @@ group by e.pubkey, e.master_pubkey`)
 
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
 			w.addParam(filterID, "context", filter.Reduce.Context)
-			refType = "reply"
+			refType = filter.Reduce.Context
 
 		case filter.Reduce.Tag == "p":
 			w.addParam(filterID, "ftagname", "#p")
@@ -795,6 +795,15 @@ func isValidCounterFilter(filter *model.Filter) (valid bool) {
 	return valid
 }
 
+func getReplyTypeFromValues(values []model.TagValues) string {
+	for j := range values {
+		if len(values[j]) > 2 && values[j][2] != nil {
+			return *values[j][2]
+		}
+	}
+	return ""
+}
+
 func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	if len(filters) == 0 {
 		return "", nil, ErrEmptyFilter
@@ -819,19 +828,23 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				w.maybeOR()
 				w.WriteString("kind = :")
 				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(idx), kinds[idx]))
-				if kinds[idx] != nostr.KindReaction {
-					w.WriteString(" AND reference_type = :")
-					var referenceType string
-					switch kinds[idx] {
-					case nostr.KindFollowList:
-						referenceType = "follower"
-					case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
-						if _, ok := filter.Tags["q"]; ok {
-							referenceType = "quote"
-						} else {
-							referenceType = "reply"
-						}
+				var referenceType string
+				switch kinds[idx] {
+				case nostr.KindReaction:
+					// Nothing to add.
+
+				case nostr.KindFollowList:
+					referenceType = "follower"
+
+				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
+					if _, quote := filter.Tags["q"]; quote {
+						referenceType = "quote"
+					} else if _, ref := filter.Tags["e"]; ref {
+						referenceType = getReplyTypeFromValues(filter.Tags["e"])
 					}
+				}
+				if referenceType != "" {
+					w.WriteString(" AND reference_type = :")
 					w.WriteString(w.addParam(filterID, "reference_type"+strconv.Itoa(idx), referenceType))
 				}
 			}

@@ -295,6 +295,21 @@ func TestEventCounters(t *testing.T) {
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1rp"}})
 		})
+		t.Run("Root", func(t *testing.T) {
+			var ev model.Event
+			ev.ID = "3rp"
+			ev.Kind = nostr.KindTextNote
+			ev.PubKey = "pubkeyrp3"
+			ev.CreatedAt = 2
+			ev.Tags = model.Tags{{"e", "1rp", "", "root", "pubkeyrp2"}, {"p", "pubkeyrp1"}}
+			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			// Total: root + reply.
+			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1rp"}})
+			// Only root.
+			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1rp"}, Tags: model.TagMap{}.Set("e", nil, nil, model.PointerOf("root"))})
+			// Only reply.
+			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1rp"}, Tags: model.TagMap{}.Set("e", nil, nil, model.PointerOf("reply"))})
+		})
 		t.Run("Repost with multiple E tags", func(t *testing.T) {
 			var ev model.Event
 			ev.ID = "14r"
