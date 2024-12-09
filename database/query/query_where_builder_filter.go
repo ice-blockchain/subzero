@@ -53,8 +53,12 @@ func parseNostrFilterFlags(f *databaseFilterSearch) *databaseFilterSearch {
 }
 
 func parseNostrFilterTagMarkers(f *databaseFilterSearch) *databaseFilterSearch {
+	// Parse tag markers.
+	// - <tag>marker:<value>
+	// - !<tag>marker:<value>
 	const tagMarker = `marker:`
 	var tagMarkerOffset int
+
 	for strings.Contains(f.Search[tagMarkerOffset:], tagMarker) {
 		tagMarkerStart := strings.Index(f.Search[tagMarkerOffset:], tagMarker)
 		if tagMarkerStart < 1 {
@@ -68,14 +72,19 @@ func parseNostrFilterTagMarkers(f *databaseFilterSearch) *databaseFilterSearch {
 			tagMarkerEnd += tagMarkerStart + len(tagMarker)
 		}
 		if x := strings.TrimSpace(f.Search[tagMarkerOffset+tagMarkerStart-1 : tagMarkerOffset+tagMarkerStart]); x != "" {
+			var excludeOffset int
+			if (tagMarkerOffset+tagMarkerStart-1 > 0) && (f.Search[tagMarkerOffset+tagMarkerStart-2] == '!') {
+				excludeOffset = 1
+			}
 			f.TagMarkers = append(f.TagMarkers, databaseFilterMarker{
-				Tag:    x,
-				Marker: f.Search[tagMarkerOffset+tagMarkerStart+len(tagMarker) : tagMarkerOffset+tagMarkerEnd],
+				Tag:     x,
+				Marker:  f.Search[tagMarkerOffset+tagMarkerStart+len(tagMarker) : tagMarkerOffset+tagMarkerEnd],
+				Exclude: excludeOffset > 0,
 			})
 			if tagMarkerEnd < len(f.Search) {
 				tagMarkerEnd++
 			}
-			f.Search = strings.TrimSpace(f.Search[:tagMarkerStart-1] + f.Search[tagMarkerEnd:])
+			f.Search = strings.TrimSpace(f.Search[:tagMarkerStart-1-excludeOffset] + f.Search[tagMarkerEnd:])
 		} else {
 			tagMarkerOffset += tagMarkerStart + len(tagMarker)
 		}

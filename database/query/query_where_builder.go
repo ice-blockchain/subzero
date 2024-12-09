@@ -65,8 +65,9 @@ type (
 		}
 	}
 	databaseFilterMarker struct {
-		Tag    string
-		Marker string
+		Tag     string
+		Marker  string
+		Exclude bool
 	}
 )
 
@@ -202,6 +203,9 @@ func (w *whereBuilder) applyFilterTagMarkers(name string, markers []databaseFilt
 
 	for id, marker := range markers {
 		w.maybeAND()
+		if marker.Exclude {
+			w.WriteString("NOT ")
+		}
 		w.WriteString("EXISTS (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = :")
 		w.WriteString(w.addParam(name, "mtag"+strconv.Itoa(id), marker.Tag))
 		w.WriteString(" AND event_tag_value3 = :")
