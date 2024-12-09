@@ -70,55 +70,55 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
-			Input: "kind1>publickey@kind1+e+root",
+			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+e+root",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
 					Kind: 1,
 				},
 				Reduce: filterDependenciesReduce{
 					Kinds:   []int{1},
-					Author:  "publickey",
+					Author:  "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 					Tag:     "e",
 					Context: "root",
 				},
 			},
 		},
 		{
-			Input: "kind1>publickey@kind1+e+reply",
+			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+e+reply",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
 					Kind: 1,
 				},
 				Reduce: filterDependenciesReduce{
 					Kinds:   []int{1},
-					Author:  "publickey",
+					Author:  "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 					Tag:     "e",
 					Context: "reply",
 				},
 			},
 		},
 		{
-			Input: "kind1>publickey@kind1+q",
+			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+q",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
 					Kind: 1,
 				},
 				Reduce: filterDependenciesReduce{
 					Kinds:  []int{1},
-					Author: "publickey",
+					Author: "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 					Tag:    "q",
 				},
 			},
 		},
 		{
-			Input: "kind1>publickey@kind6",
+			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind6",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
 					Kind: 1,
 				},
 				Reduce: filterDependenciesReduce{
 					Kinds:  []int{6},
-					Author: "publickey",
+					Author: "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 				},
 			},
 		},
