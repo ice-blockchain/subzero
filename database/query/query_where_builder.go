@@ -661,6 +661,9 @@ group by e.pubkey, e.master_pubkey`)
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
 		}
 		w.WriteString(")")
+		if filter.Reduce.Group && filter.Reduce.Kinds[1] == nostr.KindReaction {
+			w.WriteString(" GROUP BY reference_id")
+		}
 	}
 }
 
