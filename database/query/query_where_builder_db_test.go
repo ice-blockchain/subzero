@@ -933,7 +933,7 @@ func TestTagMarkerWithRepost(t *testing.T) {
 	})
 }
 
-func TestTagMarkerNegative(t *testing.T) {
+func TestFilterTagsNegative(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -973,9 +973,27 @@ func TestTagMarkerNegative(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	})
-	t.Run("Select", func(t *testing.T) {
+	t.Run("TagMarker", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{Search: "!emarker:root"})
 		require.Len(t, events, 1)
 		require.Equal(t, "2id", events[0].ID)
 	})
+	t.Run("Tags", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Tags: model.TagMap{}.Set("!e", nil, nil, model.PointerOf("root")),
+		})
+		require.Len(t, events, 1)
+		require.Equal(t, "2id", events[0].ID)
+	})
+}
+
+func TestGetReplyTypeFromValues(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, getReplyTypeFromValues(nil))
+	require.Empty(t, getReplyTypeFromValues([]model.TagValues{}))
+	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{}}))
+	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{nil, nil}}))
+	require.Equal(t, "root", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("root")}}))
+	require.Equal(t, "reply", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("reply")}}))
 }

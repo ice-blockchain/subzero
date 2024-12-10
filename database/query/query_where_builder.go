@@ -214,7 +214,7 @@ func (w *whereBuilder) applyFilterTagMarkers(name string, markers []databaseFilt
 	}
 }
 
-func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
+func (w *whereBuilder) applyFilterTags(filterID string, tags model.TagMap) {
 	const valuesMax = 21
 
 	if len(tags) == 0 {
@@ -225,11 +225,21 @@ func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 	for tagName, tagValues := range tags {
 		tagID++
 
+		queryTagName := tagName
+		exclude := false
+		if tagName != "" && tagName[0] == '!' {
+			exclude = true
+			queryTagName = tagName[1:]
+		}
+
 		w.maybeAND()
-		tagParam := w.addParam(name, "tag"+strconv.Itoa(tagID), tagName)
+		tagParam := w.addParam(filterID, "tag"+strconv.Itoa(tagID), queryTagName)
 
 		// Only the tag name is specified, no values.
 		if !tags.HasValues(tagName) {
+			if exclude {
+				w.WriteString("NOT ")
+			}
 			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
 			w.WriteString(tagParam)
 			w.WriteRune(')')
@@ -249,6 +259,9 @@ func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 			}
 
 			w.maybeOR()
+			if exclude {
+				w.WriteString("NOT ")
+			}
 			w.WriteString("EXISTS (select event_id from event_tags where event_id = e.id AND event_tag_key = :")
 			w.WriteString(tagParam)
 			for j := range values {
@@ -260,7 +273,7 @@ func (w *whereBuilder) applyFilterTags(name string, tags model.TagMap) {
 				w.WriteString("event_tag_value")
 				w.WriteString(strconv.Itoa(j + 1))
 				w.WriteString(" = :")
-				w.WriteString(w.addParam(name, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
+				w.WriteString(w.addParam(filterID, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j]))
 			}
 			w.WriteRune(')')
 		}
@@ -641,7 +654,7 @@ group by e.pubkey, e.master_pubkey`)
 
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
 			w.addParam(filterID, "context", filter.Reduce.Context)
-			refType = "reply"
+			refType = filter.Reduce.Context
 
 		case filter.Reduce.Tag == "p":
 			w.addParam(filterID, "ftagname", "#p")
@@ -782,6 +795,15 @@ func isValidCounterFilter(filter *model.Filter) (valid bool) {
 	return valid
 }
 
+func getReplyTypeFromValues(values []model.TagValues) string {
+	for j := range values {
+		if len(values[j]) > 2 && values[j][2] != nil {
+			return *values[j][2]
+		}
+	}
+	return ""
+}
+
 func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	if len(filters) == 0 {
 		return "", nil, ErrEmptyFilter
@@ -806,19 +828,23 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				w.maybeOR()
 				w.WriteString("kind = :")
 				w.WriteString(w.addParam(filterID, "kind"+strconv.Itoa(idx), kinds[idx]))
-				if kinds[idx] != nostr.KindReaction {
-					w.WriteString(" AND reference_type = :")
-					var referenceType string
-					switch kinds[idx] {
-					case nostr.KindFollowList:
-						referenceType = "follower"
-					case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
-						if _, ok := filter.Tags["q"]; ok {
-							referenceType = "quote"
-						} else {
-							referenceType = "reply"
-						}
+				var referenceType string
+				switch kinds[idx] {
+				case nostr.KindReaction:
+					// Nothing to add.
+
+				case nostr.KindFollowList:
+					referenceType = "follower"
+
+				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
+					if _, quote := filter.Tags["q"]; quote {
+						referenceType = "quote"
+					} else if _, ref := filter.Tags["e"]; ref {
+						referenceType = getReplyTypeFromValues(filter.Tags["e"])
 					}
+				}
+				if referenceType != "" {
+					w.WriteString(" AND reference_type = :")
 					w.WriteString(w.addParam(filterID, "reference_type"+strconv.Itoa(idx), referenceType))
 				}
 			}
