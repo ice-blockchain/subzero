@@ -36,7 +36,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 		}
 
 		require.NoError(t, db.executeBatch(context.Background(), &req))
-		count, err := db.CountEvents(context.Background(), nil)
+		count, err := db.CountEvents(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, num, count)
 	})
@@ -54,7 +54,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 		req.InsertOrReplace = nil
 		require.NoError(t, db.executeBatch(context.Background(), &req))
 
-		count, err := db.CountEvents(context.Background(), nil)
+		count, err := db.CountEvents(context.Background())
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
@@ -85,7 +85,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 
 		require.NoError(t, db.executeBatch(context.Background(), &req))
 
-		count, err := db.CountEvents(context.Background(), nil)
+		count, err := db.CountEvents(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, num-3, count)
 	})

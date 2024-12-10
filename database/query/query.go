@@ -235,11 +235,11 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 	return event
 }
 
-func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
+func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
 	limit := int64(selectDefaultBatchLimit)
-	hasLimitFilter := subscription != nil && len(subscription.Filters) > 0 && subscription.Filters[0].Limit > 0
+	hasLimitFilter := len(filters) > 0 && filters[0].Limit > 0
 	if hasLimitFilter {
-		limit = int64(subscription.Filters[0].Limit)
+		limit = int64(filters[0].Limit)
 	}
 
 	it := &eventIterator{
@@ -250,7 +250,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, subscription *model.Subscr
 				return nil, nil
 			}
 
-			sqlQuery, params, err := generateSelectEventsSQL(subscription, pivot, min(selectDefaultBatchLimit, limit))
+			sqlQuery, params, err := generateSelectEventsSQL(filters, pivot, min(selectDefaultBatchLimit, limit))
 			if err != nil {
 				return nil, err
 			}
@@ -306,9 +306,9 @@ func (db *dbClient) handleError(err error) error {
 	return err
 }
 
-func generateEventsCountClause(subscription *model.Subscription) (sqlQuery string, params map[string]any, err error) {
-	if subscription != nil {
-		where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(subscription.Filters...)
+func generateEventsCountClause(filters ...model.Filter) (sqlQuery string, params map[string]any, err error) {
+	if len(filters) > 0 {
+		where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
 		if err == nil {
 			return `select coalesce(sum(value), 0) from event_counters where ` + where, params, nil
 		} else if !errors.Is(err, errUnsupportedCombination) {
@@ -316,7 +316,7 @@ func generateEventsCountClause(subscription *model.Subscription) (sqlQuery strin
 		}
 	}
 
-	where, _, params, err := generateEventsWhereClause(subscription)
+	where, _, params, err := generateEventsWhereClause(filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -324,8 +324,8 @@ func generateEventsCountClause(subscription *model.Subscription) (sqlQuery strin
 	return `select count(id) from events e where ` + where, params, nil
 }
 
-func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscription) (count int64, err error) {
-	sqlQuery, params, err := generateEventsCountClause(subscription)
+func (db *dbClient) CountEvents(ctx context.Context, filters ...model.Filter) (count int64, err error) {
+	sqlQuery, params, err := generateEventsCountClause(filters...)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -350,7 +350,7 @@ func (db *dbClient) CountEventReactions(ctx context.Context, filters ...model.Fi
 	if err != nil {
 		if errors.Is(err, errUnsupportedCombination) {
 			// Fallback to the generic way of counting reactions.
-			count, err := db.CountEvents(ctx, &model.Subscription{Filters: filters})
+			count, err := db.CountEvents(ctx, filters...)
 			if err != nil {
 				return "", err
 			}
@@ -380,8 +380,8 @@ func (db *dbClient) CountEventReactions(ctx context.Context, filters ...model.Fi
 	return result, err
 }
 
-func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
-	whereMain, depClause, params, err := generateEventsWhereClause(subscription)
+func generateSelectEventsSQL(filters model.Filters, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
+	whereMain, depClause, params, err := generateEventsWhereClause(filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -445,13 +445,7 @@ from
 ` + depClause, params, nil
 }
 
-func generateEventsWhereClause(subscription *model.Subscription) (clauseMain, clauseDeps string, params map[string]any, err error) {
-	var filters []model.Filter
-
-	if subscription != nil {
-		filters = subscription.Filters
-	}
-
+func generateEventsWhereClause(filters ...model.Filter) (clauseMain, clauseDeps string, params map[string]any, err error) {
 	builder := newWhereBuilder()
 	clauseMain, params, err = builder.Build(filters...)
 	if err != nil {

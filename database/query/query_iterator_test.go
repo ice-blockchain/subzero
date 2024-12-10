@@ -16,7 +16,7 @@ import (
 func helperSelectEvents(t *testing.T, db *dbClient, filters ...model.Filter) (events []*model.Event) {
 	t.Helper()
 
-	for ev, err := range db.SelectEvents(context.Background(), &model.Subscription{Filters: filters}) {
+	for ev, err := range db.SelectEvents(context.Background(), filters...) {
 		require.NoError(t, err)
 		require.NotNil(t, ev)
 		events = append(events, ev)
@@ -28,13 +28,8 @@ func helperSelectEvents(t *testing.T, db *dbClient, filters ...model.Filter) (ev
 func helperSelectEventsN(t *testing.T, db *dbClient, limit int) (events map[string]*model.Event) {
 	t.Helper()
 
-	ctx := context.Background()
-	iter := db.SelectEvents(ctx, helperNewFilterSubscription(func(apply *model.Filter) {
-		apply.Limit = limit
-	}))
-
 	events = make(map[string]*model.Event, limit)
-	for ev, err := range iter {
+	for ev, err := range db.SelectEvents(context.Background(), model.Filter{Limit: limit}) {
 		require.NoError(t, err)
 		events[ev.ID] = ev
 	}

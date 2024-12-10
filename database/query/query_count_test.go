@@ -34,17 +34,16 @@ func TestQueryEventsCount(t *testing.T) {
 		}
 	})
 	t.Run("CountAll", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), nil)
+		count, err := db.CountEvents(context.TODO())
 		require.NoError(t, err)
 		require.Equal(t, totalEvents, count)
 	})
 	t.Run("CountByAuthor", func(t *testing.T) {
 		for author, expectedCount := range authors {
-			count, err := db.CountEvents(context.TODO(),
-				helperNewFilterSubscription(func(apply *model.Filter) {
-					apply.Authors = []string{author}
-					apply.Search = "countbyauthor"
-				}))
+			count, err := db.CountEvents(context.TODO(), model.Filter{
+				Authors: []string{author},
+				Search:  "countbyauthor",
+			})
 			require.NoError(t, err)
 			require.Equal(t, expectedCount, count)
 		}
@@ -52,10 +51,9 @@ func TestQueryEventsCount(t *testing.T) {
 	t.Run("RandomTag", func(t *testing.T) {
 		for range 10 {
 			ev := events[rand.Int31n(int32(len(events)))]
-			count, err := db.CountEvents(context.TODO(),
-				helperNewFilterSubscription(func(apply *model.Filter) {
-					apply.Tags = model.TagMap{}.SetLiterals(ev.Tags[0][0], ev.Tags[0][1:]...)
-				}))
+			count, err := db.CountEvents(context.TODO(), model.Filter{
+				Tags: model.TagMap{}.SetLiterals(ev.Tags[0][0], ev.Tags[0][1:]...),
+			})
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count)
 		}
@@ -65,18 +63,14 @@ func TestQueryEventsCount(t *testing.T) {
 		ev2 := events[rand.Int31n(int32(len(events)))]
 		ev3 := events[rand.Int31n(int32(len(events)))]
 		count, err := db.CountEvents(context.TODO(),
-			&model.Subscription{
-				Filters: model.Filters{
-					helperNewFilter(func(apply *model.Filter) {
-						apply.IDs = []string{ev1.ID}
-					}),
-					helperNewFilter(func(apply *model.Filter) {
-						apply.Authors = []string{ev2.PubKey}
-					}),
-					helperNewFilter(func(apply *model.Filter) {
-						apply.Tags = model.TagMap{}.SetLiterals(ev3.Tags[0][0], ev3.Tags[0][1:]...)
-					}),
-				},
+			model.Filter{
+				IDs: []string{ev1.ID},
+			},
+			model.Filter{
+				Authors: []string{ev2.PubKey},
+			},
+			model.Filter{
+				Tags: model.TagMap{}.SetLiterals(ev3.Tags[0][0], ev3.Tags[0][1:]...),
 			},
 		)
 		require.NoError(t, err)
@@ -134,7 +128,7 @@ func TestEventCounters(t *testing.T) {
 			ev.Tags = model.Tags{{"e", "q2"}}
 			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
 
-			c, err := db.CountEvents(context.Background(), nil)
+			c, err := db.CountEvents(context.Background())
 			require.NoError(t, err)
 			require.Equal(t, int64(13), c) // 11 posts, 2 quotes.
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{"q": nil}, IDs: []string{"1"}})

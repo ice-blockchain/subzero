@@ -391,22 +391,6 @@ func TestNIP09DeleteEvents(t *testing.T) {
 	})
 }
 
-func helperNewFilter(f func(apply *model.Filter)) model.Filter {
-	var filter model.Filter
-
-	f(&filter)
-
-	return filter
-}
-
-func helperNewSingleFilter(f func(apply *model.Filter)) model.Filters {
-	return model.Filters{helperNewFilter(f)}
-}
-
-func helperNewFilterSubscription(f func(apply *model.Filter)) *model.Subscription {
-	return &model.Subscription{Filters: helperNewSingleFilter(f)}
-}
-
 func TestSaveEventWithRepost(t *testing.T) {
 	t.Parallel()
 
@@ -428,9 +412,9 @@ func TestSaveEventWithRepost(t *testing.T) {
 
 		t.Run("CheckSelect", func(t *testing.T) {
 			var event2 model.Event
-			for ev, err := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-				apply.IDs = []string{event.ID}
-			})) {
+			for ev, err := range db.SelectEvents(context.TODO(), model.Filter{
+				IDs: []string{event.ID},
+			}) {
 				require.NoError(t, err)
 				event2 = *ev
 
@@ -592,7 +576,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.True(t, ok)
 		})
 		t.Run("Count", func(t *testing.T) {
-			count, err := db.CountEvents(context.TODO(), nil)
+			count, err := db.CountEvents(context.TODO())
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count) // Only the reposted event should be counted.
 		})
@@ -624,11 +608,11 @@ func TestQueryEventAttestation(t *testing.T) {
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{model.CustomIONKindAttestation}
-			apply.Authors = []string{masterPk}
-			apply.Search = "nostr"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Authors: []string{masterPk},
+			Search:  "nostr",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 		t.Run("TryOverride", func(t *testing.T) {
@@ -655,11 +639,11 @@ func TestQueryEventAttestation(t *testing.T) {
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
 
-		count, err = db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{model.CustomIONKindAttestation}
-			apply.Authors = []string{masterPk}
-			apply.Search = "nostr"
-		}))
+		count, err = db.CountEvents(context.TODO(), model.Filter{
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Authors: []string{masterPk},
+			Search:  "nostr",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
@@ -693,11 +677,11 @@ func TestQueryEventAttestation(t *testing.T) {
 			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
 		})
 		t.Run("Count", func(t *testing.T) {
-			count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-				apply.Kinds = []int{nostr.KindTextNote}
-				apply.Authors = []string{masterPk}
-				apply.Search = "nostr"
-			}))
+			count, err := db.CountEvents(context.TODO(), model.Filter{
+				Kinds:   []int{nostr.KindTextNote},
+				Authors: []string{masterPk},
+				Search:  "nostr",
+			})
 			require.NoError(t, err)
 			require.Equal(t, int64(2), count) // Both events should be counted, master + on behalf.
 		})
@@ -725,12 +709,12 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 	user2MessageIds := []string{}
 
 	counter := func(t *testing.T, kinds []int, ids, authors []string) int64 {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Authors = authors
-			apply.Kinds = kinds
-			apply.IDs = ids
-			apply.Search = "nostr"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Authors: authors,
+			Kinds:   kinds,
+			IDs:     ids,
+			Search:  "nostr",
+		})
 		require.NoError(t, err)
 		return count
 	}
