@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -202,7 +201,16 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 
 		return
 	}
-	if err := d.publishJobResult(reqCtx, event, outputRelays, payload, job.RequiredPaymentAmount()); err != nil {
+
+	result, err := d.finalizeJob(event, payload, job.RequiredPaymentAmount())
+	if err != nil {
+		if fErr := job.OnErrorFeedback(reqCtx, event, err); fErr != nil {
+			log.Printf("failed to publish job finalize feedback: %v", fErr)
+		}
+		return
+	}
+
+	if err := d.publishJobResult(reqCtx, result, outputRelays); err != nil {
 		log.Printf("failed to publish job result: %v", err)
 		if fErr := job.OnErrorFeedback(reqCtx, event, err); fErr != nil {
 			log.Printf("failed to publish job error feedback: %v", fErr)
@@ -210,38 +218,41 @@ func (d *dvm) process(ctx context.Context, event *model.Event) {
 	}
 }
 
-func (d *dvm) publishJobResult(ctx context.Context, incomingEvent *model.Event, relays []*nostr.Relay, payload string, reqiredPaymentAmount float64) error {
-	encodedIncomingEvent, err := json.Marshal(incomingEvent)
-	if err != nil {
-		return errors.Wrapf(err, "failed to json encode incoming event: %v", incomingEvent)
-	}
+func (d *dvm) finalizeJob(incomingEvent *model.Event, payload string, reqiredPaymentAmount float64) (*model.Event, error) {
 	result := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Content:   payload,
 			Kind:      incomingEvent.Kind + 1000,
-			Tags: nostr.Tags{
-				[]string{"request", string(encodedIncomingEvent)},
-				[]string{"e", incomingEvent.GetID()},
-				[]string{"i", incomingEvent.Content},
-				[]string{"p", incomingEvent.PubKey},
+			Tags: model.Tags{
+				model.Tag{"request", incomingEvent.String()},
+				model.Tag{"e", incomingEvent.ID, globalConfig.RelayURL},
+				model.Tag{"p", incomingEvent.PubKey},
 			},
 		},
 	}
+
 	if reqiredPaymentAmount > 0 {
-		result.Tags = append(result.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
+		result.Tags = append(result.Tags, model.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
 	}
+
 	if err := result.SignWithAlg(d.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		return errors.Wrapf(err, "failed to sign event: %v", result)
+		return nil, errors.Wrapf(err, "failed to sign event: %v", result)
 	}
-	eg := errgroup.Group{}
+
+	return &result, nil
+}
+
+func (d *dvm) publishJobResult(ctx context.Context, result *model.Event, relays []*nostr.Relay) error {
+	var eg errgroup.Group
+
 	for _, relay := range relays {
 		eg.Go(func() error {
 			return errors.Wrapf(relay.Publish(ctx, result.Event), "failed to publish job result to relay: %v", relay.URL)
 		})
 	}
 
-	return errors.Wrapf(eg.Wait(), "can't publish to some relay job result for: %v", incomingEvent)
+	return errors.Wrap(eg.Wait(), "can't publish to some relay job result")
 }
 
 func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID string) error {

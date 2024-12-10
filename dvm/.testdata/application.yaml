@@ -54,5 +54,11 @@ dvm:
     LEmxIHOYAtmTwLwU+eKFs/3gjVUxSBg4AA0h1Ox/gjA6Hb+aNZHapPW8XH+jF6Ij
     RK3+I8t8OXWV3eiFcVaUGUlc
     -----END PRIVATE KEY-----
-  private-key: 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
-  relay-url: "wss://example.com"
+  private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
+  relay-url: &relay "wss://example.com"
+
+database:
+  query:
+    url: ":memory:"
+    private-key: *pk
+    relay-url: *relay
