@@ -192,9 +192,6 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 	if event.PubKey != "" {
 		event.Tags = append(event.Tags, model.Tag{"p", event.PubKey})
 	}
-	if event.ID != "" {
-		event.Tags = append(event.Tags, model.Tag{"i", event.ID, "event"})
-	}
 	if event.MasterPubKey != "" && event.MasterPubKey != event.PubKey {
 		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.MasterPubKey})
 	}
