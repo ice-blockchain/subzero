@@ -511,7 +511,7 @@ select
 		end as jtags
 from
 	event_counters f
-inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + ` and f.reference_id in (evr.id, evr.pubkey, evr.master_pubkey)
+inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + ` and ((f.kind = 3 and f.reference_id in (evr.master_pubkey, evr.pubkey)) or f.reference_id = evr.id)
 where
 `)
 	} else {
@@ -661,7 +661,7 @@ group by e.pubkey, e.master_pubkey`)
 			w.addParam(filterID, "context", filter.Reduce.Tag)
 			refType = "follower"
 		}
-		if !filter.Reduce.Group && filter.Reduce.Kinds[1] != nostr.KindReaction {
+		if refType != "" {
 			w.WriteString(" AND f.reference_type = :")
 			w.WriteString(w.addParam(filterID, "rref", refType))
 		}
