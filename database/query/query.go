@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -339,6 +341,43 @@ func (db *dbClient) CountEvents(ctx context.Context, subscription *model.Subscri
 	}
 
 	return count, err
+}
+
+func (db *dbClient) CountEventReactions(ctx context.Context, filters ...model.Filter) (result string, err error) {
+	var sb strings.Builder
+
+	where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
+	if err != nil {
+		if errors.Is(err, errUnsupportedCombination) {
+			// Fallback to the generic way of counting reactions.
+			count, err := db.CountEvents(ctx, &model.Subscription{Filters: filters})
+			if err != nil {
+				return "", err
+			}
+			return `{"total": ` + strconv.FormatInt(count, 10) + `}`, nil
+		}
+		return "", errors.Wrap(err, "failed to generate events where clause")
+	} else if where == "" {
+		where = "1=1"
+	}
+
+	sb.WriteString(`WITH cte AS (SELECT COALESCE(NULLIF(f.reference_type, ''), '+') AS key, sum(f.value) as val from event_counters f where kind = 7 AND `)
+	sb.WriteString(where)
+	sb.WriteString(`group by reference_type) SELECT json_group_object(cte.KEY, cte.val) FROM cte`)
+	sqlQuery := sb.String()
+
+	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to prepare query sql: %q", sqlQuery)
+	}
+
+	err = errors.Wrapf(stmt.GetContext(ctx, &result, params), "failed to query event reactions count sql: %q", sqlQuery)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+		result = "{}"
+	}
+
+	return result, err
 }
 
 func generateSelectEventsSQL(subscription *model.Subscription, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {

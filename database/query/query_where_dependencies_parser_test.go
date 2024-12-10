@@ -311,6 +311,12 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.NoError(t, err)
 		helperMustBePrecalculatedCount(t, db, 2, model.Filter{IDs: []string{"t2id3"}, Kinds: []int{nostr.KindReaction}})
 
+		result, err := db.CountEventReactions(context.Background(), model.Filter{
+			IDs: []string{"t2id2", "t2id3"},
+		})
+		require.NoError(t, err)
+		require.JSONEq(t, `{"*":1,"+":1}`, result)
+
 		events := helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"t2id2", "t2id3"},
 			Search: "include:dependencies:kind1>kind6400+kind7+group+content",
