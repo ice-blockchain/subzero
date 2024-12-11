@@ -19,17 +19,13 @@ import (
 
 type (
 	nostrEventCountJob struct {
-		serviceProviderPrivKey string
-		outputRelays           []*nostr.Relay
-		relayConnectTLS        *tls.Config
+		RelayConnectTLS *tls.Config
 	}
 )
 
-func newNostrEventCountJob(outputRelays []*nostr.Relay, privateKey string, relayConnectTLS *tls.Config) *nostrEventCountJob {
+func newNostrEventCountJob(relayConnectTLS *tls.Config) *nostrEventCountJob {
 	return &nostrEventCountJob{
-		serviceProviderPrivKey: privateKey,
-		outputRelays:           outputRelays,
-		relayConnectTLS:        relayConnectTLS,
+		RelayConnectTLS: relayConnectTLS,
 	}
 }
 
@@ -52,7 +48,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 		return "0", errors.Wrapf(err, "failed to parse filters: %v", e)
 	}
 
-	queryRelays := connectToRelays(ctx, collectRelayURLsFromEvent(e), n.relayConnectTLS)
+	queryRelays := connectToRelays(ctx, e.ID, collectRelayURLsFromEvent(e), n.RelayConnectTLS)
 	defer closeRelays(queryRelays)
 
 	countString, err := n.doCount(ctx, e, filters, queryRelays)
@@ -96,7 +92,7 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 			result = strconv.FormatInt(count, 10)
 		}
 		if err != nil {
-			return "0", errors.Wrapf(err, "failed to count events for filters in local DB: %v", filters)
+			return "", errors.Wrapf(err, "failed to count events for filters in local DB: %v", filters)
 		}
 		return result, nil
 	}
@@ -105,12 +101,15 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 		queriedCount, err := relay.Count(ctx, filters)
 		if err == nil {
 			// Use result from the first relay that returns a valid count.
-			return strconv.FormatInt(queriedCount, 10), nil
+			if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction {
+				return `{"total": ` + strconv.FormatInt(queriedCount, 10) + `}`, nil
+			} else {
+				return strconv.FormatInt(queriedCount, 10), nil
+			}
 		}
-		log.Printf("failed to count events for filters %v in remote relay: %v", err, relay.URL)
 	}
 
-	return "0", nil
+	return "", errors.Errorf("remote relays are not available: %v", queryRelays)
 }
 
 func (n *nostrEventCountJob) RequiredPaymentAmount() float64 {
@@ -124,7 +123,7 @@ func (n *nostrEventCountJob) IsBidAmountEnough(amount string) bool {
 		}
 		amount, err := strconv.ParseFloat(amount, 64)
 		if err != nil {
-			log.Printf("failed to parse payment amount %v: err: %v", amount, err)
+			log.Printf("DVM: failed to parse payment amount %v: err: %v", amount, err)
 
 			return false
 		}
@@ -146,28 +145,4 @@ func collectRelayURLsFromEvent(e *model.Event) []string {
 	}
 
 	return relayList
-}
-
-func (n *nostrEventCountJob) OnErrorFeedback(ctx context.Context, event *model.Event, inErr error) error {
-	return errors.Wrapf(
-		publishJobFeedback(ctx, event, model.JobFeedbackStatusError, n.outputRelays, n.serviceProviderPrivKey, "error: "+inErr.Error(), n.RequiredPaymentAmount()),
-		"failed to publish job payment required feedback: %v", event)
-}
-
-func (n *nostrEventCountJob) OnProcessingFeedback(ctx context.Context, event *model.Event) error {
-	return nil
-}
-
-func (n *nostrEventCountJob) OnSuccessFeedback(ctx context.Context, event *model.Event) error {
-	return nil
-}
-
-func (n *nostrEventCountJob) OnPartialFeedback(ctx context.Context, event *model.Event) error {
-	return nil
-}
-
-func (n *nostrEventCountJob) OnPaymentRequiredFeedback(ctx context.Context, event *model.Event) error {
-	return errors.Wrapf(
-		publishJobFeedback(ctx, event, model.JobFeedbackStatusPaymentRequired, n.outputRelays, n.serviceProviderPrivKey, "not enough bid", n.RequiredPaymentAmount()),
-		"failed to publish job payment required feedback: %v", event)
 }

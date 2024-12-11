@@ -94,7 +94,7 @@ func TestIsBidAmountEnough(t *testing.T) {
 	t.Parallel()
 
 	t.Run("required amount is 0", func(t *testing.T) {
-		n := newNostrEventCountJob(nil, "", nil)
+		n := newNostrEventCountJob(nil)
 		tests := []struct {
 			amount   string
 			expected bool
@@ -136,10 +136,10 @@ func helperExecuteJob(t *testing.T, req *model.Event) *model.Event {
 	req.Tags = append(req.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pk})
 
 	req.CreatedAt = model.Timestamp(time.Now().Unix())
-	require.NoError(t, req.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, req.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, req.Validate())
 
-	job := newNostrEventCountJob(nil, globalDVM.privateKey, nil)
+	job := newNostrEventCountJob(nil)
 	require.NotNil(t, job)
 
 	payload, err := job.Process(context.Background(), req)
@@ -182,7 +182,7 @@ func helperCompareResults(t *testing.T, a, b *model.Event) {
 func TestEventCountersConsistency(t *testing.T) {
 	t.Parallel()
 
-	pub, err := model.GetPublicKey(globalDVM.privateKey)
+	pub, err := model.GetPublicKey(globalDVM.PrivateKey)
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -218,19 +218,19 @@ func TestEventCountersConsistency(t *testing.T) {
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reply1 model.Event
 				reply1.CreatedAt = 1
 				reply1.Kind = nostr.KindTextNote
 				reply1.Tags = append(reply1.Tags, model.Tag{"e", ev1.ID, "", model.TagMarkerRoot})
-				require.NoError(t, reply1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reply1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reply2 model.Event
 				reply2.CreatedAt = 2
 				reply2.Kind = nostr.KindTextNote
 				reply2.Tags = reply1.Tags
-				require.NoError(t, reply2.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reply2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &reply1, &reply2}
 			},
@@ -261,21 +261,21 @@ func TestEventCountersConsistency(t *testing.T) {
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var repost1 model.Event
 				repost1.CreatedAt = 1
 				repost1.Kind = nostr.KindRepost
 				repost1.Content = ev1.String()
 				repost1.Tags = append(repost1.Tags, model.Tag{"e", ev1.ID})
-				require.NoError(t, repost1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, repost1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var repost2 model.Event
 				repost2.CreatedAt = 2
 				repost2.Kind = nostr.KindRepost
 				repost2.Content = ev1.String()
 				repost2.Tags = repost1.Tags
-				require.NoError(t, repost2.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, repost2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &repost1, &repost2}
 			},
@@ -306,19 +306,19 @@ func TestEventCountersConsistency(t *testing.T) {
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var quote1 model.Event
 				quote1.CreatedAt = 1
 				quote1.Kind = nostr.KindTextNote
 				quote1.Tags = append(quote1.Tags, model.Tag{"q", ev1.ID})
-				require.NoError(t, quote1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, quote1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var quote2 model.Event
 				quote2.CreatedAt = 2
 				quote2.Kind = nostr.KindTextNote
 				quote2.Tags = quote1.Tags
-				require.NoError(t, quote2.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, quote2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &quote1, &quote2}
 			},
@@ -350,21 +350,21 @@ func TestEventCountersConsistency(t *testing.T) {
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reaction1 model.Event
 				reaction1.CreatedAt = 1
 				reaction1.Kind = nostr.KindReaction
 				reaction1.Content = "-"
 				reaction1.Tags = append(reaction1.Tags, model.Tag{"e", ev1.ID})
-				require.NoError(t, reaction1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reaction1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reaction2 model.Event
 				reaction2.CreatedAt = 2
 				reaction2.Content = "+"
 				reaction2.Kind = nostr.KindReaction
 				reaction2.Tags = reaction1.Tags
-				require.NoError(t, reaction2.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reaction2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &reaction1, &reaction2}
 			},
@@ -392,7 +392,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				ev1.Kind = nostr.KindProfileMetadata
 				ev1.Content = `{"name:":"Alice"}`
 				ev1.Tags = append(ev1.Tags, model.Tag{"imeta", "url https://foo.barr"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				events := []*model.Event{&ev1}
 				for range 42 {
