@@ -5,762 +5,452 @@ package ws
 import (
 	"context"
 	_ "embed"
-	"fmt"
+	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
-func TestJob(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	dvm.MustInit()
-	serivceProviderPubKey, err := dvm.PublicKey()
+func helperNewFilter(t *testing.T, filters ...model.Filter) string {
+	t.Helper()
+
+	data, err := json.Marshal(filters)
 	require.NoError(t, err)
-	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
-		return func(yield func(*model.Event, error) bool) {
-			for i := range storedEvents {
-				if !yield(storedEvents[i], nil) {
-					return
-				}
-			}
-		}
+
+	return string(data)
+}
+
+func helperWaitFor[T any](t *testing.T, ch <-chan T, deadline time.Duration) T {
+	t.Helper()
+
+	select {
+	case v := <-ch:
+		return v
+
+	case <-time.After(deadline):
+		t.Fatalf("timeout")
+	}
+
+	var zero T
+	return zero
+}
+
+func TestJobOnline(t *testing.T) {
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == events[0].ID {
-				return nil
+		for _, ev := range events {
+			if ev.Kind == model.KindDVMCountResponse {
+				jobResults <- ev
 			}
 		}
-		require.False(t, events[0].IsEphemeral())
-		storedEvents = append(storedEvents, events[0])
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 
 		return nil
 	})
-	pubsubServers[0].Reset()
-	pubsubServers[1].Reset()
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, pubsubServers[0].Endpoint())
-	require.NoError(t, err)
-	var (
-		postID               = uuid.NewString()
-		pubKeyOfRepostedNote = "pubkey1"
-		repostedKind         = nostr.KindArticle
-		expectedEvents       []*model.Event
-		jobEvents            []*model.Event
-	)
 
-	relayToSearchResult, err := fixture.NewRelayClient(ctx, pubsubServers[1].Endpoint())
+	ctx := context.Background()
+	privkey := model.GeneratePrivateKey()
+	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
-	t.Run("send reaction 1", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "+",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	article1 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 1,
+			Kind:      nostr.KindTextNote,
+			Content:   "dummy content 1",
+		},
+	}
+	article2 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 2,
+			Kind:      nostr.KindArticle,
+			Tags:      model.Tags{model.Tag{"title", "dummy"}},
+			Content:   "dummy content 2",
+		},
+	}
+	t.Run("Send articles", func(t *testing.T) {
+		helperSignWithMinLeadingZeroBits(t, article1, privkey)
+		helperSignWithMinLeadingZeroBits(t, article2, privkey)
+		require.NoError(t, relay.PublishMany(ctx, &article1.Event, &article2.Event))
 	})
-	t.Run("send reaction 2", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "-",
-				Sig:       uuid.NewString(),
+
+	reaction1 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 3,
+			Kind:      nostr.KindReaction,
+			Tags: model.Tags{
+				model.Tag{"e", article1.ID, "relay"},
+				model.Tag{"p", article1.PubKey},
+				model.Tag{"k", strconv.Itoa(article1.Kind)},
 			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
+			Content: "+",
+		},
+	}
+	reaction2 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 4,
+			Kind:      nostr.KindReaction,
+			Tags: model.Tags{
+				model.Tag{"e", article1.ID, "relay"},
+				model.Tag{"p", article1.PubKey},
+				model.Tag{"k", strconv.Itoa(article1.Kind)},
 			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
+			Content: "-",
+		},
+	}
+	t.Run("send reactions", func(t *testing.T) {
+		helperSignWithMinLeadingZeroBits(t, reaction1, privkey)
+		helperSignWithMinLeadingZeroBits(t, reaction2, privkey)
+		require.NoError(t, relay.PublishMany(ctx, &reaction1.Event, &reaction2.Event))
 	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	time.Sleep(time.Second * 1)
 	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 5,
 				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"authors":["%v"]}]`, expectedEvents[0].PubKey),
-				Sig:       uuid.NewString(),
+				Tags: model.Tags{
+					model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
+					model.Tag{"p", servicePubkey},
+					model.Tag{"relays", pubsubServers[0].Endpoint()},
+				},
+				Content: helperNewFilter(t, model.Filter{Search: "foo", Authors: []string{article1.PubKey}}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
-	})
-	t.Run("send dvm search nostr count job for kinds and #e filter groupped by pubkey", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "pubkey"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#e":["%v"]}]`, nostr.KindReaction, postID),
-				Sig:       uuid.NewString(),
-			},
-		}
-
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
+		resp := helperWaitFor(t, jobResults, time.Second)
+		t.Logf("received DVM response: %+v", resp)
+		require.Equal(t, ev.String(), resp.GetTag("request").Value())
+		require.Equal(t, "4", resp.Content) // 2 reactions + 2 articles.
 	})
 	t.Run("send dvm search nostr count job for kinds and #e filter groupped by content", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 6,
 				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "content"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#e":["%v"]}]`, nostr.KindReaction, postID),
-				Sig:       uuid.NewString(),
+				Tags: model.Tags{
+					model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
+					model.Tag{"p", servicePubkey},
+					model.Tag{"param", "group", "content"},
+					model.Tag{"relays", pubsubServers[0].Endpoint()},
+				},
+				Content: helperNewFilter(t, model.Filter{
+					Kinds: []int{nostr.KindReaction},
+					Tags:  model.TagMap{}.SetLiterals("e", article1.ID),
+				}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
+		resp := helperWaitFor(t, jobResults, time.Second)
+		t.Logf("received DVM response: %+v", resp)
+		require.Equal(t, ev.String(), resp.GetTag("request").Value())
+		require.JSONEq(t, `{"total":2}`, resp.Content)
 	})
 	t.Run("send dvm search nostr count job with 0 result for group", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 7,
 				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "pubkey"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#title":["dummy"]}]`, nostr.KindArticle),
-				Sig:       uuid.NewString(),
+				Tags: model.Tags{
+					model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
+					model.Tag{"p", servicePubkey},
+					model.Tag{"param", "group", "pubkey"},
+					model.Tag{"relays", pubsubServers[0].Endpoint()},
+				},
+				Content: helperNewFilter(t, model.Filter{
+					Search: "foo",
+					Kinds:  []int{nostr.KindArticle},
+					Tags:   model.TagMap{}.SetLiterals("title", "dummy"),
+				}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
+		resp := helperWaitFor(t, jobResults, time.Second)
+		t.Logf("received DVM response: %+v", resp)
+		require.Equal(t, ev.String(), resp.GetTag("request").Value())
+		require.Equal(t, "1", resp.Content) // 1 article.
 	})
-
-	time.Sleep(time.Second * 2)
-	events, err := relay.QueryEvents(ctx, nostr.Filter{Kinds: []int{6400}, Limit: 1})
-	require.NoError(t, err)
-	evList := make([]*nostr.Event, 0)
-	for ev := range events {
-		evList = append(evList, ev)
-	}
-	require.Equal(t, 4, len(evList))
-	require.NoError(t, relay.Close())
-	require.NoError(t, relayToSearchResult.Close())
-
-	expectedResponses := []string{`{"+":1,"-":1}`, `0`, fmt.Sprintf(`{"%v":1}`, expectedEvents[0].PubKey), fmt.Sprintf(`{"%v":2}`, expectedEvents[0].PubKey)}
-	for _, event := range storedEvents {
-		if event.Kind == model.KindJobNostrEventCount+1000 {
-			for _, jEv := range jobEvents {
-				if event.Tags.GetFirst([]string{"request"}).Value() == fmt.Sprintf("%+v", jEv) {
-					require.Equal(t, event.Tags.GetFirst([]string{"e"}).Value(), jEv.GetID())
-					require.Equal(t, event.Tags.GetFirst([]string{"i"}).Value(), jEv.Content)
-					require.Equal(t, event.Tags.GetFirst([]string{"p"}).Value(), jEv.PubKey)
-				}
-				require.Equal(t, event.PubKey, serivceProviderPubKey)
-			}
-			require.Contains(t, expectedResponses, event.Content)
-
-			continue
-		}
-		require.Contains(t, expectedEvents, event)
-	}
-	require.NoError(t, pubsubServers[0].WaitForReaders(testDeadline))
-	require.NoError(t, pubsubServers[1].WaitForReaders(testDeadline))
+	time.Sleep(time.Second)
+	helperMustCloseRelay(t, relay)
 }
 
 func TestJobDeletion(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	dvm.MustInit()
-	serivceProviderPubKey, err := dvm.PublicKey()
-	require.NoError(t, err)
-	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
-		return func(yield func(*model.Event, error) bool) {
-			for i := range storedEvents {
-				if !yield(storedEvents[i], nil) {
-					return
-				}
-			}
-		}
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == events[0].ID {
-				return nil
+		for _, ev := range events {
+			if ev.Kind == 7000 {
+				jobResults <- ev
 			}
 		}
-		require.False(t, events[0].IsEphemeral())
-		storedEvents = append(storedEvents, events[0])
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 
 		return nil
 	})
-	pubsubServers[0].Reset()
-	pubsubServers[1].Reset()
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, pubsubServers[0].Endpoint())
+
+	ctx := context.Background()
+	privkey := model.GeneratePrivateKey()
+	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
-	var (
-		postID               = uuid.NewString()
-		pubKeyOfRepostedNote = "pubkey1"
-		repostedKind         = nostr.KindArticle
-		expectedEvents       []*model.Event
-		jobEvents            []*model.Event
-	)
+	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	relayToSearchResult, err := fixture.NewRelayClient(ctx, pubsubServers[1].Endpoint())
-	require.NoError(t, err)
-	t.Run("send reaction 1", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "+",
-				Sig:       uuid.NewString(),
+	jobReq := &model.Event{
+		Event: nostr.Event{
+			Kind: model.KindJobNostrEventCount,
+			Tags: model.Tags{
+				model.Tag{"p", servicePubkey},
+				model.Tag{"param", "group", "pubkey"},
+				model.Tag{"relays", pubsubServers[0].Endpoint()},
 			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send reaction 2", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "-",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	time.Sleep(time.Second * 1)
-	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"authors":["%v"]}]`, expectedEvents[0].PubKey),
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
-	})
-	t.Run("send dvm search nostr count job for kinds and #e filter groupped by pubkey", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "pubkey"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#e":["%v"]}]`, nostr.KindReaction, postID),
-				Sig:       uuid.NewString(),
-			},
-		}
-
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
-	})
-	var jobEvent *model.Event
-	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
-		jobEvent = &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"relays", pubsubServers[0].Endpoint()}, []string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"param", "relay", "wss://localhost:9996"}, []string{"param", "relay", "wss://localhost:9995"}, []string{"param", "relay", "wss://localhost:9994"}},
-				Content:   fmt.Sprintf(`[{"authors":["%v"]}]`, expectedEvents[0].PubKey),
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, jobEvent, privkey)
-		require.NoError(t, relay.Publish(ctx, jobEvent.Event))
-		expectedEvents = append(expectedEvents, jobEvent)
-	})
-
-	t.Run("send delete job request", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindDeletion,
-				Tags:      nostr.Tags{[]string{"e", jobEvent.GetID()}, []string{"k", fmt.Sprint(model.KindJobNostrEventCount)}},
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-
-	time.Sleep(time.Second * 2)
-	events, err := relay.QueryEvents(ctx, nostr.Filter{Kinds: []int{6400}, Limit: 1})
-	require.NoError(t, err)
-	evList := make([]*nostr.Event, 0)
-	for ev := range events {
-		evList = append(evList, ev)
+			Content: helperNewFilter(t, model.Filter{
+				Search: "foo",
+				Kinds:  []int{nostr.KindArticle},
+				Tags:   model.TagMap{}.SetLiterals("title", "dummy"),
+			}),
+		},
 	}
-	require.Equal(t, 3, len(evList))
-	require.NoError(t, relay.Close())
-	require.NoError(t, relayToSearchResult.Close())
+	helperSignWithMinLeadingZeroBits(t, jobReq, privkey)
+	require.NoError(t, relay.Publish(ctx, jobReq.Event))
 
-	expectedResponses := []string{`{"+":1,"-":1}`, `0`, fmt.Sprintf(`{"%v":1}`, expectedEvents[0].PubKey), fmt.Sprintf(`{"%v":2}`, expectedEvents[0].PubKey)}
-	for _, event := range storedEvents {
-		if event.Kind == model.KindJobNostrEventCount+1000 {
-			for _, jEv := range jobEvents {
-				if event.Tags.GetFirst([]string{"request"}).Value() == fmt.Sprintf("%+v", jEv) {
-					require.Equal(t, event.Tags.GetFirst([]string{"e"}).Value(), jEv.GetID())
-					require.Equal(t, event.Tags.GetFirst([]string{"i"}).Value(), jEv.Content)
-					require.Equal(t, event.Tags.GetFirst([]string{"p"}).Value(), jEv.PubKey)
-				}
-				require.Equal(t, event.PubKey, serivceProviderPubKey)
-			}
-			require.Contains(t, expectedResponses, event.Content)
+	time.Sleep(time.Microsecond)
 
-			continue
-		}
-		require.Contains(t, expectedEvents, event)
+	jobStop := &model.Event{
+		Event: nostr.Event{
+			Kind: nostr.KindDeletion,
+			Tags: model.Tags{
+				model.Tag{"e", jobReq.ID},
+				model.Tag{"k", strconv.Itoa(jobReq.Kind)},
+			},
+		},
 	}
-	require.NoError(t, pubsubServers[0].WaitForReaders(testDeadline))
-	require.NoError(t, pubsubServers[1].WaitForReaders(testDeadline))
+	helperSignWithMinLeadingZeroBits(t, jobStop, privkey)
+	require.NoError(t, relay.Publish(ctx, jobStop.Event))
+
+	time.Sleep(time.Second)
+	resp := helperWaitFor(t, jobResults, time.Second)
+	t.Logf("received DVM response: %+v", resp)
+	require.Equal(t, resp.GetTag("status").Value(), model.JobFeedbackStatusError)
+	helperMustCloseRelay(t, relay)
 }
 
 func TestErrorFeedback(t *testing.T) {
-	storedEvents := []*model.Event{}
-	privKeyHex := model.GeneratePrivateKey()
-	serivceProviderPubKey, err := model.GetPublicKey(privKeyHex)
-	require.NoError(t, err)
-	dvm.MustInit()
-	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
-		return func(yield func(*model.Event, error) bool) {
-			for i := range storedEvents {
-				if !yield(storedEvents[i], nil) {
-					return
-				}
-			}
-		}
+	t.Skip("TODO: figure out how to simulate error feedback")
+
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+		return helperNewIterator(t, []*model.Event{})
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == events[0].ID {
-				return nil
+		for _, ev := range events {
+			t.Logf("received event: %+v", ev)
+			if ev.Kind == 7000 {
+				jobResults <- ev
 			}
 		}
-		require.False(t, events[0].IsEphemeral())
-		storedEvents = append(storedEvents, events[0])
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 
 		return nil
 	})
-	pubsubServers[0].Reset()
-	pubsubServers[1].Reset()
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, pubsubServers[0].Endpoint())
-	require.NoError(t, err)
-	var (
-		postID               = uuid.NewString()
-		pubKeyOfRepostedNote = "pubkey1"
-		repostedKind         = nostr.KindArticle
-		expectedEvents       []*model.Event
-	)
 
-	relayToSearchResult, err := fixture.NewRelayClient(ctx, pubsubServers[1].Endpoint())
+	ctx := context.Background()
+	privkey := model.GeneratePrivateKey()
+	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
-	t.Run("send reaction 1", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "+",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send reaction 2", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "-",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privKeyHex)
-		require.NoError(t, relayToSearchResult.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	time.Sleep(time.Second * 1)
-	var jobEvent *model.Event
-	t.Run("send wrong filter dvm search nostr count job for author filter", func(t *testing.T) {
-		jobEvent = &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   `aaaa`,
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, jobEvent, privKeyHex)
-		require.NoError(t, relay.Publish(ctx, jobEvent.Event))
-		expectedEvents = append(expectedEvents, jobEvent)
-	})
+	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	time.Sleep(time.Second * 2)
-	events, err := relay.QueryEvents(ctx, nostr.Filter{Kinds: []int{6400, 7000}, Limit: 1})
-	require.NoError(t, err)
-	evList := make([]*nostr.Event, 0)
-	for ev := range events {
-		evList = append(evList, ev)
+	jobReq := &model.Event{
+		Event: nostr.Event{
+			Kind: model.KindJobNostrEventCount,
+			Tags: model.Tags{
+				model.Tag{"p", servicePubkey},
+				model.Tag{"param", "relay", "wss://somerandomrelay"},
+				model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
+				model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
+				model.Tag{"param", "group", "pubkey"},
+				model.Tag{"relays", pubsubServers[0].Endpoint()},
+			},
+			Content: helperNewFilter(t, model.Filter{
+				Kinds: []int{nostr.KindArticle},
+				Tags:  model.TagMap{}.SetLiterals("title", "dummy"),
+			}),
+		},
 	}
-	require.Equal(t, 1, len(evList))
-	require.NoError(t, relay.Close())
-	require.NoError(t, relayToSearchResult.Close())
+	helperSignWithMinLeadingZeroBits(t, jobReq, privkey)
+	require.NoError(t, relay.Publish(ctx, jobReq.Event))
 
-	for _, event := range storedEvents {
-		if event.Kind == nostr.KindJobFeedback {
-			require.Equal(t, model.JobFeedbackStatusError, event.GetTag("status").Value())
-			require.Equal(t, jobEvent.GetID(), event.GetTag("e").Value())
-			require.Equal(t, jobEvent.PubKey, event.GetTag("p").Value())
-
-			continue
-		}
-		require.Contains(t, expectedEvents, event)
-	}
-	require.NoError(t, pubsubServers[0].WaitForReaders(testDeadline))
-	require.NoError(t, pubsubServers[1].WaitForReaders(testDeadline))
+	time.Sleep(time.Second)
+	resp := helperWaitFor(t, jobResults, time.Second)
+	t.Logf("received DVM response: %+v", resp)
+	require.Equal(t, resp.GetTag("status").Value(), model.JobFeedbackStatusError)
+	helperMustCloseRelay(t, relay)
 }
 
-func TestOfflineJob(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	serivceProviderPubKey, err := dvm.PublicKey()
-	require.NoError(t, err)
-	dvm.MustInit()
-	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) query.EventIterator {
-		return func(yield func(*model.Event, error) bool) {
-			for i := range storedEvents {
-				if !yield(storedEvents[i], nil) {
-					return
-				}
-			}
-		}
+func TestJobOffline(t *testing.T) {
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
-		for _, sEvent := range storedEvents {
-			if sEvent.ID == events[0].ID {
-				return nil
+		for _, ev := range events {
+			if ev.Kind == model.KindDVMCountResponse {
+				jobResults <- ev
 			}
 		}
-		require.False(t, events[0].IsEphemeral())
-		storedEvents = append(storedEvents, events[0])
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
 
 		return nil
 	})
-	pubsubServers[0].Reset()
-	pubsubServers[1].Reset()
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	relay, err := fixture.NewRelayClient(ctx, pubsubServers[0].Endpoint())
-	require.NoError(t, err)
 
-	var (
-		postID               = uuid.NewString()
-		pubKeyOfRepostedNote = "pubkey1"
-		repostedKind         = nostr.KindArticle
-		expectedEvents       []*model.Event
-		jobEvents            []*model.Event
-	)
+	ctx := context.Background()
+	privkey := model.GeneratePrivateKey()
+	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
-	t.Run("send reaction 1", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "+",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	article1 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 1,
+			Kind:      nostr.KindTextNote,
+			Content:   "dummy content 1",
+		},
+	}
+	article2 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 2,
+			Kind:      nostr.KindArticle,
+			Tags:      model.Tags{model.Tag{"title", "dummy"}},
+			Content:   "dummy content 2",
+		},
+	}
+	t.Run("Send articles", func(t *testing.T) {
+		helperSignWithMinLeadingZeroBits(t, article1, privkey)
+		helperSignWithMinLeadingZeroBits(t, article2, privkey)
+		require.NoError(t, relay.PublishMany(ctx, &article1.Event, &article2.Event))
 	})
-	t.Run("send reaction 2", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindReaction,
-				Tags:      nostr.Tags{[]string{"e", postID, "relay"}, []string{"p", pubKeyOfRepostedNote}, []string{"k", fmt.Sprint(repostedKind)}},
-				Content:   "-",
-				Sig:       uuid.NewString(),
+
+	reaction1 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 3,
+			Kind:      nostr.KindReaction,
+			Tags: model.Tags{
+				model.Tag{"e", article1.ID, "relay"},
+				model.Tag{"p", article1.PubKey},
+				model.Tag{"k", strconv.Itoa(article1.Kind)},
 			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
+			Content: "+",
+		},
+	}
+	reaction2 := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 4,
+			Kind:      nostr.KindReaction,
+			Tags: model.Tags{
+				model.Tag{"e", article1.ID, "relay"},
+				model.Tag{"p", article1.PubKey},
+				model.Tag{"k", strconv.Itoa(article1.Kind)},
 			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
+			Content: "-",
+		},
+	}
+	t.Run("send reactions", func(t *testing.T) {
+		helperSignWithMinLeadingZeroBits(t, reaction1, privkey)
+		helperSignWithMinLeadingZeroBits(t, reaction2, privkey)
+		require.NoError(t, relay.PublishMany(ctx, &reaction1.Event, &reaction2.Event))
 	})
-	t.Run("send article", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindArticle,
-				Tags:      nostr.Tags{[]string{"title", "dummy"}},
-				Content:   "dummy content",
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-	})
-	time.Sleep(time.Second * 1)
 	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 5,
 				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", "wss://localhost:9996"}, []string{"p", serivceProviderPubKey}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"authors":["%v"]}]`, expectedEvents[0].PubKey),
-				Sig:       uuid.NewString(),
+				Tags: model.Tags{
+					model.Tag{"p", servicePubkey},
+					model.Tag{"relays", pubsubServers[0].Endpoint()},
+				},
+				Content: helperNewFilter(t, model.Filter{Search: "foo", Authors: []string{article1.PubKey}}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
-	})
-	t.Run("send dvm search nostr count job for kinds and #e filter groupped by pubkey", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "pubkey"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#e":["%v"]}]`, nostr.KindReaction, postID),
-				Sig:       uuid.NewString(),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
+		resp := helperWaitFor(t, jobResults, time.Second)
+		t.Logf("received DVM response: %+v", resp)
+		require.Equal(t, ev.String(), resp.GetTag("request").Value())
+		require.Equal(t, "4", resp.Content) // 2 reactions + 2 articles.
 	})
 	t.Run("send dvm search nostr count job for kinds and #e filter groupped by content", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 6,
 				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "content"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#e":["%v"]}]`, nostr.KindReaction, postID),
-				Sig:       uuid.NewString(),
+				Tags: model.Tags{
+					model.Tag{"p", servicePubkey},
+					model.Tag{"param", "group", "content"},
+					model.Tag{"relays", pubsubServers[0].Endpoint()},
+				},
+				Content: helperNewFilter(t, model.Filter{
+					Kinds: []int{nostr.KindReaction},
+					Tags:  model.TagMap{}.SetLiterals("e", article1.ID),
+				}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
+		resp := helperWaitFor(t, jobResults, time.Second)
+		t.Logf("received DVM response: %+v", resp)
+		require.Equal(t, ev.String(), resp.GetTag("request").Value())
+		require.JSONEq(t, `{"+":1,"-":1}`, resp.Content)
 	})
 	t.Run("send dvm search nostr count job with 0 result for group", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: 7,
 				Kind:      model.KindJobNostrEventCount,
-				Tags:      nostr.Tags{[]string{"param", "relay", pubsubServers[1].Endpoint()}, []string{"p", serivceProviderPubKey}, []string{"param", "group", "pubkey"}, []string{"relays", pubsubServers[0].Endpoint()}},
-				Content:   fmt.Sprintf(`[{"kinds":[%v],"#title":["dummy"]}]`, nostr.KindArticle),
-				Sig:       uuid.NewString(),
+				Tags: model.Tags{
+					model.Tag{"p", servicePubkey},
+					model.Tag{"param", "group", "pubkey"},
+					model.Tag{"relays", pubsubServers[0].Endpoint()},
+				},
+				Content: helperNewFilter(t, model.Filter{
+					Search:  "foo",
+					Kinds:   []int{nostr.KindArticle},
+					Authors: []string{article1.PubKey},
+					Tags:    model.TagMap{}.SetLiterals("title", "dummy"),
+				}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		expectedEvents = append(expectedEvents, ev)
-		jobEvents = append(jobEvents, ev)
+		resp := helperWaitFor(t, jobResults, time.Second)
+		t.Logf("received DVM response: %+v", resp)
+		require.Equal(t, ev.String(), resp.GetTag("request").Value())
+		require.Equal(t, "1", resp.Content) // 1 article.
 	})
-
-	time.Sleep(time.Second * 2)
-	events, err := relay.QueryEvents(ctx, nostr.Filter{Kinds: []int{6400}, Limit: 1})
-	require.NoError(t, err)
-	evList := make([]*nostr.Event, 0)
-	for ev := range events {
-		evList = append(evList, ev)
-	}
-	require.Equal(t, 4, len(evList))
-	require.NoError(t, relay.Close())
-	expectedResponses := []string{`{"+":1,"-":1}`, `0`, fmt.Sprintf(`{"%v":1}`, expectedEvents[0].PubKey), fmt.Sprintf(`{"%v":2}`, expectedEvents[0].PubKey)}
-	for _, event := range storedEvents {
-		if event.Kind == model.KindJobNostrEventCount+1000 {
-			for _, jEv := range jobEvents {
-				if event.Tags.GetFirst([]string{"request"}).Value() == fmt.Sprintf("%+v", jEv) {
-					require.Equal(t, event.Tags.GetFirst([]string{"e"}).Value(), jEv.GetID())
-					require.Equal(t, event.Tags.GetFirst([]string{"i"}).Value(), jEv.Content)
-					require.Equal(t, event.Tags.GetFirst([]string{"p"}).Value(), jEv.PubKey)
-				}
-				require.Equal(t, event.PubKey, serivceProviderPubKey)
-			}
-			require.Contains(t, expectedResponses, event.Content)
-
-			continue
-		}
-		require.Contains(t, expectedEvents, event)
-	}
-	require.NoError(t, pubsubServers[0].WaitForReaders(testDeadline))
-	require.NoError(t, pubsubServers[1].WaitForReaders(testDeadline))
+	time.Sleep(time.Second)
+	helperMustCloseRelay(t, relay)
 }

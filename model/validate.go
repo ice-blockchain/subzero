@@ -614,25 +614,17 @@ func validateKindReactionEvent(e *Event) error {
 
 func validateKindJobResult(e *Event) error {
 	if e.Content == "" {
-		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result, content is empty: %+v", e)
+		return errors.Wrap(ErrWrongEventParams, "kind:6xxx job result: content is empty")
 	}
-	jobRequestTag := e.Tags.GetFirst([]string{"request"})
-	if jobRequestTag == nil || len(*jobRequestTag) != 2 {
-		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result, no job request tag: %+v", e)
+	if jobRequestTag := e.GetTag("request"); jobRequestTag.Value() == "" {
+		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result: no job request tag or it is empty: %+v", jobRequestTag)
 	}
-	jobRequestIDTag := e.Tags.GetFirst([]string{"e"})
-	if jobRequestIDTag == nil || len(*jobRequestIDTag) != 2 {
-		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result, no job request ID tag: %+v", e)
+	if jobRequestIDTag := e.GetTag("e"); jobRequestIDTag.Value() == "" {
+		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result: no job request ID tag or it is empty: %+v", jobRequestIDTag)
 	}
-	inputDataTag := e.Tags.GetFirst([]string{"i"})
-	if inputDataTag == nil || len(*inputDataTag) != 2 {
-		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result, no input data tag: %+v", e)
+	if customerPubkeyTag := e.GetTag("p"); customerPubkeyTag.Value() == "" {
+		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result, no customer pubkey tag or it is empty: %+v", customerPubkeyTag)
 	}
-	customerPubkeyTag := e.Tags.GetFirst([]string{"p"})
-	if customerPubkeyTag == nil || len(*customerPubkeyTag) != 2 {
-		return errors.Wrapf(ErrWrongEventParams, "kind:6xxx job result, no customer pubkey tag: %+v", e)
-	}
-
 	return nil
 }
 

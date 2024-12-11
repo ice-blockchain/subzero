@@ -2310,7 +2310,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 }
 
 func TestCountEvents(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
+	privkey, pubkey := model.GenerateKeyPair()
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		t.Logf("received events: %v", events)
 		return query.AcceptEvents(ctx, events...)
@@ -2320,13 +2320,10 @@ func TestCountEvents(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	t.Run("SaveEvent", func(t *testing.T) {
-		pk, err := model.GetPublicKey(privkey)
-		require.NoError(t, err)
-
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			PubKey:    pk,
+			PubKey:    pubkey,
 			Tags:      nil,
 			Content:   "validEvent",
 		}}
@@ -2335,7 +2332,7 @@ func TestCountEvents(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	t.Run("CountEvents", func(t *testing.T) {
-		c, err := relay.Count(ctx, nostr.Filters{{Kinds: []int{nostr.KindTextNote}, Search: "test"}})
+		c, err := relay.Count(ctx, nostr.Filters{{Kinds: []int{nostr.KindTextNote}, Search: "test", Authors: []string{pubkey}}})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), c)
 	})
