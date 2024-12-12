@@ -311,7 +311,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.NoError(t, err)
 		helperMustBePrecalculatedCount(t, db, 2, model.Filter{IDs: []string{"t2id3"}, Kinds: []int{nostr.KindReaction}})
 
-		result, err := db.CountEventReactions(context.Background(), model.Filter{
+		result, err := db.CountGroupedEventReactions(context.Background(), model.Filter{
 			IDs: []string{"t2id2", "t2id3"},
 		})
 		require.NoError(t, err)

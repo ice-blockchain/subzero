@@ -64,12 +64,12 @@ func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, 
 	return globalDB.Client.CountEvents(ctx, filters...)
 }
 
-func CountEventReactions(ctx context.Context, subscription *model.Subscription) (string, error) {
+func CountGroupedEventReactions(ctx context.Context, subscription *model.Subscription) (string, error) {
 	var filters model.Filters
 	if subscription != nil {
 		filters = subscription.Filters
 	}
-	return globalDB.Client.CountEventReactions(ctx, filters...)
+	return globalDB.Client.CountGroupedEventReactions(ctx, filters...)
 }
 
 func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {

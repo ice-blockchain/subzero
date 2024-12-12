@@ -124,9 +124,6 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
 			}
 		}
 	}
-	if len(relayList) == 0 {
-		return errors.Errorf("no output relays specified for job %v", event.ID)
-	}
 
 	ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
 	task := &jobInfo{
@@ -136,7 +133,6 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
 	}
 	d.Jobs.Store(event.ID, task)
 
-	log.Printf("DVM: job %v: accepted: total queue size: %d", event.ID, d.Jobs.Size())
 	go func() {
 		defer d.Jobs.Delete(event.ID)
 		defer cancel()
@@ -198,10 +194,7 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 		return
 	}
 
-	log.Printf("DVM: job %v: starting", task.Event.ID)
 	jobResult, err := job.Process(ctx, task.Event)
-	log.Printf("DVM: job %v: finished: error: %v, result: %v", task.Event.ID, err, jobResult)
-
 	if errors.Is(ctx.Err(), context.Canceled) {
 		log.Printf("DVM: job %v: canceled", task.Event.ID)
 
@@ -295,7 +288,6 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 		return nil
 	}
 
-	log.Printf("DVM: job %v: stopping", stopJobID)
 	jobInfo.Cancel()
 
 	return errors.Wrapf(d.publishJobFeedback(
@@ -343,9 +335,6 @@ func connectToRelays(ctx context.Context, jobID string, relayList []string, conf
 		} else {
 			resultRelays = append(resultRelays, relay)
 		}
-	}
-	if len(relayList) > 0 {
-		log.Printf("DVM: job %v: connected to %v of %v relays", jobID, len(resultRelays), len(relayList))
 	}
 	return resultRelays
 }

@@ -159,7 +159,7 @@ func TestJobOnline(t *testing.T) {
 		resp := helperWaitFor(t, jobResults, time.Second)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
-		require.JSONEq(t, `{"total":2}`, resp.Content)
+		require.JSONEq(t, `{"+":1,"-":1}`, resp.Content)
 	})
 	t.Run("send dvm search nostr count job with 0 result for group", func(t *testing.T) {
 		ev := &model.Event{

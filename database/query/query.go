@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"time"
 
@@ -343,19 +342,11 @@ func (db *dbClient) CountEvents(ctx context.Context, filters ...model.Filter) (c
 	return count, err
 }
 
-func (db *dbClient) CountEventReactions(ctx context.Context, filters ...model.Filter) (result string, err error) {
+func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...model.Filter) (result string, err error) {
 	var sb strings.Builder
 
 	where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
 	if err != nil {
-		if errors.Is(err, errUnsupportedCombination) {
-			// Fallback to the generic way of counting reactions.
-			count, err := db.CountEvents(ctx, filters...)
-			if err != nil {
-				return "", err
-			}
-			return `{"total": ` + strconv.FormatInt(count, 10) + `}`, nil
-		}
 		return "", errors.Wrap(err, "failed to generate events where clause")
 	} else if where == "" {
 		where = "1=1"
@@ -374,7 +365,6 @@ func (db *dbClient) CountEventReactions(ctx context.Context, filters ...model.Fi
 	err = errors.Wrapf(stmt.GetContext(ctx, &result, params), "failed to query event reactions count sql: %q", sqlQuery)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
-		result = "{}"
 	}
 
 	return result, err

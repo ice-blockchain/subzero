@@ -7,8 +7,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -17,27 +19,21 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type (
-	nostrEventCountJob struct {
-		RelayConnectTLS *tls.Config
-	}
+const (
+	NostrEventCountGroupContent = "content"
+	NostrEventCountGroupPubkey  = "pubkey"
+	NostrEventCountGroupReply   = "reply"
+	NostrEventCountGroupRoot    = "root"
 )
+
+type nostrEventCountJob struct {
+	RelayConnectTLS *tls.Config
+}
 
 func newNostrEventCountJob(relayConnectTLS *tls.Config) *nostrEventCountJob {
 	return &nostrEventCountJob{
 		RelayConnectTLS: relayConnectTLS,
 	}
-}
-
-func collectValuesFromTagMap(values []model.TagValues) (data []string) {
-	for _, val := range values {
-		for _, v := range val {
-			if v != nil {
-				data = append(data, *v)
-			}
-		}
-	}
-	return data
 }
 
 func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (payload string, err error) {
@@ -60,56 +56,142 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 }
 
 func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filters model.Filters, queryRelays []*nostr.Relay) (result string, err error) {
-	if len(queryRelays) == 0 || (len(queryRelays) == 1 && globalConfig != nil && queryRelays[0].URL == globalConfig.RelayURL) {
-		var groupBy string
-		for _, tag := range e.Tags {
-			if tag.Key() == "param" && tag.Value() == "group" {
-				groupBy = tag[2]
-				break
-			}
+	var groupBy string
+	for _, tag := range e.Tags {
+		if tag.Key() == "param" && tag.Value() == "group" && len(tag) > 2 {
+			groupBy = tag[2]
+			break
 		}
-		if groupBy != "" {
-			for idx := range filters {
-				if len(filters[idx].IDs) == 0 {
-					if filters[idx].Tags.HasValues("e") {
-						filters[idx].IDs = collectValuesFromTagMap(filters[idx].Tags["e"])
-					} else if filters[idx].Tags.HasValues("q") {
-						filters[idx].IDs = collectValuesFromTagMap(filters[idx].Tags["q"])
-					}
-				} else if len(filters[idx].Authors) == 0 && filters[idx].Tags.HasValues("p") {
-					filters[idx].IDs = collectValuesFromTagMap(filters[idx].Tags["p"])
-				}
-				if groupBy == "root" || groupBy == "reply" {
-					filters[idx].Tags.Append("e", nil, nil, &groupBy)
-				}
-			}
-		}
-		if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction {
-			result, err = query.CountEventReactions(ctx, &model.Subscription{Filters: filters})
-		} else {
-			var count int64
-			count, err = query.CountEvents(ctx, &model.Subscription{Filters: filters})
-			result = strconv.FormatInt(count, 10)
-		}
-		if err != nil {
-			return "", errors.Wrapf(err, "failed to count events for filters in local DB: %v", filters)
-		}
-		return result, nil
 	}
 
-	for _, relay := range queryRelays {
-		queriedCount, err := relay.Count(ctx, filters)
-		if err == nil {
-			// Use result from the first relay that returns a valid count.
-			if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction {
-				return `{"total": ` + strconv.FormatInt(queriedCount, 10) + `}`, nil
-			} else {
+	if len(queryRelays) == 0 || (len(queryRelays) == 1 && globalConfig != nil && queryRelays[0].URL == globalConfig.RelayURL) {
+		return n.doCountLocal(ctx, filters, groupBy)
+	}
+
+	return n.doCountRemote(ctx, filters, queryRelays, groupBy)
+}
+
+func (n *nostrEventCountJob) doCountLocal(ctx context.Context, filters model.Filters, groupBy string) (string, error) {
+	countFilters := slices.Clone(filters)
+	for idx := range countFilters {
+		if len(countFilters[idx].IDs) == 0 {
+			if countFilters[idx].Tags.HasValues("e") {
+				countFilters[idx].IDs = collectValuesFromTagMap(countFilters[idx].Tags["e"])
+			} else if countFilters[idx].Tags.HasValues("q") {
+				countFilters[idx].IDs = collectValuesFromTagMap(countFilters[idx].Tags["q"])
+			}
+		} else if len(countFilters[idx].Authors) == 0 && countFilters[idx].Tags.HasValues("p") {
+			countFilters[idx].Authors = collectValuesFromTagMap(countFilters[idx].Tags["p"])
+		}
+		if groupBy == "root" || groupBy == "reply" {
+			countFilters[idx].Tags.Append("e", nil, nil, &groupBy)
+		}
+	}
+
+	if groupBy == "" {
+		count, err := query.CountEvents(ctx, &model.Subscription{Filters: countFilters})
+
+		return strconv.FormatInt(count, 10), err
+	}
+
+	if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction {
+		return query.CountGroupedEventReactions(ctx, &model.Subscription{Filters: countFilters})
+	}
+
+	var events []*nostr.Event
+	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: filters}) {
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get events")
+		}
+		events = append(events, &ev.Event)
+	}
+
+	return countBasedOnGroupsFromEvents(events, groupBy)
+}
+
+func (n *nostrEventCountJob) doCountRemote(ctx context.Context, filters model.Filters, queryRelays []*nostr.Relay, groupBy string) (string, error) {
+	var wg sync.WaitGroup
+
+	if groupBy == "" {
+		for _, relay := range queryRelays {
+			queriedCount, err := relay.Count(ctx, filters)
+			if err == nil {
 				return strconv.FormatInt(queriedCount, 10), nil
 			}
 		}
+		return "", errors.Errorf("remote relays are not available: %v", queryRelays)
 	}
 
-	return "", errors.Errorf("remote relays are not available: %v", queryRelays)
+	wg.Add(len(queryRelays))
+	events := make([]*nostr.Event, 0, 10)
+	output := make(chan *nostr.Event, 10)
+	go func() {
+		for ev := range output {
+			events = append(events, ev)
+		}
+	}()
+	for _, relay := range queryRelays {
+		go func() {
+			defer wg.Done()
+
+			eventCh, err := relay.QueryEventsMany(ctx, filters...)
+			if err != nil {
+				log.Printf("cannot get events from relay %v: %v", relay.URL, err)
+
+				return
+			}
+			for ev := range eventCh {
+				output <- ev
+			}
+		}()
+	}
+	wg.Wait()
+	close(output)
+
+	return countBasedOnGroupsFromEvents(events, groupBy)
+}
+
+func countBasedOnGroupsFromEvents(events []*nostr.Event, groups ...string) (string, error) {
+	result := countBasedOnGroups(model.DeduplicateSlice(events, func(ev *nostr.Event) string { return ev.ID }), groups...)
+	if len(result) == 1 {
+		for _, count := range result {
+			return strconv.FormatUint(count, 10), nil
+		}
+	}
+
+	data, err := json.Marshal(result)
+
+	return string(data), errors.Wrap(err, "failed to marshal group counts")
+}
+
+func countBasedOnGroups(evList []*nostr.Event, groups ...string) map[string]uint64 {
+	groupCounts := make(map[string]uint64, 0)
+	for _, group := range groups {
+		for _, ev := range evList {
+			switch group {
+			case NostrEventCountGroupContent:
+				groupCounts[ev.Content]++
+			case NostrEventCountGroupPubkey:
+				groupCounts[ev.PubKey]++
+			case NostrEventCountGroupRoot, NostrEventCountGroupReply:
+				for _, tag := range ev.Tags {
+					if tag.Key() == "e" && len(tag) > 3 {
+						if tag[3] == group {
+							groupCounts[tag.Value()]++
+						}
+					}
+				}
+			default:
+				for _, tag := range ev.Tags {
+					if tag.Key() == group {
+						groupCounts[tag.Value()]++
+					}
+				}
+			}
+		}
+	}
+
+	return groupCounts
 }
 
 func (n *nostrEventCountJob) RequiredPaymentAmount() float64 {
@@ -145,4 +227,15 @@ func collectRelayURLsFromEvent(e *model.Event) []string {
 	}
 
 	return relayList
+}
+
+func collectValuesFromTagMap(values []model.TagValues) (data []string) {
+	for _, val := range values {
+		for _, v := range val {
+			if v != nil {
+				data = append(data, *v)
+			}
+		}
+	}
+	return data
 }
