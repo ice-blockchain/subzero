@@ -279,7 +279,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			IDs:    []string{"t2id1", "id2"},
 			Search: "include:dependencies:kind1>t2pk2@kind1+e+root",
 		})
-		require.Len(t, events, 4)
+		require.Len(t, events, 4) // Two original notes, two replies (only one single reply per note). t2id3 must be excluded.
 		require.Equal(t, "t2id1", events[0].ID)
 		require.Equal(t, "id2", events[1].ID)
 		require.Equal(t, "t2id2", events[2].ID)
@@ -793,4 +793,57 @@ func TestSelectDependenciesQuote(t *testing.T) {
 	t.Logf("dvm event: %+v", events[2])
 	require.Equal(t, model.KindDVMCountResponse, events[2].Kind)
 	require.Equal(t, "1", events[2].Content)
+}
+
+func TestSelectDepsAuthorTags(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	// Original note.
+	err := db.AcceptEvents(context.Background(), &model.Event{
+		Event: nostr.Event{
+			ID:        "id1",
+			Kind:      nostr.KindTextNote,
+			PubKey:    "pk1",
+			CreatedAt: 1,
+			Content:   "content of the note",
+		},
+	})
+	require.NoError(t, err)
+
+	// Two replies, different authors.
+	err = db.AcceptEvents(context.Background(),
+		&model.Event{
+			Event: nostr.Event{
+				ID:        "id2",
+				Kind:      nostr.KindTextNote,
+				PubKey:    "pk2",
+				CreatedAt: 2,
+				Content:   "content of the reply from pk2",
+				Tags:      model.Tags{{"e", "id1", "", "root"}},
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				ID:        "id3",
+				Kind:      nostr.KindTextNote,
+				PubKey:    "pk3",
+				CreatedAt: 3,
+				Content:   "content of the reply from pk3",
+				Tags:      model.Tags{{"e", "id1", "", "root"}},
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	events := helperSelectEvents(t, db, model.Filter{
+		IDs:    []string{"id1"},
+		Search: "include:dependencies:kind1>pk3@kind1+e+root",
+	})
+	require.Len(t, events, 2) // Original note, one reply.
+	require.Equal(t, "id1", events[0].ID)
+	// No pk2 (id2) reply.
+	require.Equal(t, "id3", events[1].ID)
 }
