@@ -552,18 +552,18 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-		if filter.Reduce.Author != "" {
-			w.WriteString(" AND :")
-			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
-			w.WriteString(" IN (e.pubkey, e.master_pubkey) AND ")
-		}
 		tag := filter.Reduce.Tag
 		if tag == "" {
 			// Repost, reaction.
 			tag = "e"
 		}
-		w.WriteString("e.id in (select event_id from event_tags where event_tag_key = :")
+		w.WriteString(" and e.id in (select event_id from event_tags inner join events et ON event_id = et.id where event_tag_key = :")
 		w.WriteString(w.addParam(filterID, "rtag", tag))
+		if filter.Reduce.Author != "" {
+			w.WriteString(" and :")
+			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
+			w.WriteString(" in (et.pubkey, et.master_pubkey)")
+		}
 		w.WriteString(" and event_tag_value1 in (")
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
 		w.WriteRune(')')
