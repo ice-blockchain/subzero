@@ -6,12 +6,12 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nbd-wtf/go-nostr/nip11"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
@@ -61,13 +61,26 @@ func initServer(serverCtx context.Context, port uint16) {
 }
 
 func TestNIP11(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
 	defer cancel()
+
 	info, err := nip11.Fetch(ctx, "wss://localhost:9996")
 	require.NoError(t, err)
 	require.NotNil(t, info)
+
 	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}}
 	expected := handler.info()
 	expected.URL = "wss://localhost:9996"
-	assert.Equal(t, expected, info)
+
+	require.Zero(t, slices.CompareFunc(info.SupportedNIPs, expected.SupportedNIPs, func(a, b any) int {
+		require.EqualValues(t, a, b)
+
+		return 0
+	}))
+
+	info.SupportedNIPs = nil
+	expected.SupportedNIPs = nil
+	require.Equal(t, expected, info)
 }

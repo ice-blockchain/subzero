@@ -169,7 +169,7 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
 			filter := helperNewFilterFromElements(t, set)
-			_, err := db.CountEvents(context.TODO(), &model.Subscription{Filters: model.Filters{filter}})
+			_, err := db.CountEvents(context.TODO(), filter)
 			require.NoErrorf(t, err, "failed to count events for set #%d (%#v)", i+1, filter)
 		}
 	})
@@ -205,7 +205,7 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
 			filter := helperNewFilterFromElements(t, set)
-			sql, params, err := generateSelectEventsSQL(&model.Subscription{Filters: model.Filters{filter}}, 0, 100)
+			sql, params, err := generateSelectEventsSQL(model.Filters{filter}, 0, 100)
 			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
 
 			sql = "EXPLAIN QUERY PLAN " + sql

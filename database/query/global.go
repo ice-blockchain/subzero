@@ -49,11 +49,27 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 }
 
 func GetStoredEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
-	return globalDB.Client.SelectEvents(ctx, subscription)
+	var filters model.Filters
+	if subscription != nil {
+		filters = subscription.Filters
+	}
+	return globalDB.Client.SelectEvents(ctx, filters...)
 }
 
 func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {
-	return globalDB.Client.CountEvents(ctx, subscription)
+	var filters model.Filters
+	if subscription != nil {
+		filters = subscription.Filters
+	}
+	return globalDB.Client.CountEvents(ctx, filters...)
+}
+
+func CountGroupedEventReactions(ctx context.Context, subscription *model.Subscription) (string, error) {
+	var filters model.Filters
+	if subscription != nil {
+		filters = subscription.Filters
+	}
+	return globalDB.Client.CountGroupedEventReactions(ctx, filters...)
 }
 
 func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {

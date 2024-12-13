@@ -296,10 +296,10 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 	db, ev := helperEnsureDatabase(t)
 	defer db.Close()
 	event := ev.Random(t)
-	filter := helperNewFilter(func(apply *model.Filter) {
-		apply.IDs = []string{event.ID}
-		apply.Authors = []string{event.PubKey}
-	})
+	filter := model.Filter{
+		IDs:     []string{event.ID},
+		Authors: []string{event.PubKey},
+	}
 
 	t.Run("Something", func(t *testing.T) {
 		events := helperSelectEvents(t, db, filter)
@@ -334,13 +334,13 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	filter := helperNewFilter(func(apply *model.Filter) {
-		apply.IDs = []string{"1"}
-		apply.Tags = model.TagMap{}.
+	filter := model.Filter{
+		IDs: []string{"1"},
+		Tags: model.TagMap{}.
 			SetLiterals("e", "etag").
 			SetLiterals("p", "ptag").
-			SetLiterals("d", "dtag")
-	})
+			SetLiterals("d", "dtag"),
+	}
 
 	t.Run("Match", func(t *testing.T) {
 		events := helperSelectEvents(t, db, filter)
@@ -360,9 +360,9 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 	defer db.Close()
 	event := ev.Random(t)
 
-	filter := helperNewFilter(func(apply *model.Filter) {
-		apply.Tags = model.TagMap{}.SetLiterals(event.Tags[0][0], event.Tags[0][1:]...)
-	})
+	filter := model.Filter{
+		Tags: model.TagMap{}.SetLiterals(event.Tags[0][0], event.Tags[0][1:]...),
+	}
 
 	t.Run("Match", func(t *testing.T) {
 		events := helperSelectEvents(t, db, filter)
@@ -423,11 +423,9 @@ func TestSelectEventNoTags(t *testing.T) {
 
 	id := helperGenerateEvent(t, db, false).ID
 	require.NotEmpty(t, id)
-
-	filter := helperNewFilter(func(apply *model.Filter) {
-		apply.IDs = []string{id}
-	})
-	for ev, err := range db.SelectEvents(context.Background(), &model.Subscription{Filters: model.Filters{filter}}) {
+	for ev, err := range db.SelectEvents(context.Background(), model.Filter{
+		IDs: []string{id},
+	}) {
 		require.NoError(t, err)
 		require.NotNil(t, ev)
 		t.Logf("event: %+v", ev)
@@ -488,16 +486,16 @@ func TestSelectByMimeType(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("QueryNoImeta", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "videos:false images:false"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "videos:false images:false",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(100), count)
 	})
 	t.Run("Image", func(t *testing.T) {
-		for ev, err := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "images:true"
-		})) {
+		for ev, err := range db.SelectEvents(context.TODO(), model.Filter{
+			Search: "images:true",
+		}) {
 			require.NoError(t, err)
 			t.Logf("event: %+v", ev)
 			require.NotNil(t, ev)
@@ -505,9 +503,9 @@ func TestSelectByMimeType(t *testing.T) {
 		}
 	})
 	t.Run("Video", func(t *testing.T) {
-		for ev, err := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "videos:true"
-		})) {
+		for ev, err := range db.SelectEvents(context.TODO(), model.Filter{
+			Search: "videos:true",
+		}) {
 			require.NoError(t, err)
 			t.Logf("event: %+v", ev)
 			require.NotNil(t, ev)
@@ -515,17 +513,17 @@ func TestSelectByMimeType(t *testing.T) {
 		}
 	})
 	t.Run("VideoByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "videos:true"
-			apply.IDs = []string{"1"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "videos:true",
+			IDs:    []string{"1"},
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("NoVideo", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "videos:false"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "videos:false",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(101), count)
 	})
@@ -560,60 +558,60 @@ func TestSelectQuotesReferences(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("SelectQuotes", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "quotes:true"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "quotes:true",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("SelectReferences", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "references:true"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "references:true",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("SelectReferencesAndQuotes", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "references:true quotes:true"
-			apply.IDs = []string{"1", "2"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "references:true quotes:true",
+			IDs:    []string{"1", "2"},
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	})
 	t.Run("SelectReferencesAndQuotesUnknownID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "references:true quotes:true"
-			apply.IDs = []string{"5", "6"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "references:true quotes:true",
+			IDs:    []string{"5", "6"},
+		})
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
 	t.Run("SelectQuotesByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "quotes:true"
-			apply.IDs = []string{"1", "2"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "quotes:true",
+			IDs:    []string{"1", "2"},
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("SelectNonQuotes", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "quotes:false"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "quotes:false",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(101), count)
 	})
 	t.Run("SelectNonQuoteByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "quotes:false"
-			apply.IDs = []string{"1"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "quotes:false",
+			IDs:    []string{"1"},
+		})
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
 	t.Run("SelectAll", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
+		count, err := db.CountEvents(context.TODO())
 		require.NoError(t, err)
 		require.Equal(t, int64(102), count)
 	})
@@ -655,56 +653,56 @@ func TestSelectEventsExpiration(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("All", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {}))
+		count, err := db.CountEvents(context.TODO())
 		require.NoError(t, err)
 		require.Equal(t, int64(102), count)
 	})
 	t.Run("WithoutExpiration", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:false"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "expiration:false",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(100), count)
 	})
 	t.Run("WithoutExpirationByID", func(t *testing.T) {
 		ev := events.Random(t)
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:false"
-			apply.IDs = []string{ev.ID}
-			apply.Authors = []string{ev.PubKey}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search:  "expiration:false",
+			IDs:     []string{ev.ID},
+			Authors: []string{ev.PubKey},
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("Expired", func(t *testing.T) {
-		for ev, er := range db.SelectEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:false"
-			apply.IDs = []string{"expired"}
-		})) {
+		for ev, er := range db.SelectEvents(context.TODO(), model.Filter{
+			Search: "expiration:false",
+			IDs:    []string{"expired"},
+		}) {
 			require.NoError(t, er)
 			t.Logf("expired event: %+v", ev)
 		}
 
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:false"
-			apply.IDs = []string{"expired"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "expiration:false",
+			IDs:    []string{"expired"},
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(0), count)
 	})
 	t.Run("NotExpired", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:true"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "expiration:true",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("NotExpiredByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Kinds = []int{nostr.KindTextNote}
-			apply.Search = "expiration:true"
-			apply.IDs = []string{"alive"}
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: "expiration:true",
+			IDs:    []string{"alive"},
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
@@ -756,34 +754,33 @@ func TestSelectWithExtensions(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("AliveAndE", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.IDs = []string{"alive"}
-			apply.Search = "expiration:true references:true"
-
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			IDs:    []string{"alive"},
+			Search: "expiration:true references:true",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("ExpiredAndQ", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "expiration:off quotes:on"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "expiration:off quotes:on",
+		})
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
 	t.Run("NoEAndNoQ", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "quotes:false references:false"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "quotes:false references:false",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(100), count)
 	})
 	t.Run("IdNoTags", func(t *testing.T) {
 		ev := events.Random(t)
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.IDs = []string{ev.ID}
-			apply.Search = "quotes:true"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			IDs:    []string{ev.ID},
+			Search: "quotes:true",
+		})
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
@@ -808,9 +805,9 @@ func TestSelectRepostWithReference(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("Reference extension must be ignored for reposts", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "references:false"
-		}))
+		count, err := db.CountEvents(context.TODO(), model.Filter{
+			Search: "references:false",
+		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
@@ -837,9 +834,9 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("SelectRepost", func(t *testing.T) {
-		filter := helperNewFilterSubscription(func(apply *model.Filter) {
-			apply.Search = "images:yes"
-		})
+		filter := model.Filter{
+			Search: "images:yes",
+		}
 		t.Run("Count", func(t *testing.T) {
 			count, err := db.CountEvents(context.TODO(), filter)
 			require.NoError(t, err)
@@ -969,7 +966,7 @@ func TestFilterTagsNegative(t *testing.T) {
 			},
 		)
 		require.NoError(t, err)
-		count, err := db.CountEvents(context.Background(), nil)
+		count, err := db.CountEvents(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	})

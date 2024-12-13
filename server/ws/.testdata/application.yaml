@@ -66,6 +66,6 @@ dvm:
   relay-url: &self "wss://localhost"
 
 database/query:
-  url: ":memory:"
+  url: "file::memory:?cache=shared"
   private-key: *pk
   relay-url: *self

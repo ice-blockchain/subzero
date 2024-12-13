@@ -7,5 +7,5 @@ package dvm
 import "github.com/ice-blockchain/subzero/model"
 
 func PublicKey() (string, error) {
-	return model.GetPublicKey(globalDVM.privateKey)
+	return model.GetPublicKey(globalDVM.PrivateKey)
 }
