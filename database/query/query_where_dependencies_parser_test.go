@@ -842,7 +842,7 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 		IDs:    []string{"id1"},
 		Search: "include:dependencies:kind1>pk3@kind1+e+root",
 	})
-	require.Len(t, events, 2) // Two original note, one reply.
+	require.Len(t, events, 2) // Original note, one reply.
 	require.Equal(t, "id1", events[0].ID)
 	// No pk2 (id2) reply.
 	require.Equal(t, "id3", events[1].ID)
