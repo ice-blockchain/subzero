@@ -64,19 +64,29 @@ func TestMain(m *testing.M) {
 		map[string]gin.HandlerFunc{},
 	)
 
-	hdl = new(handler)
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
-		Port:                    9998,
-		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-	}, hdl.Handle, nil, map[string]gin.HandlerFunc{}))
+	hdl := newHandler("wss://localhost:9998")
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
+		&Config{
+			Port:                    9998,
+			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		},
+		hdl.Handle,
+		nil,
+		map[string]gin.HandlerFunc{},
+	))
 
-	hdl2 := new(handler)
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
-		Port:                    9997,
-		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-	}, hdl2.Handle, nil, map[string]gin.HandlerFunc{}))
+	hdl2 := newHandler("wss://localhost:9997")
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
+		&Config{
+			Port:                    9997,
+			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		},
+		hdl2.Handle,
+		nil,
+		map[string]gin.HandlerFunc{},
+	))
 
 	code := m.Run()
 	serverCancel()

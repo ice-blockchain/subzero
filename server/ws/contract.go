@@ -3,7 +3,10 @@
 package ws
 
 import (
+	"errors"
 	"sync"
+
+	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
@@ -23,12 +26,19 @@ type (
 var WithWS = internal.WithWS
 
 type (
+	connAuthData struct {
+		Challenge     string
+		Authenticated bool
+		PublicKey     string
+	}
 	handler struct {
 		subListenersMx sync.Mutex
-		subListeners   map[adapters.WSWriter]map[string]*subscription
+		subListeners   map[adapters.WSWriter]map[string]*model.Subscription
+		connAuth       *xsync.MapOf[adapters.WSWriter, connAuthData]
+		relayURL       string
 	}
-	subscription struct {
-		*model.Subscription
-		SubscriptionID string
-	}
+)
+
+var (
+	errAuthRequired = errors.New("auth-required: please authenticate first by sending AUTH message")
 )

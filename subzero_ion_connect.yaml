@@ -1,7 +1,15 @@
 # SPDX-License-Identifier: ice License 1.0
 
+broadcast:
+  concurrency: 10
+  queue-size: 100
+  max-relays-open: 10
+  relay-open-time: 10m
+  relay-url: &self "wss://example.com"
+
 server:
   port: 4443
+  relay-url: *self
   tls-cert: &tls-cert |
     -----BEGIN CERTIFICATE-----
     MIID0TCCArmgAwIBAgIUJ66CoEOD8Ud1CJpgmxdw+zgx+uEwDQYJKoZIhvcNAQEL
@@ -60,7 +68,7 @@ database:
   query:
     url: /var/lib/subzero_ion_connect/data/db/query.db
     private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
-    relay-url: &self "wss://example.com"
+    relay-url: *self
 
 storage:
   private-key: *pk

@@ -7,11 +7,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/spf13/cobra"
 
+	"github.com/ice-blockchain/subzero/broadcast"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -32,6 +35,7 @@ var (
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit()
+			broadcast.MustInit(cmd.Context())
 			server.MustListenAndServe(cmd.Context())
 		},
 	}
@@ -42,6 +46,25 @@ var (
 
 func init() {
 	initFlags()
+	wsserver.RegisterReqMustAuthenticate(func(ctx context.Context, subscription *model.Subscription) (authRequired bool) {
+		if subscription == nil {
+			return false
+		}
+		for _, filter := range subscription.Filters {
+			if slices.Contains(filter.Kinds, nostr.KindGiftWrap) {
+				return true
+			}
+		}
+		return false
+	})
+	wsserver.RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) (authRequired bool) {
+		for _, event := range events {
+			if event.Kind == nostr.KindGiftWrap {
+				return true
+			}
+		}
+		return false
+	})
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
@@ -51,6 +74,9 @@ func init() {
 		}
 		if sErr := storage.AcceptEvents(ctx, events...); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 events")
+		}
+		if bErr := broadcast.AcceptEvents(ctx, events...); bErr != nil {
+			return errors.Wrapf(bErr, "failed to broadcast.AcceptEvent(%#v)", events)
 		}
 		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])

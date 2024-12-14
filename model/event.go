@@ -8,7 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -201,3 +203,58 @@ func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 }
 
 func PointerOf[T any](v T) *T { return &v }
+
+func parseURL(input string) (*url.URL, error) {
+	return url.Parse(
+		strings.ToLower(
+			strings.TrimSuffix(input, "/"),
+		),
+	)
+}
+
+func ValidateAuthEvent(event *Event, challenge string, relayURL string) (pubkey string, err error) {
+	const leeway = time.Minute * 10
+
+	if event.Kind != nostr.KindClientAuthentication {
+		return "", errors.Errorf("event kind %d: expected %v", event.Kind, nostr.KindClientAuthentication)
+	}
+
+	if event.Tags.GetFirst([]string{"challenge", challenge}) == nil {
+		return "", errors.Errorf("event does not contain challenge tag or it does not match")
+	}
+
+	expected, err := parseURL(relayURL)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse relay URL")
+	}
+
+	dest := event.Tags.GetFirst([]string{"relay", ""})
+	if dest == nil {
+		return "", errors.Errorf("event does not contain relay tag")
+	}
+
+	found, err := parseURL(dest.Value())
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse relay URL")
+	}
+
+	if expected.Scheme != found.Scheme ||
+		expected.Host != found.Host ||
+		expected.Path != found.Path {
+		return "", errors.Errorf("relay URL mismatch: expected %v, found %v", expected.String(), found.String())
+	}
+
+	now := time.Now()
+	eventTime := event.CreatedAt.Time()
+	if eventTime.Before(now.Add(-leeway)) || eventTime.After(now.Add(leeway)) {
+		return "", errors.Errorf("event time is out of bounds: %v", eventTime)
+	}
+
+	if ok, err := event.CheckSignature(); err != nil {
+		return "", errors.Wrap(err, "failed to check event signature")
+	} else if !ok {
+		return "", errors.Errorf("event signature is invalid")
+	}
+
+	return event.PubKey, nil
+}

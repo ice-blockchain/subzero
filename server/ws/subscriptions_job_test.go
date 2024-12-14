@@ -45,7 +45,7 @@ func helperWaitFor[T any](t *testing.T, ch <-chan T, deadline time.Duration) T {
 func TestJobOnline(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
@@ -193,7 +193,7 @@ func TestJobOnline(t *testing.T) {
 func TestJobDeletion(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
@@ -259,7 +259,7 @@ func TestErrorFeedback(t *testing.T) {
 
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		return helperNewIterator(t, []*model.Event{})
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
@@ -312,7 +312,7 @@ func TestErrorFeedback(t *testing.T) {
 func TestJobOffline(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) query.EventIterator {
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {

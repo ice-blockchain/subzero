@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: ice License 1.0
+
+broadcast:
+  concurrency: 10
+  queue-size: 100
+  max-relays-open: 10
+  relay-open-time: 10m
+  relay-url: "wss://localhost"
