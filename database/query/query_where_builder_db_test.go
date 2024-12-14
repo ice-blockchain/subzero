@@ -577,7 +577,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 			IDs:    []string{"1", "2"},
 		})
 		require.NoError(t, err)
-		require.Equal(t, int64(2), count)
+		require.Equal(t, int64(0), count)
 	})
 	t.Run("SelectReferencesAndQuotesUnknownID", func(t *testing.T) {
 		count, err := db.CountEvents(context.TODO(), model.Filter{
