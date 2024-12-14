@@ -7,9 +7,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -42,6 +44,25 @@ var (
 
 func init() {
 	initFlags()
+	wsserver.RegisterReqMustAuthenticate(func(ctx context.Context, subscription *model.Subscription) (authRequired bool) {
+		if subscription == nil {
+			return false
+		}
+		for _, filter := range subscription.Filters {
+			if slices.Contains(filter.Kinds, nostr.KindGiftWrap) {
+				return true
+			}
+		}
+		return false
+	})
+	wsserver.RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) (authRequired bool) {
+		for _, event := range events {
+			if event.Kind == nostr.KindGiftWrap {
+				return true
+			}
+		}
+		return false
+	})
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
