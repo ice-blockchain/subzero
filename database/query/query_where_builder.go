@@ -19,14 +19,6 @@ const (
 )
 
 const (
-	extensionExpiration = 1 << iota
-	extensionVideos
-	extensionImages
-	extensionQuotes
-	extensionReferences
-)
-
-const (
 	sqlOpCodeNONE = iota
 	sqlOpCodeAND
 	sqlOpCodeOR
@@ -326,77 +318,50 @@ func (w *whereBuilder) applyTimeRange(name string, since, until *model.Timestamp
 	return nil
 }
 
-func filterHasExtensions(filter *databaseFilterSearch) (positive, negative int) {
-	var values = []struct {
-		val *bool
-		bit int
-	}{
-		{filter.Expiration, extensionExpiration},
-		{filter.Videos, extensionVideos},
-		{filter.Images, extensionImages},
-		{filter.Quotes, extensionQuotes},
-		{filter.References, extensionReferences},
-	}
-
-	for _, v := range values {
-		if v.val == nil {
-			continue
+func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch) {
+	if filter.Videos != nil {
+		w.maybeAND()
+		if !*filter.Videos {
+			w.WriteString("NOT ")
 		}
-
-		if *v.val {
-			positive |= v.bit
-		} else {
-			negative |= v.bit
-		}
-	}
-
-	return
-}
-
-func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch, include bool) {
-	separator := w.maybeOR
-	if !include {
-		w.WriteString("NOT ")
-	}
-	w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND (")
-
-	if filter.Quotes != nil && *filter.Quotes == include {
-		separator()
-		w.WriteString("(event_tag_key = 'q')")
-	}
-	if filter.References != nil && *filter.References == include {
-		separator()
-		result := "true"
-		if !include {
-			result = "false"
-		}
-		w.WriteString("(case when e.reference_id is not null then " + result + " else event_tag_key = 'e' end)")
-	}
-	if filter.Images != nil && *filter.Images == include {
-		separator()
-		w.WriteString("(event_tag_key = 'imeta' AND ")
+		w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND ((event_tag_key = 'imeta' AND ")
 		w.WriteString(tagValueMimeType)
-		w.WriteString(" IN ('m image/png', 'm image/jpeg', 'm image/gif', 'm image/webp', 'm image/avif'))")
+		w.WriteString(" IN ('m video/mp4', 'm video/mpeg', 'm video/mpeg4'))))")
 	}
-	if filter.Videos != nil && *filter.Videos == include {
-		separator()
-		w.WriteString("(event_tag_key = 'imeta' AND ")
+	if filter.Images != nil {
+		w.maybeAND()
+		if !*filter.Images {
+			w.WriteString("NOT ")
+		}
+		w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND ((event_tag_key = 'imeta' AND ")
 		w.WriteString(tagValueMimeType)
-		w.WriteString(" IN ('m video/mp4', 'm video/mpeg', 'm video/mpeg4'))")
+		w.WriteString(" IN ('m image/png', 'm image/jpeg', 'm image/gif', 'm image/webp', 'm image/avif'))))")
+	}
+	if filter.Quotes != nil {
+		w.maybeAND()
+		if !*filter.Quotes {
+			w.WriteString("NOT ")
+		}
+		w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'q')")
 	}
 	if filter.Expiration != nil {
-		separator()
+		w.maybeAND()
 		if *filter.Expiration {
-			w.WriteRune('(')
-		}
-		w.WriteString("(event_tag_key = 'expiration')")
-		if *filter.Expiration {
-			w.WriteString(" AND cast(")
+			w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'expiration' AND cast(")
 			w.WriteString(tagValueExpiration)
 			w.WriteString(" as integer) > unixepoch())")
+		} else {
+			w.WriteString("NOT exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'expiration')")
 		}
 	}
-	w.WriteString("))")
+	if filter.References != nil {
+		w.maybeAND()
+		w.WriteString(`(case when e.reference_id is not null then true else `)
+		if !*filter.References {
+			w.WriteString("NOT ")
+		}
+		w.WriteString("exists (select true from event_tags where event_id = e.id AND event_tag_key = 'e') end)")
+	}
 }
 
 func filterMainIndexField(filter *databaseFilterSearch) string {
@@ -425,18 +390,10 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	}
 
 	name := "filter" + strconv.Itoa(idx) + "_"
-	positiveExtensions, negativeExtensions := filterHasExtensions(filter)
 	w.WriteRune('(') // Begin the filter section.
 	buildFromSlice(w, sqlOpCodeNONE, name, filter.IDs, "id", "")
 	buildFromSlice(w, sqlOpCodeAND, name, filter.Kinds, filterMaybeForceIndex(filter, "kind"), "kind")
-	if positiveExtensions > 0 {
-		w.maybeAND()
-		w.applyFilterForExtensions(filter, true)
-	}
-	if negativeExtensions > 0 {
-		w.maybeAND()
-		w.applyFilterForExtensions(filter, false)
-	}
+	w.applyFilterForExtensions(filter)
 	if len(filter.Authors) > 0 {
 		w.maybeAND()
 		w.WriteRune('(')
