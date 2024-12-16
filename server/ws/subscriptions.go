@@ -53,11 +53,7 @@ func canForwardEvent(in *model.Event, currentKeys ...string) bool {
 		return true
 	}
 
-	master := in.GetMasterPublicKey()
 	for _, key := range currentKeys {
-		if key == master || key == in.PubKey {
-			return true
-		}
 		for range in.Tags.All([]string{"p", key}) {
 			return true
 		}

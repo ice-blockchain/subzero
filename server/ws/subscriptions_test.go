@@ -2616,10 +2616,9 @@ func TestCanForwardEvent(t *testing.T) {
 		ev.Content = "content"
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 
-		require.False(t, canForwardEvent(&ev, user2Pub))
+		require.False(t, canForwardEvent(&ev, user1Pub)) // user1 cannot see it's own event.
+		require.False(t, canForwardEvent(&ev, user2Pub)) // user2 is not included in the event yet.
 		require.False(t, canForwardEvent(&ev))
-
-		require.True(t, canForwardEvent(&ev, user1Pub))
 
 		ev.Tags = append(ev.Tags,
 			model.Tag{"p", user2Pub},
