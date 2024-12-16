@@ -12,11 +12,12 @@ import (
 	"math"
 	"math/rand/v2"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -51,6 +52,36 @@ func (h *handler) authRequiredReq(respWriter Writer, sub *model.Subscription, ch
 	return errors.Wrap(err, "failed to write CLOSED message")
 }
 
+func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
+	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() connSubscriptions {
+		return connSubscriptions{
+			Subscriptions: xsync.NewMapOf[string, *model.Subscription](),
+		}
+	})
+	conn.Subscriptions.Store(sub.SubscriptionID, sub)
+}
+
+func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
+	if ID == nil {
+		// Connection is closing, remove all subscriptions.
+		h.connSubs.Delete(respWriter)
+
+		return false
+	}
+
+	conn, ok := h.connSubs.Load(respWriter)
+	if !ok {
+		return false
+	}
+
+	_, ok = conn.Subscriptions.LoadAndDelete(*ID)
+	if !ok {
+		return false
+	}
+
+	return true
+}
+
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
@@ -81,20 +112,10 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
 	}
 
-	eos := nostr.EOSEEnvelope(sub.SubscriptionID)
-	err := h.writeResponse(respWriter, &eos)
-
-	h.subListenersMx.Lock()
-	defer h.subListenersMx.Unlock()
-	subsFromCurrConnection, ok := h.subListeners[respWriter]
-	if !ok {
-		subsFromCurrConnection = make(map[string]*model.Subscription)
-		if h.subListeners == nil {
-			h.subListeners = make(map[Writer]map[string]*model.Subscription)
-		}
-		h.subListeners[respWriter] = subsFromCurrConnection
+	err := h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
+	if err == nil {
+		h.linkSubscription(respWriter, sub)
 	}
-	subsFromCurrConnection[sub.SubscriptionID] = sub
 
 	return err
 }
@@ -133,8 +154,8 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrap(err, "failed to store events")
 	}
 
-	if err := h.notifyListenersAboutNewEvents(events...); err != nil {
-		return errors.Wrap(err, "failed to notify subscribers about new events")
+	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {
+		return errors.Wrap(ErrNotifyFailed, err.Error())
 	}
 
 	return nil
@@ -161,46 +182,70 @@ func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err erro
 	return nil
 }
 
-func (h *handler) notifyListenersAboutNewEvents(events ...*model.Event) error {
-	var err *multierror.Error
+func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
+	var broadcast = map[Writer][]nostr.EventEnvelope{}
 
-	// TODO: FIX race condition here (concurrent map read and map write).
-	for writer, subs := range h.subListeners {
-		for _, sub := range subs {
-			for eventIdx := range events {
-				if sub.Filters.Match(&events[eventIdx].Event) {
-					err = multierror.Append(
-						err,
-						h.writeResponse(writer, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&events[eventIdx].Event}}),
-					)
+	// Collect events for each subscription.
+	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
+		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
+			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
+			for _, event := range events {
+				if !sub.Filters.Match(&event.Event) {
+					continue
+				}
+				envelope.Events = append(envelope.Events, &event.Event)
+			}
+			if len(envelope.Events) > 0 {
+				broadcast[writer] = append(broadcast[writer], envelope)
+			}
+			return true
+		})
+		return true
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(len(broadcast))
+	ch := make(chan error, len(broadcast))
+	for writer, envelopes := range broadcast {
+		go func() {
+			defer wg.Done()
+
+			for i := range envelopes {
+				if ctx.Err() != nil {
+					break
+				}
+
+				err := h.writeResponse(writer, &envelopes[i])
+				if err != nil {
+					ch <- errors.Wrapf(err, "failed to write events for subscription %v", envelopes[i].SubscriptionID)
+					break // Stop writing events for this writer.
 				}
 			}
-		}
+		}()
 	}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
 
-	return err.ErrorOrNil()
+	var err error
+	for writeErr := range ch {
+		err = errors.Join(err, writeErr)
+	}
+	return err
 }
 
-func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID *string) error {
-	h.subListenersMx.Lock()
-	defer h.subListenersMx.Unlock()
-	if subs, found := h.subListeners[respWriter]; found {
-		if subID == nil {
-			delete(h.subListeners, respWriter)
-			h.connAuth.Delete(respWriter)
-
-			return nil
-		}
-		delete(h.subListeners[respWriter], *subID)
-		if len(subs) == 0 {
-			delete(h.subListeners, respWriter)
-		}
-		if err := h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}); err != nil {
-			return errors.Wrap(err, "failed to write CLOSED message")
-		}
+func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID *string) (err error) {
+	if !h.unlinkSubscription(respWriter, subID) {
+		// Subscription not found.
+		return
 	}
 
-	return nil
+	if subID != nil {
+		err = errors.Wrap(h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}), "failed to write CLOSED message")
+	}
+
+	return err
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {

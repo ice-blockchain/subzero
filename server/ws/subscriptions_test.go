@@ -173,7 +173,7 @@ func TestRelaySubscription(t *testing.T) {
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].GenerateNIP13(ctx, NIP13MinLeadingZeroBits))
 	require.NoError(t, eventsQueue[len(eventsQueue)-1].SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, notifySubscriptions(eventBy3rdParty))
+	require.NoError(t, notifySubscriptions(ctx, eventBy3rdParty))
 
 	repostedPubkey := "pubkey1"
 	repostedID := uuid.NewString()

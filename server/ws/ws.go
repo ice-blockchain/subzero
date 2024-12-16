@@ -54,20 +54,20 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func notifySubscriptions(event *model.Event) error {
+func notifySubscriptions(ctx context.Context, event *model.Event) error {
 	if hdl == nil {
 		log.Panic("Server is not started")
 	}
 
-	return hdl.notifyListenersAboutNewEvents(event)
+	return hdl.notifyListenersAboutNewEvents(ctx, event)
 }
 
 func newHandler(relayURL string) *handler {
 	// Initialize the GLOBAL handler.
 	hdl = &handler{
-		subListeners: make(map[adapters.WSWriter]map[string]*model.Subscription),
-		connAuth:     xsync.NewMapOf[adapters.WSWriter, connAuthData](),
-		relayURL:     relayURL,
+		connSubs: xsync.NewMapOf[Writer, connSubscriptions](),
+		connAuth: xsync.NewMapOf[Writer, connAuthData](),
+		relayURL: relayURL,
 	}
 
 	return hdl
@@ -130,6 +130,11 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
 		err = h.handleEvents(h.populateContext(ctx, respWriter), respWriter, events, cfg)
+		if errors.Is(err, ErrNotifyFailed) {
+			// Not critical, just log it.
+			log.Printf("WARN: notification failed: %v", err)
+			err = nil
+		}
 		for i := range e.Events {
 			resp := &nostr.OKEnvelope{
 				EventID: e.Events[i].ID,

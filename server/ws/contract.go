@@ -4,7 +4,6 @@ package ws
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/puzpuzpuz/xsync/v3"
 
@@ -23,7 +22,11 @@ type (
 	Router         = internal.Router
 )
 
-var WithWS = internal.WithWS
+var (
+	ErrNotifyFailed = errors.New("failed to notify about new events")
+
+	WithWS = internal.WithWS
+)
 
 type (
 	connAuthData struct {
@@ -31,11 +34,14 @@ type (
 		Authenticated bool
 		PublicKey     string
 	}
+	connSubscriptions struct {
+		// SubscriptionID -> Subscription
+		Subscriptions *xsync.MapOf[string, *model.Subscription]
+	}
 	handler struct {
-		subListenersMx sync.Mutex
-		subListeners   map[adapters.WSWriter]map[string]*model.Subscription
-		connAuth       *xsync.MapOf[adapters.WSWriter, connAuthData]
-		relayURL       string
+		connSubs *xsync.MapOf[Writer, connSubscriptions]
+		connAuth *xsync.MapOf[Writer, connAuthData]
+		relayURL string
 	}
 )
 
