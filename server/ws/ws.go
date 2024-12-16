@@ -14,6 +14,7 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip42"
 	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -162,9 +163,11 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 
 		case !state.Authenticated && e.Event.Sig != "":
 			e := &model.Event{Event: e.Event}
-			_, vErr := model.ValidateAuthEvent(e, state.Challenge, h.relayURL)
-			if vErr != nil {
-				resp.Reason = errors.Wrap(vErr, "failed to validate auth event").Error()
+			_, ok := nip42.ValidateAuthEvent(&e.Event, state.Challenge, h.relayURL, func(nostrEvent *nostr.Event) (bool, error) {
+				return (&model.Event{Event: *nostrEvent}).CheckSignature()
+			})
+			if !ok {
+				resp.Reason = "failed to validate auth event"
 			} else {
 				h.connAuth.Store(respWriter, connAuthData{
 					Challenge:     state.Challenge,

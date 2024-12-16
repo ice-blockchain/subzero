@@ -100,6 +100,7 @@ var (
 		nostr.KindInterestList:          tagsTable("t", "a"),
 		nostr.KindEmojiList:             tagsTable("emoji", "a"),
 		nostr.KindDMRelayList:           tagsTable("relay"),
+		nostr.KindGiftWrap:              tagsTable("p", "k"),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
 		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
 		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
@@ -194,6 +195,8 @@ func (e *Event) Validate() error {
 		return validateKindReactionEvent(e)
 	case nostr.KindBadgeAward:
 		return validateKindBadgeAwardEvent(e)
+	case nostr.KindDirectMessage, nostr.KindSeal:
+		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	case nostr.KindReactionToWebsite:
 		if e.Content != "+" && e.Content != "-" && e.Content != "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
