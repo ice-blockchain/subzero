@@ -161,13 +161,14 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			resp.Reason = "received unexpected auth message: already authenticated"
 
 		case !state.Authenticated && e.Event.Sig != "":
-			_, vErr := model.ValidateAuthEvent(&model.Event{Event: e.Event}, state.Challenge, h.relayURL)
+			e := &model.Event{Event: e.Event}
+			_, vErr := model.ValidateAuthEvent(e, state.Challenge, h.relayURL)
 			if vErr != nil {
 				resp.Reason = errors.Wrap(vErr, "failed to validate auth event").Error()
 			} else {
 				h.connAuth.Store(respWriter, connAuthData{
 					Challenge:     state.Challenge,
-					PublicKey:     e.Event.PubKey,
+					PublicKey:     e.GetMasterPublicKey(),
 					Authenticated: true,
 				})
 				resp.OK = true
@@ -178,9 +179,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		}
 		err = h.writeResponse(respWriter, &resp)
 	case *nostr.ReqEnvelope:
-		err = h.handleReq(ctx, respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
+		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
 	case *nostr.CountEnvelope:
-		err = h.handleCount(ctx, e)
+		err = h.handleCount(h.populateContext(ctx, respWriter), e)
 		if err != nil {
 			defer respWriter.Close()
 
