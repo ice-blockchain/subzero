@@ -109,7 +109,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 
 func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
 	if v, ok := h.connAuth.Load(respWriter); ok {
-		return model.SetUserDataInContext(ctx, v.PublicKey, v.Authenticated)
+		return model.SetUserDataInContext(ctx, v.MasterPublicKey, v.PublicKey, v.Authenticated)
 	}
 	return ctx
 }
@@ -175,9 +175,10 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				resp.Reason = "failed to validate auth event"
 			} else {
 				h.connAuth.Store(respWriter, connAuthData{
-					Challenge:     state.Challenge,
-					PublicKey:     e.GetMasterPublicKey(),
-					Authenticated: true,
+					Challenge:       state.Challenge,
+					MasterPublicKey: e.GetMasterPublicKey(),
+					PublicKey:       e.PubKey,
+					Authenticated:   true,
 				})
 				resp.OK = true
 			}

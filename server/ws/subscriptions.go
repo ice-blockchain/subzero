@@ -43,27 +43,25 @@ func generateChallenge(hints ...string) string {
 }
 
 func canForwardEventContext(ctx context.Context, in *model.Event) bool {
-	pk, _ := model.GetUserDataFromContext(ctx)
+	master, pk, _ := model.GetUserDataFromContext(ctx)
 
-	return canForwardEvent(pk, in)
+	return canForwardEvent(in, master, pk)
 }
 
-func canForwardEvent(currentUserPubKey string, in *model.Event) bool {
+func canForwardEvent(in *model.Event, currentKeys ...string) bool {
 	if _, ok := protectedEventKinds[in.Kind]; !ok {
 		return true
 	}
 
-	// Sender is the same as the authenticated user.
-	if in.GetMasterPublicKey() == currentUserPubKey || in.PubKey == currentUserPubKey {
-		return true
+	master := in.GetMasterPublicKey()
+	for _, key := range currentKeys {
+		if key == master || key == in.PubKey {
+			return true
+		}
+		for range in.Tags.All([]string{"p", key}) {
+			return true
+		}
 	}
-
-	// Receiver is the same as the authenticated user.
-	for range in.Tags.All([]string{"p", currentUserPubKey}) {
-		return true
-	}
-
-	// Does not match any of the above conditions.
 	return false
 }
 
@@ -223,7 +221,7 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 			for _, event := range events {
 				if !sub.Filters.Match(&event.Event) {
 					continue
-				} else if !canForwardEvent(authData.PublicKey, event) {
+				} else if !canForwardEvent(event, authData.MasterPublicKey, authData.PublicKey) {
 					continue
 				}
 				envelope.Events = append(envelope.Events, &event.Event)

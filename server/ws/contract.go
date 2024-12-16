@@ -30,9 +30,10 @@ var (
 
 type (
 	connAuthData struct {
-		Challenge     string
-		Authenticated bool
-		PublicKey     string
+		Challenge       string
+		PublicKey       string
+		MasterPublicKey string
+		Authenticated   bool
 	}
 	connSubscriptions struct {
 		// SubscriptionID -> Subscription

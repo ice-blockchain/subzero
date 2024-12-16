@@ -2604,7 +2604,8 @@ func TestCanForwardEvent(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Regular", func(t *testing.T) {
-		require.True(t, canForwardEvent("", &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}))
+		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}))
+		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}), "")
 	})
 	t.Run("Protected", func(t *testing.T) {
 		user1Priv, user1Pub := model.GenerateKeyPair()
@@ -2615,15 +2616,15 @@ func TestCanForwardEvent(t *testing.T) {
 		ev.Content = "content"
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 
-		require.False(t, canForwardEvent(user2Pub, &ev))
-		require.False(t, canForwardEvent("", &ev))
+		require.False(t, canForwardEvent(&ev, user2Pub))
+		require.False(t, canForwardEvent(&ev))
 
-		require.True(t, canForwardEvent(user1Pub, &ev))
+		require.True(t, canForwardEvent(&ev, user1Pub))
 
 		ev.Tags = append(ev.Tags,
 			model.Tag{"p", user2Pub},
 		)
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
-		require.True(t, canForwardEvent(user2Pub, &ev))
+		require.True(t, canForwardEvent(&ev, user2Pub))
 	})
 }
