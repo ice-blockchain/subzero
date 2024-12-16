@@ -75,11 +75,8 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	}
 
 	_, ok = conn.Subscriptions.LoadAndDelete(*ID)
-	if !ok {
-		return false
-	}
 
-	return true
+	return ok
 }
 
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
