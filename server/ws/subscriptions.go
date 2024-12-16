@@ -23,6 +23,12 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+var (
+	protectedEventKinds = map[int]struct{}{
+		nostr.KindGiftWrap: {},
+	}
+)
+
 func generateChallenge(hints ...string) string {
 	const valueMin = 1_000_000_000
 
@@ -34,6 +40,31 @@ func generateChallenge(hints ...string) string {
 	}
 
 	return base64.URLEncoding.EncodeToString(h.Sum(nil))
+}
+
+func canForwardEventContext(ctx context.Context, in *model.Event) bool {
+	pk, _ := model.GetUserDataFromContext(ctx)
+
+	return canForwardEvent(pk, in)
+}
+
+func canForwardEvent(currentUserPubKey string, in *model.Event) bool {
+	if _, ok := protectedEventKinds[in.Kind]; !ok {
+		return true
+	}
+
+	// Sender is the same as the authenticated user.
+	if in.GetMasterPublicKey() == currentUserPubKey || in.PubKey == currentUserPubKey {
+		return true
+	}
+
+	// Receiver is the same as the authenticated user.
+	for range in.Tags.All([]string{"p", currentUserPubKey}) {
+		return true
+	}
+
+	// Does not match any of the above conditions.
+	return false
 }
 
 func (h *handler) authRequiredReq(respWriter Writer, sub *model.Subscription, challenge string) error {
@@ -99,6 +130,8 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		for event, err := range wsSubscriptionListener(fetchCtx, sub) {
 			if err != nil {
 				return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
+			} else if !canForwardEventContext(fetchCtx, event) {
+				continue
 			}
 			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})
 			if wErr != nil {
@@ -184,10 +217,13 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 
 	// Collect events for each subscription.
 	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
+		authData, _ := h.connAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
 			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
 			for _, event := range events {
 				if !sub.Filters.Match(&event.Event) {
+					continue
+				} else if !canForwardEvent(authData.PublicKey, event) {
 					continue
 				}
 				envelope.Events = append(envelope.Events, &event.Event)

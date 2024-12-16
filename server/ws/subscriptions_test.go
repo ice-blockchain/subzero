@@ -2599,3 +2599,31 @@ func TestRelayMultiEventsAndFilter(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 	wg.Wait()
 }
+
+func TestCanForwardEvent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Regular", func(t *testing.T) {
+		require.True(t, canForwardEvent("", &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}))
+	})
+	t.Run("Protected", func(t *testing.T) {
+		user1Priv, user1Pub := model.GenerateKeyPair()
+		_, user2Pub := model.GenerateKeyPair()
+
+		var ev model.Event
+		ev.Kind = nostr.KindGiftWrap
+		ev.Content = "content"
+		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
+
+		require.False(t, canForwardEvent(user2Pub, &ev))
+		require.False(t, canForwardEvent("", &ev))
+
+		require.True(t, canForwardEvent(user1Pub, &ev))
+
+		ev.Tags = append(ev.Tags,
+			model.Tag{"p", user2Pub},
+		)
+		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
+		require.True(t, canForwardEvent(user2Pub, &ev))
+	})
+}
