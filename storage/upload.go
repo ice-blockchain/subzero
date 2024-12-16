@@ -58,7 +58,18 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 					errors.Wrapf(err, "failed to build download url for already existing file %v/%v(%v)", masterPubKey, relativePathToFileForUrl, hash)
 			}
 			if existed {
-				return hex.EncodeToString(existingBagForUser.BagID), url, existed, nil
+				bagID = hex.EncodeToString(existingBagForUser.BagID)
+				bootstrapNode, err := c.buildBootstrapNodeInfo(existingBagForUser)
+				if err != nil {
+					return "", "", false, errors.Wrap(err, "failed to build bootstrap node info")
+				}
+				bs := []*Bootstrap{bootstrapNode}
+				b, err := json.Marshal(bs)
+				if err != nil {
+					return "", "", false, errors.Wrapf(err, "failed to marshal %#v", bs)
+				}
+				bootstrap := base64.StdEncoding.EncodeToString(b)
+				return bagID + ":" + bootstrap + ":" + strconv.FormatInt(existingBagForUser.CreatedAt.UnixNano(), 10), url, existed, nil
 			}
 
 		}
