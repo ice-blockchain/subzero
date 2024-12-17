@@ -11,4 +11,6 @@
 | ICIP-1000  | Addition     | [1522](https://github.com/nostr-protocol/nips/pull/1522) |                                                                                    |
 | ICIP-2000  | Addition     | [1482](https://github.com/nostr-protocol/nips/pull/1482) |                                                                                    |
 | ICIP-3000  | Addition     |                                                          | an extension of [NIP-72](https://github.com/nostr-protocol/nips/blob/master/72.md) |
+| ICIP-4000  | Addition     |                                                          |                                                                                    |
+| ICIP-5000  | Addition     | [148](https://github.com/nostr-protocol/nips/pull/148)   |                                                                                    |
 | ICIP-51    | Modification |                                                          | an extension of [NIP-51](https://github.com/nostr-protocol/nips/blob/master/51.md) |
