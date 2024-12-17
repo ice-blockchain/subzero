@@ -190,7 +190,6 @@ func TestRelaySubscription(t *testing.T) {
 
 	// Replacing of subscription by another subscription with another filter: smth broken from go-nostr v0.36.0 to write the message to change filters directly.
 	sub.Close()
-	require.Empty(t, <-sub.ClosedReason)
 
 	sub, err = relay.Subscribe(subCtx, []nostr.Filter{{
 		Kinds: []int{nostr.KindArticle},
@@ -227,7 +226,6 @@ func TestRelaySubscription(t *testing.T) {
 	eventsQueue = append(eventsQueue, eventMatchingReplacedSub)
 
 	sub.Close()
-	require.Empty(t, <-sub.ClosedReason)
 
 	helperMustCloseRelay(t, relay)
 	wg.Wait()
@@ -339,7 +337,6 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				assert.Equal(t, newRealtimeEvent.PubKey, ev.PubKey)
 				assert.Equal(t, newRealtimeEvent.Content, ev.Content)
 				sub.Close()
-				assert.Empty(t, <-sub.ClosedReason)
 			}(s)
 		}
 	}
@@ -2590,7 +2587,6 @@ func TestRelayMultiEventsAndFilter(t *testing.T) {
 	}
 
 	sub.Close()
-	require.Empty(t, <-sub.ClosedReason)
 
 	// Want only one event that matches the filter.
 	require.Len(t, receivedEvents, 1)

@@ -262,19 +262,6 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 	return err
 }
 
-func (h *handler) CancelSubscription(_ context.Context, respWriter Writer, subID *string) (err error) {
-	if !h.unlinkSubscription(respWriter, subID) {
-		// Subscription not found.
-		return
-	}
-
-	if subID != nil {
-		err = errors.Wrap(h.writeResponse(respWriter, &nostr.ClosedEnvelope{SubscriptionID: *subID, Reason: ""}), "failed to write CLOSED message")
-	}
-
-	return err
-}
-
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
 	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
 	if err != nil {

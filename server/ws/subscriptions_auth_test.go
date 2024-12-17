@@ -21,6 +21,8 @@ func helperDrainSub(t *testing.T, sub *nostr.Subscription) {
 loop:
 	for {
 		select {
+		case r := <-sub.ClosedReason:
+			t.Logf("closed reason: %v", r)
 		case <-sub.Events:
 			break loop
 		case <-sub.EndOfStoredEvents:
@@ -30,7 +32,6 @@ loop:
 		}
 	}
 	sub.Close()
-	require.Empty(t, <-sub.ClosedReason)
 }
 
 func TestSubscriptionReqWithAuth(t *testing.T) {

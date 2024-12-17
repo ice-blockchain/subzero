@@ -102,9 +102,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 			h.Handle(ctx, stream, msgBytes, cfg)
 		}
 	}
-	if err := h.CancelSubscription(ctx, stream, nil); err != nil {
-		log.Printf("ERROR:%v", errors.Wrap(err, "failed to cancel subscriptions opened on closing conn"))
-	}
+	h.unlinkSubscription(stream, nil)
 }
 
 func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
@@ -203,8 +201,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			err = h.writeResponse(respWriter, e)
 		}
 	case *nostr.CloseEnvelope:
-		subID := string(*e)
-		err = h.CancelSubscription(ctx, respWriter, &subID)
+		h.unlinkSubscription(respWriter, (*string)(e))
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
