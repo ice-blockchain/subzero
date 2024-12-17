@@ -18,7 +18,8 @@ type (
 	Filters      = nostr.Filters
 	Kind         = int
 	Subscription struct {
-		Filters Filters
+		SubscriptionID string
+		Filters        Filters
 	}
 	EventReference interface {
 		Filter() Filter

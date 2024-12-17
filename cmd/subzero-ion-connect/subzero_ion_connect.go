@@ -42,6 +42,12 @@ var (
 
 func init() {
 	initFlags()
+	wsserver.RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) (authRequired bool) {
+		return false
+	})
+	wsserver.RegisterEventMustAuthenticate(func(context.Context, ...*model.Event) (authRequired bool) {
+		return false
+	})
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)

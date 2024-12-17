@@ -17,6 +17,7 @@ type (
 	config struct {
 		TLSCert            string `yaml:"tls-cert"`
 		TLSKey             string `yaml:"tls-key"`
+		RelayURL           string `yaml:"relay-url" validate:"required,url"`
 		Port               uint16 `yaml:"port"`
 		Debug              bool   `yaml:"debug"`
 		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
@@ -44,7 +45,7 @@ func MustListenAndServe(ctx context.Context) {
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	uploader := httpserver.NewUploadHandler(ctx, globalConfig.IONLibertyDisabled)
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: 1111}))).
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(globalConfig.RelayURL), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: 1111}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).

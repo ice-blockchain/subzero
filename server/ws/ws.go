@@ -14,6 +14,8 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip42"
+	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -21,10 +23,20 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
-type EventGetter func(context.Context, *model.Subscription) query.EventIterator
+type (
+	EventIterator       = query.EventIterator
+	EventGetter         func(context.Context, *model.Subscription) EventIterator
+	ReqMustAuthenticate func(context.Context, *model.Subscription) (authRequired bool)
+	EventAuthenticate   func(context.Context, ...*model.Event) (authRequired bool)
+)
 
-var wsEventListener func(context.Context, ...*model.Event) error
-var wsSubscriptionListener EventGetter
+var (
+	wsEventListener        func(context.Context, ...*model.Event) error
+	wsSubscriptionListener EventGetter
+	reqMustAuth            ReqMustAuthenticate
+	eventMustAuth          EventAuthenticate
+	hdl                    *handler
+)
 
 func RegisterWSEventListener(listen func(context.Context, ...*model.Event) error) {
 	wsEventListener = listen
@@ -34,20 +46,35 @@ func RegisterWSSubscriptionListener(listen EventGetter) {
 	wsSubscriptionListener = listen
 }
 
-func notifySubscriptions(event *model.Event) error {
+func RegisterReqMustAuthenticate(cb ReqMustAuthenticate) {
+	reqMustAuth = cb
+}
+
+func RegisterEventMustAuthenticate(cb EventAuthenticate) {
+	eventMustAuth = cb
+}
+
+func notifySubscriptions(ctx context.Context, event *model.Event) error {
 	if hdl == nil {
 		log.Panic("Server is not started")
 	}
 
-	return hdl.notifyListenersAboutNewEvents(event)
+	return hdl.notifyListenersAboutNewEvents(ctx, event)
 }
 
-var hdl *handler
-
-func NewHandler() WSHandler {
-	hdl = new(handler)
+func newHandler(relayURL string) *handler {
+	// Initialize the GLOBAL handler.
+	hdl = &handler{
+		connSubs: xsync.NewMapOf[Writer, connSubscriptions](),
+		connAuth: xsync.NewMapOf[Writer, connAuthData](),
+		relayURL: relayURL,
+	}
 
 	return hdl
+}
+
+func NewHandler(relayURL string) WSHandler {
+	return newHandler(relayURL)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
@@ -55,7 +82,7 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 }
 
 func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
-	for {
+	for ctx.Err() == nil {
 		t, msgBytes, err := stream.ReadMessage()
 		if err != nil {
 			closed := new(wsutil.ClosedError)
@@ -75,9 +102,14 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 			h.Handle(ctx, stream, msgBytes, cfg)
 		}
 	}
-	if err := h.CancelSubscription(ctx, stream, nil); err != nil {
-		log.Printf("ERROR:%v", errors.Wrap(err, "failed to cancel subscriptions opened on closing conn"))
+	h.unlinkSubscription(stream, nil)
+}
+
+func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
+	if v, ok := h.connAuth.Load(respWriter); ok {
+		return model.SetUserDataInContext(ctx, v.MasterPublicKey, v.PublicKey, v.Authenticated)
 	}
+	return ctx
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
@@ -95,7 +127,12 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		for i := range e.Events {
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
-		err = h.handleEvents(ctx, events, cfg)
+		err = h.handleEvents(h.populateContext(ctx, respWriter), respWriter, events, cfg)
+		if errors.Is(err, ErrNotifyFailed) {
+			// Not critical, just log it.
+			log.Printf("WARN: notification failed: %v", err)
+			err = nil
+		}
 		for i := range e.Events {
 			resp := &nostr.OKEnvelope{
 				EventID: e.Events[i].ID,
@@ -115,10 +152,43 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			}
 		}
 		return
+	case *nostr.AuthEnvelope:
+		var resp = nostr.OKEnvelope{
+			EventID: e.Event.ID,
+		}
+		state, ok := h.connAuth.Load(respWriter)
+		switch {
+		case !ok:
+			resp.Reason = "received unexpected auth message: no challenge"
+
+		case state.Authenticated:
+			resp.Reason = "received unexpected auth message: already authenticated"
+
+		case !state.Authenticated && e.Event.Sig != "":
+			e := &model.Event{Event: e.Event}
+			_, ok := nip42.ValidateAuthEvent(&e.Event, state.Challenge, h.relayURL, func(nostrEvent *nostr.Event) (bool, error) {
+				return (&model.Event{Event: *nostrEvent}).CheckSignature()
+			})
+			if !ok {
+				resp.Reason = "failed to validate auth event"
+			} else {
+				h.connAuth.Store(respWriter, connAuthData{
+					Challenge:       state.Challenge,
+					MasterPublicKey: e.GetMasterPublicKey(),
+					PublicKey:       e.PubKey,
+					Authenticated:   true,
+				})
+				resp.OK = true
+			}
+		default: // Should never happen.
+			log.Printf("ERROR: unexpected auth message %+v", e)
+			resp.Reason = "received unexpected auth message"
+		}
+		err = h.writeResponse(respWriter, &resp)
 	case *nostr.ReqEnvelope:
-		err = h.handleReq(ctx, respWriter, &subscription{Subscription: &model.Subscription{Filters: e.Filters}, SubscriptionID: e.SubscriptionID})
+		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
 	case *nostr.CountEnvelope:
-		err = h.handleCount(ctx, e)
+		err = h.handleCount(h.populateContext(ctx, respWriter), e)
 		if err != nil {
 			defer respWriter.Close()
 
@@ -131,8 +201,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			err = h.writeResponse(respWriter, e)
 		}
 	case *nostr.CloseEnvelope:
-		subID := string(*e)
-		err = h.CancelSubscription(ctx, respWriter, &subID)
+		h.unlinkSubscription(respWriter, (*string)(e))
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}

@@ -77,6 +77,7 @@ var (
 	ErrWrongEventParams = errors.New("wrong event params")
 	ErrUnsupportedTag   = errors.New("unsupported tag")
 	ErrUnsupportedJob   = errors.New("unsupported job")
+	ErrUnsupportedKind  = errors.New("unsupported kind")
 	CommongTags         = tagsTable("nonce", "expiration", "imeta", CustomIONTagOnBehalfOf)
 	KindSupportedTags   = map[Kind]map[string]struct{}{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
@@ -99,6 +100,7 @@ var (
 		nostr.KindInterestList:          tagsTable("t", "a"),
 		nostr.KindEmojiList:             tagsTable("emoji", "a"),
 		nostr.KindDMRelayList:           tagsTable("relay"),
+		nostr.KindGiftWrap:              tagsTable("p", "k"),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
 		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
 		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
@@ -168,7 +170,7 @@ var (
 
 func (e *Event) Validate() error {
 	if e.Kind < 0 || e.Kind > 65535 {
-		return errors.New("wrong kind value")
+		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	}
 	if err := validateEventTags(e); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
@@ -193,6 +195,8 @@ func (e *Event) Validate() error {
 		return validateKindReactionEvent(e)
 	case nostr.KindBadgeAward:
 		return validateKindBadgeAwardEvent(e)
+	case nostr.KindDirectMessage, nostr.KindSeal:
+		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	case nostr.KindReactionToWebsite:
 		if e.Content != "+" && e.Content != "-" && e.Content != "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)

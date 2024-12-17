@@ -4,7 +4,7 @@ go 1.23.4
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
-	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20241212142813-7724cf00a25e
+	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20241216090049-0a53b52ee105
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20241021135840-ef55d22c523b
 )
 
@@ -25,7 +25,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.44.0
+	github.com/nbd-wtf/go-nostr v0.44.1
 	github.com/puzpuzpuz/xsync/v3 v3.4.0
 	github.com/quic-go/quic-go v0.48.2
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
@@ -120,7 +120,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.12.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/exp v0.0.0-20241215155358-4a5509556b9e // indirect
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/image v0.23.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
