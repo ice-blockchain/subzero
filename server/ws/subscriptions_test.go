@@ -61,6 +61,25 @@ func helperRegisterWSEventListenerProxyWithStorage(t *testing.T, storedEvents *[
 	})
 }
 
+func helperRegisterWSSubscriptionListenerWithStorage(t *testing.T, storedEvents *[]*model.Event) {
+	t.Helper()
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
+		if subscription == nil || len(subscription.Filters) == 0 {
+			return helperNewIterator(t, *storedEvents)
+		}
+
+		var filteredEvents []*model.Event
+		for i := range *storedEvents {
+			ev := (*storedEvents)[i]
+			if subscription.Filters.Match(&ev.Event) {
+				filteredEvents = append(filteredEvents, (*storedEvents)[i])
+			}
+		}
+		return helperNewIterator(t, filteredEvents)
+	})
+}
+
 func helperMustNewRelay(t *testing.T, service *fixture.MockService) *nostrRelay {
 	t.Helper()
 
@@ -2535,17 +2554,9 @@ func TestRelayMultiEventsAndFilter(t *testing.T) {
 		generatedEvents = append(generatedEvents, &ev.Event)
 	})
 
-	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		t.Logf("received events: %v", events)
-		err := query.AcceptEvents(ctx, events...)
-		require.NoError(t, err)
-		return err
-	})
-
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		t.Logf("received subscription: %v", subscription)
-		return query.GetStoredEvents(ctx, subscription)
-	})
+	var storedEvents []*model.Event
+	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
+	helperRegisterWSSubscriptionListenerWithStorage(t, &storedEvents)
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
