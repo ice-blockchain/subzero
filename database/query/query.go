@@ -24,6 +24,7 @@ const (
 var (
 	ErrUnexpectedRowsAffected    = errors.New("unexpected rows affected")
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
+	ErrCommunityActionForbidden  = errors.New("forbidden")
 
 	errEventIteratorInterrupted = errors.New("interrupted")
 
@@ -39,6 +40,7 @@ type databaseEvent struct {
 	KeyAlg          string
 	MasterPubKey    string
 	Dtag            string
+	Htag            string
 }
 
 type databaseBatchRequest struct {
@@ -68,6 +70,7 @@ func (req *databaseBatchRequest) Save(e *model.Event) error {
 		SigAlg:          sigAlg,
 		KeyAlg:          keyAlg,
 		Dtag:            e.Tags.GetD(),
+		Htag:            e.GetHTag(),
 	})
 
 	return nil
@@ -97,10 +100,21 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 		}
 
 		if events[i].Kind == nostr.KindDeletion {
-			if err := req.Remove(events[i]); err != nil {
-				return err
+			if communityEventsToDelete := db.gatherCommunityEventsForDeletion(ctx, events[i]); len(communityEventsToDelete) > 0 {
+				filters, err := db.handleDeletionEvents(ctx, events[i], communityEventsToDelete)
+				if err != nil {
+					return err
+				}
+				req.Delete = append(req.Delete, filters...)
+			} else {
+				if err := req.Remove(events[i]); err != nil {
+					return err
+				}
 			}
 		} else {
+			if err := db.handleCommunityEvents(ctx, events[i]); err != nil {
+				return err
+			}
 			if err := req.Save(events[i]); err != nil {
 				return err
 			}
@@ -139,9 +153,9 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
 	const stmt = `insert into events
-	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
+	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :reference_id)
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id)
 on conflict do update set
 	id                = excluded.id,
 	kind              = excluded.kind,
@@ -155,6 +169,7 @@ on conflict do update set
 	content           = excluded.content,
 	tags              = excluded.tags,
 	d_tag             = excluded.d_tag,
+	h_tag             = excluded.h_tag,
 	reference_id      = excluded.reference_id,
 	hidden            = 0
 `
@@ -422,6 +437,7 @@ with eventsmain as (
 		e.sig,
 		e.content,
 		e.d_tag,
+		e.h_tag,
 		tags as jtags
 	from
 		events e

@@ -29,6 +29,9 @@ type (
 var (
 	//go:embed DDL.sql
 	ddl string
+
+	//go:embed DDL_alter_events.sql
+	ddlAlterEvents string
 )
 
 func init() {
@@ -109,6 +112,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "master_pubkey"
 		case "dtag":
 			out = "d_tag"
+		case "htag":
+			out = "h_tag"
 		default:
 			out = n
 		}
@@ -117,12 +122,36 @@ func openDatabase(target string, runDDL bool) *dbClient {
 	})
 
 	if runDDL {
+		tx := client.MustBegin()
 		for _, statement := range strings.Split(ddl, "--------") {
-			client.MustExec(statement)
+			tx.MustExec(statement)
 		}
+		client.alterEventsTable(tx)
+		tx.Commit()
 	}
 
 	return client
+}
+
+func (db *dbClient) alterEventsTable(tx *sqlx.Tx) {
+	sqlQuery := "SELECT exists (select name from pragma_table_info('events') WHERE name = $1);"
+	res, err := tx.Queryx(sqlQuery, "h_tag")
+	if err != nil {
+		tx.Rollback()
+		panic(err)
+	}
+	var exists int
+	if res.Next() {
+		if err = res.Scan(&exists); err != nil {
+			tx.Rollback()
+			panic(err)
+		}
+	}
+	if exists == 0 {
+		for _, statement := range strings.Split(ddlAlterEvents, "--------") {
+			tx.MustExec(statement)
+		}
+	}
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {

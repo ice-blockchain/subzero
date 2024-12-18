@@ -172,6 +172,14 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 	return pubkey
 }
 
+func (e *Event) GetHTag() string {
+	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" {
+		return hTag.Value()
+	}
+
+	return e.GetID()
+}
+
 func (evt *Event) IsReplaceable() bool {
 	return nostr.IsReplaceableKind(evt.Kind)
 }

@@ -272,9 +272,9 @@ func TestQueryFuzzInsertEvents(t *testing.T) {
 
 	t.Run("Explain", func(t *testing.T) {
 		const sql = `explain query plan insert into events
-			(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, reference_id)
+			(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id)
 		values
-			(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :reference_id)
+			(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id)
 		on conflict do update set
 			id                = excluded.id,
 			kind              = excluded.kind,
@@ -288,6 +288,7 @@ func TestQueryFuzzInsertEvents(t *testing.T) {
 			content           = excluded.content,
 			tags              = excluded.tags,
 			d_tag             = excluded.d_tag,
+			h_tag             = excluded.h_tag,
 			reference_id      = excluded.reference_id,
 			hidden            = 0
 		`

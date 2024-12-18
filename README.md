@@ -48,6 +48,8 @@ NIPs | latest commit hash implemented | comments
 [94](https://github.com/nostr-protocol/nips/blob/master/94.md) | |
 [96](https://github.com/nostr-protocol/nips/blob/master/96.md) | [4e73e94d417f16fa3451e58ef921cb3b512c6f8e](https://github.com/ice-blockchain/subzero/commit/130bac5adedf6563fe8d8e869f7e46b4cfb414e0)|
 [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | [ae0fd96907d0767f07fb54ca1de9f197c600cb27](https://github.com/ice-blockchain/subzero/commit/130bac5adedf6563fe8d8e869f7e46b4cfb414e0)|
+[ICIP-3000](https://github.com/ice-blockchain/subzero/blob/master/.ion-connect-protocol/ICIP-3000.md) | [c1543a9](https://github.com/ice-blockchain/subzero/commit/c1543a97ae18cc9044d5ff70d2f23b74d42a8de4)|
+[ICIP-4000](https://github.com/ice-blockchain/subzero/blob/master/.ion-connect-protocol/ICIP-4000.md) | [c1543a9](https://github.com/ice-blockchain/subzero/commit/c1543a97ae18cc9044d5ff70d2f23b74d42a8de4)|
 
 
 Data vending machive | latest commit hash implemented | comments
