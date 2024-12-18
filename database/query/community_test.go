@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t *testing.T) {
