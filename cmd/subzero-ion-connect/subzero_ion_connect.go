@@ -7,9 +7,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -42,10 +44,23 @@ var (
 
 func init() {
 	initFlags()
-	wsserver.RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) (authRequired bool) {
+	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
+		if sub == nil {
+			return false
+		}
+		for _, filter := range sub.Filters {
+			if slices.Contains(filter.Kinds, nostr.KindReaction) {
+				return true
+			}
+		}
 		return false
 	})
-	wsserver.RegisterEventMustAuthenticate(func(context.Context, ...*model.Event) (authRequired bool) {
+	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
+		for _, event := range events {
+			if event.Kind == nostr.KindReaction {
+				return true
+			}
+		}
 		return false
 	})
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
