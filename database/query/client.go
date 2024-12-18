@@ -44,8 +44,8 @@ func init() {
 					Pure bool
 				}{
 					{
-						Name: "subzero_nostr_tag_reorder",
-						Ptr:  sqlEventTagReorderJSON,
+						Name: "subzero_nostr_tags_reorder",
+						Ptr:  sqlEventTagsReorderJSON,
 						Pure: true,
 					},
 					{

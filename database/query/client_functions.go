@@ -25,18 +25,40 @@ func sqlObehalfIsAllowed(masterJsonTags, onBehalfPubkey, masterPubkey string, ki
 	return model.OnBehalfIsAccessAllowed(tags, onBehalfPubkey, kind, nowUnix)
 }
 
-func sqlEventTagReorderJSON(jsonTag string) (string, error) {
-	var tag model.Tag
+func sqlEventTagsReorderJSON(jsonTags string) (string, error) {
+	const (
+		replyMarkerIndex = 3 // event_tag_value3.
+		patchMarkerIndex = 5 // event_tag_value5.
+	)
+	var tags model.Tags
 
-	if jsonTag == "" {
+	if jsonTags == "" {
 		return "[]", nil
 	}
 
-	if err := json.Unmarshal([]byte(jsonTag), &tag); err != nil {
+	if err := tags.Scan(jsonTags); err != nil {
 		return "", errors.Wrap(err, "failed to unmarshal tags")
 	}
 
-	data, err := json.Marshal(eventTagsReorder(tag))
+	hasReply := false
+	for i := range tags {
+		tags[i] = eventTagsReorder(tags[i])
+		hasReply = hasReply || (tags[i].Key() == "e" && len(tags[i]) > (replyMarkerIndex-1) && strings.EqualFold(tags[i][replyMarkerIndex], "reply"))
+	}
+
+	if hasReply {
+		for i := range tags {
+			if tags[i].Key() == "e" && len(tags[i]) > (replyMarkerIndex-1) && strings.EqualFold(tags[i][replyMarkerIndex], "root") {
+				for len(tags[i]) < (patchMarkerIndex + 1) {
+					// Fill the missing indexes with empty strings.
+					tags[i] = append(tags[i], "")
+				}
+				tags[i][patchMarkerIndex] = "reply_of_root"
+			}
+		}
+	}
+
+	data, err := json.Marshal(tags)
 
 	return string(data), errors.Wrap(err, "failed to marshal tags")
 }

@@ -92,6 +92,7 @@ create index if not exists idx_event_tags_id_key_value1_value2        on event_t
 create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
 create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
 --------
+drop   trigger if     exists trigger_events_after_insert_generate_tags;
 create trigger if not exists trigger_events_after_insert_generate_tags
     after insert
     on events
@@ -146,9 +147,9 @@ begin
         coalesce(value ->> 20,''),
         coalesce(value ->> 21,'')
     from
-    (
-        select subzero_nostr_tag_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
-    ) where value ->> 0 is not null
+        json_each(jsonb(subzero_nostr_tags_reorder(coalesce(new.tags, ''))))
+    where
+        value ->> 0 is not null
     on conflict do nothing;
 end
 ;
@@ -163,6 +164,7 @@ begin
 end
 ;
 --------
+drop   trigger if     exists trigger_events_after_update_generate_tags;
 create trigger if not exists trigger_events_after_update_generate_tags
     after update
     on events
@@ -218,9 +220,9 @@ begin
         coalesce(value ->> 20,''),
         coalesce(value ->> 21,'')
     from
-    (
-        select subzero_nostr_tag_reorder(coalesce(cast(value as text), '')) as value from json_each(jsonb(new.tags))
-    ) where value ->> 0 is not null
+        json_each(jsonb(subzero_nostr_tags_reorder(coalesce(new.tags, ''))))
+    where
+        value ->> 0 is not null
     on conflict do nothing;
 end
 ;
@@ -358,7 +360,7 @@ begin
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
                     )
                 when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 != '' then
-                    NEW.event_tag_value3 in ('reply', 'root')
+                    ((NEW.event_tag_value3 = 'root' AND NEW.event_tag_value5 = '') OR (NEW.event_tag_value3 = 'reply'))
                 else
                     true
             end
@@ -385,7 +387,8 @@ begin
         and event_counters.reference_id = OLD.event_tag_value1
         and event_counters.kind = e.kind
         and event_counters.reference_type = case
-            when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'e' and OLD.event_tag_value3 in ('reply', 'root') then 'reply'
+            when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'e' and
+                ((OLD.event_tag_value3 = 'root' AND OLD.event_tag_value5 = '') OR (OLD.event_tag_value3 = 'reply')) then OLD.event_tag_value3
             when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'q' then 'quote'
             when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
             when e.kind = 7 then e.content
