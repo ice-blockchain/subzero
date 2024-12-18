@@ -393,3 +393,75 @@ func TestEventMultiReactions(t *testing.T) {
 	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
 	helperMustBePrecalculatedCount(t, db, 0, model.Filter{IDs: []string{ev.ID}, Kinds: []int{nostr.KindReaction}})
 }
+
+func TestCounterRootReply(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var root model.Event
+	root.ID = "rootid"
+	root.Kind = nostr.KindTextNote
+	root.Content = "root"
+	root.PubKey = "rootpub"
+	root.CreatedAt = 1
+	require.NoError(t, db.AcceptEvents(context.Background(), &root))
+
+	var replyToRoot model.Event
+	replyToRoot.ID = "replytorootid"
+	replyToRoot.Kind = nostr.KindTextNote
+	replyToRoot.Content = "reply"
+	replyToRoot.PubKey = "replypub"
+	replyToRoot.CreatedAt = 2
+	replyToRoot.Tags = model.Tags{{"e", "rootid", "", "root"}}
+	require.NoError(t, db.AcceptEvents(context.Background(), &replyToRoot))
+
+	var replyToReply model.Event
+	replyToReply.ID = "replytoreplyid"
+	replyToReply.Kind = nostr.KindTextNote
+	replyToReply.Content = "reply"
+	replyToReply.PubKey = "replypub"
+	replyToReply.CreatedAt = 3
+	replyToReply.Tags = model.Tags{
+		{"e", "replytorootid", "", "reply"},
+		{"e", "rootid", "", "root"},
+	}
+	require.NoError(t, db.AcceptEvents(context.Background(), &replyToReply))
+
+	var replyToReplyToReply model.Event
+	replyToReplyToReply.ID = "replytoreplytoreplyid"
+	replyToReplyToReply.Kind = nostr.KindTextNote
+	replyToReplyToReply.Content = "reply"
+	replyToReplyToReply.PubKey = "replypub"
+	replyToReplyToReply.CreatedAt = 4
+	replyToReplyToReply.Tags = model.Tags{
+		{"e", "replytoreplyid", "", "reply"},
+		{"e", "rootid", "", "root"},
+	}
+	require.NoError(t, db.AcceptEvents(context.Background(), &replyToReplyToReply))
+
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{IDs: []string{root.ID}})
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{IDs: []string{replyToReply.ID}})
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{IDs: []string{replyToRoot.ID}})
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
+		Limit:  10,
+		Search: "references:false expiration:false include:dependencies:kind1>kind6400+kind1+group+root !emarker:reply",
+	})
+	require.Len(t, events, 2) // Root + DVM.
+	require.Equal(t, "rootid", events[0].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
+	require.Equal(t, "1", events[1].Content)
+
+	t.Run("Delete", func(t *testing.T) {
+		var deleteEv model.Event
+
+		deleteEv.Kind = nostr.KindDeletion
+		deleteEv.PubKey = "replypub"
+		deleteEv.Tags = model.Tags{{"e", replyToRoot.ID}}
+		require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+		helperMustBePrecalculatedCount(t, db, 0, model.Filter{IDs: []string{root.ID}})
+	})
+}
