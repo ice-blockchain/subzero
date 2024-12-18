@@ -2566,45 +2566,19 @@ func TestRelayMultiEventsAndFilter(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	sub, err := relay.Subscribe(context.Background(), []model.Filter{
-		{
+	receivedEvents, err := relay.QuerySync(context.Background(),
+		model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 			Tags: model.TagMap{}.
 				Set("e", model.PointerOf("bar"), nil, model.PointerOf("reply")),
-		},
-	})
+		})
 	require.NoError(t, err)
-
-	var wg sync.WaitGroup
-	var receivedEvents []*model.Event
-	{
-		t.Logf("subscribed to %v", sub.GetID())
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for ev := range sub.Events {
-				t.Logf("received event %v via sub", ev)
-				receivedEvents = append(receivedEvents, &model.Event{Event: *ev})
-			}
-		}()
-	}
-
-	select {
-	case <-sub.EndOfStoredEvents:
-		t.Logf("received EOS")
-
-	case <-time.After(5 * time.Second):
-		t.Fatalf("timeout waiting for EOS")
-	}
-
-	sub.Close()
 
 	// Want only one event that matches the filter.
 	require.Len(t, receivedEvents, 1)
-	require.Equal(t, generatedEvents[0], &receivedEvents[0].Event)
+	require.Equal(t, generatedEvents[0], receivedEvents[0])
 
 	helperMustCloseRelay(t, relay)
-	wg.Wait()
 }
 
 func TestCanForwardEvent(t *testing.T) {
