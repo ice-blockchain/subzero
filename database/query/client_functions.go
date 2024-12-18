@@ -43,12 +43,12 @@ func sqlEventTagsReorderJSON(jsonTags string) (string, error) {
 	hasReply := false
 	for i := range tags {
 		tags[i] = eventTagsReorder(tags[i])
-		hasReply = hasReply || (tags[i].Key() == "e" && len(tags[i]) > (replyMarkerIndex-1) && strings.EqualFold(tags[i][replyMarkerIndex], "reply"))
+		hasReply = hasReply || (tags[i].Key() == "e" && len(tags[i]) > replyMarkerIndex && strings.EqualFold(tags[i][replyMarkerIndex], "reply"))
 	}
 
 	if hasReply {
 		for i := range tags {
-			if tags[i].Key() == "e" && len(tags[i]) > (replyMarkerIndex-1) && strings.EqualFold(tags[i][replyMarkerIndex], "root") {
+			if tags[i].Key() == "e" && len(tags[i]) > replyMarkerIndex && strings.EqualFold(tags[i][replyMarkerIndex], "root") {
 				for len(tags[i]) < (patchMarkerIndex + 1) {
 					// Fill the missing indexes with empty strings.
 					tags[i] = append(tags[i], "")
