@@ -79,7 +79,7 @@ var (
 	ErrUnsupportedJob   = errors.New("unsupported job")
 	ErrUnsupportedKind  = errors.New("unsupported kind")
 	CommongTags         = tagsTable("nonce", "expiration", "imeta", CustomIONTagOnBehalfOf)
-	KindSupportedTags   = map[Kind]map[string]struct{}{
+	KindSupportedTags   = map[Kind]map[string]bool{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
 		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L"),
 		nostr.KindFollowList:            tagsTable("p"),
@@ -100,7 +100,7 @@ var (
 		nostr.KindInterestList:          tagsTable("t", "a"),
 		nostr.KindEmojiList:             tagsTable("emoji", "a"),
 		nostr.KindDMRelayList:           tagsTable("relay"),
-		nostr.KindGiftWrap:              tagsTable("p", "k"),
+		nostr.KindGiftWrap:              tagsTableRequired("p", "k", "expiration"),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
 		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
 		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
@@ -170,13 +170,17 @@ var (
 
 func validateATags(e *Event, expectedKinds ...int) error {
 	for _, aTag := range e.Tags.GetAll([]string{"a"}) {
+		if aTag.Key() != "a" {
+			// Skip possible other tags, like `alt`.
+			continue
+		}
 		if aTag.Value() == "" {
 			return errors.Wrap(ErrWrongEventParams, "value for a tag is empty")
 		}
 
 		parts := strings.Split(aTag.Value(), ":")
 		if len(parts) != 3 {
-			return errors.Wrapf(ErrWrongEventParams, "a tag value should have 3 parts, but got %d", len(parts))
+			return errors.Wrapf(ErrWrongEventParams, "a tag value should have 3 parts, but got %d: %v", len(parts), aTag.Value())
 		}
 
 		kind, err := strconv.ParseInt(parts[0], 10, 64)
@@ -200,7 +204,6 @@ func (e *Event) Validate() error {
 	if err := validateEventTags(e); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
 	}
-	e.normalizeTags()
 	switch e.Kind {
 	case nostr.KindProfileMetadata:
 		return validateKindProfileMetadataEvent(e)
@@ -718,31 +721,64 @@ func validateEventTags(e *Event) error {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
 		}
 
-		if tag.Key() == "imeta" {
+		switch tag.Key() {
+		case "imeta":
 			if err := validateIMetaTag(tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
+		case "a":
+			if err := validateATags(e); err != nil {
+				return err
+			}
+		case "expiration":
+			v, err := strconv.ParseInt(tag.Value(), 10, 64)
+			if err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "expiration tag should be int: %v", err)
+			} else if v < 0 {
+				return errors.Wrapf(ErrWrongEventParams, "expiration tag should be positive: %d", v)
+			}
+		}
+	}
+
+	for key, required := range supportedTags {
+		if required && e.GetTag(key) == nil {
+			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required, but not found", key)
 		}
 	}
 
 	return nil
 }
 
-func (e *Event) normalizeTags() {
-	for _, tag := range e.Tags {
-		switch tag.Key() {
-		case "t":
-			if len(tag) > 1 {
-				tag[1] = strings.ToLower(tag.Value()) // NIP-24.
-			}
-		}
-	}
+func tagsTable(tags ...string) map[string]bool {
+	return newTable().Add(tags...).Build()
 }
 
-func tagsTable(tags ...string) map[string]struct{} {
-	table := make(map[string]struct{}, len(tags))
+func tagsTableRequired(tags ...string) map[string]bool {
+	return newTable().Required(tags...).Build()
+}
+
+type tagTableBuilder struct {
+	M map[string]bool
+}
+
+func newTable() *tagTableBuilder {
+	return &tagTableBuilder{M: make(map[string]bool)}
+}
+
+func (t *tagTableBuilder) Add(tags ...string) *tagTableBuilder {
 	for _, tag := range tags {
-		table[tag] = struct{}{}
+		t.M[tag] = false
 	}
-	return table
+	return t
+}
+
+func (t *tagTableBuilder) Required(tags ...string) *tagTableBuilder {
+	for _, tag := range tags {
+		t.M[tag] = true
+	}
+	return t
+}
+
+func (t *tagTableBuilder) Build() map[string]bool {
+	return t.M
 }
