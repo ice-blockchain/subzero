@@ -78,8 +78,16 @@ var (
 	ErrUnsupportedTag   = errors.New("unsupported tag")
 	ErrUnsupportedJob   = errors.New("unsupported job")
 	ErrUnsupportedKind  = errors.New("unsupported kind")
-	CommongTags         = tagsTable("nonce", "expiration", "imeta", CustomIONTagOnBehalfOf)
-	KindSupportedTags   = map[Kind]map[string]bool{
+
+	CommongTags = tagsTable(
+		"t",
+		"nonce",
+		"imeta",
+		"expiration",
+		CustomIONTagOnBehalfOf,
+	)
+
+	KindSupportedTags = map[Kind]map[string]bool{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
 		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L"),
 		nostr.KindFollowList:            tagsTable("p"),
