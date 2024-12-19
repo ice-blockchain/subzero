@@ -539,9 +539,10 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 		w.WriteString(startFilter)
 		w.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = 0)) AND e.hidden=0")
 
-	case nostr.KindRelayListMetadata:
+	case nostr.KindMuteList, nostr.KindRelayListMetadata:
+		reduceKindParam := w.addParam(filterID, "rkind", filter.Reduce.Kinds[0])
 		w.WriteString("e.kind = :")
-		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
+		w.WriteString(reduceKindParam)
 		w.WriteString(" AND ( master_pubkey IN (")
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
 		w.WriteString(") OR pubkey IN (")
@@ -576,14 +577,14 @@ inner join `)
 			w.WriteString(")")
 		}
 		w.WriteString(` AND
-not exists (select true from events subev where subev.kind = 10002 and
+not exists (select true from events subev where subev.kind = :` + reduceKindParam + ` and
 (
 	(subev.pubkey = e.pubkey               and subev.hidden = 0) or
 	(subev.master_pubkey = e.master_pubkey and subev.hidden = 0) or
 	(subev.master_pubkey = e.pubkey        and subev.hidden = 0) or
 	(subev.pubkey = e.master_pubkey        and subev.hidden = 0)
 )) and e.hidden=0
-group by e.pubkey, e.master_pubkey`)
+group by e.master_pubkey`)
 
 	case nostr.KindProfileMetadata:
 		w.WriteString("e.kind = :")
