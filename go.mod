@@ -40,7 +40,6 @@ require (
 	github.com/xssnick/tonutils-storage v0.6.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.33.0
-	pgregory.net/rand v1.0.2
 )
 
 require (

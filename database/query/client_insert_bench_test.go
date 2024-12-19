@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"database/sql"
+	"math/rand/v2"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -14,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
-	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -106,11 +106,11 @@ func BenchmarkEventInsert(b *testing.B) {
 			ev.PubKey = generateHexString()
 			ev.CreatedAt = model.Timestamp(generateCreatedAt())
 			ev.Kind = generateKind()
-			ev.Content = generateRandomString(rand.Intn(1024))
+			ev.Content = generateRandomString(rand.IntN(1024))
 			ev.Tags = []model.Tag{
 				{"e", generateHexString()},
 				{"p", generateHexString()},
-				{"d", generateHexString(), generateRandomString(rand.Intn(10))},
+				{"d", generateHexString(), generateRandomString(rand.IntN(10))},
 			}
 			start := time.Now()
 			db.AcceptEvents(context.Background(), &ev)

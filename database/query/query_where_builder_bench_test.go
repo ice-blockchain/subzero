@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"math/rand/v2"
 	"os"
 	"strconv"
 	"sync"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/stretchr/testify/require"
-	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -62,7 +62,7 @@ func helperBenchEnsureDatabase(t interface {
 func helperBenchRandomEvent(t interface{ Helper() }) *model.Event {
 	t.Helper()
 
-	return benchData.Events[rand.Int31n(int32(len(benchData.Events)))]
+	return benchData.Events[rand.Int32N(int32(len(benchData.Events)))]
 }
 
 func helperBenchSelectBy(t interface{ Helper() }, db *dbClient, meter *tachymeter.Tachymeter, filters []model.Filter) {
