@@ -157,7 +157,7 @@ format-imports:
 
 buildAllBinaries:
 	set -xe; \
-	find ./cmd -mindepth 1 -maxdepth 1 -type d -print | grep -v 'fixture' | grep -v 'scripts' | while read service; do \
+	find ./cmd -mindepth 1 -maxdepth 1 -type d -print | grep -v 'fixture' | grep -v 'scripts' | grep -v 'subzero-ion-connect-keygen' | while read service; do \
 			env SERVICE_NAME=$${service##*/} env GOOS=$(GOOS) env GOARCH=$(GOARCH) $(MAKE) binary-specific-service; \
 		done;
 
