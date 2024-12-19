@@ -26,6 +26,8 @@ var (
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
 
 	errEventIteratorInterrupted = errors.New("interrupted")
+
+	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
 
 type databaseEvent struct {
@@ -452,11 +454,43 @@ func generateEventsWhereClause(filters ...model.Filter) (clauseMain, clauseDeps 
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
 	params := map[string]any{}
-	_, err := db.exec(ctx, `delete from events
-								where id in (
-									select event_id from event_tags
-										where (((event_tag_key = 'expiration')
-											AND cast(event_tag_value1 as integer) <= unixepoch())))`, params)
+	it := &eventIterator{
+		OneShot: true,
+		Map:     nil,
+		Fetch: func(pivot int64) (*sqlx.Rows, error) {
+			result, err := db.NamedQueryContext(ctx, `delete from events
+															where id in (
+																select event_id from event_tags
+																	where (((event_tag_key = 'expiration')
+																		AND cast(event_tag_value1 as integer) <= unixepoch())))
+																		returning 
+																				kind,
+																				created_at,
+																				system_created_at,
+																				id,
+																				pubkey,
+																				master_pubkey,
+																				sig,
+																				content,
+																				d_tag,
+																				tags as jtags;
+			`, params)
+			if err != nil {
+				err = errors.Wrap(db.handleError(err), "failed to exec insert event sql")
+			}
+			return result, err
+		}}
+	events := []*model.Event{}
+	err := it.Each(ctx, func(event *model.Event) error {
+		events = append(events, event)
 
-	return errors.Wrap(err, "failed to exec delete expired events")
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to exec delete expired events")
+	}
+	if notifyExpiredEvents != nil && len(events) > 0 {
+		err = errors.Wrapf(notifyExpiredEvents(ctx, events...), "failed to process notification of expired events")
+	}
+	return err
 }

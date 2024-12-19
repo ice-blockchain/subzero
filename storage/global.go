@@ -109,30 +109,37 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 		return nil
 	}
 	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
+
+	return processEventDeletion(ctx, originalEvent)
+}
+
+func processEventDeletion(ctx context.Context, originalEvent *model.Event) error {
 	fileHash := ""
 	if xTag := originalEvent.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
 		fileHash = xTag.Value()
 	} else {
 		return errors.Errorf("malformed x tag in event %v", originalEvent.ID)
 	}
-	bag, err := globalClient.bagByUser(event.GetMasterPublicKey())
+	bag, err := globalClient.bagByUser(originalEvent.GetMasterPublicKey())
 	if err != nil {
-		return errors.Wrapf(err, "failed to get bagID for the user %v", event.GetMasterPublicKey())
+		return errors.Wrapf(err, "failed to get bagID for the user %v", originalEvent.GetMasterPublicKey())
 	}
 	if bag == nil {
-		return errors.Errorf("bagID for user %v not found", event.GetMasterPublicKey())
+		return errors.Errorf("bagID for user %v not found", originalEvent.GetMasterPublicKey())
 	}
 	file, err := globalClient.detectFile(bag, fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userRoot, _ := globalClient.BuildUserPath(event.GetMasterPublicKey(), "")
+	userRoot, _ := globalClient.BuildUserPath(originalEvent.GetMasterPublicKey(), "")
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
-	if _, _, _, err := globalClient.StartUpload(ctx, event.PubKey, event.GetMasterPublicKey(), file, fileHash, nil); err != nil {
+	bagID, _, _, err := globalClient.StartUpload(ctx, originalEvent.PubKey, originalEvent.GetMasterPublicKey(), file, fileHash, nil)
+	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}
+	log.Printf("[STORAGE] INFO: bag %x replaced by %v due to file deletion %+v", bag.BagID, bagID, originalEvent)
 	return nil
 }
 
@@ -268,4 +275,20 @@ func mustInit(ctx context.Context) *client {
 	close(loadMonitoringCh)
 	go cl.startDownloadsFromQueue()
 	return cl
+}
+
+func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
+	var err error
+	for _, ev := range events {
+		if ev.Kind != nostr.KindFileMetadata {
+			continue
+		}
+		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String(), ev.String())
+		err = processEventDeletion(ctx, ev)
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrNotFound) {
+			err = nil
+		}
+		err = errors.Join(err, errors.Wrapf(err, "failed to delete files for expired event %+v", ev))
+	}
+	return errors.Wrapf(err, "failed to delete files for expired events")
 }
