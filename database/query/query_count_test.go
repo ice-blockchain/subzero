@@ -9,7 +9,6 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
-	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -17,26 +16,22 @@ import (
 func TestQueryEventsCount(t *testing.T) {
 	t.Parallel()
 
-	const totalEvents = int64(200)
-	db := helperNewDatabase(t)
+	db, data := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
 	authors := make(map[string]int64)
-	ids := make(map[string]model.Event, totalEvents)
-	events := make([]model.Event, 0, totalEvents)
+	ids := make(map[string]*model.Event, len(data.Events))
 
 	t.Run("Generate", func(t *testing.T) {
-		for range totalEvents {
-			event := helperGenerateEvent(t, db, true)
+		for _, event := range data.Events {
 			authors[event.PubKey]++
 			ids[event.ID] = event
-			events = append(events, event)
 		}
 	})
 	t.Run("CountAll", func(t *testing.T) {
 		count, err := db.CountEvents(context.TODO())
 		require.NoError(t, err)
-		require.Equal(t, totalEvents, count)
+		require.EqualValues(t, len(data.Events), count)
 	})
 	t.Run("CountByAuthor", func(t *testing.T) {
 		for author, expectedCount := range authors {
@@ -50,7 +45,7 @@ func TestQueryEventsCount(t *testing.T) {
 	})
 	t.Run("RandomTag", func(t *testing.T) {
 		for range 10 {
-			ev := events[rand.Int31n(int32(len(events)))]
+			ev := data.Random(t)
 			count, err := db.CountEvents(context.TODO(), model.Filter{
 				Tags: model.TagMap{}.SetLiterals(ev.Tags[0][0], ev.Tags[0][1:]...),
 			})
@@ -59,9 +54,9 @@ func TestQueryEventsCount(t *testing.T) {
 		}
 	})
 	t.Run("EventsOR", func(t *testing.T) {
-		ev1 := events[rand.Int31n(int32(len(events)))]
-		ev2 := events[rand.Int31n(int32(len(events)))]
-		ev3 := events[rand.Int31n(int32(len(events)))]
+		ev1 := data.Random(t)
+		ev2 := data.Random(t)
+		ev3 := data.Random(t)
 		count, err := db.CountEvents(context.TODO(),
 			model.Filter{
 				IDs: []string{ev1.ID},

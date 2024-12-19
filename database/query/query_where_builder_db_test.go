@@ -4,9 +4,11 @@ package query
 
 import (
 	"context"
+	crand "crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"slices"
 	"strconv"
@@ -18,7 +20,6 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
-	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -30,14 +31,14 @@ type testEvents struct {
 func (te *testEvents) Random(h interface{ Helper() }) *model.Event {
 	h.Helper()
 
-	idx := int(rand.Int31n(int32(len(te.Events))))
+	idx := int(rand.IntN(len(te.Events)))
 	ev := te.Events[idx]
 	te.Events = slices.Delete(te.Events, idx, idx+1)
 
 	return ev
 }
 
-func helperEnsureDatabase(t *testing.T) (*dbClient, *testEvents) {
+func helperEnsureDatabaseWithData(t *testing.T) (*dbClient, *testEvents) {
 	t.Helper()
 
 	const eventCount = 100
@@ -88,7 +89,7 @@ limit 1000`
 		return nil
 	})
 	require.NoError(t, err)
-	rand.ShuffleSlice(nil, events)
+	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })
 
 	return events
 }
@@ -97,7 +98,7 @@ func generateHexString() string {
 	// The ids, authors, #e and #p filter lists MUST contain exact 64-character lowercase hex values.
 	var buf [64]byte
 
-	if _, err := rand.Read(buf[:]); err != nil {
+	if _, err := crand.Read(buf[:]); err != nil {
 		panic(err)
 	}
 
@@ -152,7 +153,7 @@ func generateKind() int {
 		nostr.KindSimpleGroupMembers,
 	}
 
-	return kinds[rand.Intn(len(kinds))]
+	return kinds[rand.IntN(len(kinds))]
 }
 
 func generateRandomString(n int) string {
@@ -164,7 +165,7 @@ func generateRandomString(n int) string {
 
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[rand.IntN(len(letters))]
 	}
 
 	return string(b)
@@ -176,7 +177,7 @@ func generateCreatedAt() int64 {
 		end   = 1740375055
 	)
 
-	return rand.Int63n(end-start) + start
+	return rand.Int64N(end-start) + start
 }
 
 func helperGenerateEvent(
@@ -195,13 +196,13 @@ func helperGenerateEvent(
 	ev.PubKey = generateHexString()
 	ev.CreatedAt = model.Timestamp(generateCreatedAt())
 	ev.Kind = generateKind()
-	ev.Content = generateRandomString(rand.Intn(1024))
+	ev.Content = generateRandomString(rand.IntN(1024))
 
 	if withTags {
 		ev.Tags = []model.Tag{
-			{"#e", generateHexString(), generateRandomString(rand.Intn(20)), generateRandomString(rand.Intn(30))},
+			{"#e", generateHexString(), generateRandomString(rand.IntN(20)), generateRandomString(rand.IntN(30))},
 			{"#p", generateHexString()},
-			{"#d", generateHexString(), generateRandomString(rand.Intn(10))},
+			{"#d", generateHexString(), generateRandomString(rand.IntN(10))},
 		}
 	}
 
@@ -237,7 +238,7 @@ func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 func TestWhereBuilderByAuthor(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	events := helperSelectEvents(t, db,
 		model.Filter{
@@ -253,7 +254,7 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 func TestWhereBuilderByID(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	events := helperSelectEvents(t, db,
 		model.Filter{
@@ -269,7 +270,7 @@ func TestWhereBuilderByID(t *testing.T) {
 func TestWhereBuilderByMany(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	ev1 := ev.Random(t)
 	ev2 := ev.Random(t)
@@ -293,7 +294,7 @@ func TestWhereBuilderByMany(t *testing.T) {
 func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	event := ev.Random(t)
 	filter := model.Filter{
@@ -356,7 +357,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 	t.Parallel()
 
-	db, ev := helperEnsureDatabase(t)
+	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	event := ev.Random(t)
 
@@ -629,7 +630,7 @@ func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
 func TestSelectEventsExpiration(t *testing.T) {
 	t.Parallel()
 
-	db, events := helperEnsureDatabase(t)
+	db, events := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {
@@ -730,7 +731,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 func TestSelectWithExtensions(t *testing.T) {
 	t.Parallel()
 
-	db, events := helperEnsureDatabase(t)
+	db, events := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
 	t.Run("Fill", func(t *testing.T) {

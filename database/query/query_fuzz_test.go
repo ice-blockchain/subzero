@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"math/rand/v2"
 	"reflect"
 	"slices"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	combinations "github.com/mxschmitt/golang-combinations"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
-	"pgregory.net/rand"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -67,7 +67,7 @@ func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *structEleme
 			fields = append(fields, el)
 			if field.Type.Kind() == reflect.Slice {
 				next := el.Clone()
-				next.NumElem = int(rand.Int31n(6)) + 1
+				next.NumElem = int(rand.Int32N(6)) + 1
 				fields = append(fields, next)
 			}
 
@@ -87,7 +87,7 @@ func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *structEleme
 func helperRandomBool(t *testing.T) string {
 	t.Helper()
 
-	if rand.Int63n(100)%2 == 0 {
+	if rand.Int64N(100)%2 == 0 {
 		return "true"
 	}
 
@@ -125,7 +125,7 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 			value.Set(reflect.ValueOf(m))
 
 		case "Limit":
-			l := int(rand.Int63n(100))
+			l := int(rand.Int64N(100))
 			value.Set(reflect.ValueOf(l))
 
 		case "Until", "Since":
