@@ -847,3 +847,180 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 	// No pk2 (id2) reply.
 	require.Equal(t, "id3", events[1].ID)
 }
+
+func helperEventsMatch(t *testing.T, events []*model.Event, expectedCount int, filters ...model.Filter) {
+	t.Helper()
+
+	var matched int
+	f := model.Filters(filters)
+	for _, ev := range events {
+		if f.Match(&ev.Event) {
+			t.Logf("matched: %s with %s", ev.String(), f.String())
+			matched++
+		}
+	}
+
+	require.Equal(t, expectedCount, matched)
+}
+
+func TestDepMetadaAndMuteList(t *testing.T) {
+	t.Parallel()
+
+	db, _ := helperEnsureDatabaseWithData(t)
+	defer db.Close()
+
+	err := db.AcceptEvents(context.Background(),
+		// Has no KindRelayListMetadata and no KindMuteList.
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindArticle,
+				CreatedAt: 1,
+				PubKey:    "pk1",
+				ID:        "id1",
+			},
+		},
+
+		// Has both KindRelayListMetadata and KindMuteList.
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindArticle,
+				CreatedAt: 2,
+				PubKey:    "pk2",
+				ID:        "id2",
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindRelayListMetadata,
+				CreatedAt: 22,
+				PubKey:    "pk2",
+				ID:        "id22",
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindMuteList,
+				CreatedAt: 23,
+				PubKey:    "pk2",
+				ID:        "id23",
+			},
+		},
+
+		// Has KindRelayListMetadata only.
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindArticle,
+				CreatedAt: 3,
+				PubKey:    "pk3",
+				ID:        "id3",
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindRelayListMetadata,
+				CreatedAt: 33,
+				PubKey:    "pk3",
+				ID:        "id33",
+			},
+		},
+
+		// Has KindMuteList only.
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindArticle,
+				CreatedAt: 4,
+				PubKey:    "pk4",
+				ID:        "id4",
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindMuteList,
+				CreatedAt: 4,
+				PubKey:    "pk4",
+				ID:        "id42",
+			},
+		},
+
+		// Has KindMuteList only.
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindArticle,
+				CreatedAt: 5,
+				PubKey:    "pk5",
+				ID:        "id5",
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindMuteList,
+				CreatedAt: 5,
+				PubKey:    "pk5",
+				ID:        "id52",
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:   []int{nostr.KindArticle},
+		Authors: []string{"pk1", "pk2", "pk3", "pk4", "pk5"},
+		Search:  "include:dependencies:kind30023>kind10002 include:dependencies:kind30023>kind10000",
+	})
+	require.Len(t, events, 15) // 5 articles, 10 genereted events, where 10 = (kind10000 + kind10002) * 5 (total event count).
+
+	// pk1 has no KindRelayListMetadata and no KindMuteList.
+	helperEventsMatch(t, events, 2,
+		model.Filter{
+			Kinds: []int{model.CustomIONKindRelayListMetadata},
+			Tags:  model.TagMap{}.SetLiterals("p", "pk1"),
+		})
+
+	// pk2 has both KindRelayListMetadata and KindMuteList.
+	helperEventsMatch(t, events, 2,
+		model.Filter{
+			Kinds:   []int{nostr.KindRelayListMetadata},
+			Authors: []string{"pk2"},
+		},
+		model.Filter{
+			Kinds:   []int{nostr.KindMuteList},
+			Authors: []string{"pk2"},
+		},
+	)
+
+	// pk3 has KindRelayListMetadata only.
+	helperEventsMatch(t, events, 2,
+		model.Filter{
+			Kinds:   []int{nostr.KindRelayListMetadata},
+			Authors: []string{"pk3"},
+		},
+		model.Filter{
+			Kinds: []int{model.CustomIONKindRelayListMetadata},
+			Tags:  model.TagMap{}.SetLiterals("p", "pk3"),
+		},
+	)
+
+	// pk4 has KindMuteList only.
+	helperEventsMatch(t, events, 2,
+		model.Filter{
+			Kinds:   []int{nostr.KindMuteList},
+			Authors: []string{"pk4"},
+		},
+		model.Filter{
+			Kinds: []int{model.CustomIONKindRelayListMetadata},
+			Tags:  model.TagMap{}.SetLiterals("p", "pk4"),
+		},
+	)
+
+	// pk5 has KindMuteList only.
+	helperEventsMatch(t, events, 2,
+		model.Filter{
+			Kinds:   []int{nostr.KindMuteList},
+			Authors: []string{"pk5"},
+		},
+		model.Filter{
+			Kinds: []int{model.CustomIONKindRelayListMetadata},
+			Tags:  model.TagMap{}.SetLiterals("p", "pk5"),
+		},
+	)
+}
