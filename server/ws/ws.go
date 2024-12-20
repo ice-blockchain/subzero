@@ -14,7 +14,6 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/nbd-wtf/go-nostr/nip42"
 	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -153,38 +152,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		}
 		return
 	case *nostr.AuthEnvelope:
-		var resp = nostr.OKEnvelope{
-			EventID: e.Event.ID,
-		}
-		state, ok := h.connAuth.Load(respWriter)
-		switch {
-		case !ok:
-			resp.Reason = "received unexpected auth message: no challenge"
-
-		case state.Authenticated:
-			resp.Reason = "received unexpected auth message: already authenticated"
-
-		case !state.Authenticated && e.Event.Sig != "":
-			e := &model.Event{Event: e.Event}
-			_, ok := nip42.ValidateAuthEvent(&e.Event, state.Challenge, h.relayURL, func(nostrEvent *nostr.Event) (bool, error) {
-				return (&model.Event{Event: *nostrEvent}).CheckSignature()
-			})
-			if !ok {
-				resp.Reason = "failed to validate auth event"
-			} else {
-				h.connAuth.Store(respWriter, connAuthData{
-					Challenge:       state.Challenge,
-					MasterPublicKey: e.GetMasterPublicKey(),
-					PublicKey:       e.PubKey,
-					Authenticated:   true,
-				})
-				resp.OK = true
-			}
-		default: // Should never happen.
-			log.Printf("ERROR: unexpected auth message %+v", e)
-			resp.Reason = "received unexpected auth message"
-		}
-		err = h.writeResponse(respWriter, &resp)
+		err = h.writeResponse(respWriter, h.handleAuth(ctx, respWriter, &model.Event{Event: e.Event}))
 	case *nostr.ReqEnvelope:
 		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
 	case *nostr.CountEnvelope:
