@@ -41,7 +41,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 
 	err = json.Unmarshal([]byte(e.Content), &filters)
 	if err != nil {
-		return "0", errors.Wrapf(err, "failed to parse filters: %v", e)
+		return "0", errors.Wrapf(err, "failed to parse filters: %v", e.Content)
 	}
 
 	queryRelays := connectToRelays(ctx, e.ID, collectRelayURLsFromEvent(e), n.RelayConnectTLS)
