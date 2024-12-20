@@ -45,7 +45,7 @@ var testdata embed.FS
 func TestNIP96(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Unix()
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	defer func() {
 		require.NoError(t, storage.Client().Close())
@@ -70,30 +70,39 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(ctx, &ev))
 	})
+
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
-		var responses chan *nip96.UploadResponse
-		responses = make(chan *nip96.UploadResponse, 100)
+		var responses []*nip96.UploadResponse
+		responses = make([]*nip96.UploadResponse, 0)
 		upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
-			responses <- resp
+			responses = append(responses, resp)
 		})
 		upload(t, ctx, user1, masterPubKey, ".testdata/image.jpg", "ice.jpg", "ice logo", func(resp *nip96.UploadResponse) {
-			responses <- resp
+			responses = append(responses, resp)
 		})
-		upload(t, ctx, master, "", ".testdata/text-master.txt", "master.txt", "master's file", func(resp *nip96.UploadResponse) { responses <- resp })
-		upload(t, ctx, user1, masterPubKey, ".testdata/text.txt", "text.txt", "text file", func(resp *nip96.UploadResponse) { responses <- resp })
-		close(responses)
-		i := 0
-		for resp := range responses {
-			if i == 0 {
-				outdatedTags = resp.Nip94Event.Tags
-				outdatedContent = resp.Nip94Event.Content
-			}
+		upload(t, ctx, master, "", ".testdata/text-master.txt", "master.txt", "master's file", func(resp *nip96.UploadResponse) { responses = append(responses, resp) })
+		upload(t, ctx, user1, masterPubKey, ".testdata/text.txt", "text.txt", "text file", func(resp *nip96.UploadResponse) { responses = append(responses, resp) })
+		outdatedTags = responses[0].Nip94Event.Tags
+		outdatedContent = responses[0].Nip94Event.Content
+		tagsToBroadcast = responses[len(responses)-1].Nip94Event.Tags
+		contentToBroadcast = responses[len(responses)-1].Nip94Event.Content
+		for _, resp := range responses {
 			verifyFile(t, resp.Nip94Event.Content, resp.Nip94Event.Tags)
-			tagsToBroadcast = resp.Nip94Event.Tags
+			tagsToBroadcast = resp.Nip94Event.Tags.AppendUnique(model.Tag{"b", masterPubKey}).
+				AppendUnique(model.Tag{"expiration", strconv.FormatInt(time.Now().Unix()-10, 10)})
 			contentToBroadcast = resp.Nip94Event.Content
-			i += 1
+			nip94EventToSign := &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindFileMetadata,
+				Tags:      tagsToBroadcast,
+				Content:   contentToBroadcast,
+			}}
+			require.NoError(t, nip94EventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
+			require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
 		}
 	})
+
 	var outdatedNip94EventToSign *model.Event
 	t.Run("nip-94 event is accepted on the same relay it was uploaded to = no-op", func(t *testing.T) {
 		outdatedTags = outdatedTags.AppendUnique(model.Tag{"b", masterPubKey})
@@ -219,6 +228,19 @@ func TestNIP96(t *testing.T) {
 		fileName := "master.txt"
 		require.FileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 	})
+	ch := make(chan struct{}, 1)
+	query.RegisterExpiredEventsProcessor(func(ctx context.Context, events ...*model.Event) error {
+		err := storage.DeleteExpiredFiles(ctx, events...)
+		ch <- struct{}{}
+		return err
+	})
+	require.NoError(t, query.TriggerExpiredEventsCleanup(ctx))
+	select {
+	case <-ch:
+	default:
+		t.Fatal("Expired events processor was not triggered")
+	}
+	require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, "master.txt"), "expiration")
 
 }
 

@@ -44,6 +44,7 @@ var (
 
 func init() {
 	initFlags()
+	query.RegisterExpiredEventsProcessor(storage.DeleteExpiredFiles)
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
 		if sub == nil {
 			return false

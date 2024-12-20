@@ -44,6 +44,10 @@ func MustInit(ctx context.Context) {
 	})
 }
 
+func RegisterExpiredEventsProcessor(proc func(ctx context.Context, events ...*model.Event) error) {
+	notifyExpiredEvents = proc
+}
+
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	return globalDB.Client.AcceptEvents(ctx, events...)
 }
