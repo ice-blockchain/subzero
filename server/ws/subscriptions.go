@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip42"
 	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -102,6 +103,40 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	_, ok = conn.Subscriptions.LoadAndDelete(*ID)
 
 	return ok
+}
+
+func (h *handler) handleAuth(_ context.Context, respWriter Writer, e *model.Event) *nostr.OKEnvelope {
+	var resp = nostr.OKEnvelope{EventID: e.Event.ID}
+
+	state, ok := h.connAuth.Load(respWriter)
+	if !ok {
+		resp.Reason = "received unexpected auth message: no challenge was sent"
+
+		return &resp
+	} else if state.Authenticated {
+		resp.Reason = "received unexpected auth message: already authenticated"
+
+		return &resp
+	}
+
+	if _, ok = nip42.ValidateAuthEvent(&e.Event, state.Challenge, h.relayURL, func(nostrEvent *nostr.Event) (bool, error) {
+		return (&model.Event{Event: *nostrEvent}).CheckSignature()
+	}); !ok {
+		resp.Reason = "failed to validate auth event"
+
+		return &resp
+	}
+
+	h.connAuth.Store(respWriter, connAuthData{
+		Challenge:       state.Challenge,
+		MasterPublicKey: e.GetMasterPublicKey(),
+		PublicKey:       e.PubKey,
+		Authenticated:   true,
+	})
+
+	resp.OK = true
+
+	return &resp
 }
 
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
