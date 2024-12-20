@@ -2,7 +2,7 @@
   "api_url": "/files",
   "download_url": "/files",
   "delegated_to_url": "",
-  "content_types": ["image/webp", "video/mpeg4", "application/x-brotli"],
+  "content_types": ["image/webp", "video/mpeg4", "application/x-brotli", "audio/ogg", "audio/opus"],
   "plans": {
     "free": {
       "name": "Free Tier",
