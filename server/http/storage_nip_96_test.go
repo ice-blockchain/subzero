@@ -229,14 +229,18 @@ func TestNIP96(t *testing.T) {
 		fileName := "master.txt"
 		require.FileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 	})
-	expiredTriggered := false
+	ch := make(chan struct{}, 1)
 	query.RegisterExpiredEventsProcessor(func(ctx context.Context, events ...*model.Event) error {
-		expiredTriggered = true
-		return storage.DeleteExpiredFiles(ctx, events...)
+		err := storage.DeleteExpiredFiles(ctx, events...)
+		ch <- struct{}{}
+		return err
 	})
 	log.Print("Wait for expiration trigger...")
-	time.Sleep(65 * time.Second)
-	require.True(t, expiredTriggered)
+	select {
+	case <-ch:
+	case <-time.After(65 * time.Second):
+		t.Fatal("Expired events processor was not triggered")
+	}
 	require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, "master.txt"), "expiration")
 
 }

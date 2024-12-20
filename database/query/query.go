@@ -476,7 +476,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
 																				tags as jtags;
 			`, params)
 			if err != nil {
-				err = errors.Wrap(db.handleError(err), "failed to exec insert event sql")
+				err = errors.Wrap(db.handleError(err), "failed to exec delete expired events")
 			}
 			return result, err
 		}}
