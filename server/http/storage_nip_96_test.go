@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -235,10 +234,10 @@ func TestNIP96(t *testing.T) {
 		ch <- struct{}{}
 		return err
 	})
-	log.Print("Wait for expiration trigger...")
+	require.NoError(t, query.TriggerExpiredEventsCleanup(ctx))
 	select {
 	case <-ch:
-	case <-time.After(65 * time.Second):
+	default:
 		t.Fatal("Expired events processor was not triggered")
 	}
 	require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, "master.txt"), "expiration")
