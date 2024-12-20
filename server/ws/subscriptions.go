@@ -119,10 +119,15 @@ func (h *handler) handleAuth(_ context.Context, respWriter Writer, e *model.Even
 		return &resp
 	}
 
-	if _, ok = nip42.ValidateAuthEvent(&e.Event, state.Challenge, h.relayURL, func(nostrEvent *nostr.Event) (bool, error) {
-		return (&model.Event{Event: *nostrEvent}).CheckSignature()
-	}); !ok {
-		resp.Reason = "failed to validate auth event"
+	_, err := nip42.ValidateAuthEvent(
+		&e.Event,
+		state.Challenge,
+		h.relayURL,
+		nip42.WithCustomVerificator(func(nostrEvent *nostr.Event) (bool, error) {
+			return (&model.Event{Event: *nostrEvent}).CheckSignature()
+		}))
+	if err != nil {
+		resp.Reason = "failed to validate auth event: " + err.Error()
 
 		return &resp
 	}
