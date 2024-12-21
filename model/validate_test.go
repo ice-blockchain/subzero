@@ -75,3 +75,21 @@ func TestValidatePollTag(t *testing.T) {
 		require.NoError(t, ev.Validate())
 	})
 }
+
+func TestPollVoteExpiration(t *testing.T) {
+	t.Parallel()
+
+	var ev Event
+
+	ev.Kind = CustomIONKindPollVote
+	ev.CreatedAt = 1
+	ev.Tags = Tags{
+		{"e", "123"},
+	}
+	require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+	require.NoError(t, ev.Validate())
+
+	ev.Tags = append(ev.Tags, Tag{"expiration", "123"})
+	require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+	require.Error(t, ev.Validate())
+}
