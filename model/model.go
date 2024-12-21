@@ -42,12 +42,14 @@ var (
 const (
 	CustomIONKindAttestation       = 10_100
 	CustomIONKindRelayListMetadata = 20_002
+	CustomIONKindPollVote          = 1754
 
 	KindDVMCountResponse = 6400
 )
 
 const (
 	CustomIONTagOnBehalfOf = "b"
+	CustomIONTagPoll       = "poll"
 )
 
 const (

@@ -58,6 +58,10 @@ const (
 	JobFeedbackStatusError           JobFeedbackStatus = "error"
 	JobFeedbackStatusSuccess         JobFeedbackStatus = "success"
 	JobFeedbackStatusPartial         JobFeedbackStatus = "partial"
+
+	tagStateOptional tagState = iota
+	tagStateRequired
+	tagStateForbidden
 )
 
 type (
@@ -71,6 +75,9 @@ type (
 		Banner      string `json:"banner" example:"https://example.com/banner.jpg"`
 		Bot         bool   `json:"bot" example:"false"`
 	}
+
+	tagState       int
+	tagLookupTable map[string]tagState
 )
 
 var (
@@ -87,9 +94,10 @@ var (
 		CustomIONTagOnBehalfOf,
 	)
 
-	KindSupportedTags = map[Kind]map[string]bool{
+	KindSupportedTags = map[Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L"),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", CustomIONTagPoll),
+		nostr.KindDirectMessage:         tagsTable(CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              tagsTable("a", "e", "k"),
 		nostr.KindRepost:                tagsTable("e", "p"),
@@ -98,6 +106,7 @@ var (
 		nostr.KindGenericRepost:         tagsTable("k", "e", "p"),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
+		CustomIONKindPollVote:           newTable().Required("e").Forbidden("expiration").Build(),
 		nostr.KindPinList:               tagsTable("e"),
 		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
 		nostr.KindCommunityList:         tagsTable("a"),
@@ -124,7 +133,7 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at"),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", CustomIONTagPoll),
 		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at"),
 
 		// --- Jobs
@@ -149,22 +158,21 @@ var (
 		nostr.KindJobFeedback:            tagsTable("status", "amount", "e", "p"),
 	}
 
-	// Tag name -> required.
-	SupportedIMetaKeys = map[string]bool{
-		"url":      true,
-		"m":        true,
-		"x":        false,
-		"ox":       false,
-		"size":     false,
-		"dim":      false,
-		"magnet":   false,
-		"i":        true,
-		"blurhash": false,
-		"thumb":    false,
-		"image":    false,
-		"summary":  false,
-		"alt":      true,
-		"fallback": false,
+	SupportedIMetaKeys = tagLookupTable{
+		"url":      tagStateRequired,
+		"m":        tagStateRequired,
+		"x":        tagStateOptional,
+		"ox":       tagStateOptional,
+		"size":     tagStateOptional,
+		"dim":      tagStateOptional,
+		"magnet":   tagStateOptional,
+		"i":        tagStateRequired,
+		"blurhash": tagStateOptional,
+		"thumb":    tagStateOptional,
+		"image":    tagStateOptional,
+		"summary":  tagStateOptional,
+		"alt":      tagStateRequired,
+		"fallback": tagStateOptional,
 	}
 
 	JobFeedbackStatusValues = map[string]struct{}{
@@ -175,6 +183,58 @@ var (
 		JobFeedbackStatusPartial:         {},
 	}
 )
+
+func validatePollTag(tag Tag) error {
+	var rules = map[string]int{
+		"type":    0,
+		"ttl":     0,
+		"title":   0,
+		"options": 0,
+	}
+	for _, part := range tag[1:] {
+		parts := strings.SplitN(part, " ", 2)
+		if len(parts) != 2 {
+			return errors.Wrapf(ErrWrongEventParams, "poll: invalid tag value: %q: want key value", part)
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "type":
+			if value != "single" && value != "multi" {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid type value: %q, want single or multi", value)
+			}
+		case "ttl":
+			v, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want positive integer: %v", value, err)
+			} else if v < 0 {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want positive integer", value)
+			}
+		case "title":
+			if value == "" {
+				return errors.Wrap(ErrWrongEventParams, "poll: title is empty")
+			}
+		case "options":
+			var options []string
+
+			if err := json.Unmarshal([]byte(value), &options); err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid options value: %q: %v", value, err)
+			} else if len(options) == 0 {
+				return errors.Wrap(ErrWrongEventParams, "poll: options are empty")
+			}
+		default:
+			return errors.Wrapf(ErrWrongEventParams, "poll: unknown key: %q", key)
+		}
+		rules[key]++
+	}
+	for key, count := range rules {
+		if count == 0 {
+			return errors.Wrapf(ErrWrongEventParams, "poll: missing required key: %q", key)
+		}
+	}
+	return nil
+}
 
 func validateATags(e *Event, expectedKinds ...int) error {
 	for _, aTag := range e.Tags.GetAll([]string{"a"}) {
@@ -675,8 +735,8 @@ func validateIMetaTag(tag nostr.Tag) error {
 	}
 
 	// Check for all required values.
-	for key, required := range SupportedIMetaKeys {
-		if required && values[key] == "" {
+	for key, state := range SupportedIMetaKeys {
+		if state == tagStateRequired && values[key] == "" {
 			return errors.Wrapf(ErrWrongEventParams, "missing required imeta value: %s", key)
 		}
 	}
@@ -725,8 +785,10 @@ func validateEventTags(e *Event) error {
 
 	for _, tag := range e.Tags {
 		_, isCommon := CommongTags[tag.Key()]
-		if _, ok := supportedTags[tag.Key()]; !ok && !isCommon {
+		if state, ok := supportedTags[tag.Key()]; !ok && !isCommon {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
+		} else if state == tagStateForbidden {
+			return errors.Wrapf(ErrUnsupportedTag, "tag: %v: cannot be used with this kind", tag)
 		}
 
 		switch tag.Key() {
@@ -736,6 +798,10 @@ func validateEventTags(e *Event) error {
 			}
 		case "a":
 			if err := validateATags(e); err != nil {
+				return err
+			}
+		case CustomIONTagPoll:
+			if err := validatePollTag(tag); err != nil {
 				return err
 			}
 		case "expiration":
@@ -748,45 +814,52 @@ func validateEventTags(e *Event) error {
 		}
 	}
 
-	for key, required := range supportedTags {
-		if required && e.GetTag(key) == nil {
-			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required, but not found", key)
+	for key, state := range supportedTags {
+		if state == tagStateRequired && e.GetTag(key).Value() == "" {
+			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found or empty", key)
 		}
 	}
 
 	return nil
 }
 
-func tagsTable(tags ...string) map[string]bool {
-	return newTable().Add(tags...).Build()
+func tagsTable(tags ...string) tagLookupTable {
+	return newTable().Optional(tags...).Build()
 }
 
-func tagsTableRequired(tags ...string) map[string]bool {
+func tagsTableRequired(tags ...string) tagLookupTable {
 	return newTable().Required(tags...).Build()
 }
 
 type tagTableBuilder struct {
-	M map[string]bool
+	M tagLookupTable
 }
 
 func newTable() *tagTableBuilder {
-	return &tagTableBuilder{M: make(map[string]bool)}
+	return &tagTableBuilder{M: make(tagLookupTable)}
 }
 
-func (t *tagTableBuilder) Add(tags ...string) *tagTableBuilder {
+func (t *tagTableBuilder) Optional(tags ...string) *tagTableBuilder {
 	for _, tag := range tags {
-		t.M[tag] = false
+		t.M[tag] = tagStateOptional
 	}
 	return t
 }
 
 func (t *tagTableBuilder) Required(tags ...string) *tagTableBuilder {
 	for _, tag := range tags {
-		t.M[tag] = true
+		t.M[tag] = tagStateRequired
 	}
 	return t
 }
 
-func (t *tagTableBuilder) Build() map[string]bool {
+func (t *tagTableBuilder) Forbidden(tags ...string) *tagTableBuilder {
+	for _, tag := range tags {
+		t.M[tag] = tagStateForbidden
+	}
+	return t
+}
+
+func (t *tagTableBuilder) Build() tagLookupTable {
 	return t.M
 }
