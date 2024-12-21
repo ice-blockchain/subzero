@@ -89,7 +89,8 @@ var (
 
 	KindSupportedTags = map[Kind]map[string]bool{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L"),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", CustomIONTagPoll),
+		nostr.KindDirectMessage:         tagsTable(CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              tagsTable("a", "e", "k"),
 		nostr.KindRepost:                tagsTable("e", "p"),
@@ -98,6 +99,7 @@ var (
 		nostr.KindGenericRepost:         tagsTable("k", "e", "p"),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
+		CustomIONKindPollVote:           tagsTableRequired("e"),
 		nostr.KindPinList:               tagsTable("e"),
 		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
 		nostr.KindCommunityList:         tagsTable("a"),
@@ -124,7 +126,7 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at"),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", CustomIONTagPoll),
 		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at"),
 
 		// --- Jobs
@@ -175,6 +177,58 @@ var (
 		JobFeedbackStatusPartial:         {},
 	}
 )
+
+func validatePollTag(tag Tag) error {
+	var rules = map[string]int{
+		"type":    0,
+		"ttl":     0,
+		"title":   0,
+		"options": 0,
+	}
+	for _, part := range tag[1:] {
+		parts := strings.SplitN(part, " ", 2)
+		if len(parts) != 2 {
+			return errors.Wrapf(ErrWrongEventParams, "poll: invalid tag value: %q: want key value", part)
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "type":
+			if value != "single" && value != "multi" {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid type value: %q, want single or multi", value)
+			}
+		case "ttl":
+			v, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want positive integer: %v", value, err)
+			} else if v < 0 {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want positive integer", value)
+			}
+		case "title":
+			if value == "" {
+				return errors.Wrap(ErrWrongEventParams, "poll: title is empty")
+			}
+		case "options":
+			var options []string
+
+			if err := json.Unmarshal([]byte(value), &options); err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid options value: %q: %v", value, err)
+			} else if len(options) == 0 {
+				return errors.Wrap(ErrWrongEventParams, "poll: options are empty")
+			}
+		default:
+			return errors.Wrapf(ErrWrongEventParams, "poll: unknown key: %q", key)
+		}
+		rules[key]++
+	}
+	for key, count := range rules {
+		if count == 0 {
+			return errors.Wrapf(ErrWrongEventParams, "poll: missing required key: %q", key)
+		}
+	}
+	return nil
+}
 
 func validateATags(e *Event, expectedKinds ...int) error {
 	for _, aTag := range e.Tags.GetAll([]string{"a"}) {
@@ -738,6 +792,10 @@ func validateEventTags(e *Event) error {
 			if err := validateATags(e); err != nil {
 				return err
 			}
+		case CustomIONTagPoll:
+			if err := validatePollTag(tag); err != nil {
+				return err
+			}
 		case "expiration":
 			v, err := strconv.ParseInt(tag.Value(), 10, 64)
 			if err != nil {
@@ -749,8 +807,8 @@ func validateEventTags(e *Event) error {
 	}
 
 	for key, required := range supportedTags {
-		if required && e.GetTag(key) == nil {
-			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required, but not found", key)
+		if required && e.GetTag(key).Value() == "" {
+			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found or empty", key)
 		}
 	}
 
