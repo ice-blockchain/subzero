@@ -394,7 +394,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("promoting user to admin by owner, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Timestamp(time.Now().Add(-1 * time.Minute).Unix()),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -426,10 +426,9 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
-				Content:   "some text",
 				Tags: model.Tags{
 					{"h", communityID},
-					{"p", pubkeyUser2, "", ""},
+					{"p", pubkeyUser2, "", string(model.OthersRole)},
 				},
 			},
 		}
@@ -441,7 +440,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      model.CustomIONKindCommunityBanUser,
-				Content:   "some text",
+				Content:   "some reason",
 				Tags: model.Tags{
 					{"h", communityID},
 					{"p", pubkeyUser3},
@@ -449,7 +448,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
 	t.Run("try to promote user to admin by moderator, forbidden", func(t *testing.T) {
 		ev := &model.Event{

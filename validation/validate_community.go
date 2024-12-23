@@ -205,7 +205,7 @@ func applyChangeCommunityPatch(patches []*model.Event, communityDefEvent *model.
 				found := false
 				for _, existingPTag := range tags.GetAll([]string{"p"}) {
 					if existingPTag.Key() == "p" && existingPTag.Value() == patchTag.Value() && (existingPTag[2] != patchTag[2] || existingPTag[3] != patchTag[3]) {
-						tags = removeTag(tags, &patchTag)
+						tags = removeTag(tags, &existingPTag)
 						tags = append(tags, patchTag)
 						found = true
 					}
@@ -214,7 +214,9 @@ func applyChangeCommunityPatch(patches []*model.Event, communityDefEvent *model.
 					tags = append(tags, patchTag)
 				}
 			default:
-				tags = append(tags, patchTag)
+				if patchTag.Key() != "h" {
+					tags = append(tags, patchTag)
+				}
 			}
 		}
 	}
