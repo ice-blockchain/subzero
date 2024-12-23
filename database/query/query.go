@@ -100,21 +100,10 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 		}
 
 		if events[i].Kind == nostr.KindDeletion {
-			if communityEventsToDelete := db.gatherCommunityEventsForDeletion(ctx, events[i]); len(communityEventsToDelete) > 0 {
-				filters, err := db.handleDeletionEvents(ctx, events[i], communityEventsToDelete)
-				if err != nil {
-					return err
-				}
-				req.Delete = append(req.Delete, filters...)
-			} else {
-				if err := req.Remove(events[i]); err != nil {
-					return err
-				}
-			}
-		} else {
-			if err := db.handleCommunityEvents(ctx, events[i]); err != nil {
+			if err := req.Remove(events[i]); err != nil {
 				return err
 			}
+		} else {
 			if err := req.Save(events[i]); err != nil {
 				return err
 			}

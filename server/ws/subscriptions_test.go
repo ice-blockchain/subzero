@@ -584,8 +584,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 }
 
 func TestPublishingNIP10Events(t *testing.T) {
-	hVal, err := uuid.NewV7()
-	require.NoError(t, err)
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
@@ -596,7 +594,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      nostr.Tags{[]string{"e"}, []string{"h", hVal.String()}},
+			Tags:      nostr.Tags{[]string{"e"}},
 		}}
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
@@ -606,7 +604,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      nostr.Tags{[]string{"e", "", "relay", "invalid marker"}, []string{"h", hVal.String()}},
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "invalid marker"}},
 		}}
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
@@ -615,7 +613,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}, []string{"h", hVal.String()}},
+			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}},
 		}}
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
@@ -624,7 +622,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p"}, []string{"h", hVal.String()}},
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p"}},
 		}}
 		helperSignWithMinLeadingZeroBits(t, inValidKind01Event, privkey)
 		require.Error(t, relay.Publish(ctx, inValidKind01Event.Event))
@@ -635,7 +633,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 		validKind01NIP10Event = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindTextNote,
-			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}, []string{"h", hVal.String()}},
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}},
 		}}
 		helperSignWithMinLeadingZeroBits(t, validKind01NIP10Event, privkey)
 		require.NoError(t, relay.Publish(ctx, validKind01NIP10Event.Event))
@@ -646,8 +644,6 @@ func TestPublishingNIP10Events(t *testing.T) {
 }
 
 func TestPublishingNIP18Events(t *testing.T) {
-	hVal, err := uuid.NewV7()
-	require.NoError(t, err)
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
@@ -665,7 +661,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", originalEvent.GetMasterPublicKey()}, model.Tag{"h", hVal.String()}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", originalEvent.GetMasterPublicKey()}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -676,7 +672,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"p", originalEvent.GetMasterPublicKey()}, model.Tag{"h", hVal.String()}},
+			Tags:      model.Tags{model.Tag{"p", originalEvent.GetMasterPublicKey()}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -686,7 +682,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"h", hVal.String()}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -696,7 +692,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p"}, model.Tag{"h", hVal.String()}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p"}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -706,7 +702,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: model.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRepost,
-			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", "foo"}, model.Tag{"h", hVal.String()}},
+			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", "foo"}},
 			Content:   originalEvent.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
@@ -744,7 +740,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 				model.Tag{"e", subEv.ID},
 				model.Tag{"p", subEv.GetMasterPublicKey()},
 				model.Tag{"k", strconv.Itoa(subEv.Kind)},
-				model.Tag{"h", hVal.String()},
 			},
 			Content: subEv.String(),
 		}}
@@ -767,7 +762,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 				model.Tag{"e", subEv.ID},
 				model.Tag{"p", subEv.GetMasterPublicKey()},
 				model.Tag{"k", "foo"},
-				model.Tag{"h", hVal.String()},
 			},
 			Content: subEv.String(),
 		}}
@@ -796,7 +790,6 @@ func TestPublishingNIP18Events(t *testing.T) {
 				model.Tag{"e", subEv.ID, "relay"},
 				model.Tag{"p", pub},
 				model.Tag{"k", strconv.Itoa(subEv.Kind)},
-				model.Tag{"h", hVal.String()},
 			},
 			Content: subEv.String(),
 		}}
@@ -822,8 +815,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	hVal, err := uuid.NewV7()
-	require.NoError(t, err)
 
 	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
 	t.Run("kind 30023 (Article) (NIP-23): valid event", func(t *testing.T) {
@@ -834,7 +825,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
 		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
 		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
 		validEventKindArticle = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindArticle,
@@ -852,7 +842,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"published_at", "1296962229"})
 		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
 		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
 		validEventKindBlogPost = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindDraftArticle,
@@ -885,7 +874,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
 		tags = append(tags, nostr.Tag{"p", "pubkey"})
 		tags = append(tags, nostr.Tag{"dummy", "dummy"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindArticle,
@@ -2619,675 +2607,4 @@ func TestCanForwardEvent(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 		require.True(t, canForwardEvent(&ev, user2Pub))
 	})
-}
-
-func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
-
-	var validCommunityDefinitionEvent, validChangeCommunityDefinitionEvent *model.Event
-	t.Run("kind 31750 (Community definition) (ICIP-3000): valid", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "admin"})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		validCommunityDefinitionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, validCommunityDefinitionEvent, privkey)
-		require.NoError(t, relay.Publish(ctx, validCommunityDefinitionEvent.Event))
-	})
-	t.Run("kind 1753 (Community change definition) (ICIP-3000): valid", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "admin"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		validChangeCommunityDefinitionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, validChangeCommunityDefinitionEvent, privkey)
-		require.NoError(t, relay.Publish(ctx, validChangeCommunityDefinitionEvent.Event))
-	})
-	t.Run("kind 31750 (Community definition) (ICIP-3000): wrong h value", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", "aaa"})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1753 (Community change definition) (ICIP-3000): wrong h value", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", "aaa"})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 31750 (Community definition) (ICIP-3000): wrong settings comments_enabled value", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "bogus", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1753 (Community change definition) (ICIP-3000): wrong settings comments_enabled value", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "bogus", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 31750 (Community definition) (ICIP-3000): wrong settings role_required_for_posting value", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "dummy", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1753 (Community change definition) (ICIP-3000): wrong settings role_required_for_posting value", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "dummy", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 31750 (Community definition) (ICIP-3000): wrong public/private tags: both exists in the event", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"private"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1753 (Community change definition) (ICIP-3000): wrong public/private tags: both exists in the event", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"private"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "moderator"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 31750 (Community definition) (ICIP-3000): wrong role for p tag", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "dummy"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1753 (Community change definition) (ICIP-3000): wrong role for p tag", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"name", "Community name"})
-		tags = append(tags, nostr.Tag{"description", "Community description"})
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())})
-		tags = append(tags, nostr.Tag{"public"})
-		tags = append(tags, nostr.Tag{"open"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", "dummy"})
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"i foobar",
-			"dim 3024x3024",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-
-	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validCommunityDefinitionEvent, validChangeCommunityDefinitionEvent}, storedEvents)
-}
-
-func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
-
-	var validJoinCommunityEvent *model.Event
-	t.Run("kind 1750 (Community Join) (ICIP-3000): valid", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags: nostr.Tags{
-				{"h", hVal.String()},
-				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
-			},
-		}}
-		helperSignWithMinLeadingZeroBits(t, authorizationEvent, privkey)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
-
-		validJoinCommunityEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, validJoinCommunityEvent, privkey)
-		require.NoError(t, relay.Publish(ctx, validJoinCommunityEvent.Event))
-	})
-	t.Run("kind 1750 (Community Join) (ICIP-3000): no h tag", func(t *testing.T) {
-		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags: nostr.Tags{
-				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
-			},
-		}}
-		helperSignWithMinLeadingZeroBits(t, authorizationEvent, privkey)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1750 (Community Join) (ICIP-3000): wrong kind in authorization event", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityBanUser,
-			Tags: nostr.Tags{
-				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
-			},
-		}}
-		helperSignWithMinLeadingZeroBits(t, authorizationEvent, privkey)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1750 (Community Join) (ICIP-3000): authorization event was expired", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags: nostr.Tags{
-				{"expiration", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())},
-			},
-		}}
-		helperSignWithMinLeadingZeroBits(t, authorizationEvent, privkey)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1750 (Community Join) (ICIP-3000): wrong authorization event", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"authorization", "dummy"})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-
-	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validJoinCommunityEvent}, storedEvents)
-}
-
-func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
-
-	eventAuthorPubkey := uuid.NewString()
-
-	var validCommunityTransferOwnershipEvent *model.Event
-	t.Run("kind 1751 (Community transferring ownership) (ICIP-3000): valid", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
-		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-
-		validCommunityTransferOwnershipEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, validCommunityTransferOwnershipEvent, privkey)
-		require.NoError(t, relay.Publish(ctx, validCommunityTransferOwnershipEvent.Event))
-	})
-	t.Run("kind 1751 (Community transferring ownership) (ICIP-3000): no expiration", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1751 (Community transferring ownership) (ICIP-3000): expired", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1751 (Community transferring ownership) (ICIP-3000): wrong a tag: wrong kind", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityJoin, eventAuthorPubkey, "communityDIdentifier")})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	t.Run("kind 1751 (Community transferring ownership) (ICIP-3000): wrong a tag", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v", model.KindCommunityDefinition, eventAuthorPubkey)})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-
-	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validCommunityTransferOwnershipEvent}, storedEvents)
-}
-
-func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
-	privkey := model.GeneratePrivateKey()
-	storedEvents := []*model.Event{}
-	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
-
-	var validCommunityBanUserEvent *model.Event
-	t.Run("kind 1752 (Community ban user) (ICIP-3000): valid", func(t *testing.T) {
-		hVal, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-
-		validCommunityBanUserEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityBanUser,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, validCommunityBanUserEvent, privkey)
-		require.NoError(t, relay.Publish(ctx, validCommunityBanUserEvent.Event))
-	})
-	t.Run("kind 1752 (Community ban user) (ICIP-3000): wrong h tag", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"h", "dummy"})
-		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
-
-		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityBanUser,
-			Tags:      tags,
-		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
-	})
-	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validCommunityBanUserEvent}, storedEvents)
 }

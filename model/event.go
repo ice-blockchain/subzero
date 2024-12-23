@@ -173,11 +173,11 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 }
 
 func (e *Event) GetHTag() string {
-	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" {
+	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" && hTag.Value() != e.ID && e.Kind == KindCommunityDefinition {
 		return hTag.Value()
 	}
 
-	return e.GetID()
+	return e.ID
 }
 
 func (evt *Event) IsReplaceable() bool {
@@ -209,3 +209,31 @@ func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 }
 
 func PointerOf[T any](v T) *T { return &v }
+
+func (e *Event) NormalizeTags() {
+	for _, tag := range e.Tags {
+		switch tag.Key() {
+		case "t":
+			if len(tag) > 1 {
+				tag[1] = strings.ToLower(tag.Value()) // NIP-24.
+			}
+		}
+	}
+}
+
+func GetCommunityRoleByPubkey(pubkey string, communityDefinitionEvent *Event) Role {
+	if communityDefinitionEvent.PubKey == pubkey {
+		return OwnerRole
+	}
+	pTags := communityDefinitionEvent.Tags.GetAll([]string{"p"})
+	if pTags == nil {
+		return OthersRole
+	}
+	for _, pTag := range pTags {
+		if pTag.Key() == "p" && len(pTag) > 3 && pTag.Value() == pubkey {
+			return Role(pTag[3])
+		}
+	}
+
+	return OthersRole
+}

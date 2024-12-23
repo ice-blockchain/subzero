@@ -57,3 +57,66 @@ const (
 	CustomIONAttestationKindRevoked  = "revoked"
 	CustomIONAttestationKindInactive = "inactive"
 )
+
+const (
+	TagMarkerReply   string = "reply"
+	TagMarkerRoot    string = "root"
+	TagMarkerMention string = "mention"
+
+	TagReportTypeNudity        string = "nudity"
+	TagReportTypeMalware       string = "malware"
+	TagReportTypeProfanity     string = "profanity"
+	TagReportTypeIllegal       string = "illegal"
+	TagReportTypeSpam          string = "spam"
+	TagReportTypeImpersonation string = "impersonation"
+	TagReportTypeOther         string = "other"
+
+	RelayListReadMarker  = "read"
+	RelayListWriteMarker = "write"
+
+	UserGeneratedContentNamespace string = "ugc"
+	ProfileBadgesIdentifier       string = "profile_badges"
+
+	CommentsEnabledSettings        string = "comments_enabled"
+	RoleRequiredForPostingSettings string = "role_required_for_posting"
+	WhoCanReplySettings            string = "who_can_reply"
+
+	KindJobTextExtraction            = 5000
+	KindJobSummarization             = 5001
+	KindJobTranslation               = 5002
+	KindJobTextGeneration            = 5050
+	KindJobImageGeneration           = 5100
+	KindJobVideoConversion           = 5200
+	KindJobVideoTranslation          = 5201
+	KindJobImageToVideoConversion    = 5202
+	KindJobTextToSpeechGeneration    = 5250
+	KindJobNostrContentDiscovery     = 5300
+	KindJobNostrPeopleDiscovery      = 5301
+	KindJobNostrContentSearch        = 5302
+	KindJobNostrPeopleSearch         = 5303
+	KindJobNostrEventCount           = 5400
+	KindJobMalwareScanning           = 5500
+	KindJobNostrEventTimeStamping    = 5900
+	KindJobOpReturnCreation          = 5901
+	KindJobNostrEventPublishSchedule = 5905
+
+	JobFeedbackStatusPaymentRequired JobFeedbackStatus = "payment-required"
+	JobFeedbackStatusProcessing      JobFeedbackStatus = "processing"
+	JobFeedbackStatusError           JobFeedbackStatus = "error"
+	JobFeedbackStatusSuccess         JobFeedbackStatus = "success"
+	JobFeedbackStatusPartial         JobFeedbackStatus = "partial"
+)
+
+type (
+	JobFeedbackStatus      = string
+	Role                   string
+	ProfileMetadataContent struct {
+		Name        string `json:"name" example:"username"`
+		About       string `json:"about" example:"about"`
+		Picture     string `json:"picture" example:"https://example.com/pic.jpg"`
+		DisplayName string `json:"display_name" example:"John Deer"`
+		Website     string `json:"website" example:"https://ice.io"`
+		Banner      string `json:"banner" example:"https://example.com/banner.jpg"`
+		Bot         bool   `json:"bot" example:"false"`
+	}
+)

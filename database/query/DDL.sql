@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS events
     key_alg           text    not null DEFAULT '',
     content           text    not null,
     d_tag             text    not null DEFAULT '',
-    h_tag             text    not null,
+    h_tag             text    not null UNIQUE,
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
     hidden            integer not null default 0

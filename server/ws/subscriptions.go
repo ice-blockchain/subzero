@@ -8,6 +8,7 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"math"
 	"math/rand/v2"
@@ -22,12 +23,15 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 var (
 	protectedEventKinds = map[int]struct{}{
 		nostr.KindGiftWrap: {},
 	}
+
+	ErrCommunityActionForbidden = errors.New("only admin, owner or moderator can remove user/post/comment/repost from the community")
 )
 
 func generateChallenge(hints ...string) string {
@@ -185,10 +189,23 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 }
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event, cfg *Config) error {
+	var allEvents []*model.Event
 	for i := range events {
-		if err := h.validateIncomingEvent(events[i], cfg); err != nil {
+		if err := h.validateIncomingEvent(ctx, events[i], cfg); err != nil {
 			return errors.Wrapf(err, "event %v: invalid", events[i])
 		}
+		if events[i].Kind == nostr.KindDeletion {
+			evs, err := prepareCommunityEventsForDeletion(ctx, events[i])
+			if err != nil {
+				return err
+			}
+			if len(evs) > 0 {
+				allEvents = append(allEvents, evs...)
+
+				continue
+			}
+		}
+		allEvents = append(allEvents, events[i])
 	}
 
 	if wsEventListener == nil {
@@ -196,7 +213,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 	}
 
 	if eventMustAuth != nil {
-		if authRequired := eventMustAuth(ctx, events...); authRequired {
+		if authRequired := eventMustAuth(ctx, allEvents...); authRequired {
 			status, _ := h.connAuth.LoadOrCompute(respWriter, func() connAuthData {
 				return connAuthData{
 					Challenge: generateChallenge(),
@@ -214,18 +231,18 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		}
 	}
 
-	if err := wsEventListener(ctx, events...); err != nil {
+	if err := wsEventListener(ctx, allEvents...); err != nil {
 		return errors.Wrap(err, "failed to store events")
 	}
 
-	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {
+	if err := h.notifyListenersAboutNewEvents(ctx, allEvents...); err != nil {
 		return errors.Wrap(ErrNotifyFailed, err.Error())
 	}
 
 	return nil
 }
 
-func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err error) {
+func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, cfg *Config) (err error) {
 	hash := sha256.Sum256(evt.Serialize())
 	if id := hex.EncodeToString(hash[:]); id != evt.ID {
 		return errors.New("event id is invalid")
@@ -236,7 +253,7 @@ func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err erro
 	} else if !ok {
 		return errors.New("invalid event signature")
 	}
-	if vErr := evt.Validate(); vErr != nil {
+	if vErr := validation.Validate(ctx, evt); vErr != nil {
 		return errors.Wrap(vErr, "wrong event parameters")
 	}
 	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {
@@ -311,4 +328,41 @@ func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope
 	envelope.Count = &count
 
 	return nil
+}
+
+func prepareCommunityEventsForDeletion(ctx context.Context, incomingEvent *model.Event) (evs []*model.Event, err error) {
+	var ids []string
+	for _, eTag := range incomingEvent.Tags.GetAll([]string{"e"}) {
+		if eTag.Key() == "e" {
+			ids = append(ids, eTag.Value())
+		}
+	}
+	res := make([]*model.Event, 0)
+	var communityEventsToCheck []*model.Event
+	for ev := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{nostr.Filter{IDs: ids}}}) {
+		hTag := ev.GetTag("h")
+		if hTag == nil {
+			continue
+		}
+		communityEventsToCheck = append(communityEventsToCheck, ev)
+		res = append(res, &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindDeletion,
+				ID:   ev.ID,
+				Tags: model.Tags{
+					{"k", fmt.Sprint(ev.Kind)},
+					{"e", fmt.Sprint(ev.ID)},
+					{"a", fmt.Sprintf("%v:%v:%v", ev.Kind, ev.PubKey, ev.Tags.GetD())},
+				},
+				PubKey: ev.PubKey,
+			},
+		})
+	}
+	for _, ev := range communityEventsToCheck {
+		if err := validation.ValidateDeleteEvent(ctx, ev, incomingEvent); err != nil {
+			return nil, errors.Wrap(err, "failed to validate delete event")
+		}
+	}
+
+	return res, nil
 }

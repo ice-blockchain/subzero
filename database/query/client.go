@@ -123,28 +123,29 @@ func openDatabase(target string, runDDL bool) *dbClient {
 
 	if runDDL {
 		tx := client.MustBegin()
+		defer tx.Rollback()
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
-		client.alterEventsTable(tx)
+		if err := client.alterEventsTable(tx); err != nil {
+			panic(err)
+		}
 		tx.Commit()
 	}
 
 	return client
 }
 
-func (db *dbClient) alterEventsTable(tx *sqlx.Tx) {
+func (db *dbClient) alterEventsTable(tx *sqlx.Tx) error {
 	sqlQuery := "SELECT exists (select name from pragma_table_info('events') WHERE name = $1);"
 	res, err := tx.Queryx(sqlQuery, "h_tag")
 	if err != nil {
-		tx.Rollback()
-		panic(err)
+		return err
 	}
 	var exists int
 	if res.Next() {
 		if err = res.Scan(&exists); err != nil {
-			tx.Rollback()
-			panic(err)
+			return err
 		}
 	}
 	if exists == 0 {
@@ -152,6 +153,8 @@ func (db *dbClient) alterEventsTable(tx *sqlx.Tx) {
 			tx.MustExec(statement)
 		}
 	}
+
+	return nil
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
