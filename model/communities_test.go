@@ -20,7 +20,7 @@ func TestGetCommunityRoleByPubkey(t *testing.T) {
 		{
 			name:     "no author",
 			pubkey:   "foo",
-			wantRole: "",
+			wantRole: OthersRole,
 		},
 		{
 			name:   "author",

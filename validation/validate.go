@@ -50,12 +50,6 @@ const (
 	tagStateOptional tagState = iota
 	tagStateRequired
 	tagStateForbidden
-
-	CustomIONKindCommunityJoin                  = 1750
-	CustomIONKindCommunityOwnershipTransferring = 1751
-	CustomIONKindCommunityBanUser               = 1752
-	CustomIONKindCommunityChangeDefinition      = 1753
-	CustomIONKindCommunityDefinition            = 31750
 )
 
 type (
