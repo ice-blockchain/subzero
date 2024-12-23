@@ -9,9 +9,10 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
+
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/nbd-wtf/go-nostr"
 )
 
 func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event) error {

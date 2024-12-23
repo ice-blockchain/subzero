@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ice-blockchain/subzero/database/query"
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {

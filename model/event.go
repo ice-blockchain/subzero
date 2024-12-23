@@ -209,14 +209,3 @@ func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 }
 
 func PointerOf[T any](v T) *T { return &v }
-
-func (e *Event) NormalizeTags() {
-	for _, tag := range e.Tags {
-		switch tag.Key() {
-		case "t":
-			if len(tag) > 1 {
-				tag[1] = strings.ToLower(tag.Value()) // NIP-24.
-			}
-		}
-	}
-}

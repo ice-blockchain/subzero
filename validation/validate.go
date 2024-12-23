@@ -14,8 +14,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 const (
