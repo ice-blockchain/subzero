@@ -16,13 +16,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
-	"go.opencensus.io/tag"
 )
 
 const (
 	maxLabelSymbolLength int = 100
-
-	KindComment = 1111
 
 	KindJobTextExtraction            = 5000
 	KindJobSummarization             = 5001
@@ -53,11 +50,11 @@ const (
 	tagStateRequired
 	tagStateForbidden
 
-	KindCommunityJoin                  = 1750
-	KindCommunityOwnershipTransferring = 1751
-	KindCommunityBanUser               = 1752
-	KindCommunityChangeDefinition      = 1753
-	KindCommunityDefinition            = 31750
+	CustomIONKindCommunityJoin                  = 1750
+	CustomIONKindCommunityOwnershipTransferring = 1751
+	CustomIONKindCommunityBanUser               = 1752
+	CustomIONKindCommunityChangeDefinition      = 1753
+	CustomIONKindCommunityDefinition            = 31750
 )
 
 type (
@@ -77,24 +74,25 @@ type (
 )
 
 var (
-	ErrWrongEventParams = errors.New("wrong event params")
-	ErrUnsupportedTag   = errors.New("unsupported tag")
-	ErrUnsupportedJob   = errors.New("unsupported job")
-	ErrUnsupportedKind  = errors.New("unsupported kind")
+	ErrWrongEventParams         = errors.New("wrong event params")
+	ErrUnsupportedTag           = errors.New("unsupported tag")
+	ErrUnsupportedJob           = errors.New("unsupported job")
+	ErrUnsupportedKind          = errors.New("unsupported kind")
+	ErrCommunityActionForbidden = errors.New("forbidden")
 
 	CommongTags = tagsTable(
 		"t",
 		"nonce",
 		"imeta",
 		"expiration",
-		CustomIONTagOnBehalfOf,
+		model.CustomIONTagOnBehalfOf,
 		"settings",
 	)
 
-	KindSupportedTags = map[Kind]tagLookupTable{
+	KindSupportedTags = map[model.Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", CustomIONTagPoll, "h"),
-		nostr.KindDirectMessage:         tagsTable(CustomIONTagPoll),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, "h"),
+		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              tagsTable("a", "e", "k"),
 		nostr.KindRepost:                tagsTable("e", "p", "h"),
@@ -103,7 +101,7 @@ var (
 		nostr.KindGenericRepost:         tagsTable("k", "e", "p", "h"),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
-		CustomIONKindPollVote:           newTable().Required("e").Forbidden("expiration").Build(),
+		model.CustomIONKindPollVote:     newTable().Required("e").Forbidden("expiration").Build(),
 		nostr.KindPinList:               tagsTable("e"),
 		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
 		nostr.KindCommunityList:         tagsTable("a"),
@@ -130,7 +128,7 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", CustomIONTagPoll, "h"),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagPoll, "h"),
 		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", "h"),
 
 		// --- Jobs
@@ -155,11 +153,11 @@ var (
 		nostr.KindJobFeedback:                  tagsTable("status", "amount", "e", "p"),
 
 		// Community
-		model.KindCommunityDefinition:            tagsTable("h", "name", "description", "public", "private", "open", "closed", "p", "a"),
-		model.KindCommunityOwnershipTransferring: tagsTable("h", "a", "p"),
-		model.KindCommunityJoin:                  tagsTable("h", "p", "authorization"),
-		model.KindCommunityBanUser:               tagsTable("h", "p"),
-		model.KindCommunityChangeDefinition:      tagsTable("h", "name", "description", "public", "private", "open", "closed", "p"),
+		model.CustomIONKindCommunityDefinition:            tagsTable("h", "name", "description", "public", "private", "open", "closed", "p", "a"),
+		model.CustomIONKindCommunityOwnershipTransferring: tagsTable("h", "a", "p"),
+		model.CustomIONKindCommunityJoin:                  tagsTable("h", "p", "authorization"),
+		model.CustomIONKindCommunityBanUser:               tagsTable("h", "p"),
+		model.CustomIONKindCommunityChangeDefinition:      tagsTable("h", "name", "description", "public", "private", "open", "closed", "p"),
 	}
 
 	SupportedIMetaKeys = tagLookupTable{
@@ -188,7 +186,7 @@ var (
 	}
 )
 
-func validatePollTag(tag Tag) error {
+func validatePollTag(tag model.Tag) error {
 	var rules = map[string]int{
 		"type":    0,
 		"ttl":     0,
@@ -240,7 +238,7 @@ func validatePollTag(tag Tag) error {
 	return nil
 }
 
-func validateATags(e *Event, expectedKinds ...int) error {
+func validateATags(e *model.Event, expectedKinds ...int) error {
 	for _, aTag := range e.Tags.GetAll([]string{"a"}) {
 		if aTag.Key() != "a" {
 			// Skip possible other tags, like `alt`.
@@ -307,7 +305,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	case nostr.KindBookmarkList:
 		return validateATags(e) // All kinds are allowed to be bookmarked.
 	case nostr.KindCommunityList:
-		return validateATags(e, nostr.KindCommunityDefinition)
+		return validateATags(e, model.CustomIONKindCommunityDefinition)
 	case nostr.KindInterestList:
 		return validateATags(e, nostr.KindInterestSets)
 	case nostr.KindEmojiList:
@@ -381,14 +379,14 @@ func Validate(ctx context.Context, e *model.Event) error {
 		if err := validatePostCommunityEvents(ctx, e); err != nil {
 			return err
 		}
-	case model.KindCommunityDefinition, model.KindCommunityChangeDefinition:
-		return validateKindCommunityDefinitionEvent(ctx, e)
-	case model.KindCommunityJoin:
-		return validateKindCommunityJoinEvent(ctx, e)
-	case model.KindCommunityOwnershipTransferring:
-		return validateKindCommunityOwnershipTransferringEvent(ctx, e)
-	case model.KindCommunityBanUser:
-		return validateKindCommunityBanUserEvent(ctx, e)
+	case model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition:
+		return validateCustomIONKindCommunityDefinitionEvent(ctx, e)
+	case model.CustomIONKindCommunityJoin:
+		return validateCustomIONKindCommunityJoinEvent(ctx, e)
+	case model.CustomIONKindCommunityOwnershipTransferring:
+		return validateCustomIONKindCommunityOwnershipTransferringEvent(ctx, e)
+	case model.CustomIONKindCommunityBanUser:
+		return validateCustomIONKindCommunityBanUserEvent(ctx, e)
 	default:
 		if e.Kind >= 6000 && e.Kind <= 6999 {
 			return validateKindJobResult(e)
@@ -507,7 +505,7 @@ func validateKindBadgeDefinitionEvent(e *model.Event) error {
 	return nil
 }
 
-func validateKindBadgeAwardEvent(e *Event) error {
+func validateKindBadgeAwardEvent(e *model.Event) error {
 	if len(e.Tags.GetAll([]string{"a"})) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: a tag is required")
 	} else if err := validateATags(e, nostr.KindBadgeDefinition); err != nil {
@@ -519,9 +517,9 @@ func validateKindBadgeAwardEvent(e *Event) error {
 	return nil
 }
 
-func validateKindProfileBadgesEvent(e *Event) error {
-	if dTag := e.Tags.GetD(); dTag != ProfileBadgesIdentifier {
-		return errors.Wrapf(ErrWrongEventParams, "nip-58: no required d tag/wrong value: expected %q, got %q", ProfileBadgesIdentifier, dTag)
+func validateKindProfileBadgesEvent(e *model.Event) error {
+	if dTag := e.Tags.GetD(); dTag != model.ProfileBadgesIdentifier {
+		return errors.Wrapf(ErrWrongEventParams, "nip-58: no required d tag/wrong value: expected %q, got %q", model.ProfileBadgesIdentifier, dTag)
 	}
 	if err := validateATags(e, nostr.KindBadgeDefinition); err != nil {
 		return errors.Wrap(err, "nip-58")
@@ -752,7 +750,7 @@ func validateKindFeedbackJob(e *model.Event) error {
 	return nil
 }
 
-func validateKindCommunityDefinitionEvent(ctx context.Context, e *model.Event) error {
+func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model.Event) error {
 	var (
 		hTag       = e.GetTag("h")
 		pTags      = e.Tags.GetAll([]string{"p"})
@@ -785,11 +783,11 @@ func validateKindCommunityDefinitionEvent(ctx context.Context, e *model.Event) e
 		if aTag == nil || len(aTag) < 2 {
 			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
 		}
-		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != fmt.Sprint(model.KindCommunityDefinition) {
+		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != fmt.Sprint(model.CustomIONKindCommunityDefinition) {
 			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
 		}
 	}
-	if e.Kind == model.KindCommunityDefinition {
+	if e.Kind == model.CustomIONKindCommunityDefinition {
 		return nil
 	}
 	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
@@ -842,7 +840,7 @@ func validateKindCommunityDefinitionEvent(ctx context.Context, e *model.Event) e
 	return nil
 }
 
-func validateKindCommunityJoinEvent(ctx context.Context, e *model.Event) error {
+func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event) error {
 	var (
 		hTag             = e.GetTag("h")
 		authorizationTag = e.GetTag("authorization")
@@ -855,7 +853,7 @@ func validateKindCommunityJoinEvent(ctx context.Context, e *model.Event) error {
 		if err := json.Unmarshal([]byte(authorizationTag.Value()), &parsedContent); err != nil {
 			return errors.Wrapf(ErrWrongEventParams, "wrong authorization content: %+v", e)
 		}
-		if parsedContent.Kind != model.KindCommunityJoin {
+		if parsedContent.Kind != model.CustomIONKindCommunityJoin {
 			return errors.Wrapf(ErrWrongEventParams, "wrong authorization content kind: %+v", e)
 		}
 		expirationTag := parsedContent.GetTag("expiration")
@@ -900,7 +898,7 @@ func validateKindCommunityJoinEvent(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
-func validateKindCommunityOwnershipTransferringEvent(ctx context.Context, e *model.Event) error {
+func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Context, e *model.Event) error {
 	var (
 		aTags         = e.Tags.GetAll([]string{"a"})
 		hTag          = e.GetTag("h")
@@ -912,7 +910,7 @@ func validateKindCommunityOwnershipTransferringEvent(ctx context.Context, e *mod
 		if aTag == nil || len(aTag) < 2 {
 			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
 		}
-		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != fmt.Sprint(model.KindCommunityDefinition) {
+		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != fmt.Sprint(model.CustomIONKindCommunityDefinition) {
 			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
 		}
 	}
@@ -946,7 +944,7 @@ func validateKindCommunityOwnershipTransferringEvent(ctx context.Context, e *mod
 	return nil
 }
 
-func validateKindCommunityBanUserEvent(ctx context.Context, e *model.Event) error {
+func validateCustomIONKindCommunityBanUserEvent(ctx context.Context, e *model.Event) error {
 	var (
 		hTag  = e.GetTag("h")
 		pTags = e.Tags.GetAll([]string{"p"})
@@ -1060,14 +1058,14 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	}
 	switch settingType {
 	case model.CommentsEnabledSettings:
-		if kind != model.KindCommunityDefinition && kind != model.KindCommunityChangeDefinition {
+		if kind != model.CustomIONKindCommunityDefinition && kind != model.CustomIONKindCommunityChangeDefinition {
 			return errors.Wrapf(ErrWrongEventParams, "comments_enabled can be set only for 31750 kind: %+v", tag)
 		}
 		if value != "true" && value != "false" {
 			return errors.Wrapf(ErrWrongEventParams, "comments_enabled must be true or false: %+v", tag)
 		}
 	case model.RoleRequiredForPostingSettings:
-		if kind != model.KindCommunityDefinition && kind != model.KindCommunityChangeDefinition {
+		if kind != model.CustomIONKindCommunityDefinition && kind != model.CustomIONKindCommunityChangeDefinition {
 			return errors.Wrapf(ErrWrongEventParams, "role_required_for_posting can be set only for 31750 kind: %+v", tag)
 		}
 		if value != string(model.AdminRole) && value != string(model.ModeratorRole) && value != "" {
@@ -1119,7 +1117,7 @@ func validateEventTags(e *model.Event) error {
 			if err := validateATags(e); err != nil {
 				return err
 			}
-		case CustomIONTagPoll:
+		case model.CustomIONTagPoll:
 			if err := validatePollTag(tag); err != nil {
 				return err
 			}
@@ -1130,17 +1128,16 @@ func validateEventTags(e *model.Event) error {
 			} else if v < 0 {
 				return errors.Wrapf(ErrWrongEventParams, "expiration tag should be positive: %d", v)
 			}
-		}
-	}
-
-	for key, state := range supportedTags {
-		if state == tagStateRequired && e.GetTag(key).Value() == "" {
-			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found or empty", key)
-		}
-		if tag.Key() == "settings" {
+		case "settings":
 			if err := validateSettingsTag(e.Kind, tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
+		}
+
+	}
+	for key, state := range supportedTags {
+		if state == tagStateRequired && e.GetTag(key).Value() == "" {
+			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found or empty", key)
 		}
 	}
 

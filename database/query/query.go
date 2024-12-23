@@ -24,9 +24,7 @@ const (
 var (
 	ErrUnexpectedRowsAffected    = errors.New("unexpected rows affected")
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
-	ErrCommunityActionForbidden  = errors.New("forbidden")
-
-	errEventIteratorInterrupted = errors.New("interrupted")
+	errEventIteratorInterrupted  = errors.New("interrupted")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )

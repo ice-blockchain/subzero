@@ -1689,7 +1689,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	})
 	t.Run("Kind 10004 (NIP-51) valid", func(t *testing.T) {
 		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindCommunityDefinition)})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.CustomIONKindCommunityDefinition)})
 		validEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindCommunityList,
@@ -1701,7 +1701,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	})
 	t.Run("Kind 10003 (NIP-51): unsupported tag", func(t *testing.T) {
 		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindCommunityDefinition)})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.CustomIONKindCommunityDefinition)})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),

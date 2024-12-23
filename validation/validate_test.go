@@ -2,6 +2,7 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -10,6 +11,91 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidateGiftWrap(t *testing.T) {
+	t.Parallel()
+
+	key := model.GeneratePrivateKey()
+
+	var ev model.Event
+	ev.Kind = nostr.KindGiftWrap
+	ev.CreatedAt = 1
+	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.Error(t, Validate(context.TODO(), &ev))
+
+	ev.Tags = append(ev.Tags, model.Tag{"p", "foop"}, model.Tag{"k", "123"})
+	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.Error(t, Validate(context.TODO(), &ev))
+
+	ev.Tags = append(ev.Tags, model.Tag{"expiration", "foo"})
+	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.Error(t, Validate(context.TODO(), &ev))
+
+	ev.Tags = append(ev.Tags[:len(ev.Tags)-2], model.Tag{"expiration", "123"})
+	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.Error(t, Validate(context.TODO(), &ev))
+}
+
+func TestValidatePollTag(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		Tag model.Tag
+		Err error
+	}{
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3600", "title Test Poll", "options [\"Option 1\", \"Option 2\"]"}, nil},
+		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3600", "title Test Poll", "options [\"Option 1\", \"Option 2\"]"}, nil},
+		{model.Tag{model.CustomIONTagPoll, "type invalid", "ttl 3600", "title Test Poll", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl -1", "title Test Poll", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3600", "title", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3600", "title Test Poll", "options []"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3600", "title Test Poll"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3600", "title ", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3600", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3600", "title Test Poll", "options [\"Option 1\", \"Option 2\"]", "somekey2 someval"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3600", "title Test Poll", "options [foo]"}, ErrWrongEventParams},
+	}
+	for _, c := range cases {
+		err := validatePollTag(c.Tag)
+		if c.Err != nil {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+
+	t.Run("OptionsInTheEvent", func(t *testing.T) {
+		var ev model.Event
+
+		ev.Kind = nostr.KindTextNote
+		ev.Content = "Test Content"
+		ev.Tags = model.Tags{
+			{model.CustomIONTagPoll, "type single", "ttl 3600", "title Test Poll", `options ["Option 1", "Option 2"]`},
+			{"e", "123"},
+		}
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(context.TODO(), &ev))
+	})
+}
+
+func TestPollVoteExpiration(t *testing.T) {
+	t.Parallel()
+
+	var ev model.Event
+
+	ev.Kind = model.CustomIONKindPollVote
+	ev.CreatedAt = 1
+	ev.Tags = model.Tags{
+		{"e", "123"},
+	}
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, Validate(context.TODO(), &ev))
+
+	ev.Tags = append(ev.Tags, model.Tag{"expiration", "123"})
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.Error(t, Validate(context.TODO(), &ev))
+}
 
 func TestValidateSettingsTag(t *testing.T) {
 	t.Parallel()
@@ -23,31 +109,31 @@ func TestValidateSettingsTag(t *testing.T) {
 		{
 			name:    "no timestamp at the settings",
 			tag:     nostr.Tag{"settings", "foo", "0"},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
 			name:    "invalid settings length",
 			tag:     nostr.Tag{"settings", "foo"},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
 			name:    "invalid settings value for comments_enabled",
 			tag:     nostr.Tag{"settings", "comments_enabled", "bar", fmt.Sprint(time.Now().Unix())},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
 			name:    "valid settings value for comments_enabled",
 			tag:     nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
 			name:    "valid settings value for comments_enabled",
 			tag:     nostr.Tag{"settings", "comments_enabled", "false", fmt.Sprint(time.Now().Unix())},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
@@ -59,13 +145,13 @@ func TestValidateSettingsTag(t *testing.T) {
 		{
 			name:    "invalid settings value for role_required_for_posting",
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "admin", fmt.Sprint(time.Now().Unix())},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
 			name:    "invalid settings value for role_required_for_posting",
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
@@ -77,7 +163,7 @@ func TestValidateSettingsTag(t *testing.T) {
 		{
 			name:    "invalid settings value for role_required_for_posting",
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "dummy", fmt.Sprint(time.Now().Unix())},
-			kind:    model.KindCommunityDefinition,
+			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{

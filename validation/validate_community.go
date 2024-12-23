@@ -63,7 +63,7 @@ func isUserBanned(ctx context.Context, event *model.Event) error {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
-				Kinds: []int{model.KindCommunityBanUser},
+				Kinds: []int{model.CustomIONKindCommunityBanUser},
 				Tags:  model.TagMap{}.SetLiterals("p", event.PubKey),
 			},
 		},
@@ -123,7 +123,7 @@ func GetCommunityDefinition(ctx context.Context, hTag string) *model.Event {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
-				Kinds: []int{model.KindCommunityDefinition, model.KindCommunityChangeDefinition},
+				Kinds: []int{model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition},
 				Tags:  model.TagMap{}.SetLiterals("h", hTag),
 			},
 		},
@@ -134,7 +134,7 @@ func GetCommunityDefinition(ctx context.Context, hTag string) *model.Event {
 		patches             []*model.Event
 	)
 	for ev := range eventIterator {
-		if ev.Kind == model.KindCommunityChangeDefinition {
+		if ev.Kind == model.CustomIONKindCommunityChangeDefinition {
 			patches = append(patches, ev)
 
 			continue

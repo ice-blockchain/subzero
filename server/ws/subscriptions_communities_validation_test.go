@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
+func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
@@ -44,8 +44,8 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 		tags = append(tags, nostr.Tag{"open"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
 		tags = append(tags, nostr.Tag{
 			"imeta",
 			"url https://alicerelay.example.com",
@@ -59,7 +59,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		validCommunityDefinitionEvent = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validCommunityDefinitionEvent, privkey)
@@ -89,7 +89,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		validChangeCommunityDefinitionEvent = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
+			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validChangeCommunityDefinitionEvent, privkey)
@@ -118,7 +118,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -147,7 +147,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
+			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -179,7 +179,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -211,7 +211,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
+			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -243,7 +243,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -275,7 +275,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
+			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -308,7 +308,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -341,7 +341,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
+			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -373,7 +373,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -405,7 +405,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityChangeDefinition,
+			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -415,7 +415,7 @@ func TestPublishingICIP3000RelayKindCommunityDefinition(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
-func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
+func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	privkey := model.GeneratePrivateKey()
@@ -444,8 +444,8 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"open"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
 		tags = append(tags, nostr.Tag{
 			"imeta",
 			"url https://alicerelay.example.com",
@@ -459,7 +459,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 
 		validCommunityDefinitionEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validCommunityDefinitionEvent, privkey)
@@ -468,7 +468,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 	t.Run("kind 1750 (Community Join) (ICIP-3000): valid", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: nostr.Tags{
 				{"h", hVal.String()},
 				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
@@ -483,7 +483,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 
 		validJoinCommunityEvent = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validJoinCommunityEvent, privkey)
@@ -492,7 +492,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 	t.Run("kind 1750 (Community Join) (ICIP-3000): no h tag", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: nostr.Tags{
 				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
 			},
@@ -505,7 +505,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -514,7 +514,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 	t.Run("kind 1750 (Community Join) (ICIP-3000): wrong kind in authorization event", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityBanUser,
+			Kind:      model.CustomIONKindCommunityBanUser,
 			Tags: nostr.Tags{
 				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
 			},
@@ -528,7 +528,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -537,7 +537,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 	t.Run("kind 1750 (Community Join) (ICIP-3000): authorization event was expired", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: nostr.Tags{
 				{"expiration", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())},
 			},
@@ -551,7 +551,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -565,7 +565,7 @@ func TestPublishingICIP3000RelayKindCommunityJoin(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityJoin,
+			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -604,8 +604,8 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"open"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
 		tags = append(tags, nostr.Tag{
 			"imeta",
 			"url https://alicerelay.example.com",
@@ -619,7 +619,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 
 		validCommunityDefinitionEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validCommunityDefinitionEvent, privkey)
@@ -628,13 +628,13 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 	t.Run("kind 1751 (Community transferring ownership) (ICIP-3000): valid", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 
 		validCommunityTransferOwnershipEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
+			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validCommunityTransferOwnershipEvent, privkey)
@@ -646,12 +646,12 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
+			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -663,13 +663,13 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, eventAuthorPubkey, "communityDIdentifier")})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
+			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -681,13 +681,13 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityJoin, eventAuthorPubkey, "communityDIdentifier")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityJoin, eventAuthorPubkey, "communityDIdentifier")})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
+			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -699,13 +699,13 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"h", hVal.String()})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v", model.KindCommunityDefinition, eventAuthorPubkey)})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v", model.CustomIONKindCommunityDefinition, eventAuthorPubkey)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityOwnershipTransferring,
+			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
@@ -742,8 +742,8 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 		tags = append(tags, nostr.Tag{"open"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.KindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier2")})
 		tags = append(tags, nostr.Tag{
 			"imeta",
 			"url https://alicerelay.example.com",
@@ -757,7 +757,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 
 		validCommunityDefinitionEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityDefinition,
+			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validCommunityDefinitionEvent, privkey)
@@ -766,7 +766,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 	t.Run("kind 1752 (Community ban user) (ICIP-3000): valid", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityBanUser,
+			Kind:      model.CustomIONKindCommunityBanUser,
 			Tags: model.Tags{
 				{"h", hVal.String()},
 				{"p", uuid.NewString()},
@@ -782,7 +782,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.KindCommunityBanUser,
+			Kind:      model.CustomIONKindCommunityBanUser,
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)

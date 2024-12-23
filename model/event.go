@@ -173,7 +173,7 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 }
 
 func (e *Event) GetHTag() string {
-	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" && hTag.Value() != e.ID && e.Kind == KindCommunityDefinition {
+	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" && hTag.Value() != e.ID && e.Kind == CustomIONKindCommunityDefinition {
 		return hTag.Value()
 	}
 
@@ -219,21 +219,4 @@ func (e *Event) NormalizeTags() {
 			}
 		}
 	}
-}
-
-func GetCommunityRoleByPubkey(pubkey string, communityDefinitionEvent *Event) Role {
-	if communityDefinitionEvent.PubKey == pubkey {
-		return OwnerRole
-	}
-	pTags := communityDefinitionEvent.Tags.GetAll([]string{"p"})
-	if pTags == nil {
-		return OthersRole
-	}
-	for _, pTag := range pTags {
-		if pTag.Key() == "p" && len(pTag) > 3 && pTag.Value() == pubkey {
-			return Role(pTag[3])
-		}
-	}
-
-	return OthersRole
 }
