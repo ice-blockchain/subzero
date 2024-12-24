@@ -22,6 +22,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 var (
@@ -186,7 +187,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event, cfg *Config) error {
 	for i := range events {
-		if err := h.validateIncomingEvent(events[i], cfg); err != nil {
+		if err := h.validateIncomingEvent(ctx, events[i], cfg); err != nil {
 			return errors.Wrapf(err, "event %v: invalid", events[i])
 		}
 	}
@@ -225,7 +226,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 	return nil
 }
 
-func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err error) {
+func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, cfg *Config) (err error) {
 	hash := sha256.Sum256(evt.Serialize())
 	if id := hex.EncodeToString(hash[:]); id != evt.ID {
 		return errors.New("event id is invalid")
@@ -236,7 +237,7 @@ func (h *handler) validateIncomingEvent(evt *model.Event, cfg *Config) (err erro
 	} else if !ok {
 		return errors.New("invalid event signature")
 	}
-	if vErr := evt.Validate(); vErr != nil {
+	if vErr := validation.Validate(ctx, evt); vErr != nil {
 		return errors.Wrap(vErr, "wrong event parameters")
 	}
 	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {

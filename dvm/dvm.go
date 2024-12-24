@@ -20,6 +20,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 type (
@@ -91,7 +92,7 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
 		return nil
 	}
 
-	if err := event.Validate(); err != nil {
+	if err := validation.Validate(ctx, event); err != nil {
 		return errors.Wrapf(err, "wrong dvm job: %v", event)
 	}
 

@@ -172,6 +172,14 @@ func (e *Event) GetMasterPublicKey() (pubkey string) {
 	return pubkey
 }
 
+func (e *Event) GetHTag() string {
+	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" && hTag.Value() != e.ID && e.Kind == CustomIONKindCommunityDefinition {
+		return hTag.Value()
+	}
+
+	return e.ID
+}
+
 func (evt *Event) IsReplaceable() bool {
 	return nostr.IsReplaceableKind(evt.Kind)
 }

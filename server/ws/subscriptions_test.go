@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
+	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1689,7 +1690,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	})
 	t.Run("Kind 10004 (NIP-51) valid", func(t *testing.T) {
 		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindCommunityDefinition)})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.CustomIONKindCommunityDefinition)})
 		validEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindCommunityList,
@@ -1701,7 +1702,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	})
 	t.Run("Kind 10003 (NIP-51): unsupported tag", func(t *testing.T) {
 		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindCommunityDefinition)})
+		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.CustomIONKindCommunityDefinition)})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -2607,4 +2608,365 @@ func TestCanForwardEvent(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 		require.True(t, canForwardEvent(&ev, user2Pub))
 	})
+}
+
+func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
+	privkeyPostOwner, _ := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var post *model.Event
+	t.Run("create post with mentioned settings", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", "", "", model.TagMarkerRoot},
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, fmt.Sprint(time.Now().Unix())},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, post.Event))
+	})
+	t.Run("create followers list for post owner", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindFollowList,
+			Tags: nostr.Tags{
+				{"p", pubkeyUser1, "", "alice"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user1", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user2 that is not in the followers list, forbidden", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.ID, "", model.TagMarkerReply},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, post.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
+
+func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
+	privkeyPostOwner, _ := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var post *model.Event
+	t.Run("create post with mentioned settings", func(t *testing.T) {
+		pkey, err := nip19.EncodePublicKey(pubkeyUser1)
+		require.NoError(t, err)
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Content:   fmt.Sprintf("hello world: %v", pkey),
+			Tags: nostr.Tags{
+				{"e", "", "", model.TagMarkerRoot},
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, fmt.Sprint(time.Now().Unix())},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, post.Event))
+	})
+	t.Run("create reply for the initial post by user1", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user2 that was not mentioned, forbidden", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.ID, "", model.TagMarkerReply},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, post.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
+
+func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
+	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var post *model.Event
+	dBadgeTagVal := "bravery"
+	t.Run("create post with badge settings", func(t *testing.T) {
+		pkey, err := nip19.EncodePublicKey(pubkeyUser1)
+		require.NoError(t, err)
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Content:   fmt.Sprintf("hello world: %v", pkey),
+			Tags: nostr.Tags{
+				{"e", "", "", model.TagMarkerRoot},
+				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), fmt.Sprint(time.Now().Unix())},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, post.Event))
+	})
+	var defineBraveryBadgeEv *model.Event
+	t.Run("define bravery badge", func(t *testing.T) {
+		defineBraveryBadgeEv = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags: nostr.Tags{
+				{"d", dBadgeTagVal},
+				{"name", "Medal of Bravery"},
+				{"description", "Awarded to users demonstrating bravery"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, defineBraveryBadgeEv, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, defineBraveryBadgeEv.Event))
+	})
+	var awardEvent *model.Event
+	t.Run("award user1 by bravery badge", func(t *testing.T) {
+		awardEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+				{"p", pubkeyUser1, ""},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, awardEvent, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, awardEvent.Event))
+	})
+	t.Run("profile badges event", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileBadges,
+			Tags: nostr.Tags{
+				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+				{"e", awardEvent.GetMasterPublicKey(), ""},
+				{"d", "profile_badges"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+
+	t.Run("create reply for the initial post by user1", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user2 that doesn't have badge, forbidden", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.ID, "", model.TagMarkerReply},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, post.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
+
+func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
+	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
+	_, pubkeyUser3 := model.GenerateKeyPair()
+	privkeyUser4, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var post *model.Event
+	dBadgeTagVal := "bravery"
+	t.Run("create post with complex settings", func(t *testing.T) {
+		settingsConfiguration := fmt.Sprintf("%v,%v,%v|%v:%v:%v", model.FollowingWhoCanReplySettings, model.MentionWhoCanReplySettings, model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)
+		pkey, err := nip19.EncodePublicKey(pubkeyUser3)
+		require.NoError(t, err)
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Content:   fmt.Sprintf("hello world: %v", pkey),
+			Tags: nostr.Tags{
+				{"e", "", "", model.TagMarkerRoot},
+				{"settings", model.WhoCanReplySettings, settingsConfiguration, fmt.Sprint(time.Now().Unix())},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, post.Event))
+	})
+	t.Run("create followers list for post owner", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindFollowList,
+			Tags: nostr.Tags{
+				{"p", pubkeyUser1, "", "alice"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	var defineBraveryBadgeEv *model.Event
+	t.Run("define bravery badge", func(t *testing.T) {
+		defineBraveryBadgeEv = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags: nostr.Tags{
+				{"d", dBadgeTagVal},
+				{"name", "Medal of Bravery"},
+				{"description", "Awarded to users demonstrating bravery"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, defineBraveryBadgeEv, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, defineBraveryBadgeEv.Event))
+	})
+	var awardEvent *model.Event
+	t.Run("award user2 by bravery badge", func(t *testing.T) {
+		awardEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+				{"p", pubkeyUser2, ""},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, awardEvent, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, awardEvent.Event))
+	})
+	t.Run("profile badges event", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileBadges,
+			Tags: nostr.Tags{
+				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+				{"e", awardEvent.GetMasterPublicKey(), ""},
+				{"d", "profile_badges"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user1 followed, ok", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user2 badge awarded, ok", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser2},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user3 mentioned, ok", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser2},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user4, forbidden", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{"e", post.ID, "", model.TagMarkerReply},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyUser4)
+		require.Error(t, relay.Publish(ctx, post.Event))
+	})
+	helperMustCloseRelay(t, relay)
 }

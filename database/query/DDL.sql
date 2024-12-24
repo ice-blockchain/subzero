@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS events
     key_alg           text    not null DEFAULT '',
     content           text    not null,
     d_tag             text    not null DEFAULT '',
+    h_tag             text    not null UNIQUE,
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
     hidden            integer not null default 0
@@ -234,7 +235,7 @@ create trigger if not exists trigger_events_before_insert_unwind_repost
     when new.kind in (6, 16)
 begin
 insert into events
-    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, tags, d_tag, hidden)
+    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, tags, d_tag, h_tag, hidden)
 select
     json_extract(b, '$.kind'),
     0,
@@ -246,6 +247,7 @@ select
     '',
     json_extract(b, '$.tags'),
     '',
+    json_extract(b, '$.id'),
     1
 from
     (select NEW.content as b)

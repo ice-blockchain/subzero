@@ -457,6 +457,7 @@ select
 			w.WriteString(`cast(f.value as text) as content,`)
 		}
 		w.WriteString(`json_array(json_object('kinds', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id))) as d_tag,
+	h_tag,
 	case when
 		f.kind = 7 then
 			json_array(
@@ -484,6 +485,7 @@ select
 	e.sig,
 	e.content,
 	e.d_tag,
+	e.h_tag,
 	tags as jtags
 from
 	events e
@@ -560,6 +562,7 @@ select
 	'' as sig,
 	'' as content,
 	'' as d_tag,
+	'' as h_tag,
 	'[]' as jtags
 from
 	events e
