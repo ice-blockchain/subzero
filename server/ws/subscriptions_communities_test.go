@@ -306,7 +306,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -330,7 +330,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -358,7 +358,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -382,7 +382,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -428,7 +428,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
-					{"p", pubkeyUser2, "", string(model.OthersRole)},
+					{"p", pubkeyUser2, "", string(model.RegularRole)},
 				},
 			},
 		}
@@ -772,7 +772,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -799,7 +799,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -826,7 +826,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -853,7 +853,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}
@@ -1283,7 +1283,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 				Tags: model.Tags{
 					{"h", communityID},
 					{"e", post.GetID()},
-					{"p", post.PubKey},
+					{"p", post.GetMasterPublicKey()},
 				},
 			},
 		}

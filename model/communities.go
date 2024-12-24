@@ -6,7 +6,7 @@ const (
 	ModeratorRole Role = "moderator"
 	AdminRole     Role = "admin"
 	OwnerRole     Role = "owner"
-	OthersRole    Role = ""
+	RegularRole   Role = ""
 
 	CustomIONKindCommunityJoin                  = 1750
 	CustomIONKindCommunityOwnershipTransferring = 1751
@@ -16,12 +16,12 @@ const (
 )
 
 func GetCommunityRoleByPubkey(pubkey string, communityDefinitionEvent *Event) Role {
-	if communityDefinitionEvent.PubKey == pubkey {
+	if communityDefinitionEvent.GetMasterPublicKey() == pubkey {
 		return OwnerRole
 	}
 	pTags := communityDefinitionEvent.Tags.GetAll([]string{"p"})
 	if pTags == nil {
-		return OthersRole
+		return RegularRole
 	}
 	for _, pTag := range pTags {
 		if pTag.Key() == "p" && len(pTag) > 3 && pTag.Value() == pubkey {
@@ -29,5 +29,5 @@ func GetCommunityRoleByPubkey(pubkey string, communityDefinitionEvent *Event) Ro
 		}
 	}
 
-	return OthersRole
+	return RegularRole
 }

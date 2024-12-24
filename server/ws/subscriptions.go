@@ -30,8 +30,6 @@ var (
 	protectedEventKinds = map[int]struct{}{
 		nostr.KindGiftWrap: {},
 	}
-
-	ErrCommunityActionForbidden = errors.New("only admin, owner or moderator can remove user/post/comment/repost from the community")
 )
 
 func generateChallenge(hints ...string) string {
@@ -338,13 +336,10 @@ func prepareCommunityEventsForDeletion(ctx context.Context, incomingEvent *model
 		}
 	}
 	res := make([]*model.Event, 0)
-	var communityEventsToCheck []*model.Event
 	for ev := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{nostr.Filter{IDs: ids}}}) {
-		hTag := ev.GetTag("h")
-		if hTag == nil {
+		if hTag := ev.GetTag("h"); hTag == nil {
 			continue
 		}
-		communityEventsToCheck = append(communityEventsToCheck, ev)
 		res = append(res, &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindDeletion,
@@ -352,16 +347,11 @@ func prepareCommunityEventsForDeletion(ctx context.Context, incomingEvent *model
 				Tags: model.Tags{
 					{"k", fmt.Sprint(ev.Kind)},
 					{"e", fmt.Sprint(ev.ID)},
-					{"a", fmt.Sprintf("%v:%v:%v", ev.Kind, ev.PubKey, ev.Tags.GetD())},
+					{"a", fmt.Sprintf("%v:%v:%v", ev.Kind, ev.GetMasterPublicKey(), ev.Tags.GetD())},
 				},
-				PubKey: ev.PubKey,
+				PubKey: ev.GetMasterPublicKey(),
 			},
 		})
-	}
-	for _, ev := range communityEventsToCheck {
-		if err := validation.ValidateDeleteEvent(ctx, ev, incomingEvent); err != nil {
-			return nil, errors.Wrap(err, "failed to validate delete event")
-		}
 	}
 
 	return res, nil

@@ -15,7 +15,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -69,11 +71,11 @@ type (
 )
 
 var (
-	ErrWrongEventParams         = errors.New("wrong event params")
-	ErrUnsupportedTag           = errors.New("unsupported tag")
-	ErrUnsupportedJob           = errors.New("unsupported job")
-	ErrUnsupportedKind          = errors.New("unsupported kind")
-	ErrCommunityActionForbidden = errors.New("forbidden")
+	ErrWrongEventParams = errors.New("wrong event params")
+	ErrUnsupportedTag   = errors.New("unsupported tag")
+	ErrUnsupportedJob   = errors.New("unsupported job")
+	ErrUnsupportedKind  = errors.New("unsupported kind")
+	ErrActionForbidden  = errors.New("forbidden")
 
 	CommongTags = tagsTable(
 		"t",
@@ -275,7 +277,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	case nostr.KindTextNote:
 		return validateKindTextNoteEvent(ctx, e)
 	case nostr.KindDeletion:
-		return validateKindDeletionEvent(e)
+		return validateKindDeletionEvent(ctx, e)
 	case nostr.KindRepost, nostr.KindGenericRepost:
 		return validateKindRepostEvent(ctx, e)
 	case nostr.KindFollowList:
@@ -372,6 +374,9 @@ func Validate(ctx context.Context, e *model.Event) error {
 			}
 		}
 		if err := validatePostCommunityEvents(ctx, e); err != nil {
+			return err
+		}
+		if err := validateWhoCanReplySettings(ctx, e); err != nil {
 			return err
 		}
 	case model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition:
@@ -525,7 +530,7 @@ func validateKindProfileBadgesEvent(e *model.Event) error {
 	return nil
 }
 
-func validateKindDeletionEvent(e *model.Event) error {
+func validateKindDeletionEvent(ctx context.Context, e *model.Event) error {
 	eTags := e.Tags.GetAll([]string{"e"})
 	aTags := e.Tags.GetAll([]string{"a"})
 	if len(eTags) == 0 && len(aTags) == 0 {
@@ -534,6 +539,10 @@ func validateKindDeletionEvent(e *model.Event) error {
 	if len(eTags) != 0 && len(eTags) != len(e.Tags.GetAll([]string{"k"})) {
 		return errors.Wrap(ErrWrongEventParams, "nip-09: deletion request should include k tag for the kind of each event being requested for deletion")
 	}
+	if err := validateDeleteCommunityEvents(ctx, e); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -647,9 +656,119 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 	if err := validatePostCommunityEvents(ctx, e); err != nil {
 		return err
 	}
+	if err := validateWhoCanReplySettings(ctx, e); err != nil {
+		return err
+	}
 
 	return nil
 }
+
+func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
+	if eTag := e.GetTag("e"); eTag == nil || len(eTag) < 4 || (eTag[3] != model.TagMarkerReply && eTag[3] != model.TagMarkerMention) {
+		return nil
+	}
+	rootPost, err := findRootPost(ctx, e)
+	if err != nil {
+		return err
+	}
+	if rootPost == nil {
+		return nil
+	}
+	settingsTag := getLatestSettingsTag(rootPost, model.WhoCanReplySettings)
+	if settingsTag == nil || (*settingsTag)[1] != model.WhoCanReplySettings {
+		return nil
+	}
+	var (
+		values = strings.Split((*settingsTag)[2], ",")
+		passed = false
+	)
+	for _, value := range values {
+		if value == model.FollowingWhoCanReplySettings {
+			events := query.GetStoredEvents(ctx, &model.Subscription{
+				Filters: []nostr.Filter{
+					{
+						Authors: []string{rootPost.GetMasterPublicKey()},
+						Kinds:   []int{nostr.KindFollowList},
+						Tags:    model.TagMap{}.SetLiterals("p", e.GetMasterPublicKey()),
+					},
+				},
+			})
+			for _, err := range events {
+				if err != nil {
+					return err
+				}
+				passed = true
+
+				break
+			}
+		} else if value == model.MentionWhoCanReplySettings {
+			words := strings.Split(rootPost.Content, " ")
+			for _, word := range words {
+				if !strings.HasPrefix(word, "npub") {
+					continue
+				}
+				prefix, pubkey, err := nip19.Decode(word)
+				if err != nil {
+					return errors.Wrapf(ErrWrongEventParams, "can't decode the content: %v", e.Content)
+				}
+				if prefix == "npub" && pubkey.(string) == e.GetMasterPublicKey() {
+					passed = true
+
+					break
+				}
+			}
+		} else if strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix) {
+			splitted := strings.Split(value, "|")
+			if len(splitted) != 2 {
+				return errors.Wrapf(ErrWrongEventParams, "wrong badge who can reply settings: %v", value)
+			}
+			events := query.GetStoredEvents(ctx, &model.Subscription{
+				Filters: []nostr.Filter{
+					{
+						Authors: []string{e.GetMasterPublicKey()},
+						Kinds:   []int{nostr.KindProfileBadges},
+						Tags:    model.TagMap{}.SetLiterals("a", splitted[1]),
+					},
+				},
+			})
+			for _, err := range events {
+				if err != nil {
+					return err
+				}
+				passed = true
+
+				break
+			}
+		}
+	}
+	if !passed {
+		return errors.Wrapf(ErrActionForbidden, "reply can be added only by users with settings %+v badge for event: %v", settingsTag, e.ID)
+	}
+
+	return nil
+}
+
+func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
+	rootPosts := query.GetStoredEvents(ctx, &model.Subscription{
+		Filters: []nostr.Filter{
+			{
+				IDs:   []string{e.GetTag("e").Value()},
+				Kinds: []int{nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, nostr.KindReply, nostr.KindRepost},
+			},
+		},
+	})
+	for ev, err := range rootPosts {
+		if err != nil {
+			return nil, err
+		}
+		if e.Kind == ev.Kind {
+			return ev, nil
+		}
+	}
+
+	return nil, nil
+}
+
 func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 	var repostedEvent model.Event
 
@@ -688,6 +807,9 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 		if err := validatePostCommunityEvents(ctx, e); err != nil {
 			return err
 		}
+	}
+	if err := validateWhoCanReplySettings(ctx, e); err != nil {
+		return err
 	}
 
 	return nil
@@ -787,48 +909,48 @@ func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model
 	}
 	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
 	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrCommunityActionForbidden, "community definition not found")
+		return errors.Wrap(ErrActionForbidden, "community definition not found")
 	}
 	authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent)
-	if authorRole == model.OthersRole {
-		return errors.Wrap(ErrCommunityActionForbidden, "only admin, owner or moderator can change community definition")
+	if authorRole == model.RegularRole {
+		return errors.Wrap(ErrActionForbidden, "only admin, owner or moderator can change community definition")
 	}
 	if authorRole == model.ModeratorRole {
 		for _, pTag := range pTags {
 			if pTag.Key() == "p" {
 				if model.Role(pTag[3]) == model.AdminRole {
-					return errors.Wrap(ErrCommunityActionForbidden, "moderator can't promote user to admin")
+					return errors.Wrap(ErrActionForbidden, "moderator can't promote user to admin")
 				}
 				for _, tag := range communityDefinitionEvent.Tags.GetAll([]string{"p"}) {
 					if tag.Key() == "p" && tag.Value() == pTag.Value() && model.Role(tag[3]) == model.AdminRole {
-						return errors.Wrap(ErrCommunityActionForbidden, "moderator can't demote admin")
+						return errors.Wrap(ErrActionForbidden, "moderator can't demote admin")
 					}
 				}
 			}
 		}
 		if name := e.GetTag("name"); name != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the name of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the name of the community")
 		}
 		if description := e.GetTag("description"); description != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the description of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the description of the community")
 		}
 		if closed := e.GetTag("closed"); closed != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the open/closed status of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the open/closed status of the community")
 		}
 		if open := e.GetTag("open"); open != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the open/closed status of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the open/closed status of the community")
 		}
 		if public := e.GetTag("public"); public != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the public/private status of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the public/private status of the community")
 		}
 		if private := e.GetTag("private"); private != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the public/private status of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the public/private status of the community")
 		}
 		if imeta := e.GetTag("imeta"); imeta != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the picture of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the picture of the community")
 		}
 		if settings := e.Tags.GetAll([]string{"settings"}); settings != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't change the settings of the community")
+			return errors.Wrap(ErrActionForbidden, "moderator can't change the settings of the community")
 		}
 	}
 
@@ -869,24 +991,24 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 	}
 	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
 	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrCommunityActionForbidden, "community definition not found")
+		return errors.Wrap(ErrActionForbidden, "community definition not found")
 	}
 	if closedTag := communityDefinitionEvent.GetTag("closed"); closedTag != nil {
-		if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.OthersRole {
+		if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.RegularRole {
 			return nil
 		}
 		if authorizationTag == nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "can't join closed community")
+			return errors.Wrap(ErrActionForbidden, "can't join closed community")
 		}
 		var parsedAuthorizationEvent model.Event
 		if err := json.Unmarshal([]byte(authorizationTag.Value()), &parsedAuthorizationEvent); err != nil {
-			return errors.Wrap(ErrCommunityActionForbidden, "wrong authorization event")
+			return errors.Wrap(ErrActionForbidden, "wrong authorization event")
 		}
 		if err := Validate(ctx, &parsedAuthorizationEvent); err != nil {
 			return err
 		}
-		if authorizationRole := model.GetCommunityRoleByPubkey(parsedAuthorizationEvent.GetMasterPublicKey(), communityDefinitionEvent); authorizationRole == model.OthersRole {
-			return errors.Wrap(ErrCommunityActionForbidden, "user not authorized to join this community")
+		if authorizationRole := model.GetCommunityRoleByPubkey(parsedAuthorizationEvent.GetMasterPublicKey(), communityDefinitionEvent); authorizationRole == model.RegularRole {
+			return errors.Wrap(ErrActionForbidden, "user not authorized to join this community")
 		}
 	}
 
@@ -930,10 +1052,10 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 	}
 	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
 	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrCommunityActionForbidden, "community definition not found")
+		return errors.Wrap(ErrActionForbidden, "community definition not found")
 	}
 	if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.OwnerRole {
-		return errors.Wrap(ErrCommunityActionForbidden, "only owner of the community can transfer ownership")
+		return errors.Wrap(ErrActionForbidden, "only owner of the community can transfer ownership")
 	}
 
 	return nil
@@ -955,23 +1077,23 @@ func validateCustomIONKindCommunityBanUserEvent(ctx context.Context, e *model.Ev
 	}
 	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
 	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrCommunityActionForbidden, "community definition not found")
+		return errors.Wrap(ErrActionForbidden, "community definition not found")
 	}
 	authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent)
-	if authorRole == model.OthersRole {
-		return errors.Wrap(ErrCommunityActionForbidden, "only admin, owner or moderator can ban user")
+	if authorRole == model.RegularRole {
+		return errors.Wrap(ErrActionForbidden, "only admin, owner or moderator can ban user")
 	}
 	for _, pTag := range pTags {
 		if pTag.Key() == "p" {
 			if pTag.Value() == e.GetMasterPublicKey() {
-				return errors.Wrap(ErrCommunityActionForbidden, "admin/moderator can't ban himself")
+				return errors.Wrap(ErrActionForbidden, "admin/moderator can't ban himself")
 			}
 			if pTag.Value() == communityDefinitionEvent.GetMasterPublicKey() {
-				return errors.Wrap(ErrCommunityActionForbidden, "owner of the community can't be banned")
+				return errors.Wrap(ErrActionForbidden, "owner of the community can't be banned")
 			}
 			toBanRole := model.GetCommunityRoleByPubkey(pTag.Value(), communityDefinitionEvent)
 			if toBanRole == model.AdminRole && authorRole == model.ModeratorRole {
-				return errors.Wrap(ErrCommunityActionForbidden, "moderator can't ban admin")
+				return errors.Wrap(ErrActionForbidden, "moderator can't ban admin")
 			}
 		}
 	}

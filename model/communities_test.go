@@ -20,7 +20,7 @@ func TestGetCommunityRoleByPubkey(t *testing.T) {
 		{
 			name:     "no author",
 			pubkey:   "foo",
-			wantRole: OthersRole,
+			wantRole: RegularRole,
 		},
 		{
 			name:   "author",
@@ -53,6 +53,17 @@ func TestGetCommunityRoleByPubkey(t *testing.T) {
 				},
 			},
 			wantRole: AdminRole,
+		},
+		{
+			name:   "author with b tag",
+			pubkey: "foo1",
+			defEvent: Event{
+				Event: nostr.Event{
+					PubKey: "foo",
+					Tags:   Tags{{"b", "foo1"}},
+				},
+			},
+			wantRole: OwnerRole,
 		},
 	}
 

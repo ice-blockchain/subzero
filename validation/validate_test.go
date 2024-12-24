@@ -567,7 +567,7 @@ func TestApplyChangeCommunityPatch(t *testing.T) {
 				{
 					Event: nostr.Event{
 						CreatedAt: nostr.Timestamp(time.Now().Add(-1 * time.Minute).Unix()),
-						Tags:      model.Tags{{"name", "new name"}, {"description", "new description"}, {"closed"}, {"public"}, {"p", "moderator1", "", string(model.OthersRole)}, {"p", "admin1", "", string(model.ModeratorRole)}},
+						Tags:      model.Tags{{"name", "new name"}, {"description", "new description"}, {"closed"}, {"public"}, {"p", "moderator1", "", string(model.RegularRole)}, {"p", "admin1", "", string(model.ModeratorRole)}},
 					},
 				},
 			},
@@ -577,7 +577,7 @@ func TestApplyChangeCommunityPatch(t *testing.T) {
 				{"closed"},
 				{"public"},
 				{"settings", model.CommentsEnabledSettings, "true", fmt.Sprint(time.Now().Unix())},
-				{"p", "moderator1", "", string(model.OthersRole)},
+				{"p", "moderator1", "", string(model.RegularRole)},
 				{"p", "moderator2", "", string(model.ModeratorRole)},
 				{"p", "moderator3", "", string(model.ModeratorRole)},
 				{"p", "admin1", "", string(model.ModeratorRole)},

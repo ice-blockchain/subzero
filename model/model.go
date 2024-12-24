@@ -81,6 +81,10 @@ const (
 	RoleRequiredForPostingSettings string = "role_required_for_posting"
 	WhoCanReplySettings            string = "who_can_reply"
 
+	FollowingWhoCanReplySettings   string = "following"
+	MentionWhoCanReplySettings     string = "mentioned"
+	BadgeWhoCanReplySettingsPrefix string = "badge"
+
 	KindJobTextExtraction            = 5000
 	KindJobSummarization             = 5001
 	KindJobTranslation               = 5002

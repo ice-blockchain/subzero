@@ -22,39 +22,63 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 	}
 	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
 	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrCommunityActionForbidden, "community definition not found")
+		return errors.Wrap(ErrActionForbidden, "community definition not found")
 	}
 	if err := isUserBanned(ctx, incomingEvent); err != nil {
-		return errors.Wrapf(err, "user:%v banned", incomingEvent.PubKey)
+		return errors.Wrapf(err, "user:%v banned", incomingEvent.GetMasterPublicKey())
 	}
 
 	requiredRole := roleRequiredForPosting(communityDefinitionEvent)
-	replyRole := model.GetCommunityRoleByPubkey(incomingEvent.PubKey, communityDefinitionEvent)
+	replyRole := model.GetCommunityRoleByPubkey(incomingEvent.GetMasterPublicKey(), communityDefinitionEvent)
 	if requiredRole == model.ModeratorRole && (replyRole != model.AdminRole && replyRole != model.OwnerRole && replyRole != model.ModeratorRole) {
-		return errors.Wrapf(ErrCommunityActionForbidden, "only moderator, admin or owner can post in this community", requiredRole)
+		return errors.Wrapf(ErrActionForbidden, "only moderator, admin or owner can post in this community", requiredRole)
 	} else if requiredRole == model.AdminRole && replyRole != model.OwnerRole && replyRole != model.AdminRole {
-		return errors.Wrapf(ErrCommunityActionForbidden, "only admin or owner can post in this community", requiredRole)
+		return errors.Wrapf(ErrActionForbidden, "only admin or owner can post in this community", requiredRole)
 	}
 	if incomingEvent.Kind == nostr.KindRepost || incomingEvent.Kind == nostr.KindGenericRepost {
 		if !isCommunityCommentsEnabled(communityDefinitionEvent) {
-			return errors.Wrap(ErrCommunityActionForbidden, "comments are disabled in this community")
+			return errors.Wrap(ErrActionForbidden, "comments are disabled in this community")
 		}
 	}
 
 	return nil
 }
 
-func ValidateDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
+func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
+	var ids []string
+	for _, eTag := range e.Tags.GetAll([]string{"e"}) {
+		if eTag.Key() == "e" {
+			ids = append(ids, eTag.Value())
+		}
+	}
+	var communityEventsToCheck []*model.Event
+	for ev := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{nostr.Filter{IDs: ids}}}) {
+		hTag := ev.GetTag("h")
+		if hTag == nil {
+			continue
+		}
+		communityEventsToCheck = append(communityEventsToCheck, ev)
+	}
+	for _, ev := range communityEventsToCheck {
+		if err := ValidateCommunityDeleteEvent(ctx, ev, e); err != nil {
+			return errors.Wrap(err, "failed to validate delete event")
+		}
+	}
+
+	return nil
+}
+
+func ValidateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
 	communityDefinitionEvent := GetCommunityDefinition(ctx, event.GetTag("h").Value())
 	communityEventRole := model.GetCommunityRoleByPubkey(event.GetMasterPublicKey(), communityDefinitionEvent)
 	if deleteEventIssuerRole := model.GetCommunityRoleByPubkey(deleteEvent.GetMasterPublicKey(), communityDefinitionEvent); deleteEventIssuerRole == model.ModeratorRole {
 		if communityEventRole == model.AdminRole || communityEventRole == model.OwnerRole {
-			return errors.Wrap(ErrCommunityActionForbidden, "moderator can't remove admin or community owner user/post/comment/repost")
+			return errors.Wrap(ErrActionForbidden, "moderator can't remove admin or community owner user/post/comment/repost")
 		}
 	} else if deleteEventIssuerRole == model.AdminRole && communityEventRole == model.OwnerRole {
-		return errors.Wrap(ErrCommunityActionForbidden, "admin can't remove owner user/post/comment/repost")
-	} else if deleteEventIssuerRole == model.OthersRole && event.GetMasterPublicKey() != deleteEvent.GetMasterPublicKey() {
-		return errors.Wrap(ErrCommunityActionForbidden, "only admin, owner or moderator can remove user/post/comment/repost from the community")
+		return errors.Wrap(ErrActionForbidden, "admin can't remove owner user/post/comment/repost")
+	} else if deleteEventIssuerRole == model.RegularRole && event.GetMasterPublicKey() != deleteEvent.GetMasterPublicKey() {
+		return errors.Wrap(ErrActionForbidden, "only admin, owner or moderator can remove user/post/comment/repost from the community")
 	}
 
 	return nil
@@ -65,12 +89,12 @@ func isUserBanned(ctx context.Context, event *model.Event) error {
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityBanUser},
-				Tags:  model.TagMap{}.SetLiterals("p", event.PubKey),
+				Tags:  model.TagMap{}.SetLiterals("p", event.GetMasterPublicKey()),
 			},
 		},
 	})
 	for range eventIterator {
-		return errors.Wrap(ErrCommunityActionForbidden, "user was banned")
+		return errors.Wrap(ErrActionForbidden, "user was banned")
 	}
 
 	return nil
