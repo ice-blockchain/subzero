@@ -98,6 +98,15 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 		}
 
 		if events[i].Kind == nostr.KindDeletion {
+			communityFilters, err := db.prepareCommunityDeleteFilters(ctx, events[i])
+			if err != nil {
+				return err
+			}
+			if len(communityFilters) > 0 {
+				req.Delete = append(req.Delete, communityFilters...)
+
+				continue
+			}
 			if err := req.Remove(events[i]); err != nil {
 				return err
 			}
@@ -496,4 +505,25 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
 		err = errors.Wrapf(notifyExpiredEvents(ctx, events...), "failed to process notification of expired events")
 	}
 	return err
+}
+
+func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingEvent *model.Event) (filters []databaseFilterDelete, err error) {
+	var ids []string
+	for _, eTag := range incomingEvent.Tags.GetAll([]string{"e"}) {
+		if eTag.Key() == "e" {
+			ids = append(ids, eTag.Value())
+		}
+	}
+	filters = make([]databaseFilterDelete, 0)
+	for ev := range db.SelectEvents(ctx, model.Filter{IDs: ids}) {
+		if hTag := ev.GetTag("h"); hTag == nil {
+			continue
+		}
+		filters = append(filters, databaseFilterDelete{
+			Author: ev.GetMasterPublicKey(),
+			IDs:    []string{ev.GetID()},
+		})
+	}
+
+	return filters, nil
 }
