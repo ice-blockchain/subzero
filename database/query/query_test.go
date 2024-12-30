@@ -887,3 +887,62 @@ func TestQueryReply(t *testing.T) {
 		require.Len(t, events, 2)
 	})
 }
+
+func TestQueryDiscoverContentCreatorsToFollow(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("AddEvents", func(t *testing.T) {
+		var ev1 model.Event
+
+		ev1.ID = "1"
+		ev1.PubKey = "1pub"
+		ev1.Kind = nostr.KindProfileMetadata
+		ev1.CreatedAt = 1
+
+		var ev2 model.Event
+		ev2.ID = "2"
+		ev2.PubKey = "2pub"
+		ev2.Kind = nostr.KindProfileMetadata
+		ev2.CreatedAt = 2
+
+		var ev3 model.Event
+		ev3.ID = "3"
+		ev3.PubKey = "3pub"
+		ev3.Kind = nostr.KindProfileMetadata
+		ev3.CreatedAt = 3
+
+		var ev4 model.Event
+		ev4.ID = "4"
+		ev4.PubKey = "4pub"
+		ev4.Kind = nostr.KindProfileMetadata
+		ev4.CreatedAt = 4
+
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev1, &ev2, &ev3, &ev4))
+	})
+	t.Run("Filter", func(t *testing.T) {
+		eventsRandom := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: "discover content creators to follow",
+		})
+		require.Len(t, eventsRandom, 4)
+
+		eventsNotRandom := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindProfileMetadata},
+		})
+		require.Len(t, eventsNotRandom, 4)
+
+		hasDiff := false
+		for i := 0; i < 4; i++ {
+			if eventsRandom[i].PubKey != eventsNotRandom[i].PubKey {
+				hasDiff = true
+
+				break
+			}
+		}
+
+		require.True(t, hasDiff)
+	})
+}
