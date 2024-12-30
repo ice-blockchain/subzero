@@ -401,6 +401,11 @@ func generateSelectEventsSQL(filters model.Filters, systemCreatedAtPivot, limit 
 		limitQuery = " limit :mainlimit"
 	}
 
+	orderBy := " order by system_created_at desc"
+	if strings.Contains(filters.String(), "discover content creators to follow") {
+		orderBy = " order by random()"
+	}
+
 	if depClause == "" {
 		return `
 select
@@ -415,10 +420,7 @@ select
 	tags as jtags
 from
 	events e
-where ` + systemCreatedAtFilter + `(` + whereMain + `)
-order by
-	system_created_at desc
-` + limitQuery, params, nil
+where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
 	}
 
 	return `
