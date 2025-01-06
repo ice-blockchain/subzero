@@ -15,6 +15,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 func TestMain(m *testing.M) {
@@ -534,7 +535,7 @@ func helperExecuteJob(t *testing.T, req *model.Event) *model.Event {
 
 	req.CreatedAt = model.Timestamp(time.Now().Unix())
 	require.NoError(t, req.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, req.Validate())
+	require.NoError(t, validation.Validate(context.TODO(), req))
 
 	job := newNostrEventCountJob(nil)
 	require.NotNil(t, job)
