@@ -178,7 +178,7 @@ jobs:
     name: Test
     strategy:
       matrix:
-        package: [ "cfg", "database/query", "server/http", "server/ws" ]
+        package: [ "cfg", "database/query", "server/http", "server/ws", "dvm", "validation" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
     runs-on: ubuntu-latest
     steps:
@@ -220,7 +220,7 @@ jobs:
     name: Benchmark
     strategy:
       matrix:
-        package: [ "database/query", "server/http", "server/ws" ]
+        package: [ "database/query", "server/http", "server/ws", "dvm", "validation" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
     runs-on: ubuntu-latest
     steps:
@@ -388,8 +388,8 @@ jobs:
           cd secret-infrastructure
           git config user.name "ice CI/CD Bot"
           git config user.email ice-cicd-bot@ice.vip
-          git add helm/subzero-ion-connect/staging/common-values.yaml 
-          git add helm/subzero-ion-connect-indexer/staging/common-values.yaml 
+          git add helm/subzero-ion-connect/staging/common-values.yaml
+          git add helm/subzero-ion-connect-indexer/staging/common-values.yaml
           git commit -m "Updated 'subzero-ion-connect' & 'subzero-ion-connect-indexer' tag version (${{env.APP_TAG}}) in application helm chart deployment manifests"
           git push --set-upstream origin master
       - name: Slack Notification For Success
@@ -415,4 +415,4 @@ jobs:
           SLACK_ICON_EMOJI: ':sob:'
           SLACK_COLOR: ${{ job.status }}
           SLACK_FOOTER: |
-            - 
+            -
