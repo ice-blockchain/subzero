@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"encoding/json"
+	"math/rand/v2"
 	"strconv"
 	"testing"
 	"time"
@@ -183,6 +184,19 @@ func TestParseDepRequest(t *testing.T) {
 				},
 				Reduce: filterDependenciesReduce{
 					Kinds:   []int{6400, 7},
+					Group:   true,
+					Context: "content",
+				},
+			},
+		},
+		{
+			Input: "kind30023>kind6400+kind1754+group+content",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 30023,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds:   []int{6400, 1754},
 					Group:   true,
 					Context: "content",
 				},
@@ -1037,4 +1051,128 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 			Tags:  model.TagMap{}.SetLiterals("p", "pk5"),
 		},
 	)
+}
+
+func TestDVMVoteResults(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Create", func(t *testing.T) {
+		require.NoError(t, db.AcceptEvents(context.Background(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:     "poll1",
+					Kind:   nostr.KindTextNote,
+					PubKey: "pk1",
+					Tags: model.Tags{
+						{model.CustomIONTagPoll, "type multi", "title What is your favorite colors?", "options [\"Red\",\"Blue\",\"Green\",\"Yellow\"]"},
+					},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:     "poll2",
+					Kind:   nostr.KindTextNote,
+					PubKey: "pk1",
+					Tags: model.Tags{
+						{model.CustomIONTagPoll, "type single", "title What is your favorite color?", "options [\"Red\",\"Blue\",\"Green\",\"Yellow\"]"},
+					},
+				},
+			},
+			&model.Event{
+				Event: nostr.Event{
+					ID:     "poll3",
+					Kind:   nostr.KindArticle,
+					PubKey: "pk1",
+					Tags: model.Tags{
+						{model.CustomIONTagPoll, "type single", "title What is your favorite city?", "options [\"One\",\"Two\",\"Three\",\"Bar\"]"},
+						{"d", "dtag3"},
+					},
+				},
+			},
+		))
+	})
+
+	results1 := map[string]int{
+		"0":   int(rand.Int32N(100)),
+		"1":   int(rand.Int32N(99)),
+		"2":   int(rand.Int32N(42)),
+		"3":   int(rand.Int32N(666)),
+		"1,3": int(rand.Int32N(50)),
+		"0,2": int(rand.Int32N(70)),
+	}
+	expected1 := map[string]int{
+		"0": results1["0"] + results1["0,2"],
+		"1": results1["1"] + results1["1,3"],
+		"2": results1["2"] + results1["0,2"],
+		"3": results1["3"] + results1["1,3"],
+	}
+
+	results2 := map[string]int{
+		"0": int(rand.Int32N(100)),
+		"1": int(rand.Int32N(99)),
+	}
+
+	results3 := map[string]int{
+		"0": int(rand.Int32N(100)),
+		"1": int(rand.Int32N(99)),
+		"2": int(rand.Int32N(42)),
+		"3": int(rand.Int32N(666)),
+	}
+
+	t.Run("Vote", func(t *testing.T) {
+		cases := []struct {
+			Results map[string]int
+			ID      string
+		}{
+			{results1, "poll1"},
+			{results2, "poll2"},
+			{results3, "poll3"},
+		}
+		for _, c := range cases {
+			t.Run(c.ID, func(t *testing.T) {
+				for option, count := range c.Results {
+					var events []*model.Event
+					for range count {
+						var ev model.Event
+						ev.Kind = model.CustomIONKindPollVote
+						ev.Content = `[` + option + `]`
+						ev.Tags = model.Tags{
+							{"e", c.ID},
+						}
+						require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+						events = append(events, &ev)
+					}
+					require.NoError(t, db.AcceptEvents(context.Background(), events...))
+				}
+			})
+		}
+	})
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Authors: []string{"pk1"},
+		Search:  "include:dependencies:kind1>kind6400+kind1754+group+content include:dependencies:kind30023>kind6400+kind1754+group+content",
+	})
+	require.Len(t, events, 6) // 3 polls, 3 dvm events.
+
+	t.Run("CheckResults", func(t *testing.T) {
+		events = events[3:]
+		var cases = []struct {
+			ID       string
+			Expected map[string]int
+		}{
+			{"poll1", expected1},
+			{"poll2", results2},
+			{"poll3", results3},
+		}
+		for i := range events {
+			require.Equal(t, model.KindDVMCountResponse, events[i].Kind)
+
+			var counters map[string]int
+			require.NoError(t, json.Unmarshal([]byte(events[i].Content), &counters))
+			require.Equal(t, cases[i].Expected, counters)
+		}
+	})
 }

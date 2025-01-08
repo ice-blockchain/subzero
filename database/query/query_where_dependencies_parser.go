@@ -219,6 +219,21 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
+		// kind1/30023>kind6400+kind1754+group+content.
+		{
+			Tokens: []token{
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenCondDetail,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenCondDetail,
+				tokenLiteralGroup,
+				tokenCondDetail,
+				tokenLiteralContent,
+				tokenizer.TokenUndef,
+			},
+		},
 	}
 
 	dependenciesParser *tokenizer.Tokenizer
