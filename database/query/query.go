@@ -147,10 +147,10 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 	}
 	var filtersToDelete []databaseFilterDelete
 	for ev, err := range db.SelectEvents(ctx, selectFilters...) {
+		if err != nil {
+			return errors.Wrap(db.handleError(err), "failed to exec select events")
+		}
 		for _, filter := range filters {
-			if err != nil {
-				return errors.Wrap(db.handleError(err), "failed to exec delete event sql")
-			}
 			for _, id := range filter.IDs {
 				if id == ev.ID {
 					filtersToDelete = append(filtersToDelete, filter)
