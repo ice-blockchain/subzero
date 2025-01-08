@@ -70,6 +70,20 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
+			Input: "kind1>e4f0cf865fd1b24845b694a9dbe5296f663b0c4d449308c3afbd9f319ecbbcd4@kind1+e+root",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 1,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds:   []int{1},
+					Author:  "e4f0cf865fd1b24845b694a9dbe5296f663b0c4d449308c3afbd9f319ecbbcd4",
+					Tag:     "e",
+					Context: "root",
+				},
+			},
+		},
+		{
 			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+e+root",
 			Expected: filterDependencies{
 				Start: filterDependenciesStart{
