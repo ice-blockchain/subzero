@@ -164,6 +164,16 @@ func (e *Event) GetTag(tagName string) Tag {
 	return nil
 }
 
+func (e *Event) GetTags(tagName string) (tags []Tag) {
+	for _, tag := range e.Tags {
+		if tag.Key() == tagName {
+			tags = append(tags, tag)
+		}
+	}
+
+	return tags
+}
+
 func (e *Event) GetMasterPublicKey() (pubkey string) {
 	pubkey = e.PubKey
 	if bTag := e.GetTag(CustomIONTagOnBehalfOf); bTag != nil {

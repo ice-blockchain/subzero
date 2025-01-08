@@ -206,9 +206,11 @@ func validatePollTag(tag model.Tag) error {
 		case "ttl":
 			v, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want positive integer: %v", value, err)
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time: %v", value, err)
 			} else if v < 0 {
-				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want positive integer", value)
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time", value)
+			} else if v > 0 && time.Unix(v, 0).Before(time.Now()) {
+				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time in the future", value)
 			}
 		case "title":
 			if value == "" {
@@ -264,6 +266,93 @@ func validateATags(e *model.Event, expectedKinds ...int) error {
 	return nil
 }
 
+func extractTagValueFromPairs(tag model.Tag, key string) (value string, err error) {
+	if len(tag) < 2 {
+		return "", errors.Wrapf(ErrWrongEventParams, "tag %q is empty", tag.Key())
+	}
+
+	for _, part := range tag[1:] {
+		parts := strings.SplitN(part, " ", 2)
+		if len(parts) != 2 {
+			return "", errors.Wrapf(ErrWrongEventParams, "invalid tag value: %q: want key value", part)
+		}
+
+		if key == strings.TrimSpace(parts[0]) {
+			return strings.TrimSpace(parts[1]), nil
+		}
+	}
+
+	return "", errors.Wrapf(ErrWrongEventParams, "tag %q does not have key %q", tag.Key(), key)
+}
+
+func validatePollVote(ctx context.Context, e *model.Event) error {
+	events := e.GetTags("e")
+	if len(events) != 1 {
+		return errors.Wrapf(ErrWrongEventParams, "vote: expected one e tag, but got %d", len(events))
+	}
+
+	var poll *model.Event
+	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{model.Filter{IDs: events[0]}}}) {
+		if err != nil {
+			return errors.Wrap(err, "vote: failed to get poll event")
+		}
+		poll = ev
+	}
+	if poll == nil {
+		return errors.Wrap(ErrWrongEventParams, "vote: poll event not found")
+	}
+
+	pollTag := poll.GetTag(model.CustomIONTagPoll)
+	if pollTag == nil {
+		return errors.Wrap(ErrWrongEventParams, "vote: poll event does not have poll tag")
+	}
+
+	deadlineStr, _ := extractTagValueFromPairs(pollTag, "ttl")
+	deadline, err := strconv.ParseInt(deadlineStr, 10, 64)
+	if err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "vote: invalid ttl value: %q: %v", deadlineStr, err)
+	} else if time.Now().Unix() > deadline {
+		return errors.Wrapf(ErrWrongEventParams, "vote: poll is expired")
+	}
+
+	var options []int
+	err = json.Unmarshal([]byte(e.Content), &options)
+	if err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "vote: invalid options value: %q: %v", e.Content, err)
+	} else if len(options) == 0 {
+		return errors.Wrap(ErrWrongEventParams, "vote: options are empty")
+	}
+
+	pollType, _ := extractTagValueFromPairs(pollTag, "type")
+	pollOptionsStr, _ := extractTagValueFromPairs(pollTag, "options")
+
+	var pollOptions []string
+	err = json.Unmarshal([]byte(pollOptionsStr), &pollOptions)
+	if err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "vote: invalid poll options value: %q: %v", pollOptionsStr, err)
+	}
+
+	for _, option := range options {
+		if option < 0 || option >= len(pollOptions) {
+			return errors.Wrapf(ErrWrongEventParams, "vote: invalid option index: %d", option)
+		}
+	}
+
+	if pollType == "single" && len(options) > 1 {
+		return errors.Wrapf(ErrWrongEventParams, "vote: single poll can have only one option")
+	}
+
+	choises := make(map[int]int)
+	for _, option := range options {
+		choises[option]++
+		if choises[option] > 1 {
+			return errors.Wrapf(ErrWrongEventParams, "vote: duplicate option: %d", option)
+		}
+	}
+
+	return nil
+}
+
 func Validate(ctx context.Context, e *model.Event) error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
@@ -299,6 +388,8 @@ func Validate(ctx context.Context, e *model.Event) error {
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
+	case model.CustomIONKindPollVote:
+		return validatePollVote(ctx, e)
 	case nostr.KindBookmarkList:
 		return validateATags(e) // All kinds are allowed to be bookmarked.
 	case nostr.KindCommunityList:
@@ -619,38 +710,40 @@ func validateKindProfileMetadataEvent(e *model.Event) error {
 
 func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 	if json.Valid([]byte(e.Content)) {
-		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be plain text: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be plain text: %q", e.Content)
 	}
+
 	if err := validateLabelTags(e); err != nil {
-		return errors.Wrapf(ErrWrongEventParams, "nip-32: label tags are invalid for event: %+v", e)
+		return errors.Wrap(err, "nip-32: label tags are invalid for event")
 	}
-	pTags := e.Tags.GetAll([]string{"p"})
-	eTags := e.Tags.GetAll([]string{"e"})
+
+	pTags := e.GetTags("p")
+	eTags := e.GetTags("e")
 	if len(eTags) > 0 {
 		for _, tag := range eTags {
 			if len(tag) < 2 {
-				return errors.Wrapf(ErrWrongEventParams, "nip-10: no tag required param: %+v", e)
+				return errors.Wrap(ErrWrongEventParams, "nip-10: 'e' tag does not contain any event id")
 			}
 			if len(tag) >= 3 {
 				if tag[3] != model.TagMarkerRoot && tag[3] != model.TagMarkerReply && tag[3] != model.TagMarkerMention {
-					return errors.Wrapf(ErrWrongEventParams, "nip-10: wrong tag marker param: %+v", e)
+					return errors.Wrapf(ErrWrongEventParams, "nip-10: wrong tag marker param: %v, want root/reply/mention", tag[3])
 				}
 			}
 		}
 	}
 	if len(pTags) > 0 {
 		if len(eTags) == 0 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong nip-10: no e tags while p tag exist: %+v", e)
+			return errors.Wrap(ErrWrongEventParams, "wrong nip-10: no 'e' tags while p tag exist")
 		}
 		for _, tag := range pTags {
 			if len(tag) == 1 {
-				return errors.Wrapf(ErrWrongEventParams, "nip-10: p tag doesn't contain any pubkey who is involved in reply thread: %+v", e)
+				return errors.Wrap(ErrWrongEventParams, "nip-10: 'p' tag does not contain any pubkey who is involved in reply thread")
 			}
 		}
 	}
 	if hTag := e.GetTag("h"); hTag != nil {
 		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v", err.Error())
+			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v, expected uuid v7", err.Error())
 		}
 	}
 	if err := validatePostCommunityEvents(ctx, e); err != nil {

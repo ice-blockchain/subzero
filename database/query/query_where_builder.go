@@ -438,8 +438,63 @@ func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, 
 	return sb.String()
 }
 
+func (w *whereBuilder) CountVotesOf(filterID, cteName string, filter *filterDependencies) {
+	w.Params["sep"] = ":"
+
+	w.WriteString(`
+union all
+select
+	6400,
+	unixepoch(),
+	0 as system_created_at,
+	'' as id,
+	t.pubkey,
+	t.master_pubkey,
+	'' as sig,
+	json_group_object(json_each.key, json_each.value) AS content,
+	json_array(json_object('kinds', json_array(1754),
+		iif(t.kind = 1, '#e', '#a'),
+		iif(t.kind = 1, t.poll_id, concat_ws(:sep, cast(t.kind as text), t.master_pubkey, t.d_tag)))
+	) as d_tag,
+	t.h_tag,
+	json_array(
+		json_array('output', 'JSON'),
+		json_array('param', 'group', 'content')
+	) as jtags
+from (
+	select
+		mainev.id AS poll_id,
+		mainev.pubkey,
+		mainev.master_pubkey,
+		mainev.kind,
+		mainev.h_tag,
+		mainev.d_tag,
+		j.value AS option,
+		COUNT(j.value) AS votes
+	from `)
+	w.WriteString(cteName)
+	w.WriteString(` mainev
+	left join event_tags et ON et.event_tag_value1 = mainev.id AND et.event_tag_key = 'e'
+	left join events ve ON ve.id = et.event_id AND ve.kind = 1754 AND json_valid(ve.content)
+	left join json_each(ve.content) j on true
+	where
+		exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll') and mainev.kind = :`)
+	w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
+	w.WriteString(`
+	group by poll_id, option
+) t
+left join json_each(json_object(cast(t.option AS text), t.votes)) AS json_each
+group by t.poll_id
+`)
+}
+
 func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDependencies) {
 	if len(filter.Reduce.Kinds) > 0 && filter.Reduce.Kinds[0] == model.KindDVMCountResponse {
+		if len(filter.Reduce.Kinds) > 1 && filter.Reduce.Kinds[1] == model.CustomIONKindPollVote && filter.Reduce.Group {
+			w.CountVotesOf(filterID, cteName, filter)
+
+			return
+		}
 		w.WriteString(`
 union all
 select

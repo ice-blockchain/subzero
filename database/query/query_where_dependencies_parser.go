@@ -48,10 +48,10 @@ const (
 	tokenLiteralContent
 	tokenLiteralReply
 
-	tokenLiteralTagE
 	tokenLiteralTagQ
 
 	tokenLiteralGroupTagDetailP
+	tokenLiteralDetailTagE
 )
 
 var (
@@ -69,8 +69,8 @@ var (
 		tokenLiteralProfileBadges: {"profile_badges"},
 		tokenLiteralReply:         {"reply", "root"},
 
-		tokenLiteralTagE: {"e"},
-		tokenLiteralTagQ: {"q"},
+		tokenLiteralDetailTagE: {"+e"},
+		tokenLiteralTagQ:       {"q"},
 
 		tokenLiteralGroupTagDetailP: {"group+p"},
 	}
@@ -108,8 +108,7 @@ var (
 				tokenizer.TokenKeyword,
 				tokenCondInclude,
 				tokenLiteralKind, tokenizer.TokenKeyword,
-				tokenCondDetail,
-				tokenLiteralTagE,
+				tokenLiteralDetailTagE,
 				tokenCondDetail,
 				tokenLiteralReply,
 				tokenizer.TokenUndef,
@@ -164,8 +163,7 @@ var (
 				tokenLiteralKind, tokenizer.TokenKeyword,
 				tokenCondDetail,
 				tokenLiteralGroup,
-				tokenCondDetail,
-				tokenLiteralTagE,
+				tokenLiteralDetailTagE,
 				tokenizer.TokenUndef,
 			},
 		},
@@ -221,6 +219,21 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
+		// kind1/30023>kind6400+kind1754+group+content.
+		{
+			Tokens: []token{
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenCondDetail,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenCondDetail,
+				tokenLiteralGroup,
+				tokenCondDetail,
+				tokenLiteralContent,
+				tokenizer.TokenUndef,
+			},
+		},
 	}
 
 	dependenciesParser *tokenizer.Tokenizer
@@ -257,11 +270,15 @@ func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependencies, e
 		case tokenLiteralContent, tokenLiteralReply:
 			filter.Reduce.Context = stream.CurrentToken().ValueString()
 
-		case tokenLiteralTagE, tokenLiteralTagQ:
+		case tokenLiteralDetailTagE, tokenLiteralTagQ:
+			val := stream.CurrentToken().ValueString()
+			if val[0] == '+' {
+				val = val[1:]
+			}
 			if start {
-				filter.Start.Tag = stream.CurrentToken().ValueString()
+				filter.Start.Tag = val
 			} else {
-				filter.Reduce.Tag = stream.CurrentToken().ValueString()
+				filter.Reduce.Tag = val
 			}
 		case tokenLiteralGroupTagDetailP:
 			filter.Reduce.Tag = "p"
