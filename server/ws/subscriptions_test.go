@@ -584,6 +584,74 @@ func TestPublishingNIP09Events(t *testing.T) {
 	require.Equal(t, []*model.Event{validEventNIP09WithEKTags, validEventNIP09AllTags}, storedEvents)
 }
 
+func TestPublishingNIP09Events_NoEvent(t *testing.T) {
+	privkey, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var deletionEvent *model.Event
+	t.Run("kind 5 (Deletion) (NIP-05): no such event", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"k", "1"})
+		deletionEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		helperSignWithMinLeadingZeroBits(t, deletionEvent, privkey)
+		require.NoError(t, relay.Publish(ctx, deletionEvent.Event))
+	})
+	var validKind01NIP10Event *model.Event
+	t.Run("kind 1 (NIP-10): valid", func(t *testing.T) {
+		validKind01NIP10Event = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}},
+		}}
+		helperSignWithMinLeadingZeroBits(t, validKind01NIP10Event, privkey)
+		require.NoError(t, relay.Publish(ctx, validKind01NIP10Event.Event))
+	})
+	t.Run("kind 5 (Deletion) (NIP-05): delete event that exists", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", validKind01NIP10Event.GetID(), "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"k", fmt.Sprint(validKind01NIP10Event.Kind)})
+		deletionEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		helperSignWithMinLeadingZeroBits(t, deletionEvent, privkey)
+		require.NoError(t, relay.Publish(ctx, deletionEvent.Event))
+	})
+	t.Run("kind 5 (Deletion) (NIP-05): delete event one more time again", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"e", validKind01NIP10Event.GetID(), "wss://relay.example.com"})
+		tags = append(tags, nostr.Tag{"k", fmt.Sprint(validKind01NIP10Event.Kind)})
+		deletionEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindDeletion,
+			Tags:      tags,
+			Content:   "Deletion reason",
+		}}
+		helperSignWithMinLeadingZeroBits(t, deletionEvent, privkey)
+		require.NoError(t, relay.Publish(ctx, deletionEvent.Event))
+	})
+
+	helperMustCloseRelay(t, relay)
+}
+
 func TestPublishingNIP10Events(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}

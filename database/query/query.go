@@ -130,7 +130,48 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 }
 
 func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
-	where, params, err := newWhereBuilder().BuildForDelete(filters...)
+	var selectFilters []model.Filter
+	for _, filter := range filters {
+		fltr := model.Filter{
+			IDs:     filter.IDs,
+			Authors: []string{filter.Author},
+		}
+		for _, e := range filter.Events {
+			fltr.Authors = append(fltr.Authors, filter.Author)
+			fltr.Kinds = append(fltr.Kinds, e.Kind)
+			if e.TagD != "" {
+				fltr.Tags = model.TagMap{}.SetLiterals("d", e.TagD)
+			}
+			selectFilters = append(selectFilters, fltr)
+		}
+	}
+	var filtersToDelete []databaseFilterDelete
+	for ev, err := range db.SelectEvents(ctx, selectFilters...) {
+		if err != nil {
+			return errors.Wrap(db.handleError(err), "failed to exec select events")
+		}
+		for _, filter := range filters {
+			for _, id := range filter.IDs {
+				if id == ev.ID {
+					filtersToDelete = append(filtersToDelete, filter)
+
+					break
+				}
+			}
+			for _, e := range filter.Events {
+				if e.Author == ev.PubKey && e.Kind == ev.Kind && e.TagD == ev.Tags.GetD() {
+					filtersToDelete = append(filtersToDelete, filter)
+
+					break
+				}
+			}
+		}
+	}
+	if len(filtersToDelete) == 0 {
+		return nil
+	}
+
+	where, params, err := newWhereBuilder().BuildForDelete(filtersToDelete...)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate events where clause")
 	}
