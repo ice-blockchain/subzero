@@ -389,6 +389,21 @@ func TestNIP09DeleteEvents(t *testing.T) {
 		})
 		require.Empty(t, stored)
 	})
+	t.Run("event that doesn't exist", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+			Event: nostr.Event{
+				ID:        "deletion event" + uuid.NewString(),
+				PubKey:    "bogus",
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindDeletion,
+				Tags:      model.Tags{}.AppendUnique(nostr.Tag{"e", "bogus"}),
+				Content:   "bogus" + uuid.NewString(),
+				Sig:       "bogus" + uuid.NewString(),
+			},
+		}))
+	})
 }
 
 func TestSaveEventWithRepost(t *testing.T) {
@@ -798,6 +813,17 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			require.Equal(t, int64(5), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
 		})
 		t.Run("User2 could remove events of user1", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = nostr.KindDeletion
+			ev.CreatedAt = 11
+			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
+			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+
+			mustBeZero(t, user1MessageIds[1])
+			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
+		})
+		t.Run("User2 tries to remove events of user1 again and they don't exist", func(t *testing.T) {
 			var ev model.Event
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 11

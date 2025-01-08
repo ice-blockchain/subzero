@@ -733,18 +733,9 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 	return w.String(), w.Params, nil
 }
 
-func (w *whereBuilder) applyLiteFilter(idx int, filter *databaseFilterDelete) {
-	filterID := "litefilter" + strconv.Itoa(idx) + "_"
+func (w *whereBuilder) applyLiteEventFilter(idx int, filter *databaseFilterDelete) {
+	filterID := "litefilter_event" + strconv.Itoa(idx) + "_"
 
-	// Filter expression consists of two parts: (event filter) AND (access filter):
-	// - Event filter (ORed):
-	//   - By ID.
-	//   - By kind and author and D tag.
-	// - Account filter (ORed):
-	//   - By author.
-	//   - By master pubkey.
-	//   - By onbehalf attestations.
-	w.WriteRune('(')
 	if len(filter.IDs) > 0 || len(filter.Events) > 0 {
 		w.WriteRune('(')
 		buildFromSlice(w, sqlOpCodeNONE, filterID, filter.IDs, "id", "")
@@ -759,8 +750,12 @@ func (w *whereBuilder) applyLiteFilter(idx int, filter *databaseFilterDelete) {
 			w.WriteString(w.addParam(filterID, "dtag"+idxStr, filter.Events[i].TagD))
 			w.WriteRune(')')
 		}
-		w.WriteString(") AND ")
+		w.WriteString(")")
 	}
+}
+
+func (w *whereBuilder) applyLiteAccessFilter(idx int, filter *databaseFilterDelete) {
+	filterID := "litefilter_access" + strconv.Itoa(idx) + "_"
 
 	owner := w.addParam(filterID, "pubkey", filter.Author)
 	w.WriteString("((pubkey = :")
@@ -770,13 +765,27 @@ func (w *whereBuilder) applyLiteFilter(idx int, filter *databaseFilterDelete) {
 	w.WriteString(") OR (pubkey != master_pubkey AND ")
 	w.WriteString("subzero_nostr_onbehalf_is_allowed(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden=0), '[]'), :")
 	w.WriteString(owner)
-	w.WriteString(", master_pubkey, kind, unixepoch()))))")
+	w.WriteString(", master_pubkey, kind, unixepoch())))")
 }
 
 func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params map[string]any, err error) {
 	for idx := range filters {
 		w.maybeOR()
-		w.applyLiteFilter(idx, &filters[idx])
+
+		// Filter expression consists of two parts: (event filter) AND (access filter):
+		// - Event filter (ORed):
+		//   - By ID.
+		//   - By kind and author and D tag.
+		// - Account filter (ORed):
+		//   - By author.
+		//   - By master pubkey.
+		//   - By onbehalf attestations.
+
+		w.WriteRune('(')
+		w.applyLiteEventFilter(idx, &filters[idx])
+		w.WriteString(" AND ")
+		w.applyLiteAccessFilter(idx, &filters[idx])
+		w.WriteRune(')')
 	}
 
 	if w.Len() == 0 {
