@@ -12,7 +12,7 @@ jobs:
   verify-licensing:
     name: Verify Licensing
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
   verify-latest-versions-used:
     name: Verify Latest Versions
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,7 +76,7 @@ jobs:
   verify-auto-generated:
     name: Verify Auto Generated
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,7 +108,7 @@ jobs:
   lint:
     name: Lint
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,7 +143,7 @@ jobs:
   build:
     name: Build
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -180,7 +180,7 @@ jobs:
       matrix:
         package: [ "cfg", "database/query", "server/http", "server/ws", "dvm", "validation" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -222,7 +222,7 @@ jobs:
       matrix:
         package: [ "database/query", "server/http", "server/ws", "dvm", "validation" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -260,7 +260,7 @@ jobs:
     needs: [verify-licensing, verify-latest-versions-used, verify-auto-generated, lint, build, test, benchmark]
     name: PR
     if: ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checking if all previous jobs were successful
         env:
@@ -290,7 +290,7 @@ jobs:
     outputs:
       nextTag: ${{ steps.check_tag.outputs.next_tag }}
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions: write-all
     steps:
       - name: Checkout
@@ -358,7 +358,7 @@ jobs:
     needs: [ release ]
     name: Trigger Deployment
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Setting ENV variables for deployment
         run: |
