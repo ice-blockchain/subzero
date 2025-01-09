@@ -38,10 +38,16 @@ func (te *testEvents) Random(h interface{ Helper() }) *model.Event {
 	return ev
 }
 
-func helperEnsureDatabaseWithData(t *testing.T) (*dbClient, *testEvents) {
+func helperEnsureDatabaseWithData(t *testing.T, count ...int) (*dbClient, *testEvents) {
 	t.Helper()
 
-	const eventCount = 100
+	var eventCount int
+
+	if len(count) > 0 {
+		eventCount = count[0]
+	} else {
+		eventCount = 100
+	}
 
 	db := helperNewDatabase(t)
 	helperFillDatabase(t, db, eventCount)

@@ -1053,6 +1053,10 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 	)
 }
 
+func randomInt(n int) int {
+	return rand.IntN(n) + 1
+}
+
 func TestDVMVoteResults(t *testing.T) {
 	t.Parallel()
 
@@ -1096,12 +1100,12 @@ func TestDVMVoteResults(t *testing.T) {
 	})
 
 	results1 := map[string]int{
-		"0":   int(rand.Int32N(100)),
-		"1":   int(rand.Int32N(99)),
-		"2":   int(rand.Int32N(42)),
-		"3":   int(rand.Int32N(666)),
-		"1,3": int(rand.Int32N(50)),
-		"0,2": int(rand.Int32N(70)),
+		"0":   randomInt(100),
+		"1":   randomInt(99),
+		"2":   randomInt(42),
+		"3":   randomInt(666),
+		"1,3": randomInt(50),
+		"0,2": randomInt(70),
 	}
 	expected1 := map[string]int{
 		"0": results1["0"] + results1["0,2"],
@@ -1111,15 +1115,15 @@ func TestDVMVoteResults(t *testing.T) {
 	}
 
 	results2 := map[string]int{
-		"0": int(rand.Int32N(100)),
-		"1": int(rand.Int32N(99)),
+		"0": randomInt(100),
+		"1": randomInt(99),
 	}
 
 	results3 := map[string]int{
-		"0": int(rand.Int32N(100)),
-		"1": int(rand.Int32N(99)),
-		"2": int(rand.Int32N(42)),
-		"3": int(rand.Int32N(666)),
+		"0": randomInt(100),
+		"1": randomInt(99),
+		"2": randomInt(42),
+		"3": randomInt(666),
 	}
 
 	t.Run("Vote", func(t *testing.T) {
@@ -1173,6 +1177,13 @@ func TestDVMVoteResults(t *testing.T) {
 			var counters map[string]int
 			require.NoError(t, json.Unmarshal([]byte(events[i].Content), &counters))
 			require.Equal(t, cases[i].Expected, counters)
+
+			switch cases[i].ID {
+			case "poll1", "poll2":
+				require.Contains(t, events[i].String(), `#e\\\":\\\"`+cases[i].ID+`\\\"`)
+			case "poll3":
+				require.Contains(t, events[i].String(), `#a\\\":\\\"30023:pk1:dtag3\\\"`)
+			}
 		}
 	})
 }

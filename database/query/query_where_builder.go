@@ -453,8 +453,8 @@ select
 	'' as sig,
 	json_group_object(json_each.key, json_each.value) AS content,
 	json_array(json_object('kinds', json_array(1754),
-		iif(t.kind = 1, '#e', '#a'),
-		iif(t.kind = 1, t.poll_id, concat_ws(:sep, cast(t.kind as text), t.master_pubkey, t.d_tag)))
+		iif((t.kind >= 10000 AND t.kind < 20000) OR t.kind = 0 OR t.kind = 3 OR (t.kind >= 30000 AND t.kind < 40000), '#a', '#e'),
+		iif((t.kind >= 10000 AND t.kind < 20000) OR t.kind = 0 OR t.kind = 3 OR (t.kind >= 30000 AND t.kind < 40000), concat_ws(:sep, cast(t.kind as text), t.master_pubkey, t.d_tag), t.poll_id))
 	) as d_tag,
 	t.h_tag,
 	json_array(
@@ -511,7 +511,13 @@ select
 		} else {
 			w.WriteString(`cast(f.value as text) as content,`)
 		}
-		w.WriteString(`json_array(json_object('kinds', json_array(:` + (filterID + "fkind") + `),:` + (filterID + "ftagname") + `,json_array(f.reference_id))) as d_tag,
+		w.Params["sep"] = ":"
+		w.WriteString(`json_array(json_object(
+			'kinds', json_array(:` + (filterID + "fkind") + `),
+			iif(:` + (filterID + "ftagname") + `= 'lookup',
+				iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000), '#a', '#e'), :` + (filterID + "ftagname") + `),
+				json_array(iif(:` + (filterID + "ftagname") + `= 'lookup', iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000), concat_ws(:sep, cast(evr.kind as text), evr.master_pubkey, evr.d_tag), f.reference_id), f.reference_id)
+			))) as d_tag,
 	h_tag,
 	case when
 		f.kind = 7 then
@@ -656,7 +662,7 @@ group by e.master_pubkey`)
 	case model.KindDVMCountResponse:
 		w.WriteString("f.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[1]))
-		w.addParam(filterID, "ftagname", "#e")
+		w.addParam(filterID, "ftagname", "lookup")
 		w.addParam(filterID, "fkind", filter.Reduce.Kinds[1])
 		var refType string
 		switch {
