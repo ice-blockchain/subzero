@@ -56,21 +56,24 @@ func getAuthHeader(gCtx *gin.Context) string {
 func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error) {
 	bToken, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal auth token: malformed base64")
+		return nil, errors.Wrapf(err, "failed to unmarshal auth token: malformed base64: %q", token)
 	}
+
 	var event model.Event
-	if err = event.UnmarshalJSON(bToken); err != nil {
+	if err := event.UnmarshalJSON(bToken); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal auth token: malformed event json")
 	}
-	var ok bool
-	if ok, err = event.CheckSignature(); err != nil {
-		return nil, errors.Wrapf(err, "invalid token signature")
+
+	if ok, err := event.CheckSignature(); err != nil {
+		return nil, errors.Wrapf(err, "cannot check token signature")
 	} else if !ok {
 		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token signature")
 	}
+
 	if event.Kind != nostrHttpAuthKind {
-		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token event kind %v", event.Kind)
+		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token event kind: %d, expected: %d", event.Kind, nostrHttpAuthKind)
 	}
+
 	if event.CreatedAt.Time().After(now) || (event.CreatedAt.Time().Before(now) && now.Sub(event.CreatedAt.Time()) > tokenExpirationWindow) {
 		return nil, ErrTokenExpired
 	}
@@ -78,7 +81,7 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 		var urlValue *url.URL
 		urlValue, err = url.Parse(urlTag.Value())
 		if err != nil {
-			return nil, errors.Wrapf(ErrTokenInvalid, "failed to parse url tag with %v", urlTag.Value())
+			return nil, errors.Wrapf(ErrTokenInvalid, "failed to parse url tag with %q: %v", urlTag.Value(), err)
 		}
 		fullReqUrl := (&url.URL{
 			Scheme:   "https",
@@ -93,6 +96,7 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 	} else {
 		return nil, errors.Wrapf(ErrTokenInvalid, "malformed u tag %v", urlTag)
 	}
+
 	if methodTag := event.Tags.GetFirst([]string{"method"}); methodTag != nil && len(*methodTag) > 1 {
 		method := methodTag.Value()
 		if method != gCtx.Request.Method {
