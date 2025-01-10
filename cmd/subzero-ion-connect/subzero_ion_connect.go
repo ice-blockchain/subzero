@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -65,6 +66,15 @@ func init() {
 		return false
 	})
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for _, event := range events {
+			if event.Kind == nostr.KindGiftWrap {
+				_, _, authenticated := model.GetUserDataFromContext(ctx)
+				if authenticated {
+					return fmt.Errorf("%v: authenticated user is not allowed to send gift wrap events", event.ID)
+				}
+			}
+		}
+
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
 		}
