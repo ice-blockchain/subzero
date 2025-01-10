@@ -937,3 +937,52 @@ func TestQueryDiscoverContentCreatorsToFollow(t *testing.T) {
 		require.NotEqual(t, eventsRandom, eventsNotRandom)
 	})
 }
+
+func TestSelectFilterATagWithAttestation(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	priv1, pub1 := model.GenerateKeyPair()
+	_, pub2 := model.GenerateKeyPair()
+
+	t.Run("Add attestation", func(t *testing.T) {
+		var attestation model.Event
+		attestation.Kind = model.CustomIONKindAttestation
+		attestation.CreatedAt = 1
+		attestation.Tags = model.Tags{
+			{model.TagAttestationName, pub2, "", model.CustomIONAttestationKindActive + ":1"},
+		}
+		require.NoError(t, attestation.SignWithAlg(priv1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &attestation))
+	})
+	t.Run("Create event", func(t *testing.T) {
+		var evMain model.Event
+		evMain.CreatedAt = 2
+		evMain.Kind = nostr.KindTextNote
+		evMain.Content = "hello world"
+		evMain.Tags = model.Tags{
+			{"a", "1:" + pub1 + ":"},
+		}
+		require.NoError(t, evMain.SignWithAlg(priv1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &evMain))
+	})
+	t.Run("Lookup", func(t *testing.T) {
+		eventsByMaster := helperSelectEvents(t, db, model.Filter{
+			Limit: 2,
+			Tags: model.TagMap{}.
+				SetLiterals("a", "1:"+pub1+":"),
+		})
+		require.Len(t, eventsByMaster, 1)
+
+		eventsByDelegated := helperSelectEvents(t, db, model.Filter{
+			Limit: 2,
+			Tags: model.TagMap{}.
+				SetLiterals("a", "1:"+pub2+":"),
+		})
+		require.Len(t, eventsByDelegated, 1)
+
+		require.Equal(t, eventsByMaster, eventsByDelegated)
+	})
+}

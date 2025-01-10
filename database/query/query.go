@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"strings"
 	"time"
 
@@ -303,7 +304,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 				return nil, nil
 			}
 
-			sqlQuery, params, err := generateSelectEventsSQL(filters, pivot, min(selectDefaultBatchLimit, limit))
+			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters, pivot, min(selectDefaultBatchLimit, limit))
 			if err != nil {
 				return nil, err
 			}
@@ -359,7 +360,7 @@ func (db *dbClient) handleError(err error) error {
 	return err
 }
 
-func generateEventsCountClause(filters ...model.Filter) (sqlQuery string, params map[string]any, err error) {
+func (db *dbClient) generateEventsCountClause(ctx context.Context, filters ...model.Filter) (sqlQuery string, params map[string]any, err error) {
 	if len(filters) > 0 {
 		where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
 		if err == nil {
@@ -369,7 +370,7 @@ func generateEventsCountClause(filters ...model.Filter) (sqlQuery string, params
 		}
 	}
 
-	where, _, params, err := generateEventsWhereClause(filters...)
+	where, _, params, err := db.generateEventsWhereClause(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -378,7 +379,7 @@ func generateEventsCountClause(filters ...model.Filter) (sqlQuery string, params
 }
 
 func (db *dbClient) CountEvents(ctx context.Context, filters ...model.Filter) (count int64, err error) {
-	sqlQuery, params, err := generateEventsCountClause(filters...)
+	sqlQuery, params, err := db.generateEventsCountClause(ctx, filters...)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -424,8 +425,8 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 	return result, err
 }
 
-func generateSelectEventsSQL(filters model.Filters, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
-	whereMain, depClause, params, err := generateEventsWhereClause(filters...)
+func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.Filters, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
+	whereMain, depClause, params, err := db.generateEventsWhereClause(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -492,9 +493,83 @@ from
 ` + depClause, params, nil
 }
 
-func generateEventsWhereClause(filters ...model.Filter) (clauseMain, clauseDeps string, params map[string]any, err error) {
+func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []string, err error) {
+	for ev, err := range db.SelectEvents(ctx,
+		// Attention event of an user itself.
+		model.Filter{
+			Authors: []string{pubkey},
+			Kinds:   []int{model.CustomIONKindAttestation},
+		},
+		// Attention event where user is mentioned.
+		model.Filter{
+			Kinds: []int{model.CustomIONKindAttestation},
+			Tags:  model.TagMap{}.SetLiterals("p", pubkey),
+		},
+	) {
+		if err != nil {
+			return nil, errors.Wrapf(db.handleError(err), "failed to fetch all keys of %v", pubkey)
+		}
+
+		entries, err := model.ParseAttestationTags(ev.Tags)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to parse attestation tags")
+		}
+
+		keys = append(keys, ev.PubKey, ev.GetMasterPublicKey())
+		for key := range entries {
+			keys = append(keys, key)
+		}
+	}
+	return keys, nil
+}
+
+func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Filter) model.Filters {
+	for i := range filters {
+		v, ok := filters[i].Tags["a"]
+		if !ok {
+			continue
+		}
+
+		var delegatedATags []*string
+		for _, b := range v {
+			// `entry` has format `kind:pubkey:d_tag`.
+			for _, entry := range b {
+				if entry == nil {
+					continue
+				}
+
+				parts := strings.Split(*entry, ":")
+				if len(parts) != 3 {
+					continue
+				}
+
+				keys, err := db.fetchAllKeysOf(ctx, parts[1])
+				if err != nil {
+					log.Printf("subkeys fetch failed: %v", err)
+
+					continue
+				}
+
+				delegatedATags = append(delegatedATags, entry)
+				for _, key := range keys {
+					str := strings.Join([]string{parts[0], key, parts[2]}, ":")
+					delegatedATags = append(delegatedATags, &str)
+				}
+			}
+		}
+
+		filters[i].Tags.Set("a")
+		for _, entry := range model.DeduplicateSlice(delegatedATags, func(elem *string) string { return *elem }) {
+			filters[i].Tags.Append("a", entry)
+		}
+	}
+
+	return filters
+}
+
+func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...model.Filter) (clauseMain, clauseDeps string, params map[string]any, err error) {
 	builder := newWhereBuilder()
-	clauseMain, params, err = builder.Build(filters...)
+	clauseMain, params, err = builder.Build(db.extendWhereFilters(ctx, filters...)...)
 	if err != nil {
 		return "", "", nil, err
 	}
