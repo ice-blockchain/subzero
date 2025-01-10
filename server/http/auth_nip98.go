@@ -50,7 +50,15 @@ func NewAuth() AuthClient {
 }
 
 func getAuthHeader(gCtx *gin.Context) string {
-	return strings.TrimPrefix(gCtx.GetHeader("Authorization"), "Nostr ")
+	knownTypes := []string{"Bearer", "Nostr", "IONConnect"}
+
+	val := gCtx.GetHeader("Authorization")
+	for _, t := range knownTypes {
+		if strings.HasPrefix(val, t) {
+			return strings.TrimSpace(strings.TrimPrefix(val, t))
+		}
+	}
+	return ""
 }
 
 func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error) {
