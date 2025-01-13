@@ -210,7 +210,7 @@ func TestJobDeletion(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	privkey := model.GeneratePrivateKey()
+	privkey, pubkey := model.GenerateKeyPair()
 	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
 	relay := helperMustNewRelay(t, pubsubServers[0])
@@ -239,8 +239,10 @@ func TestJobDeletion(t *testing.T) {
 		Event: nostr.Event{
 			Kind: nostr.KindDeletion,
 			Tags: model.Tags{
-				model.Tag{"e", jobReq.ID},
-				model.Tag{"k", strconv.Itoa(jobReq.Kind)},
+				{"e", jobReq.ID},
+				{"k", strconv.Itoa(jobReq.Kind)},
+				{"p", jobReq.PubKey},
+				{model.CustomIONTagOnBehalfOf, pubkey},
 			},
 		},
 	}

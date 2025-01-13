@@ -77,21 +77,21 @@ var (
 	ErrUnsupportedKind  = errors.New("unsupported kind")
 	ErrActionForbidden  = errors.New("forbidden")
 
-	CommongTags = tagsTable(
+	CommongTags = []string{
 		"t",
 		"nonce",
 		"imeta",
 		"expiration",
 		model.CustomIONTagOnBehalfOf,
 		"settings",
-	)
+	}
 
 	KindSupportedTags = map[model.Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
 		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, "h"),
 		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
-		nostr.KindDeletion:              tagsTable("a", "e", "k"),
+		nostr.KindDeletion:              newEmptyTable().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
 		nostr.KindRepost:                tagsTable("e", "p", "h"),
 		nostr.KindReaction:              tagsTable("e", "p", "a", "k"),
 		nostr.KindBadgeAward:            tagsTable("a", "p"),
@@ -238,11 +238,7 @@ func validatePollTag(tag model.Tag) error {
 }
 
 func validateATags(e *model.Event, expectedKinds ...int) error {
-	for _, aTag := range e.Tags.GetAll([]string{"a"}) {
-		if aTag.Key() != "a" {
-			// Skip possible other tags, like `alt`.
-			continue
-		}
+	for _, aTag := range e.GetTags("a") {
 		if aTag.Value() == "" {
 			return errors.Wrap(ErrWrongEventParams, "value for a tag is empty")
 		}
@@ -622,14 +618,10 @@ func validateKindProfileBadgesEvent(e *model.Event) error {
 }
 
 func validateKindDeletionEvent(ctx context.Context, e *model.Event) error {
-	eTags := e.Tags.GetAll([]string{"e"})
-	aTags := e.Tags.GetAll([]string{"a"})
-	if len(eTags) == 0 && len(aTags) == 0 {
-		return errors.Wrap(ErrWrongEventParams, "nip-09: no required e/a tags found")
+	if eTags, kTags := e.GetTags("e"), e.GetTags("k"); len(eTags) != len(kTags) {
+		return errors.Wrapf(ErrWrongEventParams, "nip-09: deletion request should include k tag for the each event: found %d e tags and %d k tags", len(eTags), len(kTags))
 	}
-	if len(eTags) != 0 && len(eTags) != len(e.Tags.GetAll([]string{"k"})) {
-		return errors.Wrap(ErrWrongEventParams, "nip-09: deletion request should include k tag for the kind of each event being requested for deletion")
-	}
+
 	if err := validateDeleteCommunityEvents(ctx, e); err != nil {
 		return err
 	}
@@ -1311,8 +1303,7 @@ func validateEventTags(e *model.Event) error {
 	}
 
 	for _, tag := range e.Tags {
-		_, isCommon := CommongTags[tag.Key()]
-		if state, ok := supportedTags[tag.Key()]; !ok && !isCommon {
+		if state, ok := supportedTags[tag.Key()]; !ok {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
 		} else if state == tagStateForbidden {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v: cannot be used with this kind", tag)
@@ -1367,6 +1358,14 @@ type tagTableBuilder struct {
 }
 
 func newTable() *tagTableBuilder {
+	t := newEmptyTable()
+	for _, tag := range CommongTags {
+		t = t.Optional(tag)
+	}
+	return t
+}
+
+func newEmptyTable() *tagTableBuilder {
 	return &tagTableBuilder{M: make(tagLookupTable)}
 }
 
