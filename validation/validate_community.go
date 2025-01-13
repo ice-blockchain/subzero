@@ -46,16 +46,20 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 
 func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	var ids []string
-	for _, eTag := range e.Tags.GetAll([]string{"e"}) {
-		if eTag.Key() == "e" {
-			ids = append(ids, eTag.Value())
-		}
+	for _, eTag := range e.GetTags("e") {
+		ids = append(ids, eTag.Value())
 	}
+	if len(ids) == 0 {
+		return nil
+	}
+
 	var communityEventsToCheck []*model.Event
-	for ev := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{nostr.Filter{IDs: ids}}}) {
-		hTag := ev.GetTag("h")
-		if hTag == nil {
-			continue
+	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{{
+		IDs:  ids,
+		Tags: model.TagMap{}.SetLiterals("h"),
+	}}}) {
+		if err != nil {
+			return errors.Wrap(err, "failed to get stored events")
 		}
 		communityEventsToCheck = append(communityEventsToCheck, ev)
 	}

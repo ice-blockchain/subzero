@@ -98,10 +98,6 @@ func parseEventAsFilterForDelete(e *model.Event) (*databaseFilterDelete, error) 
 		}
 	}
 
-	if len(filter.IDs) == 0 && len(filter.Events) == 0 {
-		return nil, errors.Errorf("failed to parse event reference, no filters found: %v", e)
-	}
-
 	return &filter, nil
 }
 
@@ -739,8 +735,8 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 	return w.String(), w.Params, nil
 }
 
-func (w *whereBuilder) applyLiteFilter(idx int, filter *databaseFilterDelete) {
-	filterID := "litefilter" + strconv.Itoa(idx) + "_"
+func (w *whereBuilder) applyDeleteFilter(idx int, filter *databaseFilterDelete) {
+	filterID := "deletefilter" + strconv.Itoa(idx) + "_"
 
 	// Filter expression consists of two parts: (event filter) AND (access filter):
 	// - Event filter (ORed):
@@ -771,18 +767,18 @@ func (w *whereBuilder) applyLiteFilter(idx int, filter *databaseFilterDelete) {
 	owner := w.addParam(filterID, "pubkey", filter.Author)
 	w.WriteString("((pubkey = :")
 	w.WriteString(owner)
-	w.WriteString(" OR master_pubkey = :")
+	w.WriteString(" AND hidden=0) OR (master_pubkey = :")
 	w.WriteString(owner)
-	w.WriteString(") OR (pubkey != master_pubkey AND ")
+	w.WriteString(" AND hidden=0) OR ((pubkey != master_pubkey AND ")
 	w.WriteString("subzero_nostr_onbehalf_is_allowed(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden=0), '[]'), :")
 	w.WriteString(owner)
-	w.WriteString(", master_pubkey, kind, unixepoch()))))")
+	w.WriteString(", master_pubkey, kind, unixepoch())))))")
 }
 
 func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params map[string]any, err error) {
 	for idx := range filters {
 		w.maybeOR()
-		w.applyLiteFilter(idx, &filters[idx])
+		w.applyDeleteFilter(idx, &filters[idx])
 	}
 
 	if w.Len() == 0 {

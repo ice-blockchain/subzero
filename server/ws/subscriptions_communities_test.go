@@ -1478,7 +1478,12 @@ func TestCommunity_Deletion(t *testing.T) {
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindDeletion,
 				Content:   "some text",
-				Tags:      model.Tags{{"e", post1.GetID()}, {"k", fmt.Sprint(nostr.KindTextNote)}, {"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")}},
+				Tags: model.Tags{
+					{"e", post1.GetID()},
+					{"k", fmt.Sprint(nostr.KindTextNote)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")},
+					{model.CustomIONTagOnBehalfOf, pubkeyUser2},
+				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
@@ -1489,7 +1494,12 @@ func TestCommunity_Deletion(t *testing.T) {
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{{"e", post1.GetID()}, {"k", fmt.Sprint(nostr.KindTextNote)}, {"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")}},
+				Tags: model.Tags{
+					{"e", post1.GetID()},
+					{"k", fmt.Sprint(nostr.KindTextNote)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")},
+					{model.CustomIONTagOnBehalfOf, pubkeyUser1},
+				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
@@ -1513,7 +1523,12 @@ func TestCommunity_Deletion(t *testing.T) {
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{{"e", post2.GetID()}, {"k", fmt.Sprint(nostr.KindTextNote)}, {"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")}},
+				Tags: model.Tags{
+					{"e", post2.GetID()},
+					{"k", fmt.Sprint(nostr.KindTextNote)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")},
+					{model.CustomIONTagOnBehalfOf, pubkeyCommunityModerator},
+				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
@@ -1536,7 +1551,12 @@ func TestCommunity_Deletion(t *testing.T) {
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{{"e", post3.GetID()}, {"k", fmt.Sprint(nostr.KindTextNote)}, {"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")}},
+				Tags: model.Tags{
+					{"e", post3.GetID()},
+					{"k", fmt.Sprint(nostr.KindTextNote)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")},
+					{model.CustomIONTagOnBehalfOf, pubkeyCommunityAdmin},
+				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)
@@ -1560,7 +1580,12 @@ func TestCommunity_Deletion(t *testing.T) {
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{{"e", post4.GetID()}, {"k", fmt.Sprint(nostr.KindTextNote)}, {"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")}},
+				Tags: model.Tags{
+					{"e", post4.GetID()},
+					{"k", fmt.Sprint(nostr.KindTextNote)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyUser1, "")},
+					{model.CustomIONTagOnBehalfOf, pubkeyCommunityOwner},
+				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
@@ -1584,7 +1609,12 @@ func TestCommunity_Deletion(t *testing.T) {
 			Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{{"e", post5.GetID()}, {"k", fmt.Sprint(nostr.KindTextNote)}, {"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyCommunityOwner, "")}},
+				Tags: model.Tags{
+					{"e", post5.GetID()},
+					{"k", fmt.Sprint(nostr.KindTextNote)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindTextNote, pubkeyCommunityOwner, "")},
+					{model.CustomIONTagOnBehalfOf, pubkeyCommunityAdmin},
+				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)

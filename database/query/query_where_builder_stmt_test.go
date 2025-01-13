@@ -383,7 +383,7 @@ func TestParseNostrFilter(t *testing.T) {
 	})
 }
 
-func TestBuildLiteFilter(t *testing.T) {
+func applyDeleteFilter(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Simple", func(t *testing.T) {

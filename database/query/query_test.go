@@ -49,9 +49,6 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindTextNote,
-				Tags:      model.Tags{},
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
 			},
 		})
 		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[0]))
@@ -61,9 +58,6 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()) + 1,
 				Kind:      nostr.KindTextNote,
-				Tags:      model.Tags{},
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
 			},
 		})
 		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
@@ -84,9 +78,8 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindProfileMetadata,
-				Tags:      model.Tags{},
-				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
-				Sig:       "bogus" + uuid.NewString(),
+
+				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		}))
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -107,9 +100,8 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindProfileMetadata,
-				Tags:      model.Tags{},
-				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
-				Sig:       "bogus" + uuid.NewString(),
+
+				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		})
 		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
@@ -261,9 +253,6 @@ func TestEphemeralEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindClientAuthentication,
-				Tags:      model.Tags{},
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
 			},
 		}))
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -276,133 +265,139 @@ func TestEphemeralEvents(t *testing.T) {
 func TestNIP09DeleteEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-	t.Run("normal, non-replaceable event", func(t *testing.T) {
-		db := helperNewDatabase(t)
-		defer db.Close()
+	db := helperNewDatabase(t)
+	defer db.Close()
 
+	t.Run("normal, non-replaceable event", func(t *testing.T) {
 		publishedEvent := &model.Event{
 			Event: nostr.Event{
-				ID:        "normal" + uuid.NewString(),
-				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				ID:        "normal1",
+				PubKey:    "pk1",
+				CreatedAt: 1,
 				Kind:      nostr.KindTextNote,
-				Tags:      model.Tags{},
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
 			},
 		}
-		require.NoError(t, db.AcceptEvents(ctx, publishedEvent))
+		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+
+		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
 			Event: nostr.Event{
-				ID:        "deletion event" + uuid.NewString(),
-				PubKey:    publishedEvent.PubKey,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{}.AppendUnique(nostr.Tag{"e", publishedEvent.ID}),
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
+				ID:     "deletion event",
+				PubKey: publishedEvent.PubKey,
+				Kind:   nostr.KindDeletion,
+				Tags: model.Tags{
+					{"e", publishedEvent.ID},
+				},
 			},
 		}))
-		stored = helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindTextNote},
-		})
-		require.Empty(t, stored)
+		require.Empty(t, helperSelectEvents(t, db))
 	})
 	t.Run("replaceable event without d-tag", func(t *testing.T) {
-		db := helperNewDatabase(t)
-		defer db.Close()
-
 		publishedEvent := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable" + uuid.NewString(),
-				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				ID:        "replaceable1",
+				PubKey:    "pk2",
+				CreatedAt: 2,
 				Kind:      nostr.KindProfileMetadata,
-				Tags:      model.Tags{},
 				Content:   "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
-				Sig:       "bogus" + uuid.NewString(),
 			},
 		}
-		require.NoError(t, db.AcceptEvents(ctx, publishedEvent))
+		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+
+		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
 			Event: nostr.Event{
-				ID:        "deletion event" + uuid.NewString(),
-				PubKey:    publishedEvent.PubKey,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{}.AppendUnique(nostr.Tag{"a", fmt.Sprintf("%v:%v:", nostr.KindProfileMetadata, publishedEvent.PubKey)}),
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
+				ID:     "deletion event2",
+				PubKey: publishedEvent.PubKey,
+				Kind:   nostr.KindDeletion,
+				Tags: model.Tags{
+					{"a", fmt.Sprintf("%v:%v:", nostr.KindProfileMetadata, publishedEvent.PubKey)},
+				},
 			},
 		}))
-		stored = helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindProfileMetadata},
-		})
-		require.Empty(t, stored)
+		require.Empty(t, helperSelectEvents(t, db))
 	})
 	t.Run("replaceable event with d tag", func(t *testing.T) {
-		db := helperNewDatabase(t)
-		defer db.Close()
-
 		publishedEvent := &model.Event{
 			Event: nostr.Event{
-				ID:        "param replaceable" + uuid.NewString(),
-				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				ID:        "param replaceable1",
+				PubKey:    "pk3",
+				CreatedAt: 3,
 				Kind:      nostr.KindArticle,
-				Tags:      model.Tags{}.AppendUnique(nostr.Tag{"d", "bogus"}),
-				Content:   "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
-				Sig:       "bogus" + uuid.NewString(),
+				Tags: model.Tags{
+					{"d", "bogus"},
+				},
+				Content: "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
 			},
 		}
-		require.NoError(t, db.AcceptEvents(ctx, publishedEvent))
+		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindArticle},
 		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+
+		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
 			Event: nostr.Event{
-				ID:        "deletion event" + uuid.NewString(),
-				PubKey:    publishedEvent.PubKey,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{}.AppendUnique(nostr.Tag{"a", fmt.Sprintf("%v:%v:bogus", nostr.KindArticle, publishedEvent.PubKey)}),
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
+				ID:     "deletion event3",
+				PubKey: publishedEvent.PubKey,
+				Kind:   nostr.KindDeletion,
+				Tags: model.Tags{
+					{"a", fmt.Sprintf("%v:%v:bogus", nostr.KindArticle, publishedEvent.PubKey)},
+				},
 			},
 		}))
-		stored = helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindProfileMetadata},
-		})
-		require.Empty(t, stored)
+		require.Empty(t, helperSelectEvents(t, db))
 	})
 	t.Run("event that doesn't exist", func(t *testing.T) {
-		db := helperNewDatabase(t)
-		defer db.Close()
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
 			Event: nostr.Event{
-				ID:        "deletion event" + uuid.NewString(),
-				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindDeletion,
-				Tags:      model.Tags{}.AppendUnique(nostr.Tag{"e", "bogus"}),
-				Content:   "bogus" + uuid.NewString(),
-				Sig:       "bogus" + uuid.NewString(),
+				PubKey: "bogus",
+				Kind:   nostr.KindDeletion,
+				Tags: model.Tags{
+					{"e", "bogus"},
+				},
 			},
 		}))
+	})
+	t.Run("account delete", func(t *testing.T) {
+		require.NoError(t, db.AcceptEvents(context.Background(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "replaceable1",
+					PubKey:    "pk4",
+					CreatedAt: 4,
+					Kind:      nostr.KindProfileMetadata,
+					Content:   "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
+				}},
+			&model.Event{
+				Event: nostr.Event{
+					ID:        "note2",
+					PubKey:    "pk4",
+					CreatedAt: 5,
+					Kind:      nostr.KindTextNote,
+					Content:   "bogus",
+				}},
+		))
+		require.Equal(t, 2, len(helperSelectEvents(t, db)))
+		require.NoError(t, db.AcceptEvents(context.Background(),
+			&model.Event{
+				Event: nostr.Event{
+					ID:      "deletion event4",
+					PubKey:  "pk4",
+					Kind:    nostr.KindDeletion,
+					Content: "Remember me",
+				}},
+		))
+		require.Empty(t, helperSelectEvents(t, db))
 	})
 }
 
