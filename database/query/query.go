@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -30,17 +31,24 @@ var (
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
 
-type databaseEvent struct {
-	model.Event
-	SystemCreatedAt int64
-	ReferenceID     sql.NullString
-	Jtags           string
-	SigAlg          string
-	KeyAlg          string
-	MasterPubKey    string
-	Dtag            string
-	Htag            string
-}
+type (
+	databaseEvent struct {
+		model.Event
+		SystemCreatedAt int64
+		ReferenceID     sql.NullString
+		Jtags           string
+		SigAlg          string
+		KeyAlg          string
+		MasterPubKey    string
+		Dtag            string
+		Htag            string
+	}
+	databaseEventAddress struct {
+		Kind   int
+		Pubkey string
+		Dtag   string
+	}
+)
 
 type databaseBatchRequest struct {
 	// Events to store or replace.
@@ -130,6 +138,87 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 	return string(sAlg), string(kAlg), nil
 }
 
+func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCheck bool, filters []databaseFilterDelete) (deletedCount int, dependencies []databaseFilterDelete, err error) {
+	var (
+		where  string
+		params map[string]any
+	)
+
+	builder := newWhereBuilder()
+	if doAccessCheck {
+		where, params, err = builder.BuildForDelete(filters...)
+	} else {
+		var genericFilters model.Filters
+		for _, f := range filters {
+			var genericFilter model.Filter
+			if len(f.IDs) > 0 {
+				genericFilter.Tags = model.TagMap{}.SetLiterals("e")
+				for _, id := range f.IDs {
+					genericFilter.Tags.Append("e", &id)
+				}
+			} else if len(f.Events) > 0 {
+				genericFilter.Tags = model.TagMap{}.SetLiterals("a")
+				for _, e := range f.Events {
+					tag := fmt.Sprintf("%d:%s:%s", e.Kind, e.Pubkey, e.Dtag)
+					genericFilter.Tags.Append("a", &tag)
+				}
+			}
+			genericFilters = append(genericFilters, genericFilter)
+		}
+		if len(genericFilters) == 0 {
+			panic("attempt to delete events without filters")
+		}
+		where, params, err = builder.Build(db.extendWhereFilters(ctx, genericFilters...)...)
+	}
+	if err != nil {
+		return 0, nil, errors.Wrap(err, "failed to generate events where clause")
+	}
+
+	stmt := `delete from events as e where ` + where + ` returning
+	kind,
+	created_at,
+	system_created_at,
+	id,
+	pubkey,
+	master_pubkey,
+	sig,
+	content,
+	d_tag,
+	h_tag,
+	tags as jtags
+`
+
+	var deletedEvents []*model.Event
+	for ev, err := range db.newReadEventIterator(ctx, stmt, params) {
+		if err != nil {
+			return 0, nil, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+		}
+		deletedEvents = append(deletedEvents, ev)
+	}
+	if len(deletedEvents) == 0 {
+		return 0, nil, nil
+	}
+
+	for _, ev := range deletedEvents {
+		var f databaseFilterDelete
+
+		f.Author = ev.PubKey
+		switch {
+		case ev.IsReplaceable():
+			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
+
+		case ev.IsAddressable():
+			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
+
+		case ev.IsRegular():
+			f.IDs = append(f.IDs, ev.ID)
+		}
+		dependencies = append(dependencies, f)
+	}
+
+	return len(deletedEvents), dependencies, nil
+}
+
 func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
 	var selectFilters []model.Filter
 	for _, filter := range filters {
@@ -140,8 +229,8 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 		for _, e := range filter.Events {
 			fltr.Authors = append(fltr.Authors, filter.Author)
 			fltr.Kinds = append(fltr.Kinds, e.Kind)
-			if e.TagD != "" {
-				fltr.Tags = model.TagMap{}.SetLiterals("d", e.TagD)
+			if e.Dtag != "" {
+				fltr.Tags = model.TagMap{}.SetLiterals("d", e.Dtag)
 			}
 			selectFilters = append(selectFilters, fltr)
 		}
@@ -166,7 +255,7 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 				}
 			}
 			for _, e := range filter.Events {
-				if e.Author == ev.PubKey && e.Kind == ev.Kind && e.TagD == ev.Tags.GetD() {
+				if e.Pubkey == ev.PubKey && e.Kind == ev.Kind && e.Dtag == ev.Tags.GetD() {
 					filtersToDelete = append(filtersToDelete, filter)
 
 					break
@@ -178,18 +267,21 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 		return nil
 	}
 
-	where, params, err := newWhereBuilder().BuildForDelete(filtersToDelete...)
-	if err != nil {
-		return errors.Wrap(err, "failed to generate events where clause")
+	deleted, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filtersToDelete)
+	if deleted == 0 && err == nil {
+		err = ErrUnexpectedRowsAffected
 	}
 
-	stmt := `delete from events where ` + where
-
-	rows, err := db.exec(ctx, stmt, params)
-	if err != nil {
-		err = errors.Wrap(db.handleError(err), "failed to exec delete event sql")
-	} else if rows == 0 {
-		err = ErrUnexpectedRowsAffected
+	for len(filtersToDelete) > 0 && err == nil {
+		var dependencies []databaseFilterDelete
+		for _, batch := range model.SplitBatch(filtersToDelete, selectDefaultBatchLimit) {
+			_, batchDeps, err := db.deleteEventsWithDependencies(ctx, false, batch)
+			if err != nil {
+				break
+			}
+			dependencies = append(dependencies, batchDeps...)
+		}
+		filtersToDelete = dependencies
 	}
 
 	return err

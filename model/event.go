@@ -194,6 +194,14 @@ func (evt *Event) IsReplaceable() bool {
 	return nostr.IsReplaceableKind(evt.Kind)
 }
 
+func (evt *Event) IsAddressable() bool {
+	return nostr.IsAddressableKind(evt.Kind)
+}
+
+func (evt *Event) IsRegular() bool {
+	return nostr.IsRegularKind(evt.Kind)
+}
+
 func (evt *Event) IsEphemeral() bool {
 	return nostr.IsEphemeralKind(evt.Kind)
 }
@@ -216,6 +224,13 @@ func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 	}
 
 	return s[:j]
+}
+
+func SplitBatch[T any](slice []T, batchSize int) (batches [][]T) {
+	for batchSize < len(slice) {
+		slice, batches = slice[batchSize:], append(batches, slice[0:batchSize:batchSize])
+	}
+	return append(batches, slice)
 }
 
 func PointerOf[T any](v T) *T { return &v }

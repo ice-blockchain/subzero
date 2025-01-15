@@ -171,3 +171,35 @@ func TestDeduplicateSlice(t *testing.T) {
 		require.Equal(t, "id4", deduplicated[3])
 	})
 }
+func TestSplitBatch(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Empty", func(t *testing.T) {
+		result := SplitBatch([]int{}, 2)
+		require.Len(t, result, 1)
+		require.Empty(t, result[0])
+	})
+
+	t.Run("Smaller than batch", func(t *testing.T) {
+		input := []int{1, 2}
+		result := SplitBatch(input, 3)
+		require.Len(t, result, 1)
+		require.Equal(t, input, result[0])
+	})
+
+	t.Run("Equal to batch", func(t *testing.T) {
+		input := []int{1, 2, 3}
+		result := SplitBatch(input, 3)
+		require.Len(t, result, 1)
+		require.Equal(t, input, result[0])
+	})
+
+	t.Run("Multiple batches", func(t *testing.T) {
+		input := []int{1, 2, 3, 4, 5, 6, 7}
+		result := SplitBatch(input, 3)
+		require.Len(t, result, 3)
+		require.Equal(t, []int{1, 2, 3}, result[0])
+		require.Equal(t, []int{4, 5, 6}, result[1])
+		require.Equal(t, []int{7}, result[2])
+	})
+}

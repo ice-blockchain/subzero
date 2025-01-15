@@ -98,3 +98,32 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 
 	return ctx.Err()
 }
+
+func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
+	it := &eventIterator{
+		OneShot: true,
+		Fetch: func(int64) (*sqlx.Rows, error) {
+			stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
+			}
+
+			rows, err := stmt.QueryxContext(ctx, params)
+
+			return rows, errors.Wrapf(err, "failed to query query events sql: %q", sqlQuery)
+		}}
+
+	return func(yield func(*model.Event, error) bool) {
+		err := it.Each(ctx, func(event *model.Event) error {
+			if !yield(event, nil) {
+				return errEventIteratorInterrupted
+			}
+
+			return nil
+		})
+
+		if err != nil && !errors.Is(err, errEventIteratorInterrupted) {
+			yield(nil, errors.Wrap(err, "failed to iterate events"))
+		}
+	}
+}
