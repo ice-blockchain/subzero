@@ -400,12 +400,8 @@ func applyDeleteFilter(t *testing.T) {
 		filter := databaseFilterDelete{
 			Author: "author1",
 			IDs:    []string{"123", "456"},
-			Events: []struct {
-				Kind   int
-				Author string
-				TagD   string
-			}{
-				{Kind: 13, Author: "author2", TagD: "value1"},
+			Events: []databaseEventAddress{
+				{Kind: 13, Pubkey: "author2", Dtag: "value1"},
 			},
 		}
 		stmt, param, err := newWhereBuilder().BuildForDelete(filter)

@@ -50,11 +50,7 @@ type (
 	databaseFilterDelete struct {
 		Author string
 		IDs    []string
-		Events []struct {
-			Kind   int
-			Author string
-			TagD   string
-		}
+		Events []databaseEventAddress
 	}
 	databaseFilterMarker struct {
 		Tag     string
@@ -86,14 +82,10 @@ func parseEventAsFilterForDelete(e *model.Event) (*databaseFilterDelete, error) 
 				return nil, errors.Wrapf(err, "failed to parse replaceable event kind %v", tag.Value())
 			}
 
-			filter.Events = append(filter.Events, struct {
-				Kind   int
-				Author string
-				TagD   string
-			}{
+			filter.Events = append(filter.Events, databaseEventAddress{
 				Kind:   int(kind),
-				Author: vals[1],
-				TagD:   vals[2],
+				Pubkey: vals[1],
+				Dtag:   vals[2],
 			})
 		}
 	}
@@ -756,9 +748,9 @@ func (w *whereBuilder) applyDeleteFilter(idx int, filter *databaseFilterDelete) 
 			w.WriteString("(kind = :")
 			w.WriteString(w.addParam(filterID, "kind"+idxStr, filter.Events[i].Kind))
 			w.WriteString(" AND pubkey = :")
-			w.WriteString(w.addParam(filterID, "author"+idxStr, filter.Events[i].Author))
+			w.WriteString(w.addParam(filterID, "author"+idxStr, filter.Events[i].Pubkey))
 			w.WriteString(" AND d_tag = :")
-			w.WriteString(w.addParam(filterID, "dtag"+idxStr, filter.Events[i].TagD))
+			w.WriteString(w.addParam(filterID, "dtag"+idxStr, filter.Events[i].Dtag))
 			w.WriteRune(')')
 		}
 		w.WriteString(") AND ")

@@ -981,3 +981,94 @@ func TestSelectFilterATagWithAttestation(t *testing.T) {
 		require.Equal(t, eventsByMaster, eventsByDelegated)
 	})
 }
+func TestDeleteNestedEvents(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	rootPriv := model.GeneratePrivateKey()
+	var root model.Event
+
+	t.Run("Add events", func(t *testing.T) {
+		// Root event.
+		root.CreatedAt = 1
+		root.Kind = nostr.KindTextNote
+		root.Content = "root event"
+		require.NoError(t, root.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &root))
+
+		// First level events.
+		var ev1 model.Event
+		ev1.CreatedAt = 2
+		ev1.Kind = nostr.KindTextNote
+		ev1.Content = "regular event"
+		ev1.Tags = model.Tags{{"e", root.ID}}
+		require.NoError(t, ev1.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev1))
+
+		var ev2 model.Event
+		ev2.CreatedAt = 3
+		ev2.Kind = nostr.KindArticle
+		ev2.Content = "addressable event"
+		ev2.Tags = model.Tags{
+			{"d", "article1"},
+			{"e", root.ID},
+		}
+		require.NoError(t, ev2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev2))
+
+		var ev3 model.Event
+		ev3.CreatedAt = 4
+		ev3.Kind = nostr.KindProfileMetadata
+		ev3.Content = "replaceable event"
+		ev3.Tags = model.Tags{{"e", root.ID}}
+		require.NoError(t, ev3.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev3))
+
+		// Second level events.
+		var ev4 model.Event
+		ev4.CreatedAt = 5
+		ev4.Kind = nostr.KindTextNote
+		ev4.Content = "regular child event"
+		ev4.Tags = model.Tags{{"e", ev1.ID}}
+		require.NoError(t, ev4.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev4))
+
+		var ev5 model.Event
+		ev5.CreatedAt = 6
+		ev5.Kind = nostr.KindArticle
+		ev5.Content = "addressable child event"
+		ev5.Tags = model.Tags{
+			{"d", "article2"},
+			{"a", fmt.Sprintf("%v:%v:%v", ev2.Kind, ev2.PubKey, ev2.Tags.GetD())},
+		}
+		require.NoError(t, ev5.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev5))
+
+		var ev6 model.Event
+		ev6.CreatedAt = 7
+		ev6.Kind = nostr.KindProfileMetadata
+		ev6.Content = "replaceable child event"
+		ev6.Tags = model.Tags{
+			{"a", fmt.Sprintf("%v:%v:", ev3.Kind, ev3.PubKey)},
+		}
+		require.NoError(t, ev6.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &ev6))
+	})
+
+	events := helperSelectEvents(t, db)
+	require.Len(t, events, 7)
+
+	// Delete root event.
+	var rootDelete model.Event
+	rootDelete.CreatedAt = 8
+	rootDelete.Kind = nostr.KindDeletion
+	rootDelete.Content = "delete root event"
+	rootDelete.Tags = model.Tags{{"e", root.ID}}
+	require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(context.TODO(), &rootDelete))
+
+	// Check if all events are deleted.
+	require.Zero(t, len(helperSelectEvents(t, db)))
+}
