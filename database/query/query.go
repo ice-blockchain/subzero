@@ -348,6 +348,9 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 	}
 	if event.MasterPubKey != "" && event.MasterPubKey != event.PubKey {
 		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.MasterPubKey})
+	} else if event.GetTag(model.CustomIONTagOnBehalfOf) == nil {
+		pubkey, _ := model.GetPublicKey(db.relayPrivateKey)
+		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pubkey})
 	}
 
 	err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
