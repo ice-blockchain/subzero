@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"slices"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
@@ -47,19 +46,12 @@ func init() {
 	initFlags()
 	query.RegisterExpiredEventsProcessor(storage.DeleteExpiredFiles)
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
-		if sub == nil {
-			return false
-		}
-		for _, filter := range sub.Filters {
-			if slices.Contains(filter.Kinds, nostr.KindReaction) {
-				return true
-			}
-		}
-		return false
+		// Require authentication for all types/kinds of subscriptions.
+		return true
 	})
 	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
 		for _, event := range events {
-			if event.Kind == nostr.KindReaction {
+			if event.Kind != nostr.KindGiftWrap {
 				return true
 			}
 		}
