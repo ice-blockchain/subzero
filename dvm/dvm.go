@@ -225,15 +225,20 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 }
 
 func (d *dvm) finalizeJob(incomingEvent *model.Event, payload string, reqiredPaymentAmount float64) (*model.Event, error) {
+	pubKey, err := model.GetPublicKey(d.PrivateKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't get public key")
+	}
 	result := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Content:   payload,
 			Kind:      incomingEvent.Kind + 1000,
 			Tags: model.Tags{
-				model.Tag{"request", incomingEvent.String()},
-				model.Tag{"e", incomingEvent.ID, globalConfig.RelayURL},
-				model.Tag{"p", incomingEvent.PubKey},
+				{"request", incomingEvent.String()},
+				{"e", incomingEvent.ID, globalConfig.RelayURL},
+				{"p", incomingEvent.PubKey},
+				{model.CustomIONTagOnBehalfOf, pubKey},
 			},
 		},
 	}
@@ -302,15 +307,20 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 }
 
 func (d *dvm) publishJobFeedback(ctx context.Context, task *jobInfo, incomingEvent *model.Event, status JobFeedbackStatus, payload string, reqiredPaymentAmount float64) error {
+	pubKey, err := model.GetPublicKey(d.PrivateKey)
+	if err != nil {
+		return errors.Wrap(err, "can't get public key")
+	}
 	result := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Content:   payload,
 			Kind:      nostr.KindJobFeedback,
 			Tags: model.Tags{
-				model.Tag{"status", status},
-				model.Tag{"e", incomingEvent.ID},
-				model.Tag{"p", incomingEvent.PubKey},
+				{"status", status},
+				{"e", incomingEvent.ID},
+				{"p", incomingEvent.PubKey},
+				{model.CustomIONTagOnBehalfOf, pubKey},
 			},
 		},
 	}
