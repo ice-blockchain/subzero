@@ -12,7 +12,7 @@ require (
 	github.com/bzick/tokenizer v1.4.9
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
-	github.com/davidbyttow/govips/v2 v2.15.0
+	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gobwas/httphead v0.1.0
@@ -46,7 +46,7 @@ require (
 	atomicgo.dev/cursor v0.2.0 // indirect
 	atomicgo.dev/keyboard v0.2.9 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
-	github.com/aws/aws-sdk-go v1.55.5 // indirect
+	github.com/aws/aws-sdk-go v1.55.6 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
