@@ -981,6 +981,7 @@ func TestSelectFilterATagWithAttestation(t *testing.T) {
 		require.Equal(t, eventsByMaster, eventsByDelegated)
 	})
 }
+
 func TestDeleteNestedEvents(t *testing.T) {
 	t.Parallel()
 

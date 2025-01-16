@@ -113,10 +113,31 @@ func parseNostrFilterDependencies(f *databaseFilterSearch) (*databaseFilterSearc
 	return f, nil
 }
 
+func parseNostrFilterText(f *databaseFilterSearch) *databaseFilterSearch {
+	const (
+		textSearchPrefix = `"`
+	)
+	start := strings.Index(f.Search, textSearchPrefix)
+	if start == -1 {
+		return f
+	}
+	end := strings.Index(f.Search[start+1:], textSearchPrefix)
+	if end == -1 {
+		end = len(f.Search)
+	}
+	end += start + 1
+	f.SearchText = f.Search[start+1 : end]
+	f.Search = strings.TrimSpace(f.Search[:start] + f.Search[end+1:])
+
+	return f
+}
+
 func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
-	f := parseNostrFilterFlags(&databaseFilterSearch{
+	f := parseNostrFilterText(&databaseFilterSearch{
 		Filter: filter,
 	})
+
+	f = parseNostrFilterFlags(f)
 	f = parseNostrFilterTagMarkers(f)
 	f, err := parseNostrFilterDependencies(f)
 	if err != nil {

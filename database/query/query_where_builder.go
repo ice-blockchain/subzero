@@ -4,6 +4,7 @@ package query
 
 import (
 	"cmp"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -39,6 +40,7 @@ type (
 	}
 	databaseFilterSearch struct {
 		model.Filter
+		SearchText   string
 		Expiration   *bool
 		Videos       *bool
 		Images       *bool
@@ -739,6 +741,7 @@ func (w *whereBuilder) BuildDependencies(cteName string) (sql string, params map
 }
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
+	var searchKeyword string
 	for idx := range filters {
 		w.maybeOR()
 		dbFilter, err := parseNostrFilter(filters[idx])
@@ -751,14 +754,21 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		if dbFilter.Dependencies != nil {
 			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
+		if dbFilter.SearchText != "" {
+			searchKeyword = dbFilter.SearchText
+		}
 	}
 
 	if w.Len() > 0 {
 		w.WriteString(" AND ")
 	}
 	w.WriteString(whereBuilderDefaultWhere)
+	params = w.Params
+	if searchKeyword != "" {
+		params["search"] = fmt.Sprintf("%v*", searchKeyword)
+	}
 
-	return w.String(), w.Params, nil
+	return w.String(), params, nil
 }
 
 func (w *whereBuilder) applyDeleteFilter(idx int, filter *databaseFilterDelete) {

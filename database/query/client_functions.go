@@ -4,6 +4,7 @@ package query
 
 import (
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -96,4 +97,27 @@ func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) str
 		return strconv.Itoa(kind) + ":" + masterPubkey + ":"
 	}
 	return eventID
+}
+
+func sqlFts5CleanupText(text string) string {
+	pattern := regexp.MustCompile(`\b(npub|nsec|nprofile|nostr:)\w*\b|#\w+|[^\w\s]`)
+	text = pattern.ReplaceAllString(text, "")
+	text = regexp.MustCompile(`\s{2,}`).ReplaceAllString(text, " ")
+
+	return strings.Trim(text, " ")
+}
+
+func sqlExtractIMeta(jsonImeta string, key string) (string, error) {
+	var imetaTags []string
+	err := json.Unmarshal([]byte(jsonImeta), &imetaTags)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to unmarshal old tags")
+	}
+	for _, tag := range imetaTags {
+		if strings.HasPrefix(tag, key) {
+			return strings.Trim(strings.TrimPrefix(tag, key), " "), nil
+		}
+	}
+
+	return "", nil
 }

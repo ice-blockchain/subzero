@@ -568,21 +568,98 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 		orderBy = " order by random()"
 	}
 
+	searchKeyword := ""
+	val, ok := params["search"]
+	if ok && val.(string) != "" {
+		searchKeyword = val.(string)
+	}
 	if depClause == "" {
+		if searchKeyword != "" {
+			return `
+				select 
+					e.kind,
+					e.created_at,
+					e.system_created_at,
+					e.id,
+					e.pubkey,
+					e.master_pubkey,
+					e.sig,
+					e.content,
+					tags as jtags
+				from events e
+					join events_search es 
+						on es.id = e.id
+				where (` + systemCreatedAtFilter + `(` + whereMain + `)) AND 
+					  es.content MATCH :search
+				ORDER BY bm25(events_search), e.system_created_at desc
+				` + limitQuery, params, nil
+		}
+
 		return `
-select
-	e.kind,
-	e.created_at,
-	e.system_created_at,
-	e.id,
-	e.pubkey,
-	e.master_pubkey,
-	e.sig,
-	e.content,
-	tags as jtags
-from
-	events e
-where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
+			select
+				e.kind,
+				e.created_at,
+				e.system_created_at,
+				e.id,
+				e.pubkey,
+				e.master_pubkey,
+				e.sig,
+				e.content,
+				tags as jtags
+			from
+				events e
+			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
+	}
+
+	if searchKeyword != "" {
+		return `
+			with eventsmain as (
+				select
+					e.kind,
+					e.created_at,
+					e.system_created_at,
+					e.id,
+					e.pubkey,
+					e.master_pubkey,
+					e.sig,
+					e.content,
+					e.d_tag,
+					e.h_tag,
+					tags as jtags
+				from events e
+				where ` + systemCreatedAtFilter + `(` + whereMain + `)
+			` + limitQuery + `
+			)
+			select 
+				*
+			from
+			(
+				select
+					ev.kind,
+					ev.created_at,
+					ev.system_created_at,
+					ev.id,
+					ev.pubkey,
+					ev.master_pubkey,
+					ev.sig,
+					ev.content,
+					ev.d_tag,
+					ev.h_tag,
+					tags as jtags
+				from events ev
+					join events_search es 
+						on es.id = ev.id
+				WHERE ev.id IN (
+					select id from (
+						select
+							*
+						from
+							eventsmain
+						` + depClause + `
+					)
+				) AND es.content MATCH :search
+				ORDER BY bm25(events_search), ev.system_created_at desc
+			)`, params, nil
 	}
 
 	return `

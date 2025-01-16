@@ -421,4 +421,63 @@ begin
 end
 ;
 --------
+CREATE VIRTUAL TABLE IF NOT EXISTS events_search USING fts5(id, content);
+drop   trigger if     exists trigger_events_search_insert;
+CREATE TRIGGER IF NOT EXISTS trigger_events_search_insert AFTER INSERT ON events BEGIN
+  INSERT INTO events_search(id, content) VALUES (new.id, 
+    coalesce(
+        subzero_nostr_fts5_cleanup_text(
+            case
+                when new.kind = 0 then 
+                    iif(
+                        json_valid(new.content), 
+                        coalesce(json_extract(new.content, '$.name'), '') || ' ' || coalesce(json_extract(new.content, '$.display_name'), ''),
+                        ''
+                    )
+                when new.kind in (1, 30023) then
+                    new.content || ' ' ||
+                    iif(
+                        json_valid(new.tags),
+                        coalesce(
+                            (SELECT subzero_nostr_extract_imeta(je.value, 'alt') FROM json_each(new.tags) je WHERE json_valid(new.tags) and json_extract(value, '$[0]') = 'imeta') || 
+                            ' ' || 
+                            (SELECT subzero_nostr_extract_imeta(je.value, 'summary') FROM json_each(new.tags) je WHERE json_valid(new.tags) and json_extract(value, '$[0]') = 'imeta'),
+                            ''
+                        ),
+                        ''
+                    )
+                when new.kind in (6, 16) then 
+                    iif(
+                        json_valid(new.content), 
+                        coalesce(json_extract(new.content, '$.content'), ''),
+                        ''
+                    )
+                when new.kind = 1063 then 
+                    iif(
+                        json_valid(new.tags),
+                        coalesce(
+                            (SELECT subzero_nostr_extract_imeta(je.value, 'alt') FROM json_each(new.tags) je WHERE json_valid(new.tags) and json_extract(value, '$[0]') = 'imeta') || 
+                            ' ' || 
+                            (SELECT subzero_nostr_extract_imeta(je.value, 'summary') FROM json_each(new.tags) je WHERE json_valid(new.tags) and json_extract(value, '$[0]') = 'imeta'),
+                            ''
+                        ),
+                        ''
+                    )
+                else ''
+            end
+        ),
+    '')
+  );
+END;
+-- drop   trigger if     exists trigger_events_search_delete;
+-- CREATE TRIGGER IF NOT EXISTS trigger_events_search_delete AFTER DELETE ON events BEGIN
+--   INSERT INTO events_search(events_search, id, content) VALUES('delete', old.id, old.content);
+-- END;
+-- drop   trigger if     exists trigger_events_search_update;
+-- CREATE TRIGGER IF NOT EXISTS trigger_events_search_update AFTER UPDATE ON events BEGIN
+--   INSERT INTO events_search(events_search, id, content) VALUES('delete', old.id, old.content);
+--   INSERT INTO events_search(id, content) VALUES (new.id, new.content)
+--   on conflict do nothing;
+-- END;
+--------
 PRAGMA foreign_keys = on;
