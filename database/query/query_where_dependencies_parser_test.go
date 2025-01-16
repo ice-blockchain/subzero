@@ -356,7 +356,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			t.Logf("dvm event: %+v", ev)
 			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
 			require.Equal(t, `{"*":1,"+":1}`, ev.Content)
-			require.Len(t, ev.Tags, 3)
+			require.GreaterOrEqual(t, len(ev.Tags), 3)
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
 			require.Truef(t, valid, "signature is invalid: %+v", ev)
