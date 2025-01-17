@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -270,7 +271,22 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 			}
 			defer r.Close()
 
-			if err := r.Publish(ctx, result.Event); err != nil {
+			err := r.Publish(ctx, result.Event)
+			if err != nil && strings.Contains(err.Error(), "auth-required:") {
+				err = errors.Wrap(r.Auth(ctx, func(event *nostr.Event) error {
+					subZeroEvent := model.Event{Event: *event}
+					if err := subZeroEvent.SignWithAlg(d.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+						return err
+					}
+					*event = subZeroEvent.Event
+
+					return nil
+				}), "failed to authenticate to relay")
+				if err == nil {
+					err = r.Publish(ctx, result.Event)
+				}
+			}
+			if err != nil {
 				log.Printf("DVM: job %v: failed to publish job result to relay: %v, err: %v", task.Event.ID, relay, err)
 				return
 			}
