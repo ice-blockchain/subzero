@@ -13,6 +13,12 @@ A new kind `30175` addressable event that is a modifiable version of the kind `1
 
 Kind `30175` is a super set of kind `1`, meaning it has all the features of a kind `1` event, with the extra feature of being modifiable, so whenever a kind `1` is used, the new `30175` kind can be used as well.
 
+The kind `30175` events also need 2 timestamp fields to be added:
+1. `published_at`, mandatory, same as for [`30023` articles](https://github.com/nostr-protocol/nips/blob/master/23.md)
+2. `editing_ended_at`, optional, if set Clients and Relays MUST reject updates made to the event after that timestamp
+
+`d`, `published_at`, `editing_ended_at` tags MUST never be changed. Those are immutable, the first version of the event has the final versions of those tags.
+
 ###### Example
 ```json
 {
@@ -21,6 +27,8 @@ Kind `30175` is a super set of kind `1`, meaning it has all the features of a ki
   "content": "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n\nRead more at nostr:naddr1qqzkjurnw4ksz9thwden5te0wfjkccte9ehx7um5wghx7un8qgs2d90kkcq3nk2jry62dyf50k0h36rhpdtd594my40w9pkal876jxgrqsqqqa28pccpzu.",
   "tags": [
     ["d", <UUIDv7>],
+    ["published_at", "1296962229"],
+    ["editing_ended_at", "1297962229"],
     ["e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"],
     ["a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"]
   ],
