@@ -29,3 +29,13 @@ vendor/
 .env
 *.patch
 go.work
+
+subzero-ion-connect
+subzero-ion-connect-authgen
+subzero-ion-connect-indexer
+subzero-ion-connect-keygen
+
+!subzero-ion-connect/
+!subzero-ion-connect-authgen/
+!subzero-ion-connect-indexer/
+!subzero-ion-connect-keygen/
