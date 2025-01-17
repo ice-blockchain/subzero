@@ -347,9 +347,12 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 
 	if len(req.InsertOrReplace) > 0 {
 		err = errors.Join(err, errors.Wrap(db.saveEvents(ctx, req.InsertOrReplace), "failed to save events"))
+		err = errors.Join(err, errors.Wrap(db.saveFts5TextEvent(ctx, req.InsertOrReplace), "failed to save events"))
 	}
 
 	if len(req.Delete) > 0 {
+		err = errors.Join(err, errors.Wrap(db.deleteFts5Events(ctx, req.Delete), "failed to delete events"))
+
 		deleteErr := db.deleteEvents(ctx, req.Delete)
 		if errors.Is(deleteErr, ErrUnexpectedRowsAffected) && len(req.InsertOrReplace) > 0 {
 			deleteErr = nil
@@ -575,24 +578,7 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 	}
 	if depClause == "" {
 		if searchKeyword != "" {
-			return `
-				select 
-					e.kind,
-					e.created_at,
-					e.system_created_at,
-					e.id,
-					e.pubkey,
-					e.master_pubkey,
-					e.sig,
-					e.content,
-					tags as jtags
-				from events e
-					join events_search es 
-						on es.id = e.id
-				where (` + systemCreatedAtFilter + `(` + whereMain + `)) AND 
-					  es.content MATCH :search
-				ORDER BY bm25(events_search), e.system_created_at desc
-				` + limitQuery, params, nil
+			return searchWithoutDepsSQL(systemCreatedAtFilter, whereMain, limitQuery), params, nil
 		}
 
 		return `
@@ -610,56 +596,8 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 				events e
 			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
 	}
-
 	if searchKeyword != "" {
-		return `
-			with eventsmain as (
-				select
-					e.kind,
-					e.created_at,
-					e.system_created_at,
-					e.id,
-					e.pubkey,
-					e.master_pubkey,
-					e.sig,
-					e.content,
-					e.d_tag,
-					e.h_tag,
-					tags as jtags
-				from events e
-				where ` + systemCreatedAtFilter + `(` + whereMain + `)
-			` + limitQuery + `
-			)
-			select 
-				*
-			from
-			(
-				select
-					ev.kind,
-					ev.created_at,
-					ev.system_created_at,
-					ev.id,
-					ev.pubkey,
-					ev.master_pubkey,
-					ev.sig,
-					ev.content,
-					ev.d_tag,
-					ev.h_tag,
-					tags as jtags
-				from events ev
-					join events_search es 
-						on es.id = ev.id
-				WHERE ev.id IN (
-					select id from (
-						select
-							*
-						from
-							eventsmain
-						` + depClause + `
-					)
-				) AND es.content MATCH :search
-				ORDER BY bm25(events_search), ev.system_created_at desc
-			)`, params, nil
+		return searchWithDepsSQL(systemCreatedAtFilter, whereMain, limitQuery, depClause), params, nil
 	}
 
 	return `
