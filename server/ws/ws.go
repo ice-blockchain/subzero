@@ -27,17 +27,17 @@ type (
 	EventGetter         func(context.Context, *model.Subscription) EventIterator
 	ReqMustAuthenticate func(context.Context, *model.Subscription) (authRequired bool)
 	EventAuthenticate   func(context.Context, ...*model.Event) (authRequired bool)
+	EventListener       func(context.Context, ...*model.Event) error
 )
 
 var (
-	wsEventListener        func(context.Context, ...*model.Event) error
+	wsEventListener        EventListener
 	wsSubscriptionListener EventGetter
 	reqMustAuth            ReqMustAuthenticate
 	eventMustAuth          EventAuthenticate
-	hdl                    *handler
 )
 
-func RegisterWSEventListener(listen func(context.Context, ...*model.Event) error) {
+func RegisterWSEventListener(listen EventListener) {
 	wsEventListener = listen
 }
 
@@ -53,31 +53,20 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func notifySubscriptions(ctx context.Context, event *model.Event) error {
-	if hdl == nil {
-		log.Panic("Server is not started")
-	}
-
-	return hdl.notifyListenersAboutNewEvents(ctx, event)
-}
-
-func newHandler(relayURL string) *handler {
-	// Initialize the GLOBAL handler.
-	hdl = &handler{
-		connSubs: xsync.NewMapOf[Writer, connSubscriptions](),
-		connAuth: xsync.NewMapOf[Writer, connAuthData](),
-		relayURL: relayURL,
-	}
-
-	return hdl
-}
-
 func NewHandler(relayURL string) WSHandler {
 	return newHandler(relayURL)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
+}
+
+func newHandler(relayURL string) *handler {
+	return &handler{
+		connSubs: xsync.NewMapOf[Writer, connSubscriptions](),
+		connAuth: xsync.NewMapOf[Writer, connAuthData](),
+		relayURL: relayURL,
+	}
 }
 
 func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
