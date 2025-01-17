@@ -15,6 +15,7 @@ func main() {
 	relayURL := flag.String("relay", "", "URL of the relay")
 	challenge := flag.String("challenge", "", "Challenge string")
 	key := flag.String("key", model.GeneratePrivateKey(), "Private key")
+	master := flag.String("master-key", "", "Master public key")
 	flag.Parse()
 
 	if *relayURL == "" || *challenge == "" {
@@ -31,14 +32,19 @@ func main() {
 	fmt.Println("Private key:", *key)
 	fmt.Println("Public key: ", public)
 
+	tags := model.Tags{
+		{"relay", *relayURL},
+		{"challenge", *challenge},
+	}
+	if *master != "" {
+		tags = append(tags, model.Tag{model.CustomIONTagOnBehalfOf, *master})
+	}
+
 	authEvent := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindClientAuthentication,
-			Tags: model.Tags{
-				{"relay", *relayURL},
-				{"challenge", *challenge},
-			},
+			Tags:      tags,
 		},
 	}
 	err = authEvent.SignWithAlg(*key, model.SignAlgEDDSA, model.KeyAlgCurve25519)

@@ -79,7 +79,9 @@ func TestSelfChat(t *testing.T) {
 	sub, err := receiver.Subscribe(context.Background(), []model.Filter{
 		{
 			Kinds: []int{nostr.KindGiftWrap},
-			Tags:  model.TagMap{}.SetLiterals("k", "1"),
+			Tags: model.TagMap{}.
+				Append("k", model.PointerOf("1")).
+				Append("k", model.PointerOf("42")),
 		},
 	})
 	require.NoError(t, err)
