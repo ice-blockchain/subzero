@@ -164,6 +164,15 @@ func countBasedOnGroupsFromEvents(events []*nostr.Event, groups ...string) (stri
 	return string(data), errors.Wrap(err, "failed to marshal group counts")
 }
 
+func getMasterPublicKey(ev *nostr.Event) string {
+	for _, tag := range ev.Tags {
+		if tag.Key() == model.CustomIONTagOnBehalfOf && tag.Value() != "" {
+			return tag.Value()
+		}
+	}
+	return ev.PubKey
+}
+
 func countBasedOnGroups(evList []*nostr.Event, groups ...string) map[string]uint64 {
 	groupCounts := make(map[string]uint64, 0)
 	for _, group := range groups {
@@ -171,8 +180,10 @@ func countBasedOnGroups(evList []*nostr.Event, groups ...string) map[string]uint
 			switch group {
 			case NostrEventCountGroupContent:
 				groupCounts[ev.Content]++
+
 			case NostrEventCountGroupPubkey:
-				groupCounts[ev.PubKey]++
+				groupCounts[getMasterPublicKey(ev)]++
+
 			case NostrEventCountGroupRoot, NostrEventCountGroupReply:
 				for _, tag := range ev.Tags {
 					if tag.Key() == "e" && len(tag) > 3 {
@@ -181,6 +192,7 @@ func countBasedOnGroups(evList []*nostr.Event, groups ...string) map[string]uint
 						}
 					}
 				}
+
 			default:
 				for _, tag := range ev.Tags {
 					if tag.Key() == group {

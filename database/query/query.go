@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -383,6 +384,7 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 		event.Tags = model.Tags{
 			{"request", ev.String()},
 			{"e", ev.ID, db.relayURL},
+			{"expiration", strconv.FormatInt(time.Now().Add(model.DVMJobResultExpiration).Unix(), 10)},
 		}
 		db.MustSignEvent(event)
 	}

@@ -4,6 +4,7 @@ package model
 
 import (
 	"errors"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 )
@@ -123,4 +124,8 @@ type (
 		Banner      string `json:"banner" example:"https://example.com/banner.jpg"`
 		Bot         bool   `json:"bot" example:"false"`
 	}
+)
+
+const (
+	DVMJobResultExpiration = 15 * time.Minute
 )

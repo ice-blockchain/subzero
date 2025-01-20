@@ -230,15 +230,17 @@ func (d *dvm) finalizeJob(incomingEvent *model.Event, payload string, reqiredPay
 	if err != nil {
 		return nil, errors.Wrap(err, "can't get public key")
 	}
+	now := time.Now()
 	result := model.Event{
 		Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Timestamp(now.Unix()),
 			Content:   payload,
 			Kind:      incomingEvent.Kind + 1000,
 			Tags: model.Tags{
 				{"request", incomingEvent.String()},
 				{"e", incomingEvent.ID, globalConfig.RelayURL},
-				{"p", incomingEvent.PubKey},
+				{"expiration", strconv.FormatInt(now.Add(model.DVMJobResultExpiration).Unix(), 10)},
+				{"p", incomingEvent.GetMasterPublicKey()},
 				{model.CustomIONTagOnBehalfOf, pubKey},
 			},
 		},
@@ -327,15 +329,17 @@ func (d *dvm) publishJobFeedback(ctx context.Context, task *jobInfo, incomingEve
 	if err != nil {
 		return errors.Wrap(err, "can't get public key")
 	}
+	now := time.Now()
 	result := model.Event{
 		Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Timestamp(now.Unix()),
 			Content:   payload,
 			Kind:      nostr.KindJobFeedback,
 			Tags: model.Tags{
 				{"status", status},
+				{"expiration", strconv.FormatInt(now.Add(model.DVMJobResultExpiration).Unix(), 10)},
 				{"e", incomingEvent.ID},
-				{"p", incomingEvent.PubKey},
+				{"p", incomingEvent.GetMasterPublicKey()},
 				{model.CustomIONTagOnBehalfOf, pubKey},
 			},
 		},
