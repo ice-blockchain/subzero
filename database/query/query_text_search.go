@@ -21,7 +21,12 @@ type (
 	}
 )
 
-func (db *dbClient) saveFts5TextEvent(ctx context.Context, events []databaseEvent) error {
+var (
+	fts5TextCleanupPattern  = regexp.MustCompile(`\b(npub|nsec|nprofile|nostr:)\w*\b|#\w+|[^\w\s]`)
+	fts5SpaceCleanupPattern = regexp.MustCompile(`\s{2,}`)
+)
+
+func (db *dbClient) saveFts5Events(ctx context.Context, events []databaseEvent) error {
 	type fts5Row struct {
 		ID      string
 		Content string
@@ -61,40 +66,19 @@ func (db *dbClient) saveFts5TextEvent(ctx context.Context, events []databaseEven
 	return err
 }
 
-func (db *dbClient) deleteFts5Events(ctx context.Context, filters []databaseFilterDelete) error {
-	var filtersFindEvents model.Filters
-	for _, filter := range filters {
-		if len(filter.IDs) != 0 {
-			filtersFindEvents = append(filtersFindEvents, nostr.Filter{
-				IDs: filter.IDs,
-			})
-
-			continue
-		}
-		for _, ev := range filter.Events {
-			filtersFindEvents = append(filtersFindEvents, nostr.Filter{
-				Authors: []string{filter.Author},
-				Kinds:   []model.Kind{ev.Kind},
-				Tags:    nostr.TagMap{}.SetLiterals("d", ev.Dtag),
-			})
-		}
-	}
-	var ids []deleteFts5Row
-	iterator := db.SelectEvents(ctx, filtersFindEvents...)
-	for ev, err := range iterator {
-		if err != nil {
-			return err
-		}
-		ids = append(ids, deleteFts5Row{ID: ev.ID})
-	}
+func (db *dbClient) deleteFts5Events(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := db.deleteFts5EventsSQL(ctx, ids)
+	var toDelete []deleteFts5Row
+	for _, id := range ids {
+		toDelete = append(toDelete, deleteFts5Row{ID: id})
+	}
+	rows, err := db.deleteFts5EventsSQL(ctx, toDelete)
 	if err != nil {
 		return errors.Wrapf(err, "can't delete fts5 events for: %v", ids)
 	}
-	if expected := int64(len(filters)); rows < expected {
+	if expected := int64(len(ids)); rows < expected {
 		err = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expected, rows)
 	}
 
@@ -138,7 +122,7 @@ func parseFts5Text(ev *model.Event) string {
 		if err := json.Unmarshal([]byte(ev.Content), &parsedEvent); err != nil {
 			return ""
 		}
-		content = fmt.Sprintf("%v", parsedEvent.Content)
+		content = parsedEvent.Content
 	case nostr.KindFileMetadata:
 		content = fmt.Sprintf("%v %v", ev.Content, strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " "))
 	}
@@ -234,9 +218,8 @@ func searchWithDepsSQL(systemCreatedAtFilter, whereMain, limitQuery, depClause s
 }
 
 func fts5CleanupText(text string) string {
-	pattern := regexp.MustCompile(`\b(npub|nsec|nprofile|nostr:)\w*\b|#\w+|[^\w\s]`)
-	text = pattern.ReplaceAllString(text, "")
-	text = regexp.MustCompile(`\s{2,}`).ReplaceAllString(text, " ")
+	text = fts5TextCleanupPattern.ReplaceAllString(text, "")
+	text = fts5SpaceCleanupPattern.ReplaceAllString(text, " ")
 
 	return strings.Trim(text, " ")
 }

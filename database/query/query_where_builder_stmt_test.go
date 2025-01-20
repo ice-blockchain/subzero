@@ -466,21 +466,32 @@ func TestParseNostrFilterText(t *testing.T) {
 		require.Equal(t, "", f.Search)
 	})
 	t.Run("With search text", func(t *testing.T) {
-		f, err := parseNostrFilter(model.Filter{
-			Search: "\"some text\"",
-		})
+		f, err := parseNostrFilter(model.Filter{Search: "\"some text\" include:dependencies:kind1>kind0"})
 		require.NoError(t, err)
-		require.Empty(t, f.Filter)
 		require.Equal(t, "some text", f.SearchText)
-		require.Equal(t, "", f.Search)
+		require.Empty(t, f.Search)
 	})
-	t.Run("Search text with missed end quote", func(t *testing.T) {
-		f, err := parseNostrFilter(model.Filter{
-			Search: "include:dependencies:kind1>kind0",
-		})
+	t.Run("With search text, no ending quote", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `"some text include:dependencies:kind1>kind0`})
 		require.NoError(t, err)
-		require.Empty(t, f.Filter)
 		require.Equal(t, "", f.SearchText)
-		require.Equal(t, "", f.Search)
+		require.Equal(t, `"some text`, f.Search)
+	})
+	t.Run("With search text, doubled quotes in the end", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `"some text "" include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "some text", f.SearchText)
+		require.Empty(t, f.Search)
+	})
+	t.Run("With search text, wrong quotes in the start and middle", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `""some "text "" include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "some text", f.SearchText)
+		require.Empty(t, f.Search)
+	})
+	t.Run("With search text, no start quote", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `some text " include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "some text \"", f.Search)
 	})
 }

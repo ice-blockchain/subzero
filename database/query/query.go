@@ -149,7 +149,7 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 	return string(sAlg), string(kAlg), nil
 }
 
-func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCheck bool, filters []databaseFilterDelete) (deletedCount int, dependencies []databaseFilterDelete, err error) {
+func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCheck bool, filters []databaseFilterDelete) (deletedCount int, dependencies []databaseFilterDelete, ids []string, err error) {
 	var (
 		where  string
 		params map[string]any
@@ -189,7 +189,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		where, params, err = builder.Build(db.extendWhereFilters(ctx, genericFilters...)...)
 	}
 	if err != nil {
-		return 0, nil, errors.Wrap(err, "failed to generate events where clause")
+		return 0, nil, nil, errors.Wrap(err, "failed to generate events where clause")
 	}
 
 	stmt := `delete from events as e where ` + where + ` returning
@@ -209,12 +209,12 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	var deletedEvents []*model.Event
 	for ev, err := range db.newReadEventIterator(ctx, stmt, params) {
 		if err != nil {
-			return 0, nil, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+			return 0, nil, nil, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
 		}
 		deletedEvents = append(deletedEvents, ev)
 	}
 	if len(deletedEvents) == 0 {
-		return 0, nil, nil
+		return 0, nil, nil, nil
 	}
 
 	for _, ev := range deletedEvents {
@@ -232,12 +232,13 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 			f.IDs = append(f.IDs, ev.ID)
 		}
 		dependencies = append(dependencies, f)
+		ids = append(ids, ev.ID)
 	}
 
-	return len(deletedEvents), dependencies, nil
+	return len(deletedEvents), dependencies, ids, nil
 }
 
-func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
+func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) ([]string, error) {
 	var selectFilters []model.Filter
 	for _, filter := range filters {
 		fltr := model.Filter{
@@ -254,20 +255,23 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 		}
 	}
 
+	var deletedIDs []string
 	var filtersToDelete []databaseFilterDelete
 	for ev, err := range db.SelectEvents(ctx, selectFilters...) {
 		if err != nil {
-			return errors.Wrap(db.handleError(err), "failed to exec select events")
+			return nil, errors.Wrap(db.handleError(err), "failed to exec select events")
 		}
 		for _, filter := range filters {
 			if len(filter.IDs) == 0 && len(filter.Events) == 0 && filter.Author == ev.PubKey {
 				filtersToDelete = append(filtersToDelete, filter)
+				deletedIDs = append(deletedIDs, ev.ID)
 
 				break
 			}
 			for _, id := range filter.IDs {
 				if id == ev.ID {
 					filtersToDelete = append(filtersToDelete, filter)
+					deletedIDs = append(deletedIDs, ev.ID)
 
 					break
 				}
@@ -275,6 +279,7 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 			for _, e := range filter.Events {
 				if e.Pubkey == ev.PubKey && e.Kind == ev.Kind && e.Dtag == ev.Tags.GetD() {
 					filtersToDelete = append(filtersToDelete, filter)
+					deletedIDs = append(deletedIDs, ev.ID)
 
 					break
 				}
@@ -282,27 +287,29 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 		}
 	}
 	if len(filtersToDelete) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	deleted, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filtersToDelete)
+	deleted, filtersToDelete, ids, err := db.deleteEventsWithDependencies(ctx, true, filtersToDelete)
 	if deleted == 0 && err == nil {
 		err = ErrUnexpectedRowsAffected
 	}
+	deletedIDs = append(deletedIDs, ids...)
 
 	for len(filtersToDelete) > 0 && err == nil {
 		var dependencies []databaseFilterDelete
 		for _, batch := range model.SplitBatch(filtersToDelete, selectDefaultBatchLimit) {
-			_, batchDeps, err := db.deleteEventsWithDependencies(ctx, false, batch)
+			_, batchDeps, ids, err := db.deleteEventsWithDependencies(ctx, false, batch)
 			if err != nil {
 				break
 			}
 			dependencies = append(dependencies, batchDeps...)
+			deletedIDs = append(deletedIDs, ids...)
 		}
 		filtersToDelete = dependencies
 	}
 
-	return err
+	return ids, err
 }
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
@@ -347,17 +354,16 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 
 	if len(req.InsertOrReplace) > 0 {
 		err = errors.Join(err, errors.Wrap(db.saveEvents(ctx, req.InsertOrReplace), "failed to save events"))
-		err = errors.Join(err, errors.Wrap(db.saveFts5TextEvent(ctx, req.InsertOrReplace), "failed to save events"))
+		err = errors.Join(err, errors.Wrap(db.saveFts5Events(ctx, req.InsertOrReplace), "failed to save fts5 events"))
 	}
 
 	if len(req.Delete) > 0 {
-		err = errors.Join(err, errors.Wrap(db.deleteFts5Events(ctx, req.Delete), "failed to delete events"))
-
-		deleteErr := db.deleteEvents(ctx, req.Delete)
+		ids, deleteErr := db.deleteEvents(ctx, req.Delete)
 		if errors.Is(deleteErr, ErrUnexpectedRowsAffected) && len(req.InsertOrReplace) > 0 {
 			deleteErr = nil
 		}
 		err = errors.Join(err, errors.Wrap(deleteErr, "failed to delete events"))
+		err = errors.Join(err, errors.Wrap(db.deleteFts5Events(ctx, ids), "failed to delete fts5 events"))
 	}
 
 	return err
@@ -566,8 +572,9 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 		limitQuery = " limit :mainlimit"
 	}
 
+	const discoverContentCreatorsToFollow = "discover content creators to follow"
 	orderBy := " order by system_created_at desc"
-	if strings.Contains(filters.String(), "discover content creators to follow") {
+	if strings.Contains(filters.String(), discoverContentCreatorsToFollow) {
 		orderBy = " order by random()"
 	}
 
