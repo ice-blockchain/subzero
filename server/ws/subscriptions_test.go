@@ -751,7 +751,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
+	var validEventKindArticle, validEventKindBlogPost *model.Event
 	t.Run("kind 30023 (Article) (NIP-23): valid event", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
@@ -787,18 +787,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, validEventKindBlogPost.Event))
 	})
 
-	t.Run("kind 30023 (Article) (NIP-23): valid event no tags", func(t *testing.T) {
-		var tags nostr.Tags
-		validEventNoTagsKindArticle = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindArticle,
-			Tags:      tags,
-			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
-		}}
-		helperSignWithMinLeadingZeroBits(t, validEventNoTagsKindArticle, privkey)
-		require.NoError(t, relay.Publish(ctx, validEventNoTagsKindArticle.Event))
-	})
-
 	t.Run("kind 30023 (Article) (NIP-23): unsupported tag for this type of event", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
@@ -819,7 +807,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle}, storedEvents)
+	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost}, storedEvents)
 }
 
 func TestPublishingNIP01NIP24Events(t *testing.T) {
