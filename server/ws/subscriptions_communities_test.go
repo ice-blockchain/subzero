@@ -43,10 +43,11 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("valid closed community definition event with moderator posting, comments enabled", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
+					{"d", "dtagvalue"},
 					{"name", "some name"},
 					{"description", "some description"},
 					{"closed"},
@@ -69,7 +70,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	//---- JOIN ----
 	ownerAuthorizationEvent := &model.Event{
 		Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: model.Tags{
 				{"h", communityID},
@@ -82,7 +83,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -96,7 +97,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join admin to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -111,7 +112,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join moderator to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -126,7 +127,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join by owner to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -141,7 +142,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join by owner another user to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -156,7 +157,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join by admin another user to the community", func(t *testing.T) {
 		adminAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -168,7 +169,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, adminAuthorizationEvent, privkeyAdmin)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -183,7 +184,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join by moderator another user to the community", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -195,7 +196,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyAdmin)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -210,7 +211,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("join by moderator another user to the community", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -222,7 +223,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -238,7 +239,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post to the community by any user, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -250,7 +251,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post to the community by moderator, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -262,7 +263,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post to the community by admin, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -274,7 +275,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post to the community by owner, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -289,7 +290,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post comment to the community by any user, forbidden", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -300,7 +301,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -316,7 +317,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post comment to the community by moderator, ok", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 			},
@@ -324,7 +325,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -342,7 +343,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 			Event: nostr.Event{
 				ID:        uuid.NewString(),
 				PubKey:    pubkeyUser1,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 			},
@@ -352,7 +353,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 			Event: nostr.Event{
 				ID:        uuid.NewString(),
 				PubKey:    pubkeyCommunityAdmin,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -368,7 +369,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post comment to the community by owner, ok", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 			},
@@ -376,7 +377,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -409,7 +410,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban any user by new admin, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -424,7 +425,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("demoting admin by owner, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -438,7 +439,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban any user by demoted admin, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some reason",
 				Tags: model.Tags{
@@ -453,7 +454,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to promote user to admin by moderator, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -467,7 +468,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to demote admin by moderator, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -482,7 +483,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban any user by owner, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -497,7 +498,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban any user by admin, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -512,7 +513,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban any user by moderator, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -527,7 +528,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban any user by any user, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -542,7 +543,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban admin user by moderator, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -557,7 +558,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban owner user by moderator, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -572,7 +573,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to ban owner user by admin, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -610,12 +611,13 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("valid open community definition event with anybody posting, comments disabled", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
 					{"name", "some name"},
 					{"description", "some description"},
+					{"d", "dtagvalue"},
 					{"open"},
 					{"settings", model.CommentsEnabledSettings, "false", fmt.Sprint(time.Now().Unix())},
 					{"p", pubkeyCommunityAdmin, "", string(model.AdminRole)},
@@ -632,7 +634,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 			Event: nostr.Event{
 				ID:        uuid.NewString(),
 				PubKey:    pubkeyCommunityOwner,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -646,7 +648,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("join admin to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -662,7 +664,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 			Event: nostr.Event{
 				ID:        uuid.NewString(),
 				PubKey:    pubkeyCommunityModerator,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -676,7 +678,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("join by admin another user to the community", func(t *testing.T) {
 		adminAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -688,7 +690,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		helperSignWithMinLeadingZeroBits(t, adminAuthorizationEvent, privkeyAdmin)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -704,7 +706,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post to the community by any user, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -716,7 +718,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post to the community by moderator, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -728,7 +730,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post to the community by admin, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -740,7 +742,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post to the community by owner, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -755,7 +757,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post comment to the community by any user, forbidden", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -766,7 +768,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -782,7 +784,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post comment to the community by admin, forbidden", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -793,7 +795,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -809,7 +811,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post comment to the community by moderator, forbidden", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -820,7 +822,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -836,7 +838,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("try to post comment to the community by owner, forbidden", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -847,7 +849,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -886,12 +888,13 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("create community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
 					{"name", "some name"},
 					{"description", "some description"},
+					{"d", "dtagvalue"},
 					{"open"},
 					{"settings", model.CommentsEnabledSettings, "false", fmt.Sprint(time.Now().Unix())},
 					{"settings", model.RoleRequiredForPostingSettings, "", fmt.Sprint(time.Now().Unix())},
@@ -906,7 +909,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change definition by any user", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -920,7 +923,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change community name by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -934,7 +937,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change community description by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -948,7 +951,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change community open/closed status definition by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -962,7 +965,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change community private/public status definition by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -976,7 +979,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change community picture definition by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -990,7 +993,7 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	t.Run("try to change community settings by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1028,12 +1031,13 @@ func TestCommunity_TransferringOwnership(t *testing.T) {
 	t.Run("valid open community definition ", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
 					{"name", "some name"},
 					{"description", "some description"},
+					{"d", "dtagvalue"},
 					{"open"},
 					{"p", pubkeyCommunityAdmin, "", string(model.AdminRole)},
 					{"p", pubkeyCommunityModerator, "", string(model.ModeratorRole)},
@@ -1046,7 +1050,7 @@ func TestCommunity_TransferringOwnership(t *testing.T) {
 	t.Run("attempt of transferring ownership of the community by non privileged user", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1062,7 +1066,7 @@ func TestCommunity_TransferringOwnership(t *testing.T) {
 	t.Run("attempt of transferring ownership of the community by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1078,7 +1082,7 @@ func TestCommunity_TransferringOwnership(t *testing.T) {
 	t.Run("attempt of transferring ownership of the community by admin", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1094,7 +1098,7 @@ func TestCommunity_TransferringOwnership(t *testing.T) {
 	t.Run("transferring ownership of community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1133,7 +1137,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("valid open community definition event with anybody posting, comments disabled", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1142,6 +1146,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 					{"open"},
 					{"settings", model.CommentsEnabledSettings, "false", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())},
 					{"settings", model.RoleRequiredForPostingSettings, string(model.ModeratorRole), fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())},
+					{"d", "dtagvalue"},
 					{"p", pubkeyCommunityAdmin, "", string(model.AdminRole)},
 					{"p", pubkeyCommunityModerator, "", string(model.ModeratorRole)},
 				},
@@ -1154,7 +1159,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1168,7 +1173,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("join admin to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1182,7 +1187,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("join moderator to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1196,7 +1201,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("join by any user to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1210,7 +1215,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("try to post to the community by moderator, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -1222,7 +1227,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("try to post comment to the community by any user, forbidden, comments are disabled", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -1237,7 +1242,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityChangeDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1257,7 +1262,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("try to post to the community by moderator, now forbidden due to patches applying", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -1269,7 +1274,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	t.Run("try to post comment to the community by admin, ok, comments now enabled", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 			},
@@ -1277,7 +1282,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepost,
 				Content:   post.String(),
 				Tags: model.Tags{
@@ -1317,13 +1322,14 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("valid open community definition ", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
 					{"name", "some name"},
 					{"description", "some description"},
 					{"open"},
+					{"d", "dtagvalue"},
 					{"p", pubkeyCommunityAdmin, "", string(model.AdminRole)},
 					{"p", pubkeyCommunityModerator, "", string(model.ModeratorRole)},
 				},
@@ -1336,7 +1342,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1350,7 +1356,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("join admin to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1364,7 +1370,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("join moderator to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1378,7 +1384,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("join by moderator another user to the community", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1390,7 +1396,7 @@ func TestCommunity_Deletion(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1405,7 +1411,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("join by moderator another user to the community", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1417,7 +1423,7 @@ func TestCommunity_Deletion(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1432,7 +1438,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("join by moderator another user to the community", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1444,7 +1450,7 @@ func TestCommunity_Deletion(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1461,7 +1467,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to post comment to the community by admin, ok", func(t *testing.T) {
 		post1 = &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -1475,7 +1481,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to delete the post by user2, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Content:   "some text",
 				Tags: model.Tags{
@@ -1492,7 +1498,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to delete the post by user1 - author, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Tags: model.Tags{
 					{"e", post1.GetID()},
@@ -1509,7 +1515,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to post to the community by user1, ok", func(t *testing.T) {
 		post2 = &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -1521,7 +1527,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to delete the post by moderator, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Tags: model.Tags{
 					{"e", post2.GetID()},
@@ -1538,7 +1544,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to post to the community by user1, ok", func(t *testing.T) {
 		post3 = &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags:      model.Tags{{"h", communityID}},
 			},
@@ -1549,7 +1555,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to delete the post by admin, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Tags: model.Tags{
 					{"e", post3.GetID()},
@@ -1566,7 +1572,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to post to the community by user1, ok", func(t *testing.T) {
 		post4 = &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -1578,7 +1584,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to delete the post by community owner, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Tags: model.Tags{
 					{"e", post4.GetID()},
@@ -1595,7 +1601,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("create post by the community owner, ok", func(t *testing.T) {
 		post5 = &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -1607,7 +1613,7 @@ func TestCommunity_Deletion(t *testing.T) {
 	t.Run("try to delete the post by admin, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Tags: model.Tags{
 					{"e", post5.GetID()},
@@ -1646,7 +1652,7 @@ func TestCommunityBanUser(t *testing.T) {
 	t.Run("valid open community definition event with anybody posting, comments disabled", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityDefinition,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1654,6 +1660,7 @@ func TestCommunityBanUser(t *testing.T) {
 					{"description", "some description"},
 					{"open"},
 					{"settings", model.CommentsEnabledSettings, "false", fmt.Sprint(time.Now().Unix())},
+					{"d", "dtagvalue"},
 					{"p", pubkeyCommunityAdmin, "", string(model.AdminRole)},
 					{"p", pubkeyCommunityModerator, "", string(model.ModeratorRole)},
 				},
@@ -1668,7 +1675,7 @@ func TestCommunityBanUser(t *testing.T) {
 			Event: nostr.Event{
 				ID:        uuid.NewString(),
 				PubKey:    pubkeyCommunityOwner,
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1682,7 +1689,7 @@ func TestCommunityBanUser(t *testing.T) {
 	t.Run("join by admin another user to the community", func(t *testing.T) {
 		ownerAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1694,7 +1701,7 @@ func TestCommunityBanUser(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ownerAuthorizationEvent, privkeyOwner)
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1710,7 +1717,7 @@ func TestCommunityBanUser(t *testing.T) {
 	t.Run("try to post to the community by any user, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},
@@ -1723,7 +1730,7 @@ func TestCommunityBanUser(t *testing.T) {
 	t.Run("ban user by owner", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityBanUser,
 				Tags: model.Tags{
 					{"h", communityID},
@@ -1737,7 +1744,7 @@ func TestCommunityBanUser(t *testing.T) {
 	t.Run("try to post to the community by any user, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
 				Tags:      model.Tags{{"h", communityID}},

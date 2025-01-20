@@ -171,7 +171,8 @@ func TestSubscriptionEventAuth(t *testing.T) {
 		ev.CreatedAt = 1
 		ev.Content = "test"
 		ev.Tags = model.Tags{
-			model.Tag{"title", "test"},
+			{"title", "test"},
+			{"d", "foo"},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
 		err := relay.Publish(context.Background(), ev.Event)
@@ -197,6 +198,10 @@ func TestSubscriptionEventAuth(t *testing.T) {
 		ev.Kind = nostr.KindArticle
 		ev.CreatedAt = 2
 		ev.Content = "test"
+		ev.Tags = model.Tags{
+			{"title", "test"},
+			{"d", "foo"},
+		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
 		require.NoError(t, relay.Publish(context.Background(), ev.Event))
 

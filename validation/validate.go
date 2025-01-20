@@ -151,7 +151,7 @@ var (
 		nostr.KindJobFeedback:                  tagsTable("status", "amount", "e", "p"),
 
 		// Community
-		model.CustomIONKindCommunityDefinition:            tagsTable("h", "name", "description", "public", "private", "open", "closed", "p", "a"),
+		model.CustomIONKindCommunityDefinition:            tagsTable("h", "d", "name", "description", "public", "private", "open", "closed", "p", "a"),
 		model.CustomIONKindCommunityOwnershipTransferring: tagsTable("h", "a", "p"),
 		model.CustomIONKindCommunityJoin:                  tagsTable("h", "p", "authorization"),
 		model.CustomIONKindCommunityBanUser:               tagsTable("h", "p"),

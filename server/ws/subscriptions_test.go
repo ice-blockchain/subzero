@@ -106,7 +106,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	defer cancel()
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindTextNote,
 		Content:   "db event",
 	}}}
@@ -231,7 +231,7 @@ func TestPublishingEvents(t *testing.T) {
 	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	validEvent := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindTextNote,
 		Tags:      nil,
 		Content:   "validEvent",
@@ -243,7 +243,7 @@ func TestPublishingEvents(t *testing.T) {
 	})
 	t.Run("invalid event kind", func(t *testing.T) {
 		invalidKindEvent := model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      -1,
 			Tags:      nil,
 			Content:   "invalid kind id event",
@@ -258,7 +258,7 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("invalid event id", func(t *testing.T) {
 		invalidID := model.Event{Event: nostr.Event{
 			ID:        uuid.NewString(),
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nil,
 			Content:   "invalidID",
@@ -269,7 +269,7 @@ func TestPublishingEvents(t *testing.T) {
 	})
 	t.Run("invalid event signature", func(t *testing.T) {
 		invalidSignature := model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nil,
 			Content:   "invalidSignature",
@@ -285,7 +285,7 @@ func TestPublishingEvents(t *testing.T) {
 	t.Run("ephemeral event", func(t *testing.T) {
 		ephemeralEvent := model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindClientAuthentication,
 				Content:   "bogus",
 			},
@@ -300,7 +300,7 @@ func TestPublishingEvents(t *testing.T) {
 	var emptyKind03Event *model.Event
 	t.Run("empty kind 03 follow list tag parameters", func(t *testing.T) {
 		emptyKind03Event = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
 		}}
 		helperSignWithMinLeadingZeroBits(t, emptyKind03Event, privkey)
@@ -308,7 +308,7 @@ func TestPublishingEvents(t *testing.T) {
 	})
 	t.Run("wrong kind 03 follow list content", func(t *testing.T) {
 		inValidKind03Event := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
 			Tags:      nostr.Tags{[]string{"p"}, []string{"p"}},
 			Content:   "invalidEvent",
@@ -319,7 +319,7 @@ func TestPublishingEvents(t *testing.T) {
 	var validKind03Event *model.Event
 	t.Run("valid kind 03 follow list event", func(t *testing.T) {
 		validKind03Event = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
 			Tags:      nostr.Tags{[]string{"p", "wss://alicerelay.com/", "alice"}, []string{"p", "wss://bobrelay.com/nostr", "bob"}},
 		}}
@@ -363,7 +363,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	var validEventNIP09WithEKTags, validEventNIP09AllTags *model.Event
 	t.Run("kind 5 (Deletion) (NIP-05): valid event with e/k tag", func(t *testing.T) {
 		validEventNIP09WithEKTags = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
@@ -377,7 +377,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): valid event with all tag", func(t *testing.T) {
 		validEventNIP09AllTags = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
@@ -392,7 +392,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): invalid event, no required tags", func(t *testing.T) {
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Content:   "Deletion reason",
 		}}
@@ -401,7 +401,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): invalid event, mismatch e -> k tags", func(t *testing.T) {
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
@@ -414,7 +414,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): unsupported tag", func(t *testing.T) {
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"r", "wss://relay.example.com"},
@@ -448,7 +448,7 @@ func TestPublishingNIP09Events_NoEvent(t *testing.T) {
 	var deletionEvent *model.Event
 	t.Run("kind 5 (Deletion) (NIP-05): no such event", func(t *testing.T) {
 		deletionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
@@ -463,7 +463,7 @@ func TestPublishingNIP09Events_NoEvent(t *testing.T) {
 	var validKind01NIP10Event *model.Event
 	t.Run("kind 1 (NIP-10): valid", func(t *testing.T) {
 		validKind01NIP10Event = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: model.Tags{
 				{"e", "", "relay", "reply"},
@@ -476,7 +476,7 @@ func TestPublishingNIP09Events_NoEvent(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): delete event that exists", func(t *testing.T) {
 		deletionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", validKind01NIP10Event.ID, "wss://relay.example.com"},
@@ -490,7 +490,7 @@ func TestPublishingNIP09Events_NoEvent(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): delete event one more time again", func(t *testing.T) {
 		deletionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", validKind01NIP10Event.ID, "wss://relay.example.com"},
@@ -504,7 +504,7 @@ func TestPublishingNIP09Events_NoEvent(t *testing.T) {
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): delete user account", func(t *testing.T) {
 		deletionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{model.CustomIONTagOnBehalfOf, pubkey},
@@ -527,7 +527,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 
 	t.Run("kind 1 (NIP-10): e tags required params", func(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e"}},
 		}}
@@ -537,7 +537,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 
 	t.Run("kind 1 (NIP-10): invalid reply marker for e tags ", func(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "invalid marker"}},
 		}}
@@ -546,7 +546,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	})
 	t.Run("kind 1 (NIP-10): invalid p tag usage: no e tags", func(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"p", "pubkey1", "pubkey2"}},
 		}}
@@ -555,7 +555,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	})
 	t.Run("kind 1 (NIP-10): invalid p tag usage: empty tag values", func(t *testing.T) {
 		inValidKind01Event := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p"}},
 		}}
@@ -566,7 +566,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	var validKind01NIP10Event *model.Event
 	t.Run("kind 1 (NIP-10): valid", func(t *testing.T) {
 		validKind01NIP10Event = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}},
 		}}
@@ -594,7 +594,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	var validKind06NIP18Event *model.Event
 	t.Run("kind 6 (NIP-18): valid event", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
 			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", originalEvent.GetMasterPublicKey()}},
 			Content:   originalEvent.String(),
@@ -605,7 +605,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	})
 	t.Run("kind 6 (NIP-18): invalid event, no e tags", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
 			Tags:      model.Tags{model.Tag{"p", originalEvent.GetMasterPublicKey()}},
 			Content:   originalEvent.String(),
@@ -615,7 +615,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	})
 	t.Run("kind 6 (NIP-18): invalid event, no p tags", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
 			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}},
 			Content:   originalEvent.String(),
@@ -625,7 +625,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	})
 	t.Run("kind 6 (NIP-18): invalid event, no enough p tag parameters", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
 			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p"}},
 			Content:   originalEvent.String(),
@@ -635,7 +635,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 	})
 	t.Run("kind 6 (NIP-18): invalid event, wrong p tag pubkey != reposted note pubkey", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
 			Tags:      model.Tags{model.Tag{"e", originalEvent.ID}, model.Tag{"p", "foo"}},
 			Content:   originalEvent.String(),
@@ -651,7 +651,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &subEv, privkey)
 
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
 			Tags:      model.Tags{model.Tag{"e", subEv.ID}, model.Tag{"p", subEv.GetMasterPublicKey()}},
 			Content:   subEv.String(),
@@ -666,15 +666,19 @@ func TestPublishingNIP18Events(t *testing.T) {
 		subEv.Kind = nostr.KindArticle
 		subEv.CreatedAt = 1
 		subEv.Content = "hello article"
+		subEv.Tags = model.Tags{
+			{"title", "Hello Article"},
+			{"d", "hello-article"},
+		}
 		helperSignWithMinLeadingZeroBits(t, &subEv, privkey)
 
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGenericRepost,
 			Tags: model.Tags{
-				model.Tag{"e", subEv.ID},
-				model.Tag{"p", subEv.GetMasterPublicKey()},
-				model.Tag{"k", strconv.Itoa(subEv.Kind)},
+				{"e", subEv.ID},
+				{"p", subEv.GetMasterPublicKey()},
+				{"k", strconv.Itoa(subEv.Kind)},
 			},
 			Content: subEv.String(),
 		}}
@@ -691,7 +695,7 @@ func TestPublishingNIP18Events(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &subEv, privkey)
 
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGenericRepost,
 			Tags: model.Tags{
 				model.Tag{"e", subEv.ID},
@@ -713,13 +717,15 @@ func TestPublishingNIP18Events(t *testing.T) {
 		subEv.CreatedAt = 1
 		subEv.Content = "hello article with B"
 		subEv.Tags = model.Tags{
-			model.Tag{model.CustomIONTagOnBehalfOf, pub},
+			{model.CustomIONTagOnBehalfOf, pub},
+			{"title", "Hello Article2"},
+			{"d", "hello-article1"},
 		}
 		helperSignWithMinLeadingZeroBits(t, &subEv, privkey)
 		require.Equal(t, subEv.GetMasterPublicKey(), pub)
 
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: model.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGenericRepost,
 			Tags: model.Tags{
 				model.Tag{"e", subEv.ID, "relay"},
@@ -751,7 +757,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	var validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle *model.Event
+	var validEventKindArticle, validEventKindBlogPost *model.Event
 	t.Run("kind 30023 (Article) (NIP-23): valid event", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"a", "30023:a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919:ipsum", "wss://relay.nostr.org"})
@@ -761,7 +767,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
 		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
 		validEventKindArticle = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindArticle,
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
@@ -778,25 +784,13 @@ func TestPublishingNIP23Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"title", "Lorem Ipsum"})
 		tags = append(tags, nostr.Tag{"d", "lorem-ipsum"})
 		validEventKindBlogPost = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDraftArticle,
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
 		}}
 		helperSignWithMinLeadingZeroBits(t, validEventKindBlogPost, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventKindBlogPost.Event))
-	})
-
-	t.Run("kind 30023 (Article) (NIP-23): valid event no tags", func(t *testing.T) {
-		var tags nostr.Tags
-		validEventNoTagsKindArticle = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindArticle,
-			Tags:      tags,
-			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
-		}}
-		helperSignWithMinLeadingZeroBits(t, validEventNoTagsKindArticle, privkey)
-		require.NoError(t, relay.Publish(ctx, validEventNoTagsKindArticle.Event))
 	})
 
 	t.Run("kind 30023 (Article) (NIP-23): unsupported tag for this type of event", func(t *testing.T) {
@@ -810,7 +804,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "pubkey"})
 		tags = append(tags, nostr.Tag{"dummy", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindArticle,
 			Tags:      tags,
 			Content:   "Lorem [ipsum][nostr:nevent1qqst8cujky046negxgwwm5ynqwn53t8aqjr6afd8g59nfqwxpdhylpcpzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mg8arnc9] dolor sit amet",
@@ -819,7 +813,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost, validEventNoTagsKindArticle}, storedEvents)
+	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost}, storedEvents)
 }
 
 func TestPublishingNIP01NIP24Events(t *testing.T) {
@@ -837,7 +831,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "pubkey1"})
 		tags = append(tags, nostr.Tag{"alt", "reply"})
 		validEventNIP01 = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
 			Content:   `{"name":"qwerty","display_name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
@@ -852,7 +846,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "pubkey1"})
 		tags = append(tags, nostr.Tag{"alt", "reply"})
 		validEventNIP24 = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
 			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg","display_name":"qqq","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
@@ -867,7 +861,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "pubkey1"})
 		tags = append(tags, nostr.Tag{"alt", "reply"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
 			Content:   `{"display_name":"","website":"https://ice.io","banner":"https://example.com/banner.jpg","bot":true}`,
@@ -882,7 +876,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "pubkey1"})
 		tags = append(tags, nostr.Tag{"alt", "reply"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
 			Content:   `plain text`,
@@ -898,7 +892,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		tags = append(tags, nostr.Tag{"alt", "reply"})
 		tags = append(tags, nostr.Tag{"unsupported", "value"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      tags,
 			Content:   `{"name":"qwerty","about":"me is bot","picture":"https://example.com/pic.jpg"}`,
@@ -926,7 +920,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
 		tags = append(tags, nostr.Tag{"k", "1"})
 		validUpvoteEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 			Content:   "+",
@@ -941,7 +935,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
 		tags = append(tags, nostr.Tag{"k", "1"})
 		validUpvoteEmptyContentEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 		}}
@@ -955,7 +949,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
 		tags = append(tags, nostr.Tag{"k", "1"})
 		validDownvoteEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 			Content:   "-",
@@ -967,7 +961,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"r", "https://example.com/"})
 		validReactionToWebsiteEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReactionToWebsite,
 			Tags:      tags,
 			Content:   "+",
@@ -981,7 +975,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
 		tags = append(tags, nostr.Tag{"k", "1"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 			Content:   "+",
@@ -995,7 +989,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87:dummyDTag"})
 		tags = append(tags, nostr.Tag{"k", "1"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 			Content:   "+",
@@ -1010,7 +1004,7 @@ func TestPublishingNIP24ReactionEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
 		tags = append(tags, nostr.Tag{"k", "1"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
 			Tags:      tags,
 			Content:   "+",
@@ -1037,7 +1031,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"L", "#t"})
 		tags = append(tags, nostr.Tag{"l", "permies", "#t"})
 		validLabelingEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1050,7 +1044,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
 		tags = append(tags, nostr.Tag{"l", "permies", "ugc"})
 		validUGCLabelingEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1063,7 +1057,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"L", "#t"})
 		tags = append(tags, nostr.Tag{"l", "permies", "#t"})
 		invalidLabelingEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1076,7 +1070,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
 		tags = append(tags, nostr.Tag{"L", "#t"})
 		invalidLabelingEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1090,7 +1084,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"L", "#t"})
 		tags = append(tags, nostr.Tag{"l", "permies"})
 		invalidLabelingEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1104,7 +1098,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"L", "#t"})
 		tags = append(tags, nostr.Tag{"l", "permies permies permies permies permies permies permies permies permies permies permies permies permies", "#t"})
 		invalidLabelingEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1117,7 +1111,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
 		tags = append(tags, nostr.Tag{"l", "permies", "#t"})
 		invalidLabelingEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1131,7 +1125,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"})
 		tags = append(tags, nostr.Tag{"l", "permies", "#t"})
 		invalidLabelingEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindLabel,
 			Tags:      tags,
 			Content:   "Some label long description",
@@ -1141,7 +1135,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	})
 	t.Run("kind 1 (NIP-32): invalid label", func(t *testing.T) {
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}, []string{"l", "permies", "#t"}, []string{"L", "#a"}},
 		}}
@@ -1151,7 +1145,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	var validKind01EventWithLabels *model.Event
 	t.Run("kind 1 (NIP-32): valid with label", func(t *testing.T) {
 		validKind01EventWithLabels = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      nostr.Tags{[]string{"e", "", "relay", "reply"}, []string{"p", "pubkey1", "pubkey2"}, []string{"l", "permies", "#t"}, []string{"L", "#t"}},
 		}}
@@ -1175,7 +1169,7 @@ func TestPublishingNIP56(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", model.TagReportTypeNudity})
 		validReportEventWithPTagOnly = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1189,7 +1183,7 @@ func TestPublishingNIP56(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
 		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
 		validReportEventWithBothTags = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1205,7 +1199,7 @@ func TestPublishingNIP56(t *testing.T) {
 		tags = append(tags, nostr.Tag{"l", "permies", "#t"})
 		tags = append(tags, nostr.Tag{"L", "#t"})
 		validReportEventWithLabel = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1217,7 +1211,7 @@ func TestPublishingNIP56(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1230,7 +1224,7 @@ func TestPublishingNIP56(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", model.TagReportTypeNudity})
 		tags = append(tags, nostr.Tag{"e", "event id", model.TagReportTypeNudity})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1242,7 +1236,7 @@ func TestPublishingNIP56(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1255,7 +1249,7 @@ func TestPublishingNIP56(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
 		tags = append(tags, nostr.Tag{"e", "event id"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1268,7 +1262,7 @@ func TestPublishingNIP56(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"})
 		tags = append(tags, nostr.Tag{"e", "event id", "unsupported report type"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReporting,
 			Tags:      tags,
 			Content:   "Report description",
@@ -1297,7 +1291,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
 		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
 		validBadgeDefinitionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
@@ -1310,7 +1304,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
 		tags = append(tags, nostr.Tag{"p", "charlie", "wss://relay"})
 		validBadgeAwardEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
@@ -1325,7 +1319,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "30009:alice:honor"})
 		tags = append(tags, nostr.Tag{"e", "<honor badge award event id>", "wss://nostr.academy"})
 		validProfileBadgesEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
@@ -1340,7 +1334,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
 		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
@@ -1355,7 +1349,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
 		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
@@ -1366,7 +1360,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
@@ -1378,7 +1372,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:alice:bravery"})
 		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
@@ -1389,7 +1383,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"a", "3009:alice:bravery"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
@@ -1404,7 +1398,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "30009:alice:honor"})
 		tags = append(tags, nostr.Tag{"e", "<honor badge award event id>", "wss://nostr.academy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
@@ -1417,7 +1411,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", "1:alice:bravery"})
 		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
@@ -1431,7 +1425,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
 		tags = append(tags, nostr.Tag{"a", "3009:alice:honor"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags:      tags,
 		}}
@@ -1458,7 +1452,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"r", "wss://expensive-relay.example2.com", "write"})
 		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
 		validRelayListEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
@@ -1473,7 +1467,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
 		tags = append(tags, nostr.Tag{"e", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
@@ -1488,7 +1482,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
 		tags = append(tags, nostr.Tag{"e", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
@@ -1503,7 +1497,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "read"})
 		tags = append(tags, nostr.Tag{"r", "wss://nostr-relay.example.com", "wrong"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRelayListMetadata,
 			Tags:      tags,
 		}}
@@ -1529,7 +1523,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "event"})
 		tags = append(tags, nostr.Tag{"word", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindMuteList,
 			Tags:      tags,
 		}}
@@ -1545,7 +1539,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"word", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindMuteList,
 			Tags:      tags,
 		}}
@@ -1556,7 +1550,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"e", "event"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindPinList,
 			Tags:      tags,
 		}}
@@ -1569,7 +1563,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "event"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindPinList,
 			Tags:      tags,
 		}}
@@ -1584,7 +1578,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"t", "hash"})
 		tags = append(tags, nostr.Tag{"r", "hash"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBookmarkList,
 			Tags:      tags,
 		}}
@@ -1600,7 +1594,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"r", "hash"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBookmarkList,
 			Tags:      tags,
 		}}
@@ -1615,7 +1609,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"r", "hash"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBookmarkList,
 			Tags:      tags,
 		}}
@@ -1626,7 +1620,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.CustomIONKindCommunityDefinition)})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCommunityList,
 			Tags:      tags,
 		}}
@@ -1639,7 +1633,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", model.CustomIONKindCommunityDefinition)})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCommunityList,
 			Tags:      tags,
 		}}
@@ -1650,7 +1644,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCommunityList,
 			Tags:      tags,
 		}}
@@ -1661,7 +1655,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"e", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindPublicChatList,
 			Tags:      tags,
 		}}
@@ -1674,7 +1668,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"e", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindPublicChatList,
 			Tags:      tags,
 		}}
@@ -1685,7 +1679,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBlockedRelayList,
 			Tags:      tags,
 		}}
@@ -1698,7 +1692,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBlockedRelayList,
 			Tags:      tags,
 		}}
@@ -1709,7 +1703,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindSearchRelayList,
 			Tags:      tags,
 		}}
@@ -1722,7 +1716,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindSearchRelayList,
 			Tags:      tags,
 		}}
@@ -1733,7 +1727,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"group", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindSimpleGroupList,
 			Tags:      tags,
 		}}
@@ -1746,7 +1740,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"group", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindSimpleGroupList,
 			Tags:      tags,
 		}}
@@ -1758,7 +1752,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"t", "dummy"})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindInterestSets)})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindInterestList,
 			Tags:      tags,
 		}}
@@ -1772,7 +1766,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy,dummy", nostr.KindInterestSets)})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindInterestList,
 			Tags:      tags,
 		}}
@@ -1785,7 +1779,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindInterestList,
 			Tags:      tags,
 		}}
@@ -1798,7 +1792,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"emoji", "dummy"})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindEmojiSets)})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindEmojiList,
 			Tags:      tags,
 		}}
@@ -1812,7 +1806,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindEmojiSets)})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindEmojiList,
 			Tags:      tags,
 		}}
@@ -1824,7 +1818,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"emoji", "dummy"})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:dummy:dummy", nostr.KindProfileMetadata)})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindEmojiList,
 			Tags:      tags,
 		}}
@@ -1835,7 +1829,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDMRelayList,
 			Tags:      tags,
 		}}
@@ -1848,7 +1842,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDMRelayList,
 			Tags:      tags,
 		}}
@@ -1859,7 +1853,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"p", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGoodWikiAuthorList,
 			Tags:      tags,
 		}}
@@ -1872,7 +1866,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGoodWikiAuthorList,
 			Tags:      tags,
 		}}
@@ -1883,7 +1877,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGoodWikiRelayList,
 			Tags:      tags,
 		}}
@@ -1896,7 +1890,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"relay", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindGoodWikiRelayList,
 			Tags:      tags,
 		}}
@@ -1911,7 +1905,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
@@ -1928,7 +1922,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
@@ -1943,7 +1937,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRelaySets,
 			Tags:      tags,
 		}}
@@ -1960,7 +1954,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
@@ -1978,7 +1972,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBookmarkSets,
 			Tags:      tags,
 		}}
@@ -1998,7 +1992,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
@@ -2016,7 +2010,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCategorizedPeopleList,
 			Tags:      tags,
 		}}
@@ -2032,7 +2026,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCuratedSets,
 			Tags:      tags,
 		}}
@@ -2050,7 +2044,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCuratedSets,
 			Tags:      tags,
 		}}
@@ -2067,7 +2061,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCuratedSets,
 			Tags:      tags,
 		}}
@@ -2082,7 +2076,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCuratedVideoSets,
 			Tags:      tags,
 		}}
@@ -2099,7 +2093,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCuratedVideoSets,
 			Tags:      tags,
 		}}
@@ -2116,7 +2110,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindCuratedVideoSets,
 			Tags:      tags,
 		}}
@@ -2131,7 +2125,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindMuteSets,
 			Tags:      tags,
 		}}
@@ -2148,7 +2142,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindMuteSets,
 			Tags:      tags,
 		}}
@@ -2163,7 +2157,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindInterestSets,
 			Tags:      tags,
 		}}
@@ -2180,7 +2174,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindInterestSets,
 			Tags:      tags,
 		}}
@@ -2195,7 +2189,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindEmojiSets,
 			Tags:      tags,
 		}}
@@ -2212,7 +2206,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindEmojiSets,
 			Tags:      tags,
 		}}
@@ -2229,7 +2223,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"image", "dummy"})
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		validEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReleaseArtifactSets,
 			Tags:      tags,
 		}}
@@ -2248,7 +2242,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 		tags = append(tags, nostr.Tag{"description", "dummy"})
 		tags = append(tags, nostr.Tag{"wrong", "dummy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReleaseArtifactSets,
 			Tags:      tags,
 		}}
@@ -2272,7 +2266,7 @@ func TestCountEvents(t *testing.T) {
 
 	t.Run("SaveEvent", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			PubKey:    pubkey,
 			Tags:      nil,
@@ -2318,7 +2312,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2341,7 +2335,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"dummy dummy",
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2355,7 +2349,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"imeta",
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2370,7 +2364,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"url",
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2391,7 +2385,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2412,7 +2406,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2432,7 +2426,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"ox a",
 		})
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags:      tags,
 			Content:   "dummy",
@@ -2563,11 +2557,11 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 	var post *model.Event
 	t.Run("create post with mentioned settings", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", "", "", model.TagMarkerRoot},
-				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, fmt.Sprint(time.Now().Unix())},
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
@@ -2575,7 +2569,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 	})
 	t.Run("create followers list for post owner", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
 			Tags: nostr.Tags{
 				{"p", pubkeyUser1, "", "alice"},
@@ -2586,7 +2580,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user1", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.GetID(), "", model.TagMarkerReply},
@@ -2598,7 +2592,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user2 that is not in the followers list, forbidden", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.ID, "", model.TagMarkerReply},
@@ -2631,12 +2625,12 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 		pkey, err := nip19.EncodePublicKey(pubkeyUser1)
 		require.NoError(t, err)
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Content:   fmt.Sprintf("hello world: %v", pkey),
 			Tags: nostr.Tags{
 				{"e", "", "", model.TagMarkerRoot},
-				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, fmt.Sprint(time.Now().Unix())},
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
@@ -2644,7 +2638,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user1", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.GetID(), "", model.TagMarkerReply},
@@ -2656,7 +2650,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user2 that was not mentioned, forbidden", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.ID, "", model.TagMarkerReply},
@@ -2690,12 +2684,12 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 		pkey, err := nip19.EncodePublicKey(pubkeyUser1)
 		require.NoError(t, err)
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Content:   fmt.Sprintf("hello world: %v", pkey),
 			Tags: nostr.Tags{
 				{"e", "", "", model.TagMarkerRoot},
-				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), fmt.Sprint(time.Now().Unix())},
+				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
@@ -2704,7 +2698,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 	var defineBraveryBadgeEv *model.Event
 	t.Run("define bravery badge", func(t *testing.T) {
 		defineBraveryBadgeEv = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeDefinition,
 			Tags: nostr.Tags{
 				{"d", dBadgeTagVal},
@@ -2718,7 +2712,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 	var awardEvent *model.Event
 	t.Run("award user1 by bravery badge", func(t *testing.T) {
 		awardEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
@@ -2730,7 +2724,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 	})
 	t.Run("profile badges event", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags: nostr.Tags{
 				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
@@ -2744,7 +2738,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 
 	t.Run("create reply for the initial post by user1", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.GetID(), "", model.TagMarkerReply},
@@ -2756,7 +2750,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user2 that doesn't have badge, forbidden", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.ID, "", model.TagMarkerReply},
@@ -2793,12 +2787,12 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 		pkey, err := nip19.EncodePublicKey(pubkeyUser3)
 		require.NoError(t, err)
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Content:   fmt.Sprintf("hello world: %v", pkey),
 			Tags: nostr.Tags{
 				{"e", "", "", model.TagMarkerRoot},
-				{"settings", model.WhoCanReplySettings, settingsConfiguration, fmt.Sprint(time.Now().Unix())},
+				{"settings", model.WhoCanReplySettings, settingsConfiguration, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
@@ -2806,7 +2800,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	t.Run("create followers list for post owner", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
 			Tags: nostr.Tags{
 				{"p", pubkeyUser1, "", "alice"},
@@ -2818,7 +2812,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	var defineBraveryBadgeEv *model.Event
 	t.Run("define bravery badge", func(t *testing.T) {
 		defineBraveryBadgeEv = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeDefinition,
 			Tags: nostr.Tags{
 				{"d", dBadgeTagVal},
@@ -2832,7 +2826,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	var awardEvent *model.Event
 	t.Run("award user2 by bravery badge", func(t *testing.T) {
 		awardEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
@@ -2844,7 +2838,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	t.Run("profile badges event", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags: nostr.Tags{
 				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
@@ -2857,7 +2851,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user1 followed, ok", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.GetID(), "", model.TagMarkerReply},
@@ -2869,7 +2863,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user2 badge awarded, ok", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.GetID(), "", model.TagMarkerReply},
@@ -2881,7 +2875,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user3 mentioned, ok", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.GetID(), "", model.TagMarkerReply},
@@ -2893,7 +2887,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	t.Run("create reply for the initial post by user4, forbidden", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				{"e", post.ID, "", model.TagMarkerReply},

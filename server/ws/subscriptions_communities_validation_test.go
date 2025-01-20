@@ -43,6 +43,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		tags = append(tags, nostr.Tag{"settings", model.RoleRequiredForPostingSettings, string(model.ModeratorRole), fmt.Sprint(time.Now().Unix())})
 		tags = append(tags, nostr.Tag{"public"})
 		tags = append(tags, nostr.Tag{"open"})
+		tags = append(tags, nostr.Tag{"d", "dval"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
@@ -59,7 +60,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		validCommunityDefinitionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -89,7 +90,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		validChangeCommunityDefinitionEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
@@ -105,6 +106,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		tags = append(tags, nostr.Tag{"settings", model.RoleRequiredForPostingSettings, string(model.ModeratorRole), fmt.Sprint(time.Now().Unix())})
 		tags = append(tags, nostr.Tag{"public"})
 		tags = append(tags, nostr.Tag{"open"})
+		tags = append(tags, nostr.Tag{"d", "dval"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{
 			"imeta",
@@ -118,7 +120,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -147,7 +149,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
@@ -179,7 +181,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -211,7 +213,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
@@ -230,6 +232,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		tags = append(tags, nostr.Tag{"settings", model.RoleRequiredForPostingSettings, "dummy", fmt.Sprint(time.Now().Unix())})
 		tags = append(tags, nostr.Tag{"public"})
 		tags = append(tags, nostr.Tag{"open"})
+		tags = append(tags, nostr.Tag{"d", "dval"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{
 			"imeta",
@@ -243,7 +246,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -275,7 +278,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
@@ -308,7 +311,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -341,7 +344,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
@@ -373,7 +376,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -405,7 +408,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 		})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityChangeDefinition,
 			Tags:      tags,
 		}}
@@ -443,6 +446,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"settings", model.RoleRequiredForPostingSettings, string(model.ModeratorRole), fmt.Sprint(time.Now().Unix())})
 		tags = append(tags, nostr.Tag{"public"})
 		tags = append(tags, nostr.Tag{"open"})
+		tags = append(tags, nostr.Tag{"d", "dval"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
@@ -459,7 +463,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		})
 
 		validCommunityDefinitionEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -468,7 +472,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 	})
 	t.Run("kind 1750 (Community Join) (ICIP-3000): valid", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: nostr.Tags{
 				{"h", hVal.String()},
@@ -483,7 +487,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
 
 		validJoinCommunityEvent = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
@@ -492,7 +496,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 	})
 	t.Run("kind 1750 (Community Join) (ICIP-3000): no h tag", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: nostr.Tags{
 				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
@@ -505,7 +509,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
@@ -514,7 +518,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 	})
 	t.Run("kind 1750 (Community Join) (ICIP-3000): wrong kind in authorization event", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityBanUser,
 			Tags: nostr.Tags{
 				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
@@ -528,7 +532,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
@@ -537,7 +541,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 	})
 	t.Run("kind 1750 (Community Join) (ICIP-3000): authorization event was expired", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags: nostr.Tags{
 				{"expiration", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())},
@@ -551,7 +555,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"authorization", authorizationEvent.String()})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
@@ -565,7 +569,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		tags = append(tags, nostr.Tag{"authorization", "dummy"})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
 			Tags:      tags,
 		}}
@@ -603,6 +607,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"settings", model.RoleRequiredForPostingSettings, string(model.ModeratorRole), fmt.Sprint(time.Now().Unix())})
 		tags = append(tags, nostr.Tag{"public"})
 		tags = append(tags, nostr.Tag{"open"})
+		tags = append(tags, nostr.Tag{"d", "dval"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
@@ -619,7 +624,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		})
 
 		validCommunityDefinitionEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -634,7 +639,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 
 		validCommunityTransferOwnershipEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
@@ -651,7 +656,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
@@ -669,7 +674,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(-1 * time.Minute).Unix())})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
@@ -687,7 +692,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
@@ -705,7 +710,7 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 		tags = append(tags, nostr.Tag{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityOwnershipTransferring,
 			Tags:      tags,
 		}}
@@ -741,6 +746,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 		tags = append(tags, nostr.Tag{"settings", model.RoleRequiredForPostingSettings, string(model.ModeratorRole), fmt.Sprint(time.Now().Unix())})
 		tags = append(tags, nostr.Tag{"public"})
 		tags = append(tags, nostr.Tag{"open"})
+		tags = append(tags, nostr.Tag{"d", "dval"})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.ModeratorRole)})
 		tags = append(tags, nostr.Tag{"p", uuid.NewString(), "relay", string(model.AdminRole)})
 		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("%v:%v:%v", model.CustomIONKindCommunityDefinition, uuid.NewString(), "communityDIdentifier1")})
@@ -757,7 +763,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 		})
 
 		validCommunityDefinitionEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityDefinition,
 			Tags:      tags,
 		}}
@@ -766,7 +772,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 	})
 	t.Run("kind 1752 (Community ban user) (ICIP-3000): valid", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityBanUser,
 			Tags: model.Tags{
 				{"h", hVal.String()},
@@ -782,7 +788,7 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
 
 		invalidEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityBanUser,
 			Tags:      tags,
 		}}
