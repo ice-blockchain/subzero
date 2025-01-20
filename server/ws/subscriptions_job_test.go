@@ -78,7 +78,7 @@ func TestJobOnline(t *testing.T) {
 		Event: nostr.Event{
 			CreatedAt: 2,
 			Kind:      nostr.KindArticle,
-			Tags:      model.Tags{model.Tag{"title", "dummy"}},
+			Tags:      model.Tags{{"title", "dummy"}, {"d", "foo"}},
 			Content:   "dummy content 2",
 		},
 	}
@@ -347,8 +347,11 @@ func TestJobOffline(t *testing.T) {
 		Event: nostr.Event{
 			CreatedAt: 2,
 			Kind:      nostr.KindArticle,
-			Tags:      model.Tags{model.Tag{"title", "dummy"}},
-			Content:   "dummy content 2",
+			Tags: model.Tags{
+				{"title", "dummy"},
+				{"d", "foo"},
+			},
+			Content: "dummy content 2",
 		},
 	}
 	t.Run("Send articles", func(t *testing.T) {
