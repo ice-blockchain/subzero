@@ -767,3 +767,19 @@ func TestValidatePollVote(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateDtag(t *testing.T) {
+	t.Parallel()
+
+	// Known event kind.
+	ctx := context.TODO()
+	var ev model.Event
+	ev.Kind = nostr.KindArticle
+	require.Error(t, Validate(ctx, &ev))
+
+	// Unknown event kind, but addressable.
+	ev.Kind = nostr.KindLiveEvent
+	require.Error(t, Validate(ctx, &ev))
+	ev.Tags = append(ev.Tags, model.Tag{"d", "foo"})
+	require.NoError(t, Validate(ctx, &ev))
+}

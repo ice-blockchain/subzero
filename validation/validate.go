@@ -84,6 +84,7 @@ var (
 		"expiration",
 		model.CustomIONTagOnBehalfOf,
 		"settings",
+		"encrypted",
 	}
 
 	KindSupportedTags = map[model.Kind]tagLookupTable{
@@ -1297,13 +1298,9 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 }
 
 func validateEventTags(e *model.Event) error {
-	supportedTags, ok := KindSupportedTags[e.Kind]
-	if !ok {
-		return nil
-	}
-
+	supportedTags, known := KindSupportedTags[e.Kind]
 	for _, tag := range e.Tags {
-		if state, ok := supportedTags[tag.Key()]; !ok {
+		if state, ok := supportedTags[tag.Key()]; known && !ok {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
 		} else if state == tagStateForbidden {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v: cannot be used with this kind", tag)
@@ -1334,12 +1331,16 @@ func validateEventTags(e *model.Event) error {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
 		}
-
 	}
+
 	for key, state := range supportedTags {
 		if state == tagStateRequired && e.GetTag(key).Value() == "" {
 			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found or empty", key)
 		}
+	}
+
+	if e.IsAddressable() && e.GetTag("d").Value() == "" {
+		return errors.Wrap(ErrWrongEventParams, "addressable event must have non-empty d tag")
 	}
 
 	return nil
