@@ -16,30 +16,31 @@ import (
 )
 
 type (
-	deleteFts5Row struct {
+	fts5DeleteRow struct {
 		ID string
+	}
+	fts5SearchRow struct {
+		ID      string
+		Content string
 	}
 )
 
 var (
+	urlCleanupPattern       = regexp.MustCompile(`(https?://|http://)[\w./]+(?:\?[\w=&]+)?(?:#[\w./]+)?`)
 	fts5TextCleanupPattern  = regexp.MustCompile(`\b(npub|nsec|nprofile|nostr:)\w*\b|#\w+|[^\w\s]`)
 	fts5SpaceCleanupPattern = regexp.MustCompile(`\s{2,}`)
 )
 
 func (db *dbClient) saveFts5Events(ctx context.Context, events []databaseEvent) error {
-	type fts5Row struct {
-		ID      string
-		Content string
-	}
-	var searchEvents []fts5Row
-	var deleteEvents []deleteFts5Row
+	var searchEvents []fts5SearchRow
+	var deleteEvents []fts5DeleteRow
 	for _, ev := range events {
 		if content := parseFts5Text(&ev.Event); content != "" {
-			searchEvents = append(searchEvents, fts5Row{
+			searchEvents = append(searchEvents, fts5SearchRow{
 				ID:      ev.ID,
 				Content: content,
 			})
-			deleteEvents = append(deleteEvents, deleteFts5Row{
+			deleteEvents = append(deleteEvents, fts5DeleteRow{
 				ID: ev.ID,
 			})
 		}
@@ -70,9 +71,9 @@ func (db *dbClient) deleteFts5Events(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	var toDelete []deleteFts5Row
+	var toDelete []fts5DeleteRow
 	for _, id := range ids {
-		toDelete = append(toDelete, deleteFts5Row{ID: id})
+		toDelete = append(toDelete, fts5DeleteRow{ID: id})
 	}
 	rows, err := db.deleteFts5EventsSQL(ctx, toDelete)
 	if err != nil {
@@ -85,7 +86,7 @@ func (db *dbClient) deleteFts5Events(ctx context.Context, ids []string) error {
 	return nil
 }
 
-func (db *dbClient) deleteFts5EventsSQL(ctx context.Context, ids []deleteFts5Row) (int64, error) {
+func (db *dbClient) deleteFts5EventsSQL(ctx context.Context, ids []fts5DeleteRow) (int64, error) {
 	const stmt = `DELETE FROM events_search WHERE event_id = :id;`
 
 	result, err := db.NamedExecContext(ctx, stmt, ids)
@@ -114,7 +115,7 @@ func parseFts5Text(ev *model.Event) string {
 		content = fmt.Sprintf("%v %v", parsedContent.Name, parsedContent.DisplayName)
 	case nostr.KindTextNote, nostr.KindArticle:
 		content = fmt.Sprintf("%v %v", ev.Content, strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " "))
-	case nostr.KindRepost, nostr.KindGenericRepost:
+	case nostr.KindGenericRepost:
 		if ev.Content == "" {
 			return ""
 		}
@@ -122,7 +123,10 @@ func parseFts5Text(ev *model.Event) string {
 		if err := json.Unmarshal([]byte(ev.Content), &parsedEvent); err != nil {
 			return ""
 		}
-		content = parsedEvent.Content
+		if parsedEvent.Kind != nostr.KindArticle {
+			return ""
+		}
+		content = fmt.Sprintf("%v %v", parsedEvent.Content, strings.Join(extractFTS5IMeta(parsedEvent.GetTags("imeta")), " "))
 	case nostr.KindFileMetadata:
 		content = fmt.Sprintf("%v %v", ev.Content, strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " "))
 	}
@@ -162,7 +166,7 @@ func searchWithoutDepsSQL(systemCreatedAtFilter, whereMain, limitQuery string) (
 				on es.event_id = e.id
 		where (` + systemCreatedAtFilter + `(` + whereMain + `)) AND
 			es.content MATCH :search
-		ORDER BY bm25(events_search), e.system_created_at desc
+		ORDER BY rank, e.system_created_at desc
 		` + limitQuery
 }
 
@@ -213,11 +217,12 @@ func searchWithDepsSQL(systemCreatedAtFilter, whereMain, limitQuery, depClause s
 						` + depClause + `
 					)
 				) AND es.content MATCH :search
-				ORDER BY bm25(events_search), ev.system_created_at desc
+				ORDER BY rank, ev.system_created_at desc
 			)`
 }
 
 func fts5CleanupText(text string) string {
+	text = urlCleanupPattern.ReplaceAllString(text, "")
 	text = fts5TextCleanupPattern.ReplaceAllString(text, "")
 	text = fts5SpaceCleanupPattern.ReplaceAllString(text, " ")
 

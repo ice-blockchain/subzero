@@ -433,7 +433,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 	})
 }
 
-func TestSearchEvents_KindRepost(t *testing.T) {
+func TestSearchEvents_KindGenericRepost(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -457,7 +457,7 @@ func TestSearchEvents_KindRepost(t *testing.T) {
 				ID:        "normal" + uuid.NewString(),
 				PubKey:    "end" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindTextNote,
+				Kind:      nostr.KindArticle,
 				Tags:      tags1,
 				Content:   "end, and, ond",
 				Sig:       "end" + uuid.NewString(),
@@ -470,7 +470,7 @@ func TestSearchEvents_KindRepost(t *testing.T) {
 				ID:        "normal" + uuid.NewString(),
 				PubKey:    "ev1" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
+				Kind:      nostr.KindGenericRepost,
 				Tags:      model.Tags{},
 				Content:   expectedEvents[0].String(),
 				Sig:       "ev1" + uuid.NewString(),
@@ -479,26 +479,41 @@ func TestSearchEvents_KindRepost(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
 
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindTextNote},
+			Kinds: []int{nostr.KindArticle},
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[0], stored[0])
 
 		stored = helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindRepost},
+			Kinds: []int{nostr.KindGenericRepost},
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[1], stored[0])
 	})
 	t.Run("search repost by repost value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindRepost},
+			Kinds:  []int{nostr.KindGenericRepost},
 			Search: `"end"`,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[1], stored[0])
 	})
-
+	t.Run("search repost by reposted article tag alt", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindGenericRepost},
+			Search: `"alt1"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[1], stored[0])
+	})
+	t.Run("search repost by reposted article tag summary", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindGenericRepost},
+			Search: `"summary1"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[1], stored[0])
+	})
 }
 
 func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
@@ -750,6 +765,14 @@ func TestFts5CleanupText(t *testing.T) {
 	t.Run("hashes", func(t *testing.T) {
 		require.Equal(t, "a b", fts5CleanupText("a b #some"))
 		require.Equal(t, "a b", fts5CleanupText("#hash a #testhash b #some #some2 #some_hash"))
+	})
+	t.Run("urls", func(t *testing.T) {
+		require.Equal(t, "", fts5CleanupText("https://google.com"))
+		require.Equal(t, "", fts5CleanupText("http://google.com"))
+		require.Equal(t, "", fts5CleanupText("http://google.com?abcde"))
+		require.Equal(t, "", fts5CleanupText("http://google.com?abcde=1234"))
+		require.Equal(t, "", fts5CleanupText("http://google.com?abcde=1234&defg=5678"))
+		require.Equal(t, "a b", fts5CleanupText("http://google.com?abcde=1234&defg=5678 a b"))
 	})
 }
 

@@ -317,6 +317,7 @@ create trigger if not exists trigger_events_before_delete_remove_tags_explicit
 begin
     delete from event_tags where event_id = OLD.id;
     delete from event_counters where reference_id = OLD.id;
+    delete from events_search where event_id =  OLD.id;
 end
 ;
 --------
