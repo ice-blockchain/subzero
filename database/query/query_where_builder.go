@@ -504,8 +504,17 @@ select
 			'kinds', json_array(:` + (filterID + "fkind") + `),
 			iif(:` + (filterID + "ftagname") + `= 'lookup',
 				iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000), '#a', '#e'), :` + (filterID + "ftagname") + `),
-				json_array(iif(:` + (filterID + "ftagname") + `= 'lookup', iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000), concat_ws(:sep, cast(evr.kind as text), evr.master_pubkey, evr.d_tag), f.reference_id), f.reference_id)
-			))) as d_tag,
+				json_array(
+					json_array(
+						iif(:` + (filterID + "ftagname") + `= 'lookup',
+							iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000),
+								concat_ws(:sep, cast(evr.kind as text), evr.master_pubkey, evr.d_tag),
+								f.reference_id),
+							f.reference_id)`)
+		if filter.Reduce.Context == "root" || filter.Reduce.Context == "reply" {
+			w.WriteString(`, null, :` + filterID + "context")
+		}
+		w.WriteString(`)))) as d_tag,
 	h_tag,
 	case when
 		f.kind = 7 then
@@ -514,7 +523,7 @@ select
 				json_array('param', 'group', :` + (filterID + "context") + `
 			))
 		else
-			json_array(json_array('param', 'group', :` + (filterID + "context") + `))
+			json_array()
 		end as jtags
 from
 	event_counters f
@@ -783,26 +792,58 @@ func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql stri
 	return w.String(), w.Params, nil
 }
 
-func isValidCounterFilter(filter *model.Filter) (valid bool) {
-	switch {
-	// Filter is required.
-	case filter == nil:
+func collectValuesFromTagMap(values []model.TagValues) (data []string) {
+	for _, val := range values {
+		for _, v := range val {
+			if v != nil {
+				data = append(data, *v)
+			}
+		}
+	}
+	return data
+}
 
-	// Search by text is not supported.
-	case filter.Search != "":
-
-	// Time range is not supported.
-	case filter.Since != nil || filter.Until != nil:
-
-	// Only IDs or authors are allowed, but not both.
-	case (len(filter.IDs) > 0 && len(filter.Authors) > 0):
-		valid = len(filter.Kinds) > 0
-
-	default:
-		valid = true
+func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []string, valid bool) {
+	if len(filter.IDs) > 0 || len(filter.Authors) > 0 || filter.Since != nil || filter.Until != nil || filter.Search != "" {
+		return nil, false
 	}
 
-	return valid
+	// Single tag only.
+	if len(filter.Tags) != 1 {
+		return nil, false
+	}
+
+	var supportedTags = []string{"q", "e", "p"}
+	for _, tag := range supportedTags {
+		values, ok := filter.Tags[tag]
+		if !ok {
+			continue
+		}
+
+		references = collectValuesFromTagMap(values)
+
+		break
+
+	}
+	if len(references) == 0 {
+		return nil, false
+	}
+
+	var supportedKinds = map[int]struct{}{
+		nostr.KindReaction:      {},
+		nostr.KindFollowList:    {},
+		nostr.KindTextNote:      {},
+		nostr.KindRepost:        {},
+		nostr.KindArticle:       {},
+		nostr.KindGenericRepost: {},
+	}
+	for _, kind := range filter.Kinds {
+		if _, ok := supportedKinds[kind]; !ok {
+			return nil, false
+		}
+	}
+
+	return references, true
 }
 
 func getReplyTypeFromValues(values []model.TagValues) string {
@@ -820,7 +861,8 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 	}
 
 	for idx := range filters {
-		if !isValidCounterFilter(&filters[idx]) {
+		refs, valid := isValidPrecalculatedCounterFilter(&filters[idx])
+		if !valid {
 			return "", nil, errors.Wrapf(errUnsupportedCombination, "filter %d", idx)
 		}
 
@@ -860,8 +902,7 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 			}
 			w.WriteRune(')')
 		}
-		buildFromSlice(w, sqlOpCodeAND, filterID, filter.Authors, "reference_id", "")
-		buildFromSlice(w, sqlOpCodeAND, filterID, filter.IDs, "reference_id", "")
+		buildFromSlice(w, sqlOpCodeAND, filterID, refs, "reference_id", "")
 		if w.Len() == startLen+1 {
 			return "", nil, errUnsupportedCombination
 		}

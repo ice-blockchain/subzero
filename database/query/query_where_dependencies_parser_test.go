@@ -337,10 +337,13 @@ func TestSelectWithDependencies(t *testing.T) {
 		}
 		err = db.AcceptEvents(context.Background(), &ev)
 		require.NoError(t, err)
-		helperMustBePrecalculatedCount(t, db, 2, model.Filter{IDs: []string{"t2id3"}, Kinds: []int{nostr.KindReaction}})
+		helperMustBePrecalculatedCount(t, db, 2, model.Filter{Tags: model.TagMap{}.Set("e", model.PointerOf("t2id3")), Kinds: []int{nostr.KindReaction}})
 
 		result, err := db.CountGroupedEventReactions(context.Background(), model.Filter{
-			IDs: []string{"t2id2", "t2id3"},
+			Kinds: []int{nostr.KindReaction},
+			Tags: model.TagMap{}.
+				Append("e", model.PointerOf("t2id2")).
+				Append("e", model.PointerOf("t2id3")),
 		})
 		require.NoError(t, err)
 		require.JSONEq(t, `{"*":1,"+":1}`, result)
@@ -591,8 +594,8 @@ func TestSelectWithDependencies(t *testing.T) {
 				},
 			},
 		))
-		helperMustBePrecalculatedCount(t, db, 2, model.Filter{Authors: []string{"t9pk1"}, Kinds: []int{nostr.KindFollowList}})
-		helperMustBePrecalculatedCount(t, db, 1, model.Filter{Authors: []string{"t9pk4"}, Kinds: []int{nostr.KindFollowList}})
+		helperMustBePrecalculatedCount(t, db, 2, model.Filter{Tags: model.TagMap{}.Set("p", model.PointerOf("t9pk1")), Kinds: []int{nostr.KindFollowList}})
+		helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.Set("p", model.PointerOf("t9pk4")), Kinds: []int{nostr.KindFollowList}})
 		events := helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"t9id1", "t9id4"},
 			Search: "include:dependencies:kind0>kind6400+kind3+group+p",

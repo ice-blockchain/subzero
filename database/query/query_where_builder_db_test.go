@@ -864,7 +864,7 @@ func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...m
 	t.Helper()
 
 	where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
-	require.NoError(t, err)
+	require.NoError(t, err, filters)
 
 	stmt, err := db.PrepareNamed(`select coalesce(sum(value), 0) from event_counters where ` + where)
 	require.NoErrorf(t, err, "failed to prepare statement where: %v", where)
@@ -888,26 +888,25 @@ func TestWhereBuilderSyntaxForCounter(t *testing.T) {
 
 	t.Run("Reply", func(t *testing.T) {
 		t.Run("Reply", func(t *testing.T) {
-			helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}})
+			helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("e", "1")})
 		})
 		t.Run("Quote", func(t *testing.T) {
-			helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}, Tags: model.TagMap{"q": nil}})
+			helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "1")})
 		})
 	})
 	t.Run("Repost", func(t *testing.T) {
-		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"1"}})
+		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindRepost}, Tags: model.TagMap{}.SetLiterals("e", "1")})
 	})
 	t.Run("Reaction", func(t *testing.T) {
-		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, IDs: []string{"1", "2"}})
+		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1", "2")})
 	})
 	t.Run("Followers", func(t *testing.T) {
-		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"1"}})
+		helperMustGetPrecalculatedCounters(t, db, model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("e", "1")})
 	})
 	t.Run("Multiple", func(t *testing.T) {
 		helperMustGetPrecalculatedCounters(t, db,
-			model.Filter{Kinds: []int{nostr.KindFollowList}, Authors: []string{"1"}},
-			model.Filter{Kinds: []int{nostr.KindRepost}, IDs: []string{"1"}},
-			model.Filter{Kinds: []int{nostr.KindTextNote}, IDs: []string{"1"}, Tags: model.TagMap{"q": nil}},
+			model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("p", "1")},
+			model.Filter{Kinds: []int{nostr.KindRepost}, Tags: model.TagMap{}.SetLiterals("e", "1")},
 		)
 	})
 }

@@ -350,6 +350,21 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
+func validateFollowListEvent(e *model.Event) error {
+	keys := make(map[string]struct{})
+	for _, tag := range e.GetTags("p") {
+		if v := tag.Value(); v == "" {
+			return errors.Wrap(ErrWrongEventParams, "nip-02: missing public key")
+		} else {
+			if _, ok := keys[v]; ok {
+				return errors.Wrapf(ErrWrongEventParams, "nip-02: duplicate public key: %q", v)
+			}
+			keys[v] = struct{}{}
+		}
+	}
+	return nil
+}
+
 func Validate(ctx context.Context, e *model.Event) error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
@@ -367,11 +382,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	case nostr.KindRepost, nostr.KindGenericRepost:
 		return validateKindRepostEvent(ctx, e)
 	case nostr.KindFollowList:
-		for _, tag := range e.Tags {
-			if tag.Key() == "p" && tag.Value() == "" {
-				return errors.Wrapf(ErrWrongEventParams, "nip-02 params, no required pubkey %+v", e)
-			}
-		}
+		return validateFollowListEvent(e)
 	case nostr.KindReaction:
 		return validateKindReactionEvent(e)
 	case nostr.KindBadgeAward:

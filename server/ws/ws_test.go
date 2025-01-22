@@ -102,8 +102,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestSimpleEchoDifferentTransports(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.Skip() // Heavy CPU load, it produces messages in loop
+	if os.Getenv("TEST_ECHO") != "y" {
+		t.Skip("set TEST_ECHO=y to run this test")
 	}
 	t.Run("webtransport http 3", func(t *testing.T) {
 		testEcho(t, connCountUDP, func(ctx context.Context) (fixture.Client, error) {

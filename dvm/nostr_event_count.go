@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"log"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,30 +71,14 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 }
 
 func (n *nostrEventCountJob) doCountLocal(ctx context.Context, filters model.Filters, groupBy string) (string, error) {
-	countFilters := slices.Clone(filters)
-	for idx := range countFilters {
-		if len(countFilters[idx].IDs) == 0 {
-			if countFilters[idx].Tags.HasValues("e") {
-				countFilters[idx].IDs = collectValuesFromTagMap(countFilters[idx].Tags["e"])
-			} else if countFilters[idx].Tags.HasValues("q") {
-				countFilters[idx].IDs = collectValuesFromTagMap(countFilters[idx].Tags["q"])
-			}
-		} else if len(countFilters[idx].Authors) == 0 && countFilters[idx].Tags.HasValues("p") {
-			countFilters[idx].Authors = collectValuesFromTagMap(countFilters[idx].Tags["p"])
-		}
-		if groupBy == "root" || groupBy == "reply" {
-			countFilters[idx].Tags.Append("e", nil, nil, &groupBy)
-		}
-	}
-
 	if groupBy == "" {
-		count, err := query.CountEvents(ctx, &model.Subscription{Filters: countFilters})
+		count, err := query.CountEvents(ctx, &model.Subscription{Filters: filters})
 
 		return strconv.FormatInt(count, 10), err
 	}
 
-	if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction {
-		return query.CountGroupedEventReactions(ctx, &model.Subscription{Filters: countFilters})
+	if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction && groupBy == NostrEventCountGroupContent {
+		return query.CountGroupedEventReactions(ctx, &model.Subscription{Filters: filters})
 	}
 
 	var events []*nostr.Event
@@ -239,15 +222,4 @@ func collectRelayURLsFromEvent(e *model.Event) []string {
 	}
 
 	return relayList
-}
-
-func collectValuesFromTagMap(values []model.TagValues) (data []string) {
-	for _, val := range values {
-		for _, v := range val {
-			if v != nil {
-				data = append(data, *v)
-			}
-		}
-	}
-	return data
 }
