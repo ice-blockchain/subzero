@@ -36,6 +36,10 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "moderator, admin or owner"))
 	} else if requiredRole == model.AdminRole && replyRole != model.OwnerRole && replyRole != model.AdminRole {
 		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "admin or owner"))
+	} else if requiredRole == model.RegularRole && replyRole == model.RegularRole {
+		if err := isUserPartOfCommunity(ctx, communityDefinitionEvent, incomingEvent); err != nil {
+			return errors.Wrapf(err, "user:%v not part of the community", incomingEvent.GetMasterPublicKey())
+		}
 	}
 	if incomingEvent.Kind == nostr.KindRepost || incomingEvent.Kind == nostr.KindGenericRepost {
 		if !isCommunityCommentsEnabled(communityDefinitionEvent) {
@@ -103,11 +107,39 @@ func isUserBanned(ctx context.Context, event *model.Event) error {
 			},
 		},
 	})
-	for range eventIterator {
+	for _, err := range eventIterator {
+		if err != nil {
+			return errors.Wrap(err, "failed to get stored events")
+		}
+
 		return errors.Wrap(ErrActionForbidden, "user was banned")
 	}
 
 	return nil
+}
+
+func isUserPartOfCommunity(ctx context.Context, communityDefinitionEvent, event *model.Event) error {
+	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
+		Filters: model.Filters{
+			model.Filter{
+				Kinds: []int{model.CustomIONKindCommunityJoin},
+				Tags:  model.TagMap{}.SetLiterals("p", event.GetMasterPublicKey()),
+			},
+		},
+	})
+	for ev, err := range eventIterator {
+		if err != nil {
+			return errors.Wrap(err, "failed to get stored events")
+		}
+		if communityDefinitionEvent.GetTag("open") != nil {
+			return nil
+		}
+		if communityDefinitionEvent.GetTag("closed") != nil && ev.GetTag("authorization") != nil {
+			return nil
+		}
+	}
+
+	return errors.Wrap(ErrActionForbidden, "user is not part of the community")
 }
 
 func getLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {

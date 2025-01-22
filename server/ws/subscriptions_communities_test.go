@@ -94,7 +94,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join admin to the community", func(t *testing.T) {
+	t.Run("send invitation to admin", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityAdmin},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by admin to join to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -109,7 +123,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join moderator to the community", func(t *testing.T) {
+	t.Run("send invitation to moderator", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityModerator},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by moderator", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -124,7 +152,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by owner to the community", func(t *testing.T) {
+	t.Run("send invitation by owner to user1", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by user1", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -139,7 +181,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by owner another user to the community", func(t *testing.T) {
+	t.Run("send invitation by owner to user2", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by user2", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -154,7 +210,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by admin another user to the community", func(t *testing.T) {
+	t.Run("send invitation by admin to user3", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser3},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by user3", func(t *testing.T) {
 		adminAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -181,7 +251,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser3)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by moderator another user to the community", func(t *testing.T) {
+	t.Run("send invitation by moderator to user4", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser4},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation from moderator by user4", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -208,7 +292,21 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser4)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by moderator another user to the community", func(t *testing.T) {
+	t.Run("send invitation to user5 by moderator", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser5},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by moderator", func(t *testing.T) {
 		moderatorAuthorizationEvent := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -236,7 +334,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	//---- POST ----
-	t.Run("try to post to the community by any user, forbidden", func(t *testing.T) {
+	t.Run("try to post to the community by regular user, forbidden", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -287,7 +385,7 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	//---- COMMENT ----
-	t.Run("try to post comment to the community by any user, forbidden", func(t *testing.T) {
+	t.Run("try to post comment to the community by regular user, forbidden", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -588,6 +686,102 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	helperMustCloseRelay(t, relay)
 }
 
+func TestCommunityDefinition_OpenPublicCommunity(t *testing.T) {
+	relay := helperMustNewRelay(t, pubsubServers[0])
+	ctx := context.Background()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
+
+	t.Run("valid public open community definition event", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityDefinition,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"d", "dtagvalue"},
+					{"name", "some name"},
+					{"description", "some description"},
+					{"public"},
+					{"open"},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	//---- JOIN ----
+	ownerAuthorizationEvent := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindCommunityJoin,
+			Tags: model.Tags{
+				{"h", communityID},
+				{"p", pubkeyCommunityOwner},
+				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
+			},
+		},
+	}
+	helperSignWithMinLeadingZeroBits(t, ownerAuthorizationEvent, privkeyOwner)
+	t.Run("join owner to the community", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityOwner},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("self-join user to the community", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join any user to the community with authorization tag as no needed", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser2},
+					{"authorization", ownerAuthorizationEvent.String()},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
+
 func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	ctx := context.Background()
@@ -607,6 +801,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	privkeyAdmin, pubkeyCommunityAdmin := model.GenerateKeyPair()
 	privkeyModerator, pubkeyCommunityModerator := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, _ := model.GenerateKeyPair()
 
 	t.Run("valid open community definition event with anybody posting, comments disabled", func(t *testing.T) {
 		ev := &model.Event{
@@ -675,19 +870,7 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by admin another user to the community", func(t *testing.T) {
-		adminAuthorizationEvent := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindCommunityJoin,
-				Tags: model.Tags{
-					{"h", communityID},
-					{"p", pubkeyUser1},
-					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
-				},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, adminAuthorizationEvent, privkeyAdmin)
+	t.Run("self-join user to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -695,7 +878,6 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 				Tags: model.Tags{
 					{"h", communityID},
 					{"p", pubkeyUser1},
-					{"authorization", adminAuthorizationEvent.String()},
 				},
 			},
 		}
@@ -703,7 +885,19 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	//---- POST ----
-	t.Run("try to post to the community by any user, ok", func(t *testing.T) {
+	t.Run("try to post to the community by user that not in the community, forbidden", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "some text",
+				Tags:      model.Tags{{"h", communityID}},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("try to post to the community by regular role user, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -861,6 +1055,200 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
 		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
+
+func TestCommunityDefinition_ClosedCommunity_AnybodyPosting(t *testing.T) {
+	relay := helperMustNewRelay(t, pubsubServers[0])
+	ctx := context.Background()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
+	privkeyAdmin, pubkeyCommunityAdmin := model.GenerateKeyPair()
+	privkeyModerator, pubkeyCommunityModerator := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, _ := model.GenerateKeyPair()
+
+	t.Run("valid open community definition event with anybody posting, comments disabled", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityDefinition,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"name", "some name"},
+					{"description", "some description"},
+					{"d", "dtagvalue"},
+					{"closed"},
+					{"settings", model.CommentsEnabledSettings, "false", fmt.Sprint(time.Now().Unix())},
+					{"p", pubkeyCommunityAdmin, "", string(model.AdminRole)},
+					{"p", pubkeyCommunityModerator, "", string(model.ModeratorRole)},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	//---- JOIN ----
+	t.Run("join owner to the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyCommunityOwner,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityOwner},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join admin to the community", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityAdmin},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join moderator to the community", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityModerator},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("invite user1 by admin", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by user1", func(t *testing.T) {
+		adminAuthorizationEvent := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, adminAuthorizationEvent, privkeyAdmin)
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+					{"authorization", adminAuthorizationEvent.String()},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	//---- POST ----
+	t.Run("try to post to the community by user that not in the community, forbidden", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "some text",
+				Tags:      model.Tags{{"h", communityID}},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("try to post to the community by regular role user, ok", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "some text",
+				Tags:      model.Tags{{"h", communityID}},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("try to post to the community by moderator, ok", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "some text",
+				Tags:      model.Tags{{"h", communityID}},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("try to post to the community by admin, ok", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "some text",
+				Tags:      model.Tags{{"h", communityID}},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyAdmin)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("try to post to the community by owner, ok", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "some text",
+				Tags: model.Tags{
+					{"h", communityID},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	helperMustCloseRelay(t, relay)
 }
@@ -1198,7 +1586,7 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by any user to the community", func(t *testing.T) {
+	t.Run("self-join user1 to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -1239,7 +1627,6 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
 	t.Run("change community definition event, set commentsEnabled=true, roleRequiredForPosting=admin", func(t *testing.T) {
-
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -1381,19 +1768,7 @@ func TestCommunity_Deletion(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by moderator another user to the community", func(t *testing.T) {
-		moderatorAuthorizationEvent := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindCommunityJoin,
-				Tags: model.Tags{
-					{"h", communityID},
-					{"p", pubkeyUser1},
-					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
-				},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
+	t.Run("self-join user1 to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -1401,26 +1776,13 @@ func TestCommunity_Deletion(t *testing.T) {
 				Tags: model.Tags{
 					{"h", communityID},
 					{"p", pubkeyUser1},
-					{"authorization", moderatorAuthorizationEvent.String()},
 				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by moderator another user to the community", func(t *testing.T) {
-		moderatorAuthorizationEvent := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindCommunityJoin,
-				Tags: model.Tags{
-					{"h", communityID},
-					{"p", pubkeyUser2},
-					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
-				},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
+	t.Run("self-join user2 to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -1428,34 +1790,6 @@ func TestCommunity_Deletion(t *testing.T) {
 				Tags: model.Tags{
 					{"h", communityID},
 					{"p", pubkeyUser2},
-					{"authorization", moderatorAuthorizationEvent.String()},
-				},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-	})
-	t.Run("join by moderator another user to the community", func(t *testing.T) {
-		moderatorAuthorizationEvent := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindCommunityJoin,
-				Tags: model.Tags{
-					{"h", communityID},
-					{"p", pubkeyUser2},
-					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
-				},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, moderatorAuthorizationEvent, privkeyModerator)
-		ev := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindCommunityJoin,
-				Tags: model.Tags{
-					{"h", communityID},
-					{"p", pubkeyUser2},
-					{"authorization", moderatorAuthorizationEvent.String()},
 				},
 			},
 		}
@@ -1463,7 +1797,7 @@ func TestCommunity_Deletion(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	var post1 *model.Event
-	// //---- POST ----
+	//---- POST ----
 	t.Run("try to post comment to the community by admin, ok", func(t *testing.T) {
 		post1 = &model.Event{
 			Event: nostr.Event{
@@ -1686,19 +2020,7 @@ func TestCommunityBanUser(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("join by admin another user to the community", func(t *testing.T) {
-		ownerAuthorizationEvent := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindCommunityJoin,
-				Tags: model.Tags{
-					{"h", communityID},
-					{"p", pubkeyUser1},
-					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
-				},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ownerAuthorizationEvent, privkeyOwner)
+	t.Run("self-join user1 to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
@@ -1706,14 +2028,13 @@ func TestCommunityBanUser(t *testing.T) {
 				Tags: model.Tags{
 					{"h", communityID},
 					{"p", pubkeyUser1},
-					{"authorization", ownerAuthorizationEvent.String()},
 				},
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	// //---- POST ----
+	//---- POST ----
 	t.Run("try to post to the community by any user, ok", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{

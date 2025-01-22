@@ -34,7 +34,6 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 
 	var validCommunityDefinitionEvent, validChangeCommunityDefinitionEvent *model.Event
 	t.Run("kind 31750 (Community definition) (ICIP-3000): valid", func(t *testing.T) {
-
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"name", "Community name"})
 		tags = append(tags, nostr.Tag{"description", "Community description"})
@@ -437,7 +436,6 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 
 	var validJoinCommunityEvent *model.Event
 	t.Run("kind 31750 (Community definition) (ICIP-3000): valid", func(t *testing.T) {
-
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"name", "Community name"})
 		tags = append(tags, nostr.Tag{"description", "Community description"})
@@ -470,7 +468,7 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, validCommunityDefinitionEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validCommunityDefinitionEvent.Event))
 	})
-	t.Run("kind 1750 (Community Join) (ICIP-3000): valid", func(t *testing.T) {
+	t.Run("kind 1750 (Community Join) (ICIP-3000): not needed authorization tag for public open community", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindCommunityJoin,
@@ -492,8 +490,32 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 			Tags:      tags,
 		}}
 		helperSignWithMinLeadingZeroBits(t, validJoinCommunityEvent, privkey)
+		require.Error(t, relay.Publish(ctx, validJoinCommunityEvent.Event))
+	})
+	t.Run("kind 1750 (Community Join) (ICIP-3000): valid", func(t *testing.T) {
+		authorizationEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindCommunityJoin,
+			Tags: nostr.Tags{
+				{"h", hVal.String()},
+				{"expiration", fmt.Sprint(time.Now().Add(1 * time.Minute).Unix())},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, authorizationEvent, privkey)
+
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"h", hVal.String()})
+		tags = append(tags, nostr.Tag{"p", uuid.NewString()})
+
+		validJoinCommunityEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindCommunityJoin,
+			Tags:      tags,
+		}}
+		helperSignWithMinLeadingZeroBits(t, validJoinCommunityEvent, privkey)
 		require.NoError(t, relay.Publish(ctx, validJoinCommunityEvent.Event))
 	})
+
 	t.Run("kind 1750 (Community Join) (ICIP-3000): no h tag", func(t *testing.T) {
 		authorizationEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
