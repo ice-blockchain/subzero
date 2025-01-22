@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.23.4
+go 1.23.5
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	github.com/bzick/tokenizer v1.4.9
+	github.com/bzick/tokenizer v1.4.10
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
@@ -25,7 +25,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.48.0
+	github.com/nbd-wtf/go-nostr v0.48.1
 	github.com/puzpuzpuz/xsync/v3 v3.4.1
 	github.com/quic-go/quic-go v0.48.2
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
@@ -70,7 +70,7 @@ require (
 	github.com/goccy/go-json v0.10.4 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
+	github.com/google/pprof v0.0.0-20250121033306-997b0b79cac0 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
