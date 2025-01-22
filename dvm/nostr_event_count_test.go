@@ -561,20 +561,20 @@ func helperReadFromDB(t *testing.T, req model.Filter) *model.Event {
 			break
 		}
 	}
-	require.NotNil(t, result)
+	require.NotNil(t, result, "No DVM event found in the database")
 
 	return result
 }
 
-func helperCompareResults(t *testing.T, a, b *model.Event) {
+func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 	t.Helper()
 
-	if a.CreatedAt != b.CreatedAt {
-		a.CreatedAt, b.CreatedAt = 0, 0
-		a.Sig, b.Sig = "", ""
+	if dbResult.CreatedAt != dvmResult.CreatedAt {
+		dbResult.CreatedAt, dvmResult.CreatedAt = 0, 0
+		dbResult.Sig, dvmResult.Sig = "", ""
 	}
 
-	require.JSONEq(t, a.String(), b.String())
+	require.JSONEq(t, dbResult.String(), dvmResult.String())
 }
 
 func TestEventCountersConsistency(t *testing.T) {
@@ -602,13 +602,16 @@ func TestEventCountersConsistency(t *testing.T) {
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
 					Tags: model.Tags{
-						model.Tag{"param", "group", "root"},
-						model.Tag{"param", "relay", globalConfig.RelayURL},
+						{"param", "relay", globalConfig.RelayURL},
 					},
 				},
 			},
 			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
-				reqDVM.Content = `[{"kinds":[1],"#e":["` + events[0].ID + `"]}]`
+				reqDVM.Content = model.Filters{
+					{
+						Kinds: []int{1},
+						Tags:  model.TagMap{}.Set("e", &events[0].ID, nil, model.PointerOf(model.TagMarkerRoot)),
+					}}.String()
 			},
 			Events: func(t *testing.T) []*model.Event {
 				var ev1 model.Event
@@ -645,13 +648,16 @@ func TestEventCountersConsistency(t *testing.T) {
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
 					Tags: model.Tags{
-						model.Tag{"param", "group", "e"},
-						model.Tag{"param", "relay", globalConfig.RelayURL},
+						{"param", "relay", globalConfig.RelayURL},
 					},
 				},
 			},
 			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
-				reqDVM.Content = `[{"kinds":[6],"#e":["` + events[0].ID + `"]}]`
+				reqDVM.Content = model.Filters{
+					{
+						Kinds: []int{6},
+						Tags:  model.TagMap{}.Set("e", &events[0].ID),
+					}}.String()
 			},
 			Events: func(t *testing.T) []*model.Event {
 				var ev1 model.Event
@@ -690,13 +696,16 @@ func TestEventCountersConsistency(t *testing.T) {
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
 					Tags: model.Tags{
-						model.Tag{"param", "group", "q"},
 						model.Tag{"param", "relay", globalConfig.RelayURL},
 					},
 				},
 			},
 			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
-				reqDVM.Content = `[{"kinds":[1],"#q":["` + events[0].ID + `"]}]`
+				reqDVM.Content = model.Filters{
+					{
+						Kinds: []int{1},
+						Tags:  model.TagMap{}.Set("q", &events[0].ID),
+					}}.String()
 			},
 			Events: func(t *testing.T) []*model.Event {
 				var ev1 model.Event
@@ -733,14 +742,18 @@ func TestEventCountersConsistency(t *testing.T) {
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
 					Tags: model.Tags{
-						model.Tag{"output", "JSON"},
-						model.Tag{"param", "group", "content"},
-						model.Tag{"param", "relay", globalConfig.RelayURL},
+						{"output", "JSON"},
+						{"param", "group", "content"},
+						{"param", "relay", globalConfig.RelayURL},
 					},
 				},
 			},
 			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
-				reqDVM.Content = `[{"kinds":[7],"#e":["` + events[0].ID + `"]}]`
+				reqDVM.Content = model.Filters{
+					{
+						Kinds: []int{7},
+						Tags:  model.TagMap{}.Set("e", &events[0].ID),
+					}}.String()
 			},
 			Events: func(t *testing.T) []*model.Event {
 				var ev1 model.Event
@@ -776,13 +789,18 @@ func TestEventCountersConsistency(t *testing.T) {
 			},
 			RequestDVM: model.Event{
 				Event: nostr.Event{
-					Kind:    model.KindJobNostrEventCount,
-					Content: `[{"kinds":[3],"#p":["` + pub + `"]}]`,
+					Kind: model.KindJobNostrEventCount,
 					Tags: model.Tags{
-						model.Tag{"param", "group", "p"},
-						model.Tag{"param", "relay", globalConfig.RelayURL},
+						{"param", "relay", globalConfig.RelayURL},
 					},
 				},
+			},
+			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+				reqDVM.Content = model.Filters{
+					{
+						Kinds: []int{3},
+						Tags:  model.TagMap{}.Set("p", &pub),
+					}}.String()
 			},
 			Events: func(t *testing.T) []*model.Event {
 				var ev1 model.Event
