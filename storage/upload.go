@@ -41,7 +41,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 			}
 		}
 		if len(existingHDData) > 0 {
-			if err = json.Unmarshal(existingBagForUser.Header.Data, &existingHD); err != nil {
+			if err = json.Unmarshal(existingHDData, &existingHD); err != nil {
 				return "", "", false, errors.Wrapf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
