@@ -3,6 +3,7 @@
 package model
 
 import (
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -176,19 +177,11 @@ func (e *Event) GetTags(tagName string) (tags []Tag) {
 }
 
 func (e *Event) GetMasterPublicKey() (pubkey string) {
-	pubkey = e.PubKey
-	if bTag := e.GetTag(CustomIONTagOnBehalfOf); bTag != nil {
-		pubkey = bTag.Value()
-	}
-	return pubkey
+	return cmp.Or(e.GetTag(CustomIONTagOnBehalfOf).Value(), e.PubKey)
 }
 
 func (e *Event) GetHTag() string {
-	if hTag := e.GetTag("h"); hTag != nil && hTag.Value() != "" && hTag.Value() != e.ID && e.Kind == CustomIONKindCommunityDefinition {
-		return hTag.Value()
-	}
-
-	return e.ID
+	return cmp.Or(e.GetTag(CustomIONTagCommunity).Value(), e.ID)
 }
 
 func (evt *Event) IsReplaceable() bool {

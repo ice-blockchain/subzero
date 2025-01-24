@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS events
     key_alg           text    not null DEFAULT '',
     content           text    not null,
     d_tag             text    not null DEFAULT '',
-    h_tag             text    not null UNIQUE,
+    h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
     hidden            integer not null default 0
@@ -24,6 +24,11 @@ where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
 --------
 create unique index if not exists parameterized_replaceable_event_uk on events(master_pubkey, kind, d_tag)
 where 30000 <= kind AND kind < 40000;
+--------
+drop index if exists uix_events_h_tag;
+create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
+where kind = 31750;
+--------
 
 -- Where order:
 --   system_created_at
@@ -227,6 +232,7 @@ begin
     on conflict do nothing;
 end
 ;
+drop   trigger if     exists trigger_events_before_insert_unwind_repost;
 --------
 create trigger if not exists trigger_events_before_insert_unwind_repost
     before insert

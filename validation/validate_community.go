@@ -20,9 +20,10 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 	if hTag == nil {
 		return nil
 	}
-	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
-	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrActionForbidden, "community definition not found")
+
+	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
+	if err != nil {
+		return err
 	}
 	if err := isUserBanned(ctx, incomingEvent); err != nil {
 		return errors.Wrapf(err, "user:%v banned", incomingEvent.GetMasterPublicKey())
@@ -73,7 +74,11 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 }
 
 func ValidateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
-	communityDefinitionEvent := GetCommunityDefinition(ctx, event.GetTag(model.CustomIONTagCommunity).Value())
+	communityDefinitionEvent, err := GetCommunityDefinition(ctx, event.GetTag(model.CustomIONTagCommunity).Value())
+	if err != nil {
+		return err
+	}
+
 	communityEventRole := model.GetCommunityRoleByPubkey(event.GetMasterPublicKey(), communityDefinitionEvent)
 	if deleteEventIssuerRole := model.GetCommunityRoleByPubkey(deleteEvent.GetMasterPublicKey(), communityDefinitionEvent); deleteEventIssuerRole == model.ModeratorRole {
 		if communityEventRole == model.AdminRole || communityEventRole == model.OwnerRole {
@@ -148,7 +153,7 @@ func roleRequiredForPosting(event *model.Event) model.Role {
 	return ""
 }
 
-func GetCommunityDefinition(ctx context.Context, hTag string) *model.Event {
+func GetCommunityDefinition(ctx context.Context, hTag string) (*model.Event, error) {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
@@ -162,7 +167,10 @@ func GetCommunityDefinition(ctx context.Context, hTag string) *model.Event {
 		lastDefinitionEvent *model.Event
 		patches             []*model.Event
 	)
-	for ev := range eventIterator {
+	for ev, err := range eventIterator {
+		if err != nil {
+			return nil, errors.Wrapf(err, "%v: cannot fetch community definition", hTag)
+		}
 		if ev.Kind == model.CustomIONKindCommunityChangeDefinition {
 			patches = append(patches, ev)
 
@@ -178,14 +186,15 @@ func GetCommunityDefinition(ctx context.Context, hTag string) *model.Event {
 		}
 	}
 	if lastDefinitionEvent == nil {
-		return nil
+		return nil, errors.Wrapf(ErrNotFound, "%v: community definition not found", hTag)
 	}
+
 	tags := applyChangeCommunityPatch(patches, lastDefinitionEvent)
 	if tags != nil {
 		lastDefinitionEvent.Tags = tags
 	}
 
-	return lastDefinitionEvent
+	return lastDefinitionEvent, nil
 }
 
 func applyChangeCommunityPatch(patches []*model.Event, communityDefEvent *model.Event) model.Tags {
