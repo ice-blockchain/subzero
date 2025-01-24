@@ -87,6 +87,13 @@ var (
 		"encrypted",
 	}
 
+	ConflictTags = map[string]string{
+		"e": "a",
+		"a": "e",
+		"q": "Q",
+		"Q": "q",
+	}
+
 	KindSupportedTags = map[model.Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
 		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, model.CustomIONTagCommunity),
