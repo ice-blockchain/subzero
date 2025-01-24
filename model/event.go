@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -208,6 +209,18 @@ func (evt *Event) IsEphemeral() bool {
 
 func (e *Event) IsJobRequest() bool {
 	return e.Kind >= 5000 && e.Kind < 6000
+}
+
+func (e *Event) Address() string {
+	switch {
+	case e.IsAddressable():
+		return strconv.Itoa(e.Kind) + ":" + e.GetMasterPublicKey() + ":" + e.Tags.GetD()
+
+	case e.IsReplaceable():
+		return strconv.Itoa(e.Kind) + ":" + e.GetMasterPublicKey() + ":"
+	}
+
+	return e.ID
 }
 
 func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {

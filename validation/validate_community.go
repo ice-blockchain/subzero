@@ -16,7 +16,7 @@ import (
 )
 
 func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event) error {
-	hTag := incomingEvent.GetTag("h")
+	hTag := incomingEvent.GetTag(model.CustomIONTagCommunity)
 	if hTag == nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	var communityEventsToCheck []*model.Event
 	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{{
 		IDs:  ids,
-		Tags: model.TagMap{}.SetLiterals("h"),
+		Tags: model.TagMap{}.SetLiterals(model.CustomIONTagCommunity),
 	}}}) {
 		if err != nil {
 			return errors.Wrap(err, "failed to get stored events")
@@ -73,7 +73,7 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 }
 
 func ValidateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
-	communityDefinitionEvent := GetCommunityDefinition(ctx, event.GetTag("h").Value())
+	communityDefinitionEvent := GetCommunityDefinition(ctx, event.GetTag(model.CustomIONTagCommunity).Value())
 	communityEventRole := model.GetCommunityRoleByPubkey(event.GetMasterPublicKey(), communityDefinitionEvent)
 	if deleteEventIssuerRole := model.GetCommunityRoleByPubkey(deleteEvent.GetMasterPublicKey(), communityDefinitionEvent); deleteEventIssuerRole == model.ModeratorRole {
 		if communityEventRole == model.AdminRole || communityEventRole == model.OwnerRole {
@@ -112,7 +112,7 @@ func getLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
 		if tag.Value() == settingsName && len(tag) > 3 {
 			timestamp, err := strconv.ParseInt(tag[3], 10, 64)
 			if err != nil {
-				log.Printf("error parsing timestamp: %v", err)
+				log.Printf("%v: error parsing timestamp: %v: %v", event.String(), settingsName, err)
 
 				continue
 			}
@@ -153,7 +153,7 @@ func GetCommunityDefinition(ctx context.Context, hTag string) *model.Event {
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition},
-				Tags:  model.TagMap{}.SetLiterals("h", hTag),
+				Tags:  model.TagMap{}.SetLiterals(model.CustomIONTagCommunity, hTag),
 			},
 		},
 	})
@@ -242,7 +242,7 @@ func applyChangeCommunityPatch(patches []*model.Event, communityDefEvent *model.
 					tags = append(tags, patchTag)
 				}
 			default:
-				if patchTag.Key() != "h" {
+				if patchTag.Key() != model.CustomIONTagCommunity {
 					tags = append(tags, patchTag)
 				}
 			}

@@ -875,7 +875,7 @@ func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...m
 	}
 	require.NoError(t, err)
 
-	t.Logf("where: %v --> %v", where, counter)
+	t.Logf("Precalculated count result:\n\tWhere: %v\n\tParams: %+v\n\tCounter: %v", where, params, counter)
 
 	return counter
 }

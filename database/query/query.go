@@ -151,20 +151,27 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	} else {
 		var genericFilters model.Filters
 		for _, f := range filters {
-			var genericFilter model.Filter
 			if len(f.IDs) > 0 {
-				genericFilter.Tags = model.TagMap{}.SetLiterals("e")
+				genericFilter := model.Filter{
+					Tags: model.TagMap{},
+				}
 				for _, id := range f.IDs {
 					genericFilter.Tags.Append("e", &id)
 				}
+				genericFilters = append(genericFilters, genericFilter)
 			} else if len(f.Events) > 0 {
-				genericFilter.Tags = model.TagMap{}.SetLiterals("a")
+				filterA, filterQ := model.Filter{
+					Tags: model.TagMap{},
+				}, model.Filter{
+					Tags: model.TagMap{},
+				}
 				for _, e := range f.Events {
 					tag := fmt.Sprintf("%d:%s:%s", e.Kind, e.Pubkey, e.Dtag)
-					genericFilter.Tags.Append("a", &tag)
+					filterA.Tags.Append("a", &tag)
+					filterQ.Tags.Append("Q", &tag)
+					genericFilters = append(genericFilters, filterA, filterQ)
 				}
 			}
-			genericFilters = append(genericFilters, genericFilter)
 		}
 		if len(genericFilters) == 0 {
 			panic("attempt to delete events without filters")
@@ -628,42 +635,44 @@ func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []s
 
 func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Filter) model.Filters {
 	for i := range filters {
-		v, ok := filters[i].Tags["a"]
-		if !ok {
-			continue
-		}
+		for _, tag := range []string{"a", "Q"} {
+			v, ok := filters[i].Tags[tag]
+			if !ok {
+				continue
+			}
 
-		var delegatedATags []*string
-		for _, b := range v {
-			// `entry` has format `kind:pubkey:d_tag`.
-			for _, entry := range b {
-				if entry == nil {
-					continue
-				}
+			var delegatedTags []*string
+			for _, b := range v {
+				// `entry` has format `kind:pubkey:d_tag`.
+				for _, entry := range b {
+					if entry == nil {
+						continue
+					}
 
-				parts := strings.Split(*entry, ":")
-				if len(parts) != 3 {
-					continue
-				}
+					parts := strings.Split(*entry, ":")
+					if len(parts) != 3 {
+						continue
+					}
 
-				keys, err := db.fetchAllKeysOf(ctx, parts[1])
-				if err != nil {
-					log.Printf("subkeys fetch failed: %v", err)
+					keys, err := db.fetchAllKeysOf(ctx, parts[1])
+					if err != nil {
+						log.Printf("subkeys fetch failed: %v", err)
 
-					continue
-				}
+						continue
+					}
 
-				delegatedATags = append(delegatedATags, entry)
-				for _, key := range keys {
-					str := strings.Join([]string{parts[0], key, parts[2]}, ":")
-					delegatedATags = append(delegatedATags, &str)
+					delegatedTags = append(delegatedTags, entry)
+					for _, key := range keys {
+						str := strings.Join([]string{parts[0], key, parts[2]}, ":")
+						delegatedTags = append(delegatedTags, &str)
+					}
 				}
 			}
-		}
 
-		filters[i].Tags.Set("a")
-		for _, entry := range model.DeduplicateSlice(delegatedATags, func(elem *string) string { return *elem }) {
-			filters[i].Tags.Append("a", entry)
+			filters[i].Tags.Set(tag)
+			for _, entry := range model.DeduplicateSlice(delegatedTags, func(elem *string) string { return *elem }) {
+				filters[i].Tags.Append(tag, entry)
+			}
 		}
 	}
 

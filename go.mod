@@ -25,7 +25,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.48.1
+	github.com/nbd-wtf/go-nostr v0.48.2
 	github.com/puzpuzpuz/xsync/v3 v3.4.1
 	github.com/quic-go/quic-go v0.49.0
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
@@ -127,7 +127,7 @@ require (
 	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
-	google.golang.org/protobuf v1.36.3 // indirect
+	google.golang.org/protobuf v1.36.4 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

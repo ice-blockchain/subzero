@@ -329,14 +329,14 @@ create trigger if not exists trigger_event_tags_after_insert_inc_counter
     after insert
     on event_tags
     for each row
-    when (NEW.event_tag_key in ('q', 'e', 'p')) AND (NEW.event_tag_value1 != '')
+    when (NEW.event_tag_key in ('a', 'q', 'e', 'p', 'Q')) AND (NEW.event_tag_value1 != '')
 begin
     insert into event_counters (reference_id, reference_type, kind, value)
     select
-        NEW.event_tag_value1, -- Either event id OR public key (kind = 3).
+        NEW.event_tag_value1,
         case
-            when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 in ('reply', 'root') then NEW.event_tag_value3
-            when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'q' then 'quote'
+            when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('a', 'e') and NEW.event_tag_value3 in ('reply', 'root') then NEW.event_tag_value3
+            when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('q', 'Q') then 'quote'
             when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
             when e.kind = 7 then e.content -- reaction type
             else ''
@@ -347,8 +347,8 @@ begin
         events e
     where
             (e.id = NEW.event_id)
-        and (e.kind in (1, 3, 6, 7, 16, 30023))
-        and (e.kind = 3 OR exists (select 1 from events where id = NEW.event_tag_value1))
+        and (e.kind in (1, 3, 6, 7, 16, 30023, 30175))
+        and (e.kind = 3 OR NEW.event_tag_key in ('a', 'Q') OR exists (select 1 from events where id = NEW.event_tag_value1))
         and (
             case
                 when e.kind = 7 then
@@ -361,7 +361,7 @@ begin
                         where
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
                     )
-                when e.kind in (1, 6, 16, 30023) and NEW.event_tag_key = 'e' and NEW.event_tag_value3 != '' then
+                when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('a', 'e') and NEW.event_tag_value3 != '' then
                     ((NEW.event_tag_value3 = 'root' AND NEW.event_tag_value5 = '') OR (NEW.event_tag_value3 = 'reply'))
                 else
                     true
@@ -378,7 +378,7 @@ create trigger if not exists trigger_event_tags_after_delete_dec_counter
     after delete
     on event_tags
     for each row
-    when (OLD.event_tag_key in ('q', 'e', 'p')) AND (OLD.event_tag_value1 != '')
+    when (OLD.event_tag_key in ('a', 'q', 'e', 'p', 'Q')) AND (OLD.event_tag_value1 != '')
 begin
     update event_counters set
         value = max(value - 1, 0)
@@ -389,9 +389,9 @@ begin
         and event_counters.reference_id = OLD.event_tag_value1
         and event_counters.kind = e.kind
         and event_counters.reference_type = case
-            when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'e' and
+            when e.kind in (1, 6, 16, 30023, 30175) and OLD.event_tag_key in ('a', 'e') and
                 ((OLD.event_tag_value3 = 'root' AND OLD.event_tag_value5 = '') OR (OLD.event_tag_value3 = 'reply')) then OLD.event_tag_value3
-            when e.kind in (1, 6, 16, 30023) and OLD.event_tag_key = 'q' then 'quote'
+            when e.kind in (1, 6, 16, 30023, 30175) and OLD.event_tag_key in ('q', 'Q') then 'quote'
             when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
             when e.kind = 7 then e.content
             else ''

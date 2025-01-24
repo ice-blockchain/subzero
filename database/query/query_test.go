@@ -1072,3 +1072,144 @@ func TestDeleteNestedEvents(t *testing.T) {
 	// Check if all events are deleted.
 	require.Zero(t, len(helperSelectEvents(t, db)))
 }
+
+func TestEditablePostFlow(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var post model.Event
+	post.Kind = model.CustomIONKindEditableTextNote
+	post.ID = "1"
+	post.PubKey = "1pub"
+	post.CreatedAt = 1
+	post.Content = "hello world"
+	require.NoError(t, db.AcceptEvents(context.TODO(), &post))
+
+	t.Run("Quote", func(t *testing.T) {
+		var quote1, quote2 model.Event
+
+		quote1.Kind = nostr.KindArticle
+		quote1.ID = "ev2"
+		quote1.PubKey = "2pub"
+		quote1.CreatedAt = 2
+		quote1.Content = "quoted content1"
+		quote1.Tags = model.Tags{
+			{"Q", post.Address()},
+			{"d", "article1"},
+		}
+
+		quote2.Kind = nostr.KindArticle
+		quote2.ID = "ev3"
+		quote2.PubKey = "2pub"
+		quote2.CreatedAt = 3
+		quote2.Content = "quoted content2"
+		quote2.Tags = model.Tags{
+			{"Q", post.Address()},
+			{"d", "article2"},
+		}
+
+		require.NoError(t, db.AcceptEvents(context.TODO(), &quote1, &quote2))
+
+		helperMustBePrecalculatedCount(t, db, 2, model.Filter{
+			Kinds: []int{nostr.KindArticle},
+			Tags:  model.TagMap{}.SetLiterals("Q", post.Address()),
+		})
+
+		t.Run("Delete quote1", func(t *testing.T) {
+			var delete model.Event
+
+			delete.Kind = nostr.KindDeletion
+			delete.ID = "3"
+			delete.PubKey = "2pub"
+			delete.CreatedAt = 3
+			delete.Tags = model.Tags{{"e", quote1.ID}}
+			require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+
+			helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+				Kinds: []int{nostr.KindArticle},
+				Tags:  model.TagMap{}.SetLiterals("Q", post.Address()),
+			})
+		})
+	})
+
+	t.Run("Reply", func(t *testing.T) {
+		var reply1, reply2 model.Event
+
+		reply1.Kind = nostr.KindArticle
+		reply1.ID = "ev4"
+		reply1.PubKey = "2pub"
+		reply1.CreatedAt = 2
+		reply1.Content = "reply content1"
+		reply1.Tags = model.Tags{
+			{"a", post.Address(), "", "reply"},
+			{"d", "reply1"},
+		}
+
+		reply2.Kind = nostr.KindArticle
+		reply2.ID = "ev5"
+		reply2.PubKey = "2pub"
+		reply2.CreatedAt = 3
+		reply2.Content = "reply content2"
+		reply2.Tags = model.Tags{
+			{"a", post.Address(), "", "root"},
+			{"d", "reply2"},
+		}
+
+		require.NoError(t, db.AcceptEvents(context.TODO(), &reply1, &reply2))
+
+		postAddress := post.Address()
+		helperMustBePrecalculatedCount(t, db, 3, model.Filter{ // 1 root, 1 reply, 1 quote.
+			Kinds: []int{nostr.KindArticle},
+			Tags:  model.TagMap{}.SetLiterals("a", postAddress),
+		})
+		helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+			Kinds: []int{nostr.KindArticle},
+			Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("reply")),
+		})
+		helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+			Kinds: []int{nostr.KindArticle},
+			Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("root")),
+		})
+
+		t.Run("Delete reply1", func(t *testing.T) {
+			var delete model.Event
+
+			delete.Kind = nostr.KindDeletion
+			delete.ID = "3"
+			delete.PubKey = "2pub"
+			delete.CreatedAt = 3
+			delete.Tags = model.Tags{{"e", reply1.ID}}
+			require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+
+			helperMustBePrecalculatedCount(t, db, 2, model.Filter{ // 1 root, 1 quote.
+				Kinds: []int{nostr.KindArticle},
+				Tags:  model.TagMap{}.SetLiterals("a", postAddress),
+			})
+			helperMustBePrecalculatedCount(t, db, 0, model.Filter{
+				Kinds: []int{nostr.KindArticle},
+				Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("reply")),
+			})
+		})
+	})
+	t.Run("Delete post", func(t *testing.T) {
+		var delete model.Event
+
+		delete.Kind = nostr.KindDeletion
+		delete.ID = "4"
+		delete.PubKey = "1pub"
+		delete.CreatedAt = 4
+		delete.Tags = model.Tags{{"e", post.ID}}
+		require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+
+		helperMustBePrecalculatedCount(t, db, 0, model.Filter{
+			Kinds: []int{nostr.KindArticle},
+			Tags:  model.TagMap{}.SetLiterals("a", post.Address()),
+		})
+		helperMustBePrecalculatedCount(t, db, 0, model.Filter{
+			Kinds: []int{nostr.KindArticle},
+			Tags:  model.TagMap{}.SetLiterals("Q", post.Address()),
+		})
+	})
+}

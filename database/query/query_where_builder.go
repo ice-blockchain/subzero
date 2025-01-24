@@ -566,7 +566,7 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 	}
 
 	switch filter.Reduce.Kinds[0] {
-	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost:
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
 		tag := filter.Reduce.Tag
@@ -663,7 +663,7 @@ group by e.master_pubkey`)
 		w.addParam(filterID, "fkind", filter.Reduce.Kinds[1])
 		var refType string
 		switch {
-		case filter.Reduce.Tag == "q":
+		case strings.EqualFold(filter.Reduce.Tag, "q"):
 			w.addParam(filterID, "ftagname", "#q")
 			w.addParam(filterID, "context", filter.Reduce.Tag)
 			refType = "quote"
@@ -813,7 +813,7 @@ func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []strin
 		return nil, false
 	}
 
-	var supportedTags = []string{"q", "e", "p"}
+	var supportedTags = []string{"a", "q", "Q", "e", "p"}
 	for _, tag := range supportedTags {
 		values, ok := filter.Tags[tag]
 		if !ok {
@@ -830,12 +830,13 @@ func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []strin
 	}
 
 	var supportedKinds = map[int]struct{}{
-		nostr.KindReaction:      {},
-		nostr.KindFollowList:    {},
-		nostr.KindTextNote:      {},
-		nostr.KindRepost:        {},
-		nostr.KindArticle:       {},
-		nostr.KindGenericRepost: {},
+		nostr.KindReaction:                  {},
+		nostr.KindFollowList:                {},
+		nostr.KindTextNote:                  {},
+		nostr.KindRepost:                    {},
+		nostr.KindArticle:                   {},
+		nostr.KindGenericRepost:             {},
+		model.CustomIONKindEditableTextNote: {},
 	}
 	for _, kind := range filter.Kinds {
 		if _, ok := supportedKinds[kind]; !ok {
@@ -853,6 +854,15 @@ func getReplyTypeFromValues(values []model.TagValues) string {
 		}
 	}
 	return ""
+}
+
+func tagsHasQuote(m model.TagMap) bool {
+	for _, tag := range []string{"q", "Q"} {
+		if _, ok := m[tag]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (sql string, params map[string]any, err error) {
@@ -888,11 +898,13 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				case nostr.KindFollowList:
 					referenceType = "follower"
 
-				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost:
-					if _, quote := filter.Tags["q"]; quote {
+				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
+					if tagsHasQuote(filter.Tags) {
 						referenceType = "quote"
 					} else if _, ref := filter.Tags["e"]; ref {
 						referenceType = getReplyTypeFromValues(filter.Tags["e"])
+					} else if _, ref := filter.Tags["a"]; ref {
+						referenceType = getReplyTypeFromValues(filter.Tags["a"])
 					}
 				}
 				if referenceType != "" {

@@ -87,16 +87,23 @@ var (
 		"encrypted",
 	}
 
+	ConflictTags = map[string]string{
+		"e": "a",
+		"a": "e",
+		"q": "Q",
+		"Q": "q",
+	}
+
 	KindSupportedTags = map[model.Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, "h"),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, model.CustomIONTagCommunity),
 		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              newEmptyTable().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
-		nostr.KindRepost:                tagsTable("e", "p", "h"),
+		nostr.KindRepost:                tagsTable("e", "p", model.CustomIONTagCommunity),
 		nostr.KindReaction:              tagsTable("e", "p", "a", "k"),
 		nostr.KindBadgeAward:            tagsTable("a", "p"),
-		nostr.KindGenericRepost:         tagsTable("k", "e", "p", "h"),
+		nostr.KindGenericRepost:         tagsTable("k", "e", "p", "a", model.CustomIONTagCommunity),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
 		model.CustomIONKindPollVote:     newTable().Required("e").Forbidden("expiration").Build(),
@@ -126,8 +133,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagPoll, "h"),
-		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", "h"),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
@@ -151,11 +158,20 @@ var (
 		nostr.KindJobFeedback:                  tagsTable("status", "amount", "e", "p"),
 
 		// Community
-		model.CustomIONKindCommunityDefinition:            tagsTable("h", "d", "name", "description", "public", "private", "open", "closed", "p", "a"),
-		model.CustomIONKindCommunityOwnershipTransferring: tagsTable("h", "a", "p"),
-		model.CustomIONKindCommunityJoin:                  tagsTable("h", "p", "authorization"),
-		model.CustomIONKindCommunityBanUser:               tagsTable("h", "p"),
-		model.CustomIONKindCommunityChangeDefinition:      tagsTable("h", "name", "description", "public", "private", "open", "closed", "p"),
+		model.CustomIONKindCommunityDefinition:            tagsTable(model.CustomIONTagCommunity, "d", "name", "description", "public", "private", "open", "closed", "p", "a"),
+		model.CustomIONKindCommunityOwnershipTransferring: tagsTable(model.CustomIONTagCommunity, "a", "p"),
+		model.CustomIONKindCommunityJoin:                  tagsTable(model.CustomIONTagCommunity, "p", "authorization"),
+		model.CustomIONKindCommunityBanUser:               tagsTable(model.CustomIONTagCommunity, "p"),
+		model.CustomIONKindCommunityChangeDefinition:      tagsTable(model.CustomIONTagCommunity, "name", "description", "public", "private", "open", "closed", "p"),
+
+		model.CustomIONKindEditableTextNote: newTable().
+			Optional("e", "d", "p", "q", "l", "L",
+				"editing_ended_at",
+				model.CustomIONTagPoll,
+				model.CustomIONTagCommunity,
+			).
+			Required("published_at").
+			Build(),
 	}
 
 	SupportedIMetaKeys = tagLookupTable{
@@ -239,24 +255,28 @@ func validatePollTag(tag model.Tag) error {
 }
 
 func validateATags(e *model.Event, expectedKinds ...int) error {
-	for _, aTag := range e.GetTags("a") {
-		if aTag.Value() == "" {
-			return errors.Wrap(ErrWrongEventParams, "value for a tag is empty")
+	return validateAddressableTag(e, "a", expectedKinds...)
+}
+
+func validateAddressableTag(e *model.Event, tagName string, expectedKinds ...int) error {
+	for _, tag := range e.GetTags(tagName) {
+		if tag.Value() == "" {
+			return errors.Wrapf(ErrWrongEventParams, "tag %v: empty value", tag.Key())
 		}
 
-		parts := strings.Split(aTag.Value(), ":")
+		parts := strings.Split(tag.Value(), ":")
 		if len(parts) != 3 {
-			return errors.Wrapf(ErrWrongEventParams, "a tag value should have 3 parts, but got %d: %v", len(parts), aTag.Value())
+			return errors.Wrapf(ErrWrongEventParams, "tag %v: value should have 3 parts, but got %d: %v", tag.Key(), len(parts), tag.Value())
 		}
 
 		kind, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {
-			return errors.Wrapf(ErrWrongEventParams, "a tag value should have kind as first part, but got %q: %v", parts[0], err)
+			return errors.Wrapf(ErrWrongEventParams, "tag %v: value should have kind as first part, but got %q: %v", tag.Key(), parts[0], err)
 		}
 
 		if len(expectedKinds) > 0 {
 			if !slices.Contains(expectedKinds, int(kind)) {
-				return errors.Wrapf(ErrWrongEventParams, "a tag value should have one of the expected kinds '%v', but got %d", expectedKinds, kind)
+				return errors.Wrapf(ErrWrongEventParams, "tag %v: value should have one of the expected kinds '%v', but got %d", tag.Key(), expectedKinds, kind)
 			}
 		}
 	}
@@ -398,8 +418,6 @@ func Validate(ctx context.Context, e *model.Event) error {
 		}
 	case model.CustomIONKindPollVote:
 		return validatePollVote(ctx, e)
-	case nostr.KindBookmarkList:
-		return validateATags(e) // All kinds are allowed to be bookmarked.
 	case nostr.KindCommunityList:
 		return validateATags(e, model.CustomIONKindCommunityDefinition)
 	case nostr.KindInterestList:
@@ -465,12 +483,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle:
 		if e.Content == "" {
-			return errors.Wrapf(ErrWrongEventParams, "nip-23: this kind should have text markdown content: %+v", e)
-		}
-		if hTag := e.GetTag("h"); hTag != nil {
-			if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-				return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v", err.Error())
-			}
+			return errors.Wrap(ErrWrongEventParams, "nip-23: this kind should have text markdown content")
 		}
 		if err := validatePostCommunityEvents(ctx, e); err != nil {
 			return err
@@ -745,11 +758,6 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 			}
 		}
 	}
-	if hTag := e.GetTag("h"); hTag != nil {
-		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v, expected uuid v7", err.Error())
-		}
-	}
 	if err := validatePostCommunityEvents(ctx, e); err != nil {
 		return err
 	}
@@ -897,10 +905,7 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 			"nip-18: repost must include p tag with pubkey of the event being reposted: found %q, expected %q",
 			pTag.Value(), repostedEvent.GetMasterPublicKey())
 	}
-	if hTag := e.GetTag("h"); hTag != nil {
-		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v", err.Error())
-		}
+	if e.GetTag(model.CustomIONTagCommunity) != nil {
 		if err := validatePostCommunityEvents(ctx, e); err != nil {
 			return err
 		}
@@ -921,9 +926,6 @@ func validateKindReactionEvent(e *model.Event) error {
 	}
 	if kTag := e.Tags.GetFirst([]string{"k"}); kTag != nil && kTag.Value() == "" {
 		return errors.Wrap(ErrWrongEventParams, "nip-25: k tag is empty")
-	}
-	if err := validateATags(e); err != nil {
-		return errors.Wrap(err, "nip-25")
 	}
 	return nil
 }
@@ -966,7 +968,7 @@ func validateKindFeedbackJob(e *model.Event) error {
 
 func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model.Event) error {
 	var (
-		hTag       = e.GetTag("h")
+		hTag       = e.GetTag(model.CustomIONTagCommunity)
 		pTags      = e.Tags.GetAll([]string{"p"})
 		openTag    = e.GetTag("open")
 		closedTag  = e.GetTag("closed")
@@ -976,9 +978,6 @@ func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model
 	)
 	if hTag == nil {
 		return errors.Wrap(ErrWrongEventParams, "community must have h tag")
-	}
-	if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-		return errors.Wrapf(ErrWrongEventParams, "community must have a valid UUIDv7 h tag: %+v", e)
 	}
 	for _, tag := range pTags {
 		if tag.Key() == "p" {
@@ -1056,7 +1055,7 @@ func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model
 
 func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event) error {
 	var (
-		hTag             = e.GetTag("h")
+		hTag             = e.GetTag(model.CustomIONTagCommunity)
 		authorizationTag = e.GetTag("authorization")
 	)
 	if hTag == nil {
@@ -1115,7 +1114,7 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Context, e *model.Event) error {
 	var (
 		aTags         = e.Tags.GetAll([]string{"a"})
-		hTag          = e.GetTag("h")
+		hTag          = e.GetTag(model.CustomIONTagCommunity)
 		pTags         = e.Tags.GetAll([]string{"p"})
 		expirationTag = e.GetTag("expiration")
 		currentTime   = time.Now().Unix()
@@ -1130,9 +1129,6 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 	}
 	if hTag == nil {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid h tag: %+v", e)
-	}
-	if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-		return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid UUIDv7 h tag: %+v", e)
 	}
 	if len(pTags) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have at least one p tag: %+v", e)
@@ -1160,14 +1156,11 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 
 func validateCustomIONKindCommunityBanUserEvent(ctx context.Context, e *model.Event) error {
 	var (
-		hTag  = e.GetTag("h")
+		hTag  = e.GetTag(model.CustomIONTagCommunity)
 		pTags = e.Tags.GetAll([]string{"p"})
 	)
 	if hTag == nil {
 		return errors.Wrapf(ErrWrongEventParams, "community ban must have h tag: %+v", e)
-	}
-	if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-		return errors.Wrap(ErrWrongEventParams, "community ban must have a valid UUIDv7 h tag")
 	}
 	if len(pTags) == 0 {
 		return errors.Wrap(ErrWrongEventParams, "community ban must have at least one p tag: %v")
@@ -1322,9 +1315,15 @@ func validateEventTags(e *model.Event) error {
 			if err := validateIMetaTag(tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
-		case "a":
-			if err := validateATags(e); err != nil {
+		case "a", model.CustomIONTagAddressableQ:
+			if err := validateAddressableTag(e, tag.Key()); err != nil {
 				return err
+			}
+		case model.CustomIONTagCommunity:
+			if val, err := uuid.Parse(tag.Value()); err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "tag %v: error: %q: %v", model.CustomIONTagCommunity, tag.Value(), err)
+			} else if version := val.Version(); version != 0x7 {
+				return errors.Wrapf(ErrWrongEventParams, "tag %v: wrong UUID version: %#02x, expected %#02x", model.CustomIONTagCommunity, version, 0x7)
 			}
 		case model.CustomIONTagPoll:
 			if err := validatePollTag(tag); err != nil {
@@ -1333,9 +1332,9 @@ func validateEventTags(e *model.Event) error {
 		case "expiration":
 			v, err := strconv.ParseInt(tag.Value(), 10, 64)
 			if err != nil {
-				return errors.Wrapf(ErrWrongEventParams, "expiration tag should be int: %v", err)
+				return errors.Wrapf(ErrWrongEventParams, "tag: expiration: should be int: %v", err)
 			} else if v < 0 {
-				return errors.Wrapf(ErrWrongEventParams, "expiration tag should be positive: %d", v)
+				return errors.Wrapf(ErrWrongEventParams, "tag: expiration: should be positive: %d", v)
 			}
 		case "settings":
 			if err := validateSettingsTag(e.Kind, tag); err != nil {
