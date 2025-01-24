@@ -76,6 +76,7 @@ var (
 	ErrUnsupportedJob   = errors.New("unsupported job")
 	ErrUnsupportedKind  = errors.New("unsupported kind")
 	ErrActionForbidden  = errors.New("forbidden")
+	ErrNotFound         = errors.New("not found")
 
 	CommongTags = []string{
 		"t",
@@ -1000,12 +1001,17 @@ func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model
 			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
 		}
 	}
+	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
 	if e.Kind == model.CustomIONKindCommunityDefinition {
+		if err == nil {
+			return errors.Wrap(ErrActionForbidden, "community already exists")
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
 		return nil
 	}
-	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
-	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrActionForbidden, "community definition not found")
+	if err != nil {
+		return err
 	}
 	authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent)
 	if authorRole == model.RegularRole {
@@ -1085,9 +1091,9 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 			return errors.Wrapf(ErrWrongEventParams, "wrong authorization signature: %v", err.Error())
 		}
 	}
-	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
-	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrActionForbidden, "community definition not found")
+	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
+	if err != nil {
+		return err
 	}
 	if closedTag := communityDefinitionEvent.GetTag("closed"); closedTag != nil {
 		if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.RegularRole {
@@ -1143,9 +1149,9 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 	if currentTime > expirationTime {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership transferring event has expired: %+v", e)
 	}
-	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
-	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrActionForbidden, "community definition not found")
+	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
+	if err != nil {
+		return err
 	}
 	if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.OwnerRole {
 		return errors.Wrap(ErrActionForbidden, "only owner of the community can transfer ownership")
@@ -1160,14 +1166,14 @@ func validateCustomIONKindCommunityBanUserEvent(ctx context.Context, e *model.Ev
 		pTags = e.Tags.GetAll([]string{"p"})
 	)
 	if hTag == nil {
-		return errors.Wrapf(ErrWrongEventParams, "community ban must have h tag: %+v", e)
+		return errors.Wrap(ErrWrongEventParams, "community ban must have h tag")
 	}
 	if len(pTags) == 0 {
-		return errors.Wrap(ErrWrongEventParams, "community ban must have at least one p tag: %v")
+		return errors.Wrap(ErrWrongEventParams, "community ban must have at least one p tag")
 	}
-	communityDefinitionEvent := GetCommunityDefinition(ctx, hTag.Value())
-	if communityDefinitionEvent == nil {
-		return errors.Wrap(ErrActionForbidden, "community definition not found")
+	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
+	if err != nil {
+		return err
 	}
 	authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent)
 	if authorRole == model.RegularRole {
