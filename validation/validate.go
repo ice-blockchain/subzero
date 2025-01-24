@@ -96,7 +96,7 @@ var (
 		nostr.KindRepost:                tagsTable("e", "p", model.CustomIONTagCommunity),
 		nostr.KindReaction:              tagsTable("e", "p", "a", "k"),
 		nostr.KindBadgeAward:            tagsTable("a", "p"),
-		nostr.KindGenericRepost:         tagsTable("k", "e", "p", model.CustomIONTagCommunity),
+		nostr.KindGenericRepost:         tagsTable("k", "e", "p", "a", model.CustomIONTagCommunity),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
 		model.CustomIONKindPollVote:     newTable().Required("e").Forbidden("expiration").Build(),
