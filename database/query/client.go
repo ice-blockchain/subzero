@@ -73,6 +73,11 @@ func init() {
 						Ptr:  sqlTagAGetAt(2),
 						Pure: true,
 					},
+					{
+						Name: "subzero_nostr_get_event_address",
+						Ptr:  sqlGetEventAddress,
+						Pure: true,
+					},
 				}
 
 				for idx := range funcTable {

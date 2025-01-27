@@ -4,9 +4,11 @@ package query
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -85,4 +87,13 @@ func sqlTagAGetAt(pos int) func(string) string {
 
 		return fields[pos]
 	}
+}
+
+func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) string {
+	if nostr.IsAddressableKind(kind) {
+		return strconv.Itoa(kind) + ":" + masterPubkey + ":" + dTag
+	} else if nostr.IsReplaceableKind(kind) {
+		return strconv.Itoa(kind) + ":" + masterPubkey + ":"
+	}
+	return eventID
 }

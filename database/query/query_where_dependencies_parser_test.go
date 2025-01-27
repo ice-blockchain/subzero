@@ -1190,3 +1190,54 @@ func TestDVMVoteResults(t *testing.T) {
 		}
 	})
 }
+
+func TestSelectDependenciesWithAddressableEvents(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	user1Priv, user1Pub := model.GenerateKeyPair()
+
+	var event1 model.Event
+	event1.Kind = model.CustomIONKindEditableTextNote
+	event1.Content = "Hey"
+	event1.CreatedAt = 1
+	event1.Tags = model.Tags{
+		{"d", "dtag1"},
+	}
+	require.NoError(t, event1.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var event2 model.Event
+	event2.Kind = model.CustomIONKindEditableTextNote
+	event2.Content = "quote"
+	event2.CreatedAt = 2
+	event2.Tags = model.Tags{
+		{"Q", event1.Address(), "", user1Pub},
+		{"d", "dtag2"},
+	}
+	require.NoError(t, event2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var event3 model.Event
+	event3.Kind = model.CustomIONKindEditableTextNote
+	event3.Content = "quote2"
+	event3.CreatedAt = 3
+	event3.Tags = model.Tags{
+		{"Q", event1.Address(), "", user1Pub},
+		{"d", "dtag3"},
+	}
+	require.NoError(t, event3.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	require.NoError(t, db.AcceptEvents(context.Background(), &event1, &event2, &event3))
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{model.CustomIONKindEditableTextNote},
+		Search: "include:dependencies:kind30175>kind6400+kind30175+group+q",
+		Limit:  10,
+	})
+	require.Len(t, events, 4) // 3 notes, 1 dvm event.
+
+	t.Logf("dvm event: %+v", events[len(events)-1]) // The last event is the DVM event.
+	require.Equal(t, model.KindDVMCountResponse, events[len(events)-1].Kind)
+	require.Equal(t, "2", events[len(events)-1].Content)
+}

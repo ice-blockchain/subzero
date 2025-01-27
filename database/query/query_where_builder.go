@@ -507,9 +507,7 @@ select
 				json_array(
 					json_array(
 						iif(:` + (filterID + "ftagname") + `= 'lookup',
-							iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000),
-								concat_ws(:sep, cast(evr.kind as text), evr.master_pubkey, evr.d_tag),
-								f.reference_id),
+							subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag),
 							f.reference_id)`)
 		if filter.Reduce.Context == "root" || filter.Reduce.Context == "reply" {
 			w.WriteString(`, null, :` + filterID + "context")
@@ -527,7 +525,12 @@ select
 		end as jtags
 from
 	event_counters f
-inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + ` and ((f.kind = 3 and f.reference_id in (evr.master_pubkey, evr.pubkey)) or f.reference_id = evr.id)
+inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
+	and (
+		(f.kind = 3 and f.reference_id in (evr.master_pubkey, evr.pubkey))
+		or
+		f.reference_id = subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag)
+	)
 where
 `)
 	} else {
@@ -569,20 +572,24 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-		tag := filter.Reduce.Tag
-		if tag == "" {
-			// Repost, reaction.
-			tag = "e"
+		tag := filter.Reduce.Tag // Could be "q" or "e" or "p".
+		w.WriteString(" and e.id in (select event_id from event_tags inner join events et ON event_id = et.id where event_tag_key ")
+		switch tag {
+		case "q":
+			w.WriteString(" in ('q', 'Q')")
+		case "e":
+			w.WriteString(" in ('e', 'a')")
+		default:
+			w.WriteString(" = :")
+			w.WriteString(w.addParam(filterID, "rtag", tag))
 		}
-		w.WriteString(" and e.id in (select event_id from event_tags inner join events et ON event_id = et.id where event_tag_key = :")
-		w.WriteString(w.addParam(filterID, "rtag", tag))
 		if filter.Reduce.Author != "" {
 			w.WriteString(" and :")
 			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
 			w.WriteString(" in (et.pubkey, et.master_pubkey)")
 		}
 		w.WriteString(" and event_tag_value1 in (")
-		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "subzero_nostr_get_event_address(id, kind, master_pubkey, d_tag)", &filter.Start))
 		w.WriteRune(')')
 		if filter.Reduce.Context != "" {
 			w.WriteString(" and event_tag_value3 = :")
@@ -690,7 +697,7 @@ group by e.master_pubkey`)
 			w.WriteString(" UNION ALL ")
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
 		} else {
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start))
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "subzero_nostr_get_event_address(id, kind, master_pubkey, d_tag)", &filter.Start))
 		}
 		w.WriteString(")")
 		if filter.Reduce.Group && filter.Reduce.Kinds[1] == nostr.KindReaction {
