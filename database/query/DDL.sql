@@ -358,7 +358,7 @@ begin
         and (
             case
                 when e.kind = 7 then
-                    -- As per NIP25, we want only the value of the last `e` tag here.
+                    -- As per NIP25, we want only the value of the last `e` tag here OR `a` tag.
                     NEW.event_tag_value1 = (
                         select
                             json_group_array(json_extract(value, '$[1]'))->>'$[#-1]'
@@ -366,7 +366,7 @@ begin
                             json_each(e.tags)
                         where
                             json_valid(e.tags) and json_extract(value, '$[0]') = 'e'
-                    )
+                    ) OR NEW.event_tag_key = 'a'
                 when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('a', 'e') and NEW.event_tag_value3 != '' then
                     ((NEW.event_tag_value3 = 'root' AND NEW.event_tag_value5 = '') OR (NEW.event_tag_value3 = 'reply'))
                 else
@@ -412,7 +412,7 @@ begin
                             json_each(e.tags) je
                         where
                             json_valid(e.tags) and json_extract(je.value, '$[0]') = 'e'
-                    )
+                    ) OR OLD.event_tag_key = 'a'
                 else true
             end
         );
