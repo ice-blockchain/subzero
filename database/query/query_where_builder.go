@@ -572,12 +572,12 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-		tag := filter.Reduce.Tag // Could be "q" or "e" or "p".
+		tag := filter.Reduce.Tag // Could be "q" or "e" or "p" or empty.
 		w.WriteString(" and e.id in (select event_id from event_tags inner join events et ON event_id = et.id where event_tag_key ")
 		switch tag {
 		case "q":
 			w.WriteString(" in ('q', 'Q')")
-		case "e":
+		case "", "e":
 			w.WriteString(" in ('e', 'a')")
 		default:
 			w.WriteString(" = :")
