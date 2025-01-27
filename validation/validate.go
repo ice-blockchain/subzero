@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -52,6 +53,7 @@ const (
 	tagStateOptional tagState = iota
 	tagStateRequired
 	tagStateForbidden
+	tagStateOneOf
 )
 
 type (
@@ -66,8 +68,12 @@ type (
 		Bot         bool   `json:"bot" example:"false"`
 	}
 
-	tagState       int
-	tagLookupTable map[string]tagState
+	tagState uint
+	tagData  struct {
+		State tagState
+		Tags  []string
+	}
+	tagLookupTable map[string]tagData
 )
 
 var (
@@ -88,23 +94,16 @@ var (
 		"encrypted",
 	}
 
-	ConflictTags = map[string]string{
-		"e": "a",
-		"a": "e",
-		"q": "Q",
-		"Q": "q",
-	}
-
 	KindSupportedTags = map[model.Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
 		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, model.CustomIONTagCommunity),
 		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              newEmptyTable().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
-		nostr.KindRepost:                tagsTable("e", "p", model.CustomIONTagCommunity),
-		nostr.KindReaction:              tagsTable("e", "p", "a", "k"),
+		nostr.KindRepost:                newTable().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
+		nostr.KindReaction:              newTable().Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindBadgeAward:            tagsTable("a", "p"),
-		nostr.KindGenericRepost:         tagsTable("k", "e", "p", "a", model.CustomIONTagCommunity),
+		nostr.KindGenericRepost:         newTable().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
 		model.CustomIONKindPollVote:     newTable().Required("e").Forbidden("expiration").Build(),
@@ -170,12 +169,13 @@ var (
 				"editing_ended_at",
 				model.CustomIONTagPoll,
 				model.CustomIONTagCommunity,
+				model.CustomIONTagAddressableQ,
 			).
 			Required("published_at").
 			Build(),
 	}
 
-	SupportedIMetaKeys = tagLookupTable{
+	SupportedIMetaKeys = map[string]tagState{
 		"url":      tagStateRequired,
 		"m":        tagStateRequired,
 		"x":        tagStateOptional,
@@ -404,8 +404,6 @@ func Validate(ctx context.Context, e *model.Event) error {
 		return validateKindRepostEvent(ctx, e)
 	case nostr.KindFollowList:
 		return validateFollowListEvent(e)
-	case nostr.KindReaction:
-		return validateKindReactionEvent(e)
 	case nostr.KindBadgeAward:
 		return validateKindBadgeAwardEvent(e)
 	case nostr.KindDirectMessage, nostr.KindSeal:
@@ -897,8 +895,14 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 		}
 	}
 
-	if eTag := e.GetTag("e"); eTag.Value() != repostedEvent.ID {
-		return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note: found %q, expected %q", eTag.Value(), repostedEvent.ID)
+	if repostedEvent.IsAddressable() || repostedEvent.IsReplaceable() {
+		if eTag := e.GetTag("a"); eTag.Value() != repostedEvent.Address() {
+			return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include a tag with address of the note: found %q, expected %q", eTag.Value(), repostedEvent.Address())
+		}
+	} else {
+		if eTag := e.GetTag("e"); eTag.Value() != repostedEvent.ID {
+			return errors.Wrapf(ErrWrongEventParams, "nip-18: repost must include e tag with id of the note: found %q, expected %q", eTag.Value(), repostedEvent.ID)
+		}
 	}
 
 	if pTag := e.GetTag("p"); pTag.Value() != repostedEvent.GetMasterPublicKey() {
@@ -915,19 +919,6 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 		return err
 	}
 
-	return nil
-}
-
-func validateKindReactionEvent(e *model.Event) error {
-	if eTag := e.Tags.GetLast([]string{"e"}); eTag == nil || eTag.Value() == "" {
-		return errors.Wrap(ErrWrongEventParams, "nip-25: e tag is empty")
-	}
-	if pTag := e.Tags.GetLast([]string{"p"}); pTag == nil || pTag.Value() == "" {
-		return errors.Wrap(ErrWrongEventParams, "nip-25: p tag is empty")
-	}
-	if kTag := e.Tags.GetFirst([]string{"k"}); kTag != nil && kTag.Value() == "" {
-		return errors.Wrap(ErrWrongEventParams, "nip-25: k tag is empty")
-	}
 	return nil
 }
 
@@ -1308,11 +1299,12 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 }
 
 func validateEventTags(e *model.Event) error {
+	currentTags := make(map[string]int)
 	supportedTags, known := KindSupportedTags[e.Kind]
 	for _, tag := range e.Tags {
-		if state, ok := supportedTags[tag.Key()]; known && !ok {
+		if data, ok := supportedTags[tag.Key()]; known && !ok {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
-		} else if state == tagStateForbidden {
+		} else if data.State == tagStateForbidden {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v: cannot be used with this kind", tag)
 		}
 
@@ -1347,11 +1339,31 @@ func validateEventTags(e *model.Event) error {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
 		}
+		currentTags[tag.Key()]++
 	}
 
-	for key, state := range supportedTags {
-		if state == tagStateRequired && e.GetTag(key).Value() == "" {
-			return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found or empty", key)
+	for key, data := range supportedTags {
+		switch data.State {
+		case tagStateRequired:
+			if _, ok := currentTags[key]; !ok {
+				return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found", key)
+			}
+		case tagStateOneOf:
+			found := map[string]struct{}{}
+			for _, tag := range data.Tags {
+				if _, ok := currentTags[tag]; ok {
+					found[tag] = struct{}{}
+				}
+			}
+			if len(found) == 0 {
+				return errors.Wrapf(ErrWrongEventParams, "one of tags %v must be present", data.Tags)
+			} else if len(found) > 1 {
+				keys := make([]string, 0, len(found))
+				for key := range maps.Keys(found) {
+					keys = append(keys, key)
+				}
+				return errors.Wrapf(ErrWrongEventParams, "only one of tags %v must be present, found %v", data.Tags, keys)
+			}
 		}
 	}
 
@@ -1388,21 +1400,29 @@ func newEmptyTable() *tagTableBuilder {
 
 func (t *tagTableBuilder) Optional(tags ...string) *tagTableBuilder {
 	for _, tag := range tags {
-		t.M[tag] = tagStateOptional
+		t.M[tag] = tagData{State: tagStateOptional}
 	}
 	return t
 }
 
 func (t *tagTableBuilder) Required(tags ...string) *tagTableBuilder {
 	for _, tag := range tags {
-		t.M[tag] = tagStateRequired
+		t.M[tag] = tagData{State: tagStateRequired}
 	}
 	return t
 }
 
 func (t *tagTableBuilder) Forbidden(tags ...string) *tagTableBuilder {
 	for _, tag := range tags {
-		t.M[tag] = tagStateForbidden
+		t.M[tag] = tagData{State: tagStateForbidden}
+	}
+	return t
+}
+
+func (t *tagTableBuilder) OneOf(tags ...string) *tagTableBuilder {
+	data := tagData{Tags: tags, State: tagStateOneOf}
+	for _, tag := range tags {
+		t.M[tag] = data
 	}
 	return t
 }
