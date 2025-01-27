@@ -86,6 +86,8 @@ var (
 
 	CommongTags = []string{
 		"t",
+		"l",
+		"L",
 		"nonce",
 		"imeta",
 		"expiration",
@@ -96,7 +98,7 @@ var (
 
 	KindSupportedTags = map[model.Kind]tagLookupTable{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", "l", "L", model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity),
 		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              newEmptyTable().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
@@ -129,12 +131,12 @@ var (
 		nostr.KindInterestSets:          tagsTable("t", "d", "title", "image", "description"),
 		nostr.KindEmojiSets:             tagsTable("emoji", "d", "title", "image", "description"),
 		nostr.KindReleaseArtifactSets:   tagsTable("e", "i", "version", "d", "title", "image", "description"),
-		nostr.KindLabel:                 tagsTable("L", "l", "e", "p", "a", "r", "t"),
+		nostr.KindLabel:                 tagsTable("e", "p", "a", "r", "t"),
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "l", "L", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDraftArticle:          tagsTable("a", "l", "L", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
@@ -165,7 +167,7 @@ var (
 		model.CustomIONKindCommunityChangeDefinition:      tagsTable(model.CustomIONTagCommunity, "name", "description", "public", "private", "open", "closed", "p"),
 
 		model.CustomIONKindEditableTextNote: newTable().
-			Optional("a", "e", "d", "p", "q", "l", "L",
+			Optional("a", "e", "d", "p", "q",
 				"editing_ended_at",
 				model.CustomIONTagPoll,
 				model.CustomIONTagCommunity,
