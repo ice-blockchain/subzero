@@ -3,6 +3,7 @@
 package validation
 
 import (
+	"cmp"
 	"context"
 	"log"
 	"sort"
@@ -32,9 +33,9 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 	requiredRole := roleRequiredForPosting(communityDefinitionEvent)
 	replyRole := model.GetCommunityRoleByPubkey(incomingEvent.GetMasterPublicKey(), communityDefinitionEvent)
 	if requiredRole == model.ModeratorRole && (replyRole != model.AdminRole && replyRole != model.OwnerRole && replyRole != model.ModeratorRole) {
-		return errors.Wrapf(ErrActionForbidden, "only moderator, admin or owner can post in this community", requiredRole)
+		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "moderator, admin or owner"))
 	} else if requiredRole == model.AdminRole && replyRole != model.OwnerRole && replyRole != model.AdminRole {
-		return errors.Wrapf(ErrActionForbidden, "only admin or owner can post in this community", requiredRole)
+		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "admin or owner"))
 	}
 	if incomingEvent.Kind == nostr.KindRepost || incomingEvent.Kind == nostr.KindGenericRepost {
 		if !isCommunityCommentsEnabled(communityDefinitionEvent) {
