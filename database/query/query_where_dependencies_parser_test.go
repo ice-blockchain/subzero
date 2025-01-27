@@ -1136,7 +1136,7 @@ func TestDVMVoteResults(t *testing.T) {
 		}{
 			{results1, "poll1"},
 			{results2, "poll2"},
-			{results3, "poll3"},
+			{results3, "30023:pk1:dtag3"},
 		}
 		for _, c := range cases {
 			t.Run(c.ID, func(t *testing.T) {
@@ -1240,4 +1240,69 @@ func TestSelectDependenciesWithAddressableEvents(t *testing.T) {
 	t.Logf("dvm event: %+v", events[len(events)-1]) // The last event is the DVM event.
 	require.Equal(t, model.KindDVMCountResponse, events[len(events)-1].Kind)
 	require.Equal(t, "2", events[len(events)-1].Content)
+}
+
+func TestSelectDependenciesReactionAddressable(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	user1Priv, user1Pub := model.GenerateKeyPair()
+
+	var event1 model.Event
+	event1.Kind = model.CustomIONKindEditableTextNote
+	event1.Content = "Hey"
+	event1.CreatedAt = 1
+	event1.Tags = model.Tags{
+		{"d", "dtag1"},
+	}
+	require.NoError(t, event1.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(context.Background(), &event1))
+
+	var reaction1, reaction2 model.Event
+
+	reaction1.ID = "id1"
+	reaction1.Kind = nostr.KindReaction
+	reaction1.PubKey = "pk1"
+	reaction1.CreatedAt = 13
+	reaction1.Content = "approve"
+	reaction1.Tags = model.Tags{
+		{"a", event1.Address()},
+		{"p", user1Pub},
+		{"k", strconv.Itoa(event1.Kind)},
+	}
+
+	reaction2.ID = "id2"
+	reaction2.Kind = nostr.KindReaction
+	reaction2.PubKey = "pk2"
+	reaction2.CreatedAt = 11
+	reaction2.Content = "minus"
+	reaction2.Tags = model.Tags{
+		{"a", event1.Address()},
+		{"p", user1Pub},
+		{"k", strconv.Itoa(event1.Kind)},
+	}
+
+	require.NoError(t, db.AcceptEvents(context.Background(), &reaction1, &reaction2))
+
+	helperMustBePrecalculatedCount(t, db, 2, model.Filter{Tags: model.TagMap{}.Set("a", model.PointerOf(event1.Address())), Kinds: []int{nostr.KindReaction}})
+
+	result, err := db.CountGroupedEventReactions(context.Background(), model.Filter{
+		Kinds: []int{nostr.KindReaction},
+		Tags: model.TagMap{}.
+			Append("a", model.PointerOf(event1.Address())),
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"approve":1,"minus":1}`, result)
+
+	events := helperSelectEvents(t, db, model.Filter{
+		IDs:    []string{event1.ID},
+		Search: "include:dependencies:kind30175>kind6400+kind7+group+content",
+	})
+
+	require.Len(t, events, 2) // 1 event, 1 DVM (reaction count) event.
+	require.Equal(t, event1.ID, events[0].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
+	require.JSONEq(t, `{"approve":1,"minus":1}`, events[1].Content)
 }
