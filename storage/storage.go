@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -39,6 +38,7 @@ type (
 		FilePath(masterKey, fileSha256 string) (string, error)
 		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
 		Delete(userPubkey, masterKey string, fileSha256 string) error
+		DeleteUser(masterKey string) error
 	}
 	Bootstrap struct {
 		Overlay *overlay.Node
@@ -222,36 +222,6 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 		})
 	}
 	return bag.Header.FilesCount, res, nil
-}
-
-func (c *client) Delete(userPubKey, masterKey, fileHash string) error {
-	bag, err := c.bagByUser(masterKey)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
-	}
-	if bag == nil {
-		return ErrNotFound
-	}
-	var metadata *headerData
-	metadata, err = c.fileMeta(bag)
-	if err != nil {
-		return errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
-	}
-	file, err := c.detectFileFromMeta(bag, metadata, fileHash)
-	if err != nil {
-		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
-	}
-	if userPubKey != masterKey {
-		if metadata.FileMetadata[file].Owner == masterKey {
-			return ErrForbidden
-		}
-	}
-	userPath, _ := c.BuildUserPath(masterKey, "")
-	err = os.Remove(filepath.Join(userPath, file))
-	if err != nil {
-		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
-	}
-	return nil
 }
 
 func (c *client) FilePath(masterKey, fileHash string) (string, error) {

@@ -50,7 +50,6 @@ func TestNIP96(t *testing.T) {
 	defer func() {
 		require.NoError(t, storage.Client().Close())
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
-		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
 	}()
 	master, masterPubKey := model.GenerateKeyPair()
 	user1, user1PubKey := model.GenerateKeyPair()
@@ -204,17 +203,33 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})
-	t.Run("delete file owned by user 1 on behave of usr 2 (attestation)", func(t *testing.T) {
+	t.Run("delete file owned by user 1 on behave of usr 2 (attestation) via deletion of imeta tagged post", func(t *testing.T) {
 		status := deleteFile(t, ctx, user2, "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1", masterPubKey)
 		require.Equal(t, http.StatusOK, status)
 		fileName := "text.txt"
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
+		imetaEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				nostr.Tag{
+					"imeta",
+					fmt.Sprintf("x %v", nip94EventToSign.Tags.GetFirst([]string{"x"}).Value()),
+					fmt.Sprintf("ox %v", nip94EventToSign.Tags.GetFirst([]string{"ox"}).Value()),
+					fmt.Sprintf("url %v", nip94EventToSign.Tags.GetFirst([]string{"url"}).Value()),
+				},
+				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindTextNote), 10)},
+				nostr.Tag{"b", masterPubKey},
+			},
+		}}
+		require.NoError(t, imetaEvent.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(ctx, imetaEvent))
 		deletionEventToSign := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindDeletion,
 			Tags: nostr.Tags{
-				nostr.Tag{"e", nip94EventToSign.ID},
-				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindFileMetadata), 10)},
+				nostr.Tag{"e", imetaEvent.ID},
+				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindTextNote), 10)},
 				nostr.Tag{"b", masterPubKey},
 			},
 		}}
@@ -241,7 +256,18 @@ func TestNIP96(t *testing.T) {
 		t.Fatal("Expired events processor was not triggered")
 	}
 	require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, "master.txt"), "expiration")
-
+	t.Run("profile removal - causes whole storage removal for that user", func(t *testing.T) {
+		deletionEventToSign := &model.Event{
+			Event: nostr.Event{
+				ID:      "deletion event4",
+				PubKey:  masterPubKey,
+				Kind:    nostr.KindDeletion,
+				Content: "profile deletion",
+			}}
+		require.NoError(t, deletionEventToSign.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
+		require.NoDirExists(t, filepath.Join(newStorageRoot, masterPubKey))
+	})
 }
 
 func verifyFile(t *testing.T, content string, tags nostr.Tags) {

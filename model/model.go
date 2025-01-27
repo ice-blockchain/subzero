@@ -38,6 +38,7 @@ type (
 var (
 	ErrUnsupportedAlg       = errors.New("unsupported signature/key algorithm combination")
 	ErrOnBehalfAccessDenied = errors.New("on-behalf access denied")
+	ErrWrongEventParams     = errors.New("wrong event params")
 )
 
 const (
