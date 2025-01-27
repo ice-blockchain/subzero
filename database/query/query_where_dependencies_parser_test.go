@@ -1136,7 +1136,7 @@ func TestDVMVoteResults(t *testing.T) {
 		}{
 			{results1, "poll1"},
 			{results2, "poll2"},
-			{results3, "poll3"},
+			{results3, "30023:pk1:dtag3"},
 		}
 		for _, c := range cases {
 			t.Run(c.ID, func(t *testing.T) {

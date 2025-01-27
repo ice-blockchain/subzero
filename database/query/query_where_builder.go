@@ -330,7 +330,7 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch) {
 		if !*filter.Quotes {
 			w.WriteString("NOT ")
 		}
-		w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'q')")
+		w.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key in ('q', 'Q'))")
 	}
 	if filter.Expiration != nil {
 		w.maybeAND()
@@ -348,7 +348,7 @@ func (w *whereBuilder) applyFilterForExtensions(filter *databaseFilterSearch) {
 		if !*filter.References {
 			w.WriteString("NOT ")
 		}
-		w.WriteString("exists (select true from event_tags where event_id = e.id AND event_tag_key = 'e') end)")
+		w.WriteString("exists (select true from event_tags where event_id = e.id AND event_tag_key in ('a', 'e')) end)")
 	}
 }
 
@@ -440,9 +440,10 @@ select
 	t.master_pubkey,
 	'' as sig,
 	json_group_object(json_each.key, json_each.value) AS content,
-	json_array(json_object('kinds', json_array(1754),
+	json_array(json_object(
+		'kinds', json_array(1754),
 		iif((t.kind >= 10000 AND t.kind < 20000) OR t.kind = 0 OR t.kind = 3 OR (t.kind >= 30000 AND t.kind < 40000), '#a', '#e'),
-		iif((t.kind >= 10000 AND t.kind < 20000) OR t.kind = 0 OR t.kind = 3 OR (t.kind >= 30000 AND t.kind < 40000), concat_ws(:sep, cast(t.kind as text), t.master_pubkey, t.d_tag), t.poll_id))
+			subzero_nostr_get_event_address(t.poll_id, t.kind, t.master_pubkey, t.d_tag))
 	) as d_tag,
 	t.h_tag,
 	json_array(
@@ -462,7 +463,7 @@ from (
 	from `)
 	w.WriteString(cteName)
 	w.WriteString(` mainev
-	left join event_tags et ON et.event_tag_value1 = mainev.id AND et.event_tag_key = 'e'
+	left join event_tags et ON et.event_tag_value1 = subzero_nostr_get_event_address(mainev.id, mainev.kind, mainev.master_pubkey, mainev.d_tag) AND et.event_tag_key in ('a', 'e')
 	left join events ve ON ve.id = et.event_id AND ve.kind = 1754 AND json_valid(ve.content)
 	left join json_each(ve.content) j on true
 	where

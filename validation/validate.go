@@ -106,7 +106,7 @@ var (
 		nostr.KindGenericRepost:         newTable().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
-		model.CustomIONKindPollVote:     newTable().Required("e").Forbidden("expiration").Build(),
+		model.CustomIONKindPollVote:     newTable().OneOf("e", "a").Forbidden("expiration").Build(),
 		nostr.KindPinList:               tagsTable("e"),
 		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
 		nostr.KindCommunityList:         tagsTable("a"),
@@ -133,8 +133,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindArticle:               tagsTable("a", "l", "L", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("a", "l", "L", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
