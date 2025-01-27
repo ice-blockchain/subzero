@@ -165,7 +165,7 @@ var (
 		model.CustomIONKindCommunityChangeDefinition:      tagsTable(model.CustomIONTagCommunity, "name", "description", "public", "private", "open", "closed", "p"),
 
 		model.CustomIONKindEditableTextNote: newTable().
-			Optional("e", "d", "p", "q", "l", "L",
+			Optional("a", "e", "d", "p", "q", "l", "L",
 				"editing_ended_at",
 				model.CustomIONTagPoll,
 				model.CustomIONTagCommunity,
