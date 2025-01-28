@@ -14,9 +14,9 @@ func ParseIMeta(tag Tag) (values map[string]string, err error) {
 	for _, val := range tag[1:] {
 		parts := strings.Split(val, " ")
 		if len(parts) < 2 {
-			return nil, errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
+			return nil, errors.Errorf("wrong imeta tag: %+v", tag)
 		} else if _, ok := values[parts[0]]; ok {
-			return nil, errors.Wrapf(ErrWrongEventParams, "duplicate imeta value: %s", parts[0])
+			return nil, errors.Errorf("duplicate imeta value: %s", parts[0])
 		}
 		values[parts[0]] = parts[1]
 	}

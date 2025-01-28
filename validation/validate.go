@@ -1197,7 +1197,7 @@ func validateIMetaTag(tag nostr.Tag) error {
 
 	values, err := model.ParseIMeta(tag)
 	if err != nil {
-		return errors.Wrapf(err, "invalid imeta")
+		return errors.Wrapf(ErrWrongEventParams, "invalid imeta: %v", err.Error())
 	}
 	// Check for all required values.
 	for key, state := range SupportedIMetaKeys {
