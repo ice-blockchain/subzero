@@ -1195,20 +1195,10 @@ func validateIMetaTag(tag nostr.Tag) error {
 		return nil
 	}
 
-	values := make(map[string]string)
-	// Parse tag values and check for all unsupported values.
-	for _, val := range tag[1:] {
-		parts := strings.Split(val, " ")
-		if len(parts) < 2 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong imeta tag: %+v", tag)
-		} else if _, ok := SupportedIMetaKeys[parts[0]]; !ok {
-			return errors.Wrapf(ErrWrongEventParams, "not supported imeta value: %s", parts[0])
-		} else if _, ok := values[parts[0]]; ok {
-			return errors.Wrapf(ErrWrongEventParams, "duplicate imeta value: %s", parts[0])
-		}
-		values[parts[0]] = parts[1]
+	values, err := model.ParseIMeta(tag)
+	if err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "invalid imeta: %v", err.Error())
 	}
-
 	// Check for all required values.
 	for key, state := range SupportedIMetaKeys {
 		if state == tagStateRequired && values[key] == "" {
@@ -1223,6 +1213,9 @@ func validateIMetaTag(tag nostr.Tag) error {
 
 	// Check for values correctness.
 	for key, value := range values {
+		if _, ok := SupportedIMetaKeys[key]; !ok {
+			return errors.Wrapf(ErrWrongEventParams, "not supported imeta value: %s", key)
+		}
 		switch key {
 		case "x", "ox":
 			if _, err := hex.DecodeString(value); err != nil {

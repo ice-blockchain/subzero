@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -61,20 +60,21 @@ func Client() StorageClient {
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	var acceptErrors multierror.Error
+	var acceptErrors *multierror.Error
 
 	for _, event := range events {
 		switch event.Kind {
 		case nostr.KindFileMetadata:
-			multierror.Append(&acceptErrors, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
+			acceptErrors = multierror.Append(acceptErrors, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
 
 		case nostr.KindDeletion:
-			if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
-				if kTag.Value() == strconv.FormatInt(int64(nostr.KindFileMetadata), 10) {
-					multierror.Append(&acceptErrors, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
+			if (len(event.Tags) == 0 || (len(event.Tags) == 1 && event.GetTag("b").Value() != "")) && event.GetMasterPublicKey() != "" {
+				acceptErrors = multierror.Append(acceptErrors, errors.Wrapf(globalClient.DeleteUser(event.GetMasterPublicKey()), "failed to accept profile deletion %v", event))
+			} else if len(event.Tags) > 1 {
+				if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
+					acceptErrors = multierror.Append(acceptErrors, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
 				}
 			}
-
 		}
 	}
 
@@ -97,7 +97,9 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 			return errors.Wrapf(err, "failed to query referenced deletion file event")
 		}
 		if fileEvent.Kind != nostr.KindFileMetadata {
-			return errors.Errorf("event mismatch: event %v is %v not file metadata (%v)", fileEvent.ID, fileEvent.Kind, nostr.KindFileMetadata)
+			if fileEvent.GetTag("imeta") == nil {
+				continue
+			}
 		}
 		if fileEvent.GetMasterPublicKey() != event.GetMasterPublicKey() {
 			return errors.Errorf("user mismatch: event %v is signed by %v not %v", fileEvent.ID, fileEvent.PubKey, event.PubKey)
@@ -109,37 +111,54 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 		return nil
 	}
 	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
-
-	return processEventDeletion(ctx, originalEvent)
+	fileHashes := []string{}
+	if xTag := originalEvent.Tags.GetFirst([]string{"x"}); originalEvent.Kind == nostr.KindFileMetadata && xTag != nil && len(*xTag) > 1 {
+		fileHashes = append(fileHashes, xTag.Value())
+	} else {
+		imetas := originalEvent.Tags.GetAll([]string{"imeta"})
+		for _, imeta := range imetas {
+			imetaValues, err := model.ParseIMeta(imeta)
+			if err != nil {
+				return errors.Wrapf(err, "malformed imeta")
+			}
+			hash := imetaValues["ox"]
+			if hash == "" {
+				hash = imetaValues["x"]
+			}
+			if hash == "" {
+				return errors.Errorf("malformed imeta: empty x, ox tags")
+			}
+			fileHashes = append(fileHashes, hash)
+		}
+	}
+	var mErr *multierror.Error
+	for _, fh := range fileHashes {
+		mErr = multierror.Append(mErr, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey))
+	}
+	return mErr.ErrorOrNil()
 }
 
-func processEventDeletion(ctx context.Context, originalEvent *model.Event) error {
-	fileHash := ""
-	if xTag := originalEvent.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
-		fileHash = xTag.Value()
-	} else {
-		return errors.Errorf("malformed x tag in event %v", originalEvent.ID)
-	}
-	bag, err := globalClient.bagByUser(originalEvent.GetMasterPublicKey())
+func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey string) error {
+	bag, err := globalClient.bagByUser(masterPubkey)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get bagID for the user %v", originalEvent.GetMasterPublicKey())
+		return errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)
 	}
 	if bag == nil {
-		return errors.Errorf("bagID for user %v not found", originalEvent.GetMasterPublicKey())
+		return errors.Errorf("bagID for user %v not found", masterPubkey)
 	}
 	file, err := globalClient.detectFile(bag, fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userRoot, _ := globalClient.BuildUserPath(originalEvent.GetMasterPublicKey(), "")
+	userRoot, _ := globalClient.BuildUserPath(masterPubkey, "")
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
-	bagID, _, _, err := globalClient.StartUpload(ctx, originalEvent.PubKey, originalEvent.GetMasterPublicKey(), file, fileHash, nil)
+	bagID, _, _, err := globalClient.StartUpload(ctx, pubkey, masterPubkey, file, fileHash, nil)
 	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}
-	log.Printf("[STORAGE] INFO: bag %x replaced by %v due to file deletion %+v", bag.BagID, bagID, originalEvent)
+	log.Printf("[STORAGE] INFO: bag %x replaced by %v due to file deletion %+v", bag.BagID, bagID, fileHash)
 	return nil
 }
 
@@ -284,7 +303,14 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 			continue
 		}
 		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String(), ev.String())
-		err = processEventDeletion(ctx, ev)
+		fileHash := ""
+		if xTag := ev.Tags.GetFirst([]string{"x"}); ev.Kind == nostr.KindFileMetadata && xTag != nil && len(*xTag) > 1 {
+			fileHash = xTag.Value()
+		}
+		if fileHash == "" {
+			return errors.Errorf("malformed file event: no file hash, %v", ev.String())
+		}
+		err = processEventDeletion(ctx, fileHash, ev.GetMasterPublicKey(), ev.PubKey)
 		if errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrNotFound) {
 			err = nil
 		}
