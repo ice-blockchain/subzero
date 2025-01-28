@@ -263,6 +263,7 @@ on conflict do nothing;
 end
 ;
 --------
+drop   trigger if     exists trigger_events_after_insert_link_repost;
 create trigger if not exists trigger_events_after_insert_link_repost
     after insert
     on events
