@@ -1271,8 +1271,14 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 			return errors.Wrapf(ErrWrongEventParams, "role_required_for_posting must be admin or moderator: %+v", tag)
 		}
 	case model.WhoCanReplySettings:
-		if kind != nostr.KindTextNote && kind != nostr.KindArticle {
-			return errors.Wrapf(ErrWrongEventParams, "who_can_reply can be set only for 1 and 30023 kinds: %+v", tag)
+		accept := map[int]struct{}{
+			nostr.KindTextNote:                  {},
+			nostr.KindArticle:                   {},
+			nostr.KindDraftArticle:              {},
+			model.CustomIONKindEditableTextNote: {},
+		}
+		if _, ok := accept[kind]; !ok {
+			return errors.Wrapf(ErrWrongEventParams, "who_can_reply cannot be set for kind: %d: %+v", kind, tag)
 		}
 		values := strings.Split(value, ",")
 		for _, v := range values {
