@@ -2,7 +2,6 @@
 
 DROP TABLE IF EXISTS old_events;
 DROP TABLE IF EXISTS old_event_tags;
-DROP TABLE IF EXISTS old_event_counters;
 DROP TABLE IF EXISTS old_events_search;
 --------
 DROP INDEX IF EXISTS replaceable_event_uk;
@@ -32,3 +31,15 @@ DROP INDEX IF EXISTS idx_event_tags_id_key_value1_value2;
 DROP INDEX IF EXISTS idx_event_tags_id_key_value1_value3;
 DROP INDEX IF EXISTS idx_event_tags_id_key_value1_value2_value3;
 DROP INDEX IF EXISTS idx_event_counters_reference_id;
+--------
+drop   trigger if     exists trigger_events_after_insert_generate_tags;
+drop   trigger if     exists trigger_events_before_update_remove_old_data;
+drop   trigger if     exists trigger_events_after_update_generate_tags;
+drop   trigger if     exists trigger_events_before_insert_unwind_repost;
+drop   trigger if     exists trigger_events_after_insert_link_repost;
+drop   trigger if     exists trigger_events_before_insert_check_onbehalf_permission;
+drop   trigger if     exists trigger_events_before_update_check_attestation_list_content;
+drop   trigger if     exists trigger_events_before_delete_remove_tags_explicit;
+drop   trigger if     exists trigger_event_tags_after_insert_inc_counter;
+drop   trigger if     exists trigger_event_tags_after_delete_dec_counter;
+drop   trigger if     exists trigger_events_search_insert;

@@ -49,18 +49,6 @@ CREATE TABLE IF NOT EXISTS new_event_tags (
     primary key (event_id, event_tag_key, event_tag_value1)
 ) strict, WITHOUT ROWID;
 --------
-drop   trigger if     exists trigger_events_after_insert_generate_tags;
-drop   trigger if     exists trigger_events_before_update_remove_old_data;
-drop   trigger if     exists trigger_events_after_update_generate_tags;
-drop   trigger if     exists trigger_events_before_insert_unwind_repost;
-drop   trigger if     exists trigger_events_after_insert_link_repost;
-drop   trigger if     exists trigger_events_before_insert_check_onbehalf_permission;
-drop   trigger if     exists trigger_events_before_update_check_attestation_list_content;
-drop   trigger if     exists trigger_events_before_delete_remove_tags_explicit;
-drop   trigger if     exists trigger_event_tags_after_insert_inc_counter;
-drop   trigger if     exists trigger_event_tags_after_delete_dec_counter;
-drop   trigger if     exists trigger_events_search_insert;
---------
 INSERT INTO new_events (
     rid,
     kind,
