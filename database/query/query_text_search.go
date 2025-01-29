@@ -113,9 +113,7 @@ func parseMetadataContent(ev *model.Event) string {
 			return ""
 		}
 		content = fmt.Sprintf("%v %v", parsedContent.Name, parsedContent.DisplayName)
-	case nostr.KindTextNote, nostr.KindArticle, model.KindModifiableTextNote:
-		content = strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " ")
-	case nostr.KindFileMetadata:
+	case nostr.KindFileMetadata, nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
 		content = strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " ")
 	}
 

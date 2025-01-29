@@ -84,16 +84,6 @@ func init() {
 						Ptr:  sqlGetEventAddress,
 						Pure: true,
 					},
-					{
-						Name: "subzero_nostr_fts5_cleanup_text",
-						Ptr:  sqlFts5CleanupText,
-						Pure: true,
-					},
-					{
-						Name: "subzero_nostr_extract_imeta",
-						Ptr:  sqlExtractIMeta,
-						Pure: true,
-					},
 				}
 
 				for idx := range funcTable {

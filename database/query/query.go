@@ -768,7 +768,7 @@ func (db *dbClient) generateEventsWhereSearchClause(ctx context.Context, filters
 			if kind == nostr.KindRepost {
 				toAdd = append(toAdd, nostr.KindTextNote)
 			} else if kind == nostr.KindGenericRepost {
-				toAdd = append(toAdd, nostr.KindArticle)
+				toAdd = append(toAdd, nostr.KindArticle, model.CustomIONKindEditableTextNote)
 			}
 		}
 		cpy[ix].Kinds = append(filter.Kinds, toAdd...)
