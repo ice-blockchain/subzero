@@ -29,6 +29,12 @@ type (
 var (
 	//go:embed DDL.sql
 	ddl string
+
+	//go:embed DDL_add_search.sql
+	ddlAddSearch string
+
+	//go:embed DDL_drop_old_tables.sql
+	ddlDropOldTables string
 )
 
 func init() {
@@ -139,10 +145,47 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
+		changed, err := client.addSearchTable(tx)
+		if err != nil {
+			panic(err)
+		}
 		tx.Commit()
+		if changed {
+			tx := client.MustBegin()
+			for _, statement := range strings.Split(ddlDropOldTables, "--------") {
+				tx.MustExec(statement)
+			}
+			tx.Commit()
+			tx = client.MustBegin()
+			for _, statement := range strings.Split(ddl, "--------") {
+				tx.MustExec(statement)
+			}
+			tx.Commit()
+		}
 	}
 
 	return client
+}
+
+func (db *dbClient) addSearchTable(tx *sqlx.Tx) (changed bool, err error) {
+	sqlQuery := "SELECT exists (select name from pragma_table_info('events') WHERE name = $1);"
+	res, err := tx.Queryx(sqlQuery, "metadata")
+	if err != nil {
+		return false, err
+	}
+	var exists int
+	if res.Next() {
+		if err = res.Scan(&exists); err != nil {
+			return false, err
+		}
+	}
+	if exists == 0 {
+		for _, statement := range strings.Split(ddlAddSearch, "--------") {
+			tx.MustExec(statement)
+		}
+	}
+
+	return exists == 0, nil
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {

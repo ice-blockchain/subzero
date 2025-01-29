@@ -214,20 +214,20 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 
 			rows, err := stmt.QueryContext(context.Background(), params)
 			require.NoError(t, err)
-			var hasPK bool
+			var hasIndex bool
 			for rows.Next() {
 				var s1, s2, s3, s4 string
 				err := rows.Scan(&s1, &s2, &s3, &s4)
 				require.NoError(t, err)
 				op[s4]++
-				if strings.Contains(s4, "SEARCH e USING PRIMARY KEY") {
-					hasPK = true
+				if strings.Contains(s4, "SEARCH e USING INDEX sqlite_autoindex_events_1") || strings.Contains(s4, "SEARCH e USING INDEX") {
+					hasIndex = true
 				}
 				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
 					if strings.Contains(filter.Search, "Expiration:true") {
 						// It uses SCAN over CTE, which is expected.
 						continue
-					} else if (hasPK || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
+					} else if (hasIndex || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
 						// Allow B-TREE for ORDER BY if there are multiple authors or PK is used.
 						continue
 					}
@@ -272,9 +272,9 @@ func TestQueryFuzzInsertEvents(t *testing.T) {
 
 	t.Run("Explain", func(t *testing.T) {
 		const sql = `explain query plan insert into events
-			(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id)
+			(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, metadata)
 		values
-			(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id)
+			(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :metadata)
 		on conflict do update set
 			id                = excluded.id,
 			kind              = excluded.kind,
@@ -290,6 +290,7 @@ func TestQueryFuzzInsertEvents(t *testing.T) {
 			d_tag             = excluded.d_tag,
 			h_tag             = excluded.h_tag,
 			reference_id      = excluded.reference_id,
+			metadata 		  = excluded.metadata,
 			hidden            = 0
 		`
 		stmt, err := db.prepare(context.Background(), sql, hashSQL(sql))

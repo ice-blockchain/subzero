@@ -1,0 +1,34 @@
+-- SPDX-License-Identifier: ice License 1.0
+
+DROP TABLE IF EXISTS old_events;
+DROP TABLE IF EXISTS old_event_tags;
+DROP TABLE IF EXISTS old_event_counters;
+DROP TABLE IF EXISTS old_events_search;
+--------
+DROP INDEX IF EXISTS replaceable_event_uk;
+DROP INDEX IF EXISTS parameterized_replaceable_event_uk;
+DROP INDEX IF EXISTS idx_events_system_created_at;
+DROP INDEX IF EXISTS idx_events_kind_system_created_at;
+DROP INDEX IF EXISTS idx_events_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_master_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_kind_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_kind_master_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_id_kind_system_created_at;
+DROP INDEX IF EXISTS idx_events_id_created_at_system_created_at;
+DROP INDEX IF EXISTS idx_events_id_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_id_master_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_id_kind_pubkey_created_at_system_created_at;
+DROP INDEX IF EXISTS idx_events_id_kind_master_pubkey_created_at_system_created_at;
+DROP INDEX IF EXISTS idx_events_system_created_at_id_created_at;
+DROP INDEX IF EXISTS idx_events_reference_id_system_created_at;
+DROP INDEX IF EXISTS idx_events_pubkey_master_pubkey_system_created_at;
+DROP INDEX IF EXISTS idx_events_reference_id;
+DROP INDEX IF EXISTS idx_event_tags_key_value1;
+DROP INDEX IF EXISTS idx_event_tags_key_value1_expiration;
+DROP INDEX IF EXISTS idx_event_tags_key_value2;
+DROP INDEX IF EXISTS idx_event_tags_key_value3;
+DROP INDEX IF EXISTS idx_event_tags_id_key_value2;
+DROP INDEX IF EXISTS idx_event_tags_id_key_value1_value2;
+DROP INDEX IF EXISTS idx_event_tags_id_key_value1_value3;
+DROP INDEX IF EXISTS idx_event_tags_id_key_value1_value2_value3;
+DROP INDEX IF EXISTS idx_event_counters_reference_id;

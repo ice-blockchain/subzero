@@ -109,6 +109,8 @@ const (
 	KindJobOpReturnCreation          = 5901
 	KindJobNostrEventPublishSchedule = 5905
 
+	KindModifiableTextNote = 30175
+
 	JobFeedbackStatusPaymentRequired JobFeedbackStatus = "payment-required"
 	JobFeedbackStatusProcessing      JobFeedbackStatus = "processing"
 	JobFeedbackStatusError           JobFeedbackStatus = "error"

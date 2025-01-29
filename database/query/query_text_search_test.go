@@ -179,7 +179,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
-	t.Run("Create events with text note kind with imeta alt and summary tags", func(t *testing.T) {
+	t.Run("delete events", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				ID:        "normal" + uuid.NewString(),
@@ -398,9 +398,9 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 		})
 		require.Len(t, stored, 3)
 
-		require.EqualValues(t, expectedEvents[2], stored[0])
+		require.EqualValues(t, expectedEvents[2], stored[2])
 		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.EqualValues(t, expectedEvents[0], stored[0])
 	})
 	t.Run("search by imeta alt tag summary1 value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -427,9 +427,9 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 		})
 		require.Len(t, stored, 3)
 
-		require.EqualValues(t, expectedEvents[2], stored[0])
+		require.EqualValues(t, expectedEvents[2], stored[2])
 		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.EqualValues(t, expectedEvents[0], stored[0])
 	})
 }
 
@@ -454,32 +454,33 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 		})
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
-				ID:        "normal" + uuid.NewString(),
-				PubKey:    "end" + uuid.NewString(),
+				ID:        "ev1" + uuid.NewString(),
+				PubKey:    "ev1" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindArticle,
 				Tags:      tags1,
 				Content:   "end, and, ond",
-				Sig:       "end" + uuid.NewString(),
+				Sig:       "ev1" + uuid.NewString(),
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
 
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
-				ID:        "normal" + uuid.NewString(),
-				PubKey:    "ev1" + uuid.NewString(),
+				ID:        "ev2" + uuid.NewString(),
+				PubKey:    "ev2" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindGenericRepost,
 				Tags:      model.Tags{},
 				Content:   expectedEvents[0].String(),
-				Sig:       "ev1" + uuid.NewString(),
+				Sig:       "ev2" + uuid.NewString(),
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindArticle},
+			Limit: 100,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[0], stored[0])
@@ -494,6 +495,7 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindGenericRepost},
 			Search: `"end"`,
+			Limit:  100,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[1], stored[0])
@@ -502,6 +504,7 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindGenericRepost},
 			Search: `"alt1"`,
+			Limit:  100,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[1], stored[0])
@@ -510,6 +513,7 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindGenericRepost},
 			Search: `"summary1"`,
+			Limit:  100,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[1], stored[0])
@@ -544,6 +548,7 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"id2"},
 			Search: `include:dependencies:kind1>kind0`,
+			Limit:  100,
 		})
 		require.Len(t, stored, 2)
 		require.Equal(t, "id2", stored[0].ID)
@@ -552,42 +557,47 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 		stored = helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"id2"},
 			Search: `"not" include:dependencies:kind1>kind0`,
+			Limit:  100,
 		})
 		require.Len(t, stored, 2)
-		require.Equal(t, "id1", stored[0].ID)
-		require.Equal(t, "id2", stored[1].ID)
+		require.Equal(t, "id2", stored[0].ID)
+		require.Equal(t, "id1", stored[1].ID)
 
-		// stored = helperSelectEvents(t, db, model.Filter{
-		// 	IDs:    []string{"id2"},
-		// 	Search: `"not include:dependencies:kind1>kind0`,
-		// })
-		// require.Len(t, stored, 2)
-		// require.Equal(t, "id1", stored[0].ID)
-		// require.Equal(t, "id2", stored[1].ID)
+		stored = helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"id2"},
+			Search: `"not include:dependencies:kind1>kind0`,
+			Limit:  100,
+		})
+		require.Len(t, stored, 2)
+		require.Equal(t, "id1", stored[1].ID)
+		require.Equal(t, "id2", stored[0].ID)
 
-		// stored = helperSelectEvents(t, db, model.Filter{
-		// 	IDs:    []string{"id2"},
-		// 	Search: `"not" " include:dependencies:kind1>kind0`,
-		// })
-		// require.Len(t, stored, 2)
-		// require.Equal(t, "id1", stored[0].ID)
-		// require.Equal(t, "id2", stored[1].ID)
+		stored = helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"id2"},
+			Search: `"not" " include:dependencies:kind1>kind0`,
+			Limit:  100,
+		})
+		require.Len(t, stored, 2)
+		require.Equal(t, "id1", stored[1].ID)
+		require.Equal(t, "id2", stored[0].ID)
 
-		// stored = helperSelectEvents(t, db, model.Filter{
-		// 	IDs:    []string{"id2"},
-		// 	Search: `""not include:dependencies:kind1>kind0`,
-		// })
-		// require.Len(t, stored, 2)
-		// require.Equal(t, "id1", stored[0].ID)
-		// require.Equal(t, "id2", stored[1].ID)
+		stored = helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"id2"},
+			Search: `""not include:dependencies:kind1>kind0`,
+			Limit:  100,
+		})
+		require.Len(t, stored, 2)
+		require.Equal(t, "id1", stored[1].ID)
+		require.Equal(t, "id2", stored[0].ID)
 
-		// stored = helperSelectEvents(t, db, model.Filter{
-		// 	IDs:    []string{"id2"},
-		// 	Search: `not" include:dependencies:kind1>kind0`,
-		// })
-		// require.Len(t, stored, 2)
-		// require.Equal(t, "id1", stored[0].ID)
-		// require.Equal(t, "id2", stored[1].ID)
+		stored = helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"id2"},
+			Search: `not" include:dependencies:kind1>kind0`,
+			Limit:  100,
+		})
+		require.Len(t, stored, 2)
+		require.Equal(t, "id1", stored[1].ID)
+		require.Equal(t, "id2", stored[0].ID)
 	})
 }
 
@@ -686,20 +696,20 @@ func TestQuerySearchFuzzNoUseTempBTREEOrScan(t *testing.T) {
 
 			rows, err := stmt.QueryContext(context.Background(), params)
 			require.NoError(t, err)
-			var hasPK bool
+			var hasIndex bool
 			for rows.Next() {
 				var s1, s2, s3, s4 string
 				err := rows.Scan(&s1, &s2, &s3, &s4)
 				require.NoError(t, err)
 				op[s4]++
-				if strings.Contains(s4, "SEARCH e USING PRIMARY KEY") {
-					hasPK = true
+				if strings.Contains(s4, "SEARCH e USING INDEX") {
+					hasIndex = true
 				}
 				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
 					if strings.Contains(filter.Search, "Expiration:true") {
 						// It uses SCAN over CTE, which is expected.
 						continue
-					} else if (hasPK || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
+					} else if (hasIndex || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
 						// Allow B-TREE for ORDER BY if there are multiple authors or PK is used.
 						continue
 					}
@@ -857,6 +867,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 	stored := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{nostr.KindTextNote, nostr.KindProfileMetadata},
 		Search: `"child"`,
+		Limit:  100,
 	})
 	require.Len(t, stored, 2)
 
@@ -873,6 +884,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 	stored = helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{nostr.KindTextNote, nostr.KindProfileMetadata},
 		Search: `"child"`,
+		Limit:  100,
 	})
 	require.Zero(t, stored, 0)
 }
