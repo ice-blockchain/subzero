@@ -961,48 +961,50 @@ func validateKindFeedbackJob(e *model.Event) error {
 }
 
 func validateCustomIONKindCommunityDefinitionEvent(ctx context.Context, e *model.Event) error {
-	var (
-		hTag       = e.GetTag(model.CustomIONTagCommunity)
-		pTags      = e.Tags.GetAll([]string{"p"})
-		openTag    = e.GetTag("open")
-		closedTag  = e.GetTag("closed")
-		publicTag  = e.GetTag("public")
-		privateTag = e.GetTag("private")
-		aTags      = e.Tags.GetAll([]string{"a"})
-	)
+	hTag := e.GetTag(model.CustomIONTagCommunity)
 	if hTag == nil {
 		return errors.Wrap(ErrWrongEventParams, "community must have h tag")
 	}
+
+	pTags := e.GetTags("p")
 	for _, tag := range pTags {
-		if tag.Key() == "p" {
-			if len(tag) < 4 || (tag[3] != string(model.ModeratorRole) && tag[3] != string(model.AdminRole) && tag[3] != "") {
-				return errors.Wrapf(ErrWrongEventParams, "p tag must specify a valid role (moderator or admin): %+v", e)
-			}
+		if len(tag) < 4 || (tag[3] != string(model.ModeratorRole) && tag[3] != string(model.AdminRole) && tag[3] != "") {
+			return errors.Wrapf(ErrWrongEventParams, "p tag must specify a valid role (moderator or admin): %v", tag)
 		}
 	}
-	if openTag != nil && closedTag != nil {
-		return errors.Wrapf(ErrWrongEventParams, "community cannot be open and closed at the same time: %+v", e)
+
+	if e.GetTag("open") != nil && e.GetTag("closed") != nil {
+		return errors.Wrap(ErrWrongEventParams, "community cannot be open and closed at the same time")
 	}
-	if publicTag != nil && privateTag != nil {
-		return errors.Wrapf(ErrWrongEventParams, "community cannot be public and private at the same time: %+v", e)
+
+	if e.GetTag("public") != nil && e.GetTag("private") != nil {
+		return errors.Wrap(ErrWrongEventParams, "community cannot be public and private at the same time")
 	}
-	for _, aTag := range aTags {
-		if aTag == nil || len(aTag) < 2 {
-			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
+
+	for _, aTag := range e.GetTags("a") {
+		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != strconv.Itoa(model.CustomIONKindCommunityDefinition) {
+			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %v", aTag)
 		}
-		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != fmt.Sprint(model.CustomIONKindCommunityDefinition) {
-			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
-		}
 	}
+
+	// Here we have two possible cases:
+	// - CustomIONKindCommunityDefinition -- addressable community definition, only owner can create/modify it.
+	// - CustomIONKindCommunityChangeDefinition -- regular event, with some updates to the already existing community definition, moderators/admins can send it.
 	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
 	if e.Kind == model.CustomIONKindCommunityDefinition {
+		// Must not exist OR must be owned by the same pubkey/master pubkey.
 		if err == nil {
-			return errors.Wrap(ErrActionForbidden, "community already exists")
-		} else if !errors.Is(err, ErrNotFound) {
-			return err
+			// Existing community definition found, check if the owner is the same.
+			if communityDefinitionEvent.GetMasterPublicKey() != e.GetMasterPublicKey() {
+				return errors.Wrap(ErrActionForbidden, "community already exists")
+			}
+		} else if errors.Is(err, ErrNotFound) {
+			// Not found, allow the creation.
+			return nil
 		}
-		return nil
+		return err
 	}
+	// Change definition event, community must exist.
 	if err != nil {
 		return err
 	}
