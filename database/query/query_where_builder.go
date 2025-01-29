@@ -427,8 +427,6 @@ func (w *whereBuilder) createWhereForDepFilter(filterID, cteName, field string, 
 }
 
 func (w *whereBuilder) CountVotesOf(filterID, cteName string, filter *filterDependencies) {
-	w.Params["sep"] = ":"
-
 	w.WriteString(`
 union all
 select
@@ -500,7 +498,6 @@ select
 		} else {
 			w.WriteString(`cast(f.value as text) as content,`)
 		}
-		w.Params["sep"] = ":"
 		w.WriteString(`json_array(json_object(
 			'kinds', json_array(:` + (filterID + "fkind") + `),
 			iif(:` + (filterID + "ftagname") + `= 'lookup',
@@ -574,7 +571,7 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
 		tag := filter.Reduce.Tag // Could be "q" or "e" or "p" or empty.
-		w.WriteString(" and e.id in (select event_id from event_tags inner join events et ON event_id = et.id where event_tag_key ")
+		w.WriteString(" and e.id in (select event_id from event_tags mctx inner join events et ON mctx.event_id = et.id where mctx.event_tag_key ")
 		switch tag {
 		case "q":
 			w.WriteString(" in ('q', 'Q')")
@@ -589,12 +586,15 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 			w.WriteString(w.addParam(filterID, "author", filter.Reduce.Author))
 			w.WriteString(" in (et.pubkey, et.master_pubkey)")
 		}
-		w.WriteString(" and event_tag_value1 in (")
+		w.WriteString(" and mctx.event_tag_value1 in (")
 		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "subzero_nostr_get_event_address(id, kind, master_pubkey, d_tag)", &filter.Start))
 		w.WriteRune(')')
 		if filter.Reduce.Context != "" {
-			w.WriteString(" and event_tag_value3 = :")
+			w.WriteString(" and mctx.event_tag_value3 = :")
 			w.WriteString(w.addParam(filterID, "rcontext", filter.Reduce.Context))
+			if filter.Reduce.Context == "root" {
+				w.WriteString(` and NOT EXISTS (select true from event_tags rctx where rctx.event_id = et.id AND rctx.event_tag_key = mctx.event_tag_key and rctx.event_tag_value3 = 'reply')`)
+			}
 		}
 		w.WriteString(" group by event_tag_value1) AND e.hidden=0")
 

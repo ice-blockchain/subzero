@@ -299,6 +299,17 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.CreatedAt = 4
 		ev.Tags = model.Tags{
 			{"e", "id2", "", "root"},
+			{"e", "t2id3", "", "reply"},
+		}
+		err = db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
+
+		ev.ID = "t2id6"
+		ev.Kind = nostr.KindTextNote
+		ev.PubKey = "t2pk2"
+		ev.CreatedAt = 5
+		ev.Tags = model.Tags{
+			{"e", "id2", "", "root"},
 		}
 		err = db.AcceptEvents(context.Background(), &ev)
 		require.NoError(t, err)
@@ -311,7 +322,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Equal(t, "t2id1", events[0].ID)
 		require.Equal(t, "id2", events[1].ID)
 		require.Equal(t, "t2id2", events[2].ID)
-		require.Equal(t, "t2id5", events[3].ID)
+		require.Equal(t, "t2id6", events[3].ID)
 	})
 	t.Run("kind1>kind6400+kind7+group+content", func(t *testing.T) {
 		var ev model.Event
