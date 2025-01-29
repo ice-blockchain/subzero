@@ -39,6 +39,7 @@ func MustInit(ctx context.Context) {
 		go func() {
 			<-ctx.Done()
 			globalDB.Client.Close()
+			globalDB.Client.dvmResponses.Stop()
 			globalDB.Once = sync.Once{}
 		}()
 	})

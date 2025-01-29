@@ -204,6 +204,10 @@ func (e *Event) IsJobRequest() bool {
 	return e.Kind >= 5000 && e.Kind < 6000
 }
 
+func (e *Event) IsJobResponse() bool {
+	return e.Kind >= 6000 && e.Kind < 7000
+}
+
 func (e *Event) Address() string {
 	switch {
 	case e.IsAddressable():

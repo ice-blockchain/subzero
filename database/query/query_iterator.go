@@ -16,9 +16,10 @@ type EventIterator iter.Seq2[*model.Event, error]
 
 type (
 	eventIterator struct {
-		Fetch   func(pivot int64) (*sqlx.Rows, error)
-		Map     func(*databaseEvent) *databaseEvent
-		OneShot bool
+		Fetch       func(pivot int64) (*sqlx.Rows, error)
+		ExtraEvents func() []*databaseEvent
+		Map         func(*databaseEvent) *databaseEvent
+		OneShot     bool
 	}
 )
 
@@ -90,13 +91,31 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 		}
 
 		if pivot == newPivot || it.OneShot {
-			return nil
+			return it.fetchExtra(fn)
 		}
 
 		pivot = newPivot
 	}
-
+	if err := it.fetchExtra(fn); err != nil {
+		return err
+	}
 	return ctx.Err()
+}
+
+func (it *eventIterator) fetchExtra(fn func(*model.Event) error) error {
+	if it.ExtraEvents != nil {
+		extra := it.ExtraEvents()
+		for _, event := range extra {
+			if it.Map != nil {
+				event = it.Map(event)
+			}
+			err := fn(&event.Event)
+			if err != nil {
+				return errors.Wrap(err, "failed to process event")
+			}
+		}
+	}
+	return nil
 }
 
 func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
