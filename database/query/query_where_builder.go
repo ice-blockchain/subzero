@@ -4,7 +4,6 @@ package query
 
 import (
 	"cmp"
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -760,7 +759,7 @@ func (w *whereBuilder) WithPrefix(prefix string) *whereBuilder {
 }
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
-	var searchKeyword string
+	var searchKeywords []string
 	for idx := range filters {
 		w.maybeOR()
 		dbFilter, err := parseNostrFilter(filters[idx])
@@ -773,9 +772,16 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		if dbFilter.Dependencies != nil {
 			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
-		if dbFilter.SearchText != "" {
-			searchKeyword = dbFilter.SearchText
+		if w.Prefix != "" && dbFilter.SearchText != "" {
+			searchKeywords = append(searchKeywords, dbFilter.SearchText+"*")
 		}
+	}
+	if w.Prefix != "" && len(searchKeywords) > 0 {
+		if w.Len() > 0 {
+			w.WriteString(" AND ")
+		}
+		w.WriteString(" events_search MATCH :search")
+		w.Params["search"] = strings.Join(searchKeywords, " OR ")
 	}
 	if w.Prefix == "" {
 		if w.Len() > 0 {
@@ -783,12 +789,8 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		}
 		w.WriteString(whereBuilderDefaultWhere)
 	}
-	params = w.Params
-	if searchKeyword != "" {
-		params["search"] = fmt.Sprintf("%v*", searchKeyword)
-	}
 
-	return w.String(), params, nil
+	return w.String(), w.Params, nil
 }
 
 func (w *whereBuilder) applyDeleteFilter(idx int, filter *databaseFilterDelete) {

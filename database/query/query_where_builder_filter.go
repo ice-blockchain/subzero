@@ -3,6 +3,7 @@
 package query
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -118,7 +119,11 @@ func parseNostrFilterText(f *databaseFilterSearch) *databaseFilterSearch {
 	quoteEnd := strings.LastIndex(f.Search, "\"")
 
 	if quoteStart != -1 && quoteEnd != -1 && quoteEnd > quoteStart {
-		f.SearchText = strings.TrimSpace(strings.ReplaceAll(f.Search[quoteStart+1:quoteEnd], `"`, ""))
+		s, err := strconv.Unquote(f.Search[quoteStart+1 : quoteEnd])
+		if err != nil {
+			s = f.Search[quoteStart+1 : quoteEnd]
+		}
+		f.SearchText = strings.TrimSpace(s)
 		f.Search = strings.TrimSpace(f.Search[:quoteStart] + f.Search[quoteEnd+1:])
 	}
 

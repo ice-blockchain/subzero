@@ -323,7 +323,7 @@ on conflict do update set
 	sig_alg           = excluded.sig_alg,
 	key_alg           = excluded.key_alg,
 	content           = excluded.content,
-	metadata  		  = excluded.metadata,
+	metadata          = excluded.metadata,
 	tags              = excluded.tags,
 	d_tag             = excluded.d_tag,
 	h_tag             = excluded.h_tag,
@@ -571,14 +571,8 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 	if strings.Contains(filters.String(), discoverContentCreatorsToFollow) {
 		orderBy = " order by random()"
 	}
-
-	searchKeyword := ""
-	val, ok := params["search"]
-	if ok && val.(string) != "" {
-		searchKeyword = val.(string)
-	}
 	if depClause == "" {
-		if searchKeyword != "" {
+		if whereSearch != "" {
 			sql, err := db.searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery)
 			if err != nil {
 				return "", nil, err
@@ -602,7 +596,7 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 				events e
 			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
 	}
-	if searchKeyword != "" {
+	if whereSearch != "" {
 		sql, err := db.searchWithDepsSQL(whereMain, depClause, whereSearch, systemCreatedAtFilter, limitQuery)
 		if err != nil {
 			return "", nil, err
@@ -726,7 +720,16 @@ func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...mo
 	if err != nil {
 		return "", "", "", nil, err
 	}
-	if val, ok := params["search"]; ok && val.(string) != "" {
+	handleSearch := false
+	for ix := range filters {
+		f := parseNostrFilterText(&databaseFilterSearch{Filter: filters[ix]})
+		if f.SearchText != "" {
+			handleSearch = true
+
+			break
+		}
+	}
+	if handleSearch {
 		builderSearch := newWhereBuilder()
 		paramsSearch := map[string]any{}
 		cpy := model.Filters{}
@@ -737,7 +740,7 @@ func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...mo
 				if kind == nostr.KindRepost {
 					toAdd = append(toAdd, nostr.KindTextNote)
 				} else if kind == nostr.KindGenericRepost {
-					toAdd = append(toAdd, nostr.KindArticle)
+					toAdd = append(toAdd, nostr.KindArticle, model.CustomIONKindEditableTextNote)
 				}
 			}
 			cpy[ix].Kinds = append(filter.Kinds, toAdd...)

@@ -179,6 +179,23 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
+	t.Run("search by 2 filters with search field", func(t *testing.T) {
+		filters := model.Filters{
+			model.Filter{
+				Kinds:  []int{nostr.KindTextNote},
+				Search: `"summ"`,
+			},
+			model.Filter{
+				Kinds:  []int{nostr.KindTextNote},
+				Search: `"end"`,
+			},
+		}
+		stored := helperSelectEvents(t, db, filters...)
+		require.Len(t, stored, 3)
+		require.EqualValues(t, expectedEvents[1], stored[0])
+		require.EqualValues(t, expectedEvents[2], stored[1])
+		require.EqualValues(t, expectedEvents[0], stored[2])
+	})
 	t.Run("delete events", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -574,7 +591,7 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 
 		stored = helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"id2"},
-			Search: `"not" " include:dependencies:kind1>kind0`,
+			Search: `"not" include:dependencies:kind1>kind0`,
 			Limit:  100,
 		})
 		require.Len(t, stored, 2)

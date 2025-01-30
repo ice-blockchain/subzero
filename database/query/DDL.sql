@@ -234,7 +234,6 @@ begin
     on conflict do nothing;
 end
 ;
-drop   trigger if     exists trigger_events_before_insert_unwind_repost;
 --------
 drop   trigger if     exists trigger_events_before_insert_unwind_repost;
 create trigger if not exists trigger_events_before_insert_unwind_repost
@@ -426,7 +425,7 @@ end
 ;
 --------
 CREATE VIRTUAL TABLE if not exists events_search USING fts5(content, metadata, content='events', content_rowid=rid);
-CREATE TRIGGER if not exists trigger_events_search_insert 
+CREATE TRIGGER if not exists trigger_events_after_insert_search_index 
     AFTER INSERT
     ON events 
     for each row
@@ -435,7 +434,7 @@ CREATE TRIGGER if not exists trigger_events_search_insert
 BEGIN
   INSERT INTO events_search(rowid, content, metadata) VALUES (NEW.rid, NEW.content, NEW.metadata);
 END;
-CREATE TRIGGER if not exists trigger_events_search_delete AFTER DELETE ON events BEGIN
+CREATE TRIGGER if not exists trigger_events_after_delete_search_index AFTER DELETE ON events BEGIN
     DELETE FROM events_search WHERE rowid = old.rid;
 END;
 --------

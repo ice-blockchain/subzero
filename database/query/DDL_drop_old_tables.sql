@@ -42,4 +42,5 @@ drop   trigger if     exists trigger_events_before_update_check_attestation_list
 drop   trigger if     exists trigger_events_before_delete_remove_tags_explicit;
 drop   trigger if     exists trigger_event_tags_after_insert_inc_counter;
 drop   trigger if     exists trigger_event_tags_after_delete_dec_counter;
-drop   trigger if     exists trigger_events_search_insert;
+drop   trigger if     exists trigger_events_after_insert_search_index;
+drop   trigger if     exists trigger_events_after_delete_search_index;

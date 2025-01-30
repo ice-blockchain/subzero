@@ -3,13 +3,11 @@
 package query
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -30,76 +28,6 @@ var (
 	fts5TextCleanupPattern  = regexp.MustCompile(`\b(npub|nsec|nprofile|nostr:)\w*\b|#\w+|[^\w\s]`)
 	fts5SpaceCleanupPattern = regexp.MustCompile(`\s{2,}`)
 )
-
-func (db *dbClient) saveFts5Events(ctx context.Context, events []databaseEvent) error {
-	var searchEvents []fts5SearchRow
-	var deleteEvents []fts5DeleteRow
-	for _, ev := range events {
-		if content := parseMetadataContent(&ev.Event); content != "" {
-			searchEvents = append(searchEvents, fts5SearchRow{
-				ID:      ev.ID,
-				Content: content,
-			})
-			deleteEvents = append(deleteEvents, fts5DeleteRow{
-				ID: ev.ID,
-			})
-		}
-	}
-	if len(searchEvents) == 0 {
-		return nil
-	}
-	_, err := db.deleteFts5EventsSQL(ctx, deleteEvents)
-	if err != nil {
-		return errors.Wrapf(err, "can't delete already existing fts5 events: %v", events)
-	}
-
-	const stmt = `INSERT INTO events_search(event_id, content) VALUES (:id, :content)`
-
-	result, err := db.NamedExecContext(ctx, stmt, searchEvents)
-	if err != nil {
-		err = errors.Wrap(db.handleError(err), "failed to exec insert fts5 event sql")
-	} else if rows, err := result.RowsAffected(); err != nil {
-		err = errors.Wrap(err, "failed to get rows affected")
-	} else if expected := int64(len(events)); rows < expected {
-		err = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expected, rows)
-	}
-
-	return err
-}
-
-func (db *dbClient) deleteFts5Events(ctx context.Context, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	var toDelete []fts5DeleteRow
-	for _, id := range ids {
-		toDelete = append(toDelete, fts5DeleteRow{ID: id})
-	}
-	rows, err := db.deleteFts5EventsSQL(ctx, toDelete)
-	if err != nil {
-		return errors.Wrapf(err, "can't delete fts5 events for: %v", ids)
-	}
-	if expected := int64(len(ids)); rows < expected {
-		err = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expected, rows)
-	}
-
-	return nil
-}
-
-func (db *dbClient) deleteFts5EventsSQL(ctx context.Context, ids []fts5DeleteRow) (int64, error) {
-	const stmt = `DELETE FROM events_search WHERE event_id = :id;`
-
-	result, err := db.NamedExecContext(ctx, stmt, ids)
-	if err != nil {
-		return 0, errors.Wrap(db.handleError(err), "failed to exec delete fts5 record")
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to get rows affected")
-	}
-
-	return rows, err
-}
 
 func parseMetadataContent(ev *model.Event) string {
 	content := ""
@@ -138,7 +66,7 @@ func extractFTS5IMeta(tags []model.Tag) []string {
 func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
 	var preSearchWhere string
 	if whereSearch != "" {
-		preSearchWhere = ` (` + whereSearch + `) AND `
+		preSearchWhere = ` (` + whereSearch + `) `
 	}
 	var where string
 	if whereMain != "" {
@@ -157,7 +85,7 @@ func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAt
 				on ref.reference_id = e.id
 			join events_search es
 					on es.rowid = e.rid
-				where ` + systemCreatedAtWhere + preSearchWhere + ` events_search MATCH :search
+				where ` + systemCreatedAtWhere + preSearchWhere + `
 		)
 		select
 			e.kind,
@@ -191,7 +119,7 @@ func (db *dbClient) searchWithDepsSQL(whereMain, depClause, whereSearch, systemC
 					ON ref.reference_id = e.id
 				JOIN events_search es
 					ON es.rowid = e.rid
-				WHERE ` + systemCreatedAtFilter + `(` + whereSearch + `) AND events_search MATCH :search
+				WHERE ` + systemCreatedAtFilter + `(` + whereSearch + `)
 				` + limitQuery + `
 			)
 			select
