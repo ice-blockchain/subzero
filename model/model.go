@@ -136,5 +136,5 @@ type (
 )
 
 const (
-	DVMJobResultExpiration = 15 * time.Minute
+	DVMJobResultExpiration = 5 * time.Minute
 )

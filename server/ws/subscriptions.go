@@ -202,6 +202,24 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 	} else {
 		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
 	}
+	if dvmResponseStorage != nil {
+		fetchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		events, err := dvmResponseStorage(fetchCtx, sub)
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch dvm responses for subscription %+v", sub)
+		}
+		if len(events) > 0 {
+			master, pk, _ := model.GetUserDataFromContext(ctx)
+			matchedEvents := matchEventsWithSubscription(master, pk, sub, events...)
+			for _, event := range matchedEvents {
+				wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{event}})
+				if wErr != nil {
+					return errors.Wrapf(wErr, "failed to write event[%+v]", event)
+				}
+			}
+		}
+	}
 
 	err := h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
 	if err == nil {
@@ -280,6 +298,19 @@ func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, c
 	return nil
 }
 
+func matchEventsWithSubscription(masterPublicKey, publicKey string, sub *model.Subscription, events ...*model.Event) []*nostr.Event {
+	filtered := make([]*nostr.Event, 0, len(events))
+	for _, event := range events {
+		if !sub.Filters.Match(&event.Event) {
+			continue
+		} else if !canForwardEvent(event, masterPublicKey, publicKey) {
+			continue
+		}
+		filtered = append(filtered, &event.Event)
+	}
+	return filtered
+}
+
 func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
 	var broadcast = map[Writer][]nostr.EventEnvelope{}
 
@@ -287,15 +318,8 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
 		authData, _ := h.connAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
-			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
-			for _, event := range events {
-				if !sub.Filters.Match(&event.Event) {
-					continue
-				} else if !canForwardEvent(event, authData.MasterPublicKey, authData.PublicKey) {
-					continue
-				}
-				envelope.Events = append(envelope.Events, &event.Event)
-			}
+			envelope := nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
+			envelope.Events = matchEventsWithSubscription(authData.MasterPublicKey, authData.PublicKey, sub, events...)
 			if len(envelope.Events) > 0 {
 				broadcast[writer] = append(broadcast[writer], envelope)
 			}

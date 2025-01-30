@@ -9,10 +9,8 @@ import (
 	_ "embed"
 	"strings"
 	"sync"
-	stdlibtime "time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jellydator/ttlcache/v3"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
 	"github.com/mattn/go-sqlite3"
@@ -25,7 +23,6 @@ type (
 		relayURL        string
 		stmtCacheMx     *sync.RWMutex
 		stmtCache       map[string]*sqlx.NamedStmt
-		dvmResponses    *ttlcache.Cache[string, []*databaseEvent]
 	}
 )
 
@@ -96,12 +93,10 @@ func init() {
 
 func openDatabase(target string, runDDL bool) *dbClient {
 	client := &dbClient{
-		DB:           sqlx.MustConnect("sqlite3_subzero", target),
-		stmtCacheMx:  new(sync.RWMutex),
-		stmtCache:    make(map[string]*sqlx.NamedStmt),
-		dvmResponses: ttlcache.New[string, []*databaseEvent](ttlcache.WithTTL[string, []*databaseEvent](15 * stdlibtime.Minute)),
+		DB:          sqlx.MustConnect("sqlite3_subzero", target),
+		stmtCacheMx: new(sync.RWMutex),
+		stmtCache:   make(map[string]*sqlx.NamedStmt),
 	}
-	go client.dvmResponses.Start()
 	client.Mapper = reflectx.NewMapperFunc("subzero", func(in string) (out string) {
 		n := strings.ToLower(in)
 		switch n {

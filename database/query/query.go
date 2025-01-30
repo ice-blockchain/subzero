@@ -113,14 +113,7 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 		if events[i].IsEphemeral() {
 			continue
 		}
-		if events[i].IsJobRequest() {
-			continue
-		}
-		if events[i].IsJobResponse() || events[i].Kind == nostr.KindJobFeedback {
-			if err := db.acceptDVMResponseEvent(events[i]); err != nil {
-				return err
-			}
-
+		if events[i].IsJobRequest() || events[i].IsJobResponse() || events[i].Kind == nostr.KindJobFeedback {
 			continue
 		}
 
@@ -451,7 +444,6 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 
 			return rows, err
 		},
-		ExtraEvents: db.searchDVMEvents(filters),
 	}
 
 	return func(yield func(*model.Event, error) bool) {

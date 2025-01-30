@@ -70,7 +70,7 @@ func TestJobOnline(t *testing.T) {
 
 		return nil
 	})
-
+	RegisterDVMResponseStorage(dvm.GetStoredEvents)
 	ctx := context.Background()
 	privkey := model.GeneratePrivateKey()
 	servicePubkey, err := dvm.PublicKey()
@@ -210,7 +210,8 @@ func TestJobOnline(t *testing.T) {
 				Append("e", &eTag2),
 			})
 		require.Len(t, dvmSearchResults, 2)
-		require.Equal(t, []*model.Event{responses[1], responses[2]}, dvmSearchResults)
+		require.Contains(t, dvmSearchResults, responses[1])
+		require.Contains(t, dvmSearchResults, responses[2])
 	})
 	t.Run("request dvm result via subscription with #p, first 2 requests came from same user", func(t *testing.T) {
 		pTag := responses[0].GetTag("p").Value()
@@ -219,7 +220,8 @@ func TestJobOnline(t *testing.T) {
 				Append("p", &pTag),
 			})
 		require.Len(t, dvmSearchResults, 2)
-		require.Equal(t, []*model.Event{responses[0], responses[1]}, dvmSearchResults)
+		require.Contains(t, dvmSearchResults, responses[0])
+		require.Contains(t, dvmSearchResults, responses[1])
 	})
 	t.Run("request dvm result via subscription with #p and #e", func(t *testing.T) {
 		pTag := responses[1].GetTag("p").Value()

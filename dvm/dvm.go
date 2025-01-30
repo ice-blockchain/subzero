@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v3"
 
@@ -37,10 +38,12 @@ type (
 		OutputRelays []string
 		Cancel       context.CancelFunc
 	}
+
 	dvm struct {
 		Jobs            *xsync.MapOf[string, *jobInfo]
 		RelayConnectTLS *tls.Config
 		PrivateKey      string
+		dvmResponses    *ttlcache.Cache[string, *xsync.MapOf[string, *model.Event]]
 	}
 	config struct {
 		PrivateKey string `yaml:"private-key"`
@@ -56,15 +59,21 @@ var (
 	globalConfig       *config
 )
 
-func MustInit() {
+func MustInit(ctx context.Context) {
 	globalConfig = cfg.MustGet[config]()
 	globalDVM = &dvm{
-		Jobs:       xsync.NewMapOf[string, *jobInfo](),
-		PrivateKey: globalConfig.PrivateKey,
+		Jobs:         xsync.NewMapOf[string, *jobInfo](),
+		PrivateKey:   globalConfig.PrivateKey,
+		dvmResponses: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration)),
 	}
+	go globalDVM.dvmResponses.Start()
 	if globalConfig.TLSKey != "-" && globalConfig.TLSCert != "-" {
 		globalDVM.RelayConnectTLS = buildTLS()
 	}
+	go func() {
+		<-ctx.Done()
+		globalDVM.dvmResponses.Stop()
+	}()
 }
 
 func buildTLS() *tls.Config {
@@ -89,8 +98,11 @@ func AcceptJob(ctx context.Context, event *model.Event) error {
 }
 
 func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
-	if (event.Kind < 5000 && event.Kind != nostr.KindDeletion) || event.Kind > 5999 {
+	if (event.Kind < 5000 && event.Kind != nostr.KindDeletion) || event.Kind > 7000 {
 		return nil
+	}
+	if event.IsJobResponse() {
+		return errors.Wrapf(d.acceptDVMResponseEvent(event), "failed to accept dvm response")
 	}
 
 	if err := validation.Validate(ctx, event); err != nil {

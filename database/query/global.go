@@ -34,12 +34,10 @@ func MustInit(ctx context.Context) {
 		globalDB.Client = openDatabase(globalConfig.URL, true).
 			WithPrivateKey(globalConfig.PrivateKey).
 			WithRelayURL(globalConfig.RelayURL)
-
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go func() {
 			<-ctx.Done()
 			globalDB.Client.Close()
-			globalDB.Client.dvmResponses.Stop()
 			globalDB.Once = sync.Once{}
 		}()
 	})
