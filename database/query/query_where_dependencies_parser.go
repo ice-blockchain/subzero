@@ -52,6 +52,9 @@ const (
 
 	tokenLiteralGroupTagDetailP
 	tokenLiteralDetailTagE
+	tokenLiteralDetailTagP
+
+	tokenLiteralPipe
 )
 
 var (
@@ -70,6 +73,7 @@ var (
 		tokenLiteralReply:         {"reply", "root"},
 
 		tokenLiteralDetailTagE: {"+e"},
+		tokenLiteralDetailTagP: {"+p+"},
 		tokenLiteralTagQ:       {"q"},
 
 		tokenLiteralGroupTagDetailP: {"group+p"},
@@ -234,6 +238,17 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
+		// kind3>kind0+p+|key1,key2,keyN|.
+		{
+			Tokens: []token{
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenLiteralDetailTagP,
+				tokenizer.TokenString,
+				tokenizer.TokenUndef,
+			},
+		},
 	}
 
 	dependenciesParser *tokenizer.Tokenizer
@@ -243,6 +258,7 @@ func init() {
 	dependenciesParser = tokenizer.New()
 	dependenciesParser.SetWhiteSpaces([]byte{' ', '\t'})
 	dependenciesParser.AllowKeywordSymbols(tokenizer.Numbers, tokenizer.Numbers)
+	dependenciesParser.DefineStringToken(tokenLiteralPipe, `|`, `|`).SetEscapeSymbol(tokenizer.BackSlash)
 	for k, v := range parserTokens {
 		dependenciesParser.DefineTokens(k, v)
 	}
@@ -289,6 +305,9 @@ func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependencies, e
 
 		case tokenSearchExpr:
 			start = false
+
+		case tokenizer.TokenString:
+			filter.Reduce.Author = stream.CurrentToken().ValueUnescapedString()
 
 		case tokenizer.TokenKeyword:
 			if stream.PrevToken().Is(tokenLiteralKind) {

@@ -203,6 +203,30 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
+			Input: "kind3>kind0+p+|key1,key2,keyN|",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 3,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds:  []int{0},
+					Author: "key1,key2,keyN",
+				},
+			},
+		},
+		{
+			Input: "kind3>kind0+p+|key1|",
+			Expected: filterDependencies{
+				Start: filterDependenciesStart{
+					Kind: 3,
+				},
+				Reduce: filterDependenciesReduce{
+					Kinds:  []int{0},
+					Author: "key1",
+				},
+			},
+		},
+		{
 			Input: "kind1>kind6400+kind7+group+foo",
 			Err:   errDepParserUnexpectedToken,
 		},
@@ -1316,4 +1340,64 @@ func TestSelectDependenciesReactionAddressable(t *testing.T) {
 	require.Equal(t, event1.ID, events[0].ID)
 	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
 	require.JSONEq(t, `{"approve":1,"minus":1}`, events[1].Content)
+}
+
+func TestMostRelevantFollowers(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var ev model.Event
+	ev.Kind = nostr.KindFollowList
+	ev.PubKey = "root"
+	ev.ID = "id1"
+	ev.Tags = model.Tags{ // No pk4.
+		{"p", "pk1"},
+		{"p", "pk2"},
+		{"p", "pk3"},
+		{"p", "pk5"},
+	}
+	require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+
+	var ev1, ev2 model.Event
+	ev1.Kind = nostr.KindFollowList
+	ev1.PubKey = "pk1"
+	ev1.ID = "id2"
+	ev1.Tags = model.Tags{
+		{"p", "pk2"},
+		{"p", "pk3"},
+		{"p", "pk4"},
+	}
+	ev2.Kind = nostr.KindFollowList
+	ev2.PubKey = "pk2"
+	ev2.ID = "id3"
+	ev2.Tags = model.Tags{
+		{"p", "pk1"},
+		{"p", "pk3"},
+		{"p", "pk4"},
+	}
+	require.NoError(t, db.AcceptEvents(context.Background(), &ev1, &ev2))
+
+	var ev3, ev4 model.Event
+	ev3.Kind = nostr.KindProfileMetadata
+	ev3.PubKey = "pk3"
+	ev3.ID = "id4"
+	ev4.Kind = nostr.KindProfileMetadata
+	ev4.PubKey = "pk4"
+	ev4.ID = "id5"
+	require.NoError(t, db.AcceptEvents(context.Background(), &ev3, &ev4))
+
+	f := model.Filter{
+		Kinds:   []int{nostr.KindFollowList},
+		Authors: []string{"root"},
+		Search:  "include:dependencies:kind3>kind0+p+|pk3,pk4|",
+		Limit:   1,
+	}
+
+	events := helperSelectEvents(t, db, f)
+	require.Len(t, events, 2) // 1 follow list (root), 1 relevant follower (pk3).
+	require.Equal(t, "id1", events[0].ID)
+	require.Equal(t, nostr.KindProfileMetadata, events[1].Kind)
+	require.Equal(t, "id4", events[1].ID)
 }

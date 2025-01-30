@@ -656,13 +656,30 @@ not exists (select true from events subev where subev.kind = :` + reduceKindPara
 group by e.master_pubkey`)
 
 	case nostr.KindProfileMetadata:
+		// Check for `Author` in the filter.
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-		w.WriteString(" AND ( master_pubkey IN (")
-		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
-		w.WriteString(") OR pubkey IN (")
-		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
-		w.WriteString(")) AND e.hidden=0")
+		if filter.Reduce.Author != "" {
+			// Most relevant followers.
+			w.WriteString(`
+		and e.master_pubkey in (select l1tags.event_tag_value1 from event_tags l1tags inner join ` + cteName + ` l1 on l1.id = event_id and l1.kind= 3 where l1tags.event_tag_key = 'p')
+		and exists (
+			select true
+			from events l2
+			inner join event_tags l2tags on l2.id = l2tags.event_id
+			where
+				l2.kind = 3
+				and l2.hidden = 0
+				and l2tags.event_tag_key = 'p' `)
+			buildFromSlice(w, sqlOpCodeAND, filterID, strings.Split(filter.Reduce.Author, ","), "l2tags.event_tag_value1", "")
+			w.WriteString(") and e.hidden=0")
+		} else {
+			w.WriteString(" AND ( master_pubkey IN (")
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
+			w.WriteString(") OR pubkey IN (")
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
+			w.WriteString(")) AND e.hidden=0")
+		}
 
 	case model.KindDVMCountResponse:
 		w.WriteString("f.kind = :")

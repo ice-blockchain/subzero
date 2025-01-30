@@ -2614,3 +2614,64 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	})
 	helperMustCloseRelay(t, relay)
 }
+
+func TestSubscriptionMRF(t *testing.T) {
+	t.Cleanup(func() {
+		RegisterReqMustAuthenticate(nil)
+		RegisterEventMustAuthenticate(nil)
+	})
+
+	privKey, pubKey := model.GenerateKeyPair()
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		return nil
+	})
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
+		t.Logf("subscription: %v: %s", subscription.SubscriptionID, subscription.Filters.String())
+		require.Len(t, subscription.Filters, 1)
+		require.Len(t, subscription.Filters[0].Kinds, 1)
+		require.Equal(t, nostr.KindFollowList, subscription.Filters[0].Kinds[0])
+		require.Contains(t, subscription.Filters[0].Authors, pubKey)
+		require.Equal(t, `include:dependencies:kind3>kind0+p+|test1|`, subscription.Filters[0].Search)
+
+		return query.GetStoredEvents(ctx, subscription)
+	})
+	RegisterReqMustAuthenticate(func(ctx context.Context, sub *model.Subscription) bool {
+		return false
+	})
+	RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) bool {
+		return true
+	})
+
+	relay := helperMustNewRelay(t, pubsubServers[0])
+	t.Run("DoAuth", func(t *testing.T) {
+		var ev model.Event
+
+		ev.Kind = nostr.KindTextNote
+		ev.CreatedAt = 1
+		ev.Content = "test"
+		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
+		err := relay.Publish(context.Background(), ev.Event)
+		t.Logf("publish error: %v", err)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), errAuthRequired.Error())
+
+		err = relay.Auth(context.Background(), func(event *nostr.Event) error {
+			subZeroEvent := model.Event{Event: *event}
+			if err := subZeroEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+				return err
+			}
+			*event = subZeroEvent.Event
+
+			return nil
+		})
+		require.NoError(t, err)
+	})
+	t.Run("Request", func(t *testing.T) {
+		_, err := relay.QuerySync(context.Background(), model.Filter{
+			Search: filterTextMRF,
+			Tags:   model.TagMap{}.SetLiterals("p", "test1"),
+		})
+		require.NoError(t, err)
+	})
+	helperMustCloseRelay(t, relay)
+}

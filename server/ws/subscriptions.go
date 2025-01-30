@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,10 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/validation"
+)
+
+const (
+	filterTextMRF = `most relevant followers`
 )
 
 var (
@@ -145,6 +150,27 @@ func (h *handler) handleAuth(_ context.Context, respWriter Writer, e *model.Even
 	return &resp
 }
 
+func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscription) *model.Subscription {
+	for i := range sub.Filters {
+		if !(strings.Contains(sub.Filters[i].Search, filterTextMRF) && sub.Filters[i].Tags.HasValues("p")) {
+			continue
+		}
+		m, pk, authenticated := model.GetUserDataFromContext(ctx)
+		sub.OneShot = true
+		if !authenticated {
+			// Should not happen, but just in case. Also set it to OneShot mode.
+			continue
+		}
+		sub.Filters[i] = model.Filter{
+			Kinds:   []int{nostr.KindFollowList},
+			Authors: []string{m, pk},
+			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(sub.Filters[i].Tags.All("p"), ",") + "|",
+			Limit:   1,
+		}
+	}
+	return sub
+}
+
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
@@ -162,7 +188,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		fetchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		for event, err := range wsSubscriptionListener(fetchCtx, sub) {
+		for event, err := range wsSubscriptionListener(fetchCtx, h.prepareSubscription(ctx, sub)) {
 			if err != nil {
 				return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 			} else if !canForwardEventContext(fetchCtx, event) {
@@ -179,7 +205,14 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 
 	err := h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
 	if err == nil {
-		h.linkSubscription(respWriter, sub)
+		if sub.OneShot {
+			err = h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+				SubscriptionID: sub.SubscriptionID,
+				Reason:         "processed: single request only subscription",
+			})
+		} else {
+			h.linkSubscription(respWriter, sub)
+		}
 	}
 
 	return err
