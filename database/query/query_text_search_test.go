@@ -34,8 +34,8 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			"m image/jpg",
 			"dim 3024x4032",
 			"i foobar",
-			"alt a,lt1 text",
-			"summary dummy summa;:,ry1 content",
+			"alt alt1 text",
+			"summary dummy summary1 content",
 			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
@@ -72,8 +72,8 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			"m image/jpg",
 			"dim 3024x4032",
 			"i foobar",
-			"alt al.t2 text",
-			"summary dummy sum,&*mary2 content",
+			"alt alt2 text",
+			"summary dummy summary2 content",
 			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
@@ -310,73 +310,35 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 	defer db.Close()
 	expectedEvents := []*model.Event{}
 	t.Run("Events with KindFileMetadata", func(t *testing.T) {
-		var tags1 model.Tags
-		tags1 = append(tags1, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"dim 3024x4032",
-			"i foobar",
-			"alt a,lt1 text",
-			"summary dummy summa;:,ry1 content",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "ev1" + uuid.NewString(),
 				PubKey:    "ev1" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindFileMetadata,
-				Tags:      tags1,
+				Tags:      nostr.Tags{{"alt", "alt1 text"}, {"summary", "dummy summary1 content"}},
 				Sig:       "ev1" + uuid.NewString(),
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
-
-		var tags2 model.Tags
-		tags2 = append(tags2, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"dim 3024x4032",
-			"i foobar",
-			"alt a,lt2 text",
-			"summary dummy summa;:,ry2 content",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "ev2" + uuid.NewString(),
 				PubKey:    "ev2" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindFileMetadata,
-				Tags:      tags2,
+				Tags:      nostr.Tags{{"alt", "alt2 text"}, {"summary", "dummy summary2 content"}},
 				Sig:       "ev2" + uuid.NewString(),
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
-
-		var tags3 model.Tags
-		tags3 = append(tags3, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"dim 3024x4032",
-			"i foobar",
-			"alt a,lt3 text",
-			"summary dummy summa;:,ry3 content",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
-			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "ev3" + uuid.NewString(),
 				PubKey:    "ev3" + uuid.NewString(),
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindFileMetadata,
-				Tags:      tags3,
+				Tags:      nostr.Tags{{"alt", "alt3 text"}, {"summary", "dummy summary3 content"}},
 				Sig:       "ev3" + uuid.NewString(),
 			},
 		})
@@ -464,8 +426,8 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 			"m image/jpg",
 			"dim 3024x4032",
 			"i foobar",
-			"alt a,lt1 text",
-			"summary dummy summa;:,ry1 content",
+			"alt alt1 text",
+			"summary dummy summary1 content",
 			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
@@ -637,7 +599,7 @@ func TestSearchEvents_Replace(t *testing.T) {
 					"m image/jpg",
 					"dim 3024x4032",
 					"i foobar",
-					"alt a,lt1 text",
+					"alt alt1 text",
 					"summary dummy summa;:,ry1 content",
 					fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 					fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
@@ -761,48 +723,6 @@ func TestQuerySearchFuzzNoUseTempBTREEOrScan(t *testing.T) {
 	})
 }
 
-func TestFts5CleanupText(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Usual", func(t *testing.T) {
-		require.Equal(t, "", fts5CleanupText(""))
-		require.Equal(t, "a", fts5CleanupText("a"))
-		require.Equal(t, "a b", fts5CleanupText("a b"))
-	})
-	t.Run("Multiple spacs", func(t *testing.T) {
-		require.Equal(t, "a b", fts5CleanupText("a        b   "))
-	})
-	t.Run("With punctuation", func(t *testing.T) {
-		require.Equal(t, "a b", fts5CleanupText("a, b"))
-		require.Equal(t, "a b", fts5CleanupText("a; b"))
-		require.Equal(t, "a b", fts5CleanupText("a. b"))
-		require.Equal(t, "a b", fts5CleanupText("a* b"))
-		require.Equal(t, "a b", fts5CleanupText("a& b"))
-		require.Equal(t, "a b", fts5CleanupText("a% b"))
-		require.Equal(t, "a b", fts5CleanupText("a# b"))
-		require.Equal(t, "a b", fts5CleanupText("a? b"))
-		require.Equal(t, "a b", fts5CleanupText("a? b $"))
-	})
-	t.Run("nostr", func(t *testing.T) {
-		require.Equal(t, "a b", fts5CleanupText("npub112412951925 a npub112412951925 b npub112412951925"))
-		require.Equal(t, "a b", fts5CleanupText("nsec35235236622 a nsec35235236622 b nsec35235236622"))
-		require.Equal(t, "a b", fts5CleanupText("nprofile35235236622 a nprofile35235236622 b nprofile35235236622"))
-		require.Equal(t, "a b", fts5CleanupText("nostr:nprofile35235236622 a nostr:nprofile35235236622 b nostr:nprofile35235236622"))
-	})
-	t.Run("hashes", func(t *testing.T) {
-		require.Equal(t, "a b", fts5CleanupText("a b #some"))
-		require.Equal(t, "a b", fts5CleanupText("#hash a #testhash b #some #some2 #some_hash"))
-	})
-	t.Run("urls", func(t *testing.T) {
-		require.Equal(t, "", fts5CleanupText("https://google.com"))
-		require.Equal(t, "", fts5CleanupText("http://google.com"))
-		require.Equal(t, "", fts5CleanupText("http://google.com?abcde"))
-		require.Equal(t, "", fts5CleanupText("http://google.com?abcde=1234"))
-		require.Equal(t, "", fts5CleanupText("http://google.com?abcde=1234&defg=5678"))
-		require.Equal(t, "a b", fts5CleanupText("http://google.com?abcde=1234&defg=5678 a b"))
-	})
-}
-
 func TestFts5DeleteNestedEvents(t *testing.T) {
 	t.Parallel()
 
@@ -863,7 +783,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		ev5.Content = "addressable child event"
 		ev5.Tags = model.Tags{
 			{"d", "article2"},
-			{"a", fmt.Sprintf("%v:%v:%v", ev2.Kind, ev2.PubKey, ev2.Tags.GetD())},
+			{"a", ev2.Address()},
 		}
 		require.NoError(t, ev5.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev5))
@@ -873,7 +793,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		ev6.Kind = nostr.KindProfileMetadata
 		ev6.Content = `{"name":"replaceable child event"}`
 		ev6.Tags = model.Tags{
-			{"a", fmt.Sprintf("%v:%v:", ev3.Kind, ev3.PubKey)},
+			{"a", ev3.Address()},
 		}
 		require.NoError(t, ev6.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(context.TODO(), &ev6))

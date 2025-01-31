@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ type (
 		MasterPubKey    string
 		Dtag            string
 		Htag            string
-		Metadata        string
+		ContentMetadata string
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -80,7 +81,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		KeyAlg:          keyAlg,
 		Dtag:            e.Tags.GetD(),
 		Htag:            e.GetHTag(),
-		Metadata:        parseMetadataContent(e),
+		ContentMetadata: parseContentMetadata(e),
 	}, nil
 }
 
@@ -309,9 +310,9 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
 	const stmt = `insert into events
-	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, metadata)
+	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :metadata)
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata)
 on conflict do update set
 	id                = excluded.id,
 	kind              = excluded.kind,
@@ -323,7 +324,7 @@ on conflict do update set
 	sig_alg           = excluded.sig_alg,
 	key_alg           = excluded.key_alg,
 	content           = excluded.content,
-	metadata          = excluded.metadata,
+	content_metadata  = excluded.content_metadata,
 	tags              = excluded.tags,
 	d_tag             = excluded.d_tag,
 	h_tag             = excluded.h_tag,
@@ -731,7 +732,7 @@ func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...mo
 	}
 	if handleSearch {
 		builderSearch := newWhereBuilder()
-		paramsSearch := map[string]any{}
+		var paramsSearch map[string]any
 		cpy := model.Filters{}
 		cpy = append(cpy, filters...)
 		for ix, filter := range cpy {
@@ -749,45 +750,7 @@ func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...mo
 		if err != nil {
 			return "", "", "", nil, err
 		}
-		for key, val := range paramsSearch {
-			params[key] = val
-		}
-	}
-
-	return clauseMain, clauseDeps, clauseSearch, params, nil
-}
-
-func (db *dbClient) generateEventsWhereSearchClause(ctx context.Context, filters ...model.Filter) (clauseMain, clauseDeps, clauseSearch string, params map[string]any, err error) {
-	mainBuilder := newWhereBuilder()
-
-	clauseMain, params, err = mainBuilder.Build(db.extendWhereFilters(ctx, filters...)...)
-	if err != nil {
-		return "", "", "", nil, err
-	}
-	cpy := filters
-	for ix, filter := range cpy {
-		var toAdd []int
-		for _, kind := range filter.Kinds {
-			if kind == nostr.KindRepost {
-				toAdd = append(toAdd, nostr.KindTextNote)
-			} else if kind == nostr.KindGenericRepost {
-				toAdd = append(toAdd, nostr.KindArticle, model.CustomIONKindEditableTextNote)
-			}
-		}
-		cpy[ix].Kinds = append(filter.Kinds, toAdd...)
-	}
-	clauseDeps, params, err = mainBuilder.BuildDependencies("eventsmain")
-	if err != nil {
-		return "", "", "", nil, err
-	}
-	builderSearch := newWhereBuilder()
-	paramsSearch := map[string]any{}
-	clauseSearch, paramsSearch, err = builderSearch.WithPrefix("search").Build(db.extendWhereFilters(ctx, cpy...)...)
-	if err != nil {
-		return "", "", "", nil, err
-	}
-	for key, val := range paramsSearch {
-		params[key] = val
+		maps.Copy(params, paramsSearch)
 	}
 
 	return clauseMain, clauseDeps, clauseSearch, params, nil

@@ -5,7 +5,6 @@ package query
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -13,23 +12,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type (
-	fts5DeleteRow struct {
-		ID string
-	}
-	fts5SearchRow struct {
-		ID      string
-		Content string
-	}
-)
-
-var (
-	urlCleanupPattern       = regexp.MustCompile(`(https?://|http://)[\w./]+(?:\?[\w=&]+)?(?:#[\w./]+)?`)
-	fts5TextCleanupPattern  = regexp.MustCompile(`\b(npub|nsec|nprofile|nostr:)\w*\b|#\w+|[^\w\s]`)
-	fts5SpaceCleanupPattern = regexp.MustCompile(`\s{2,}`)
-)
-
-func parseMetadataContent(ev *model.Event) string {
+func parseContentMetadata(ev *model.Event) string {
 	content := ""
 	switch ev.Kind {
 	case nostr.KindProfileMetadata:
@@ -41,11 +24,22 @@ func parseMetadataContent(ev *model.Event) string {
 			return ""
 		}
 		content = fmt.Sprintf("%v %v", parsedContent.Name, parsedContent.DisplayName)
-	case nostr.KindFileMetadata, nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
+	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
 		content = strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " ")
+	case nostr.KindFileMetadata:
+		altTags := ev.GetTags("alt")
+		summaryTags := ev.GetTags("summary")
+		var values []string
+		for _, tag := range altTags {
+			values = append(values, strings.TrimSpace(tag.Value()))
+		}
+		for _, tag := range summaryTags {
+			values = append(values, strings.TrimSpace(tag.Value()))
+		}
+		content = strings.Join(values, " ")
 	}
 
-	return fts5CleanupText(content)
+	return content
 }
 
 func extractFTS5IMeta(tags []model.Tag) []string {
@@ -151,12 +145,4 @@ func (db *dbClient) searchWithDepsSQL(whereMain, depClause, whereSearch, systemC
 			` + depClause + `;`
 
 	return sql, nil
-}
-
-func fts5CleanupText(text string) string {
-	text = urlCleanupPattern.ReplaceAllString(text, "")
-	text = fts5TextCleanupPattern.ReplaceAllString(text, "")
-	text = fts5SpaceCleanupPattern.ReplaceAllString(text, " ")
-
-	return strings.Trim(text, " ")
 }

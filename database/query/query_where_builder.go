@@ -379,10 +379,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		return nil
 	}
 
-	name := "filter" + strconv.Itoa(idx) + "_"
-	if w.Prefix != "" {
-		name = w.Prefix + "_" + name
-	}
+	name := w.Prefix + "filter" + strconv.Itoa(idx) + "_"
 
 	w.WriteRune('(') // Begin the filter section.
 	buildFromSlice(w, sqlOpCodeNONE, name, filter.IDs, "e.id", "")

@@ -30,11 +30,14 @@ var (
 	//go:embed DDL.sql
 	ddl string
 
-	//go:embed DDL_add_search.sql
-	ddlAddSearch string
+	//go:embed DDL_do_events_migration.sql
+	ddlDoEventsMigration string
 
-	//go:embed DDL_drop_old_tables.sql
-	ddlDropOldTables string
+	//go:embed DDL_cleanup_events_migration.sql
+	ddlCleanupMigration string
+
+	//go:embed DDL_add_fts5.sql
+	ddlAddFTS5 string
 )
 
 func init() {
@@ -122,6 +125,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "d_tag"
 		case "htag":
 			out = "h_tag"
+		case "contentmetadata":
+			out = "content_metadata"
 		default:
 			out = n
 		}
@@ -135,41 +140,61 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
-		changed, err := client.addSearchTable(tx)
+		requireMigration, err := client.requireMigration(tx)
 		if err != nil {
 			panic(err)
 		}
-		tx.Commit()
-		if changed {
-			tx := client.MustBegin()
-			for _, statement := range strings.Split(ddlDropOldTables, "--------") {
-				tx.MustExec(statement)
-			}
+		if requireMigration {
+			client.addFts5(tx)
 			tx.Commit()
-			tx = client.MustBegin()
-			for _, statement := range strings.Split(ddl, "--------") {
-				tx.MustExec(statement)
-			}
-			tx.Commit()
+
+			return client
 		}
+		tx.Commit()
+
+		client.doMigration()
 	}
 
 	return client
 }
 
-func (db *dbClient) addSearchTable(tx *sqlx.Tx) (changed bool, err error) {
+func (db *dbClient) doMigration() {
+	tx1 := db.MustBegin()
+	defer tx1.Rollback()
+	for _, statement := range strings.Split(ddlDoEventsMigration, "--------") {
+		tx1.MustExec(statement)
+	}
+	tx1.Commit()
+
+	tx2 := db.MustBegin()
+	defer tx2.Rollback()
+	for _, statement := range strings.Split(ddlCleanupMigration, "--------") {
+		tx2.MustExec(statement)
+	}
+	tx2.Commit()
+
+	tx3 := db.MustBegin()
+	defer tx3.Rollback()
+	for _, statement := range strings.Split(ddl, "--------") {
+		tx3.MustExec(statement)
+	}
+	tx3.Commit()
+}
+
+func (db *dbClient) requireMigration(tx *sqlx.Tx) (bool, error) {
 	sqlQuery := "SELECT exists (select name from pragma_table_info('events') WHERE name = $1);"
 	var exists []bool
-	if err = tx.SelectContext(context.Background(), &exists, sqlQuery, "metadata"); err != nil || len(exists) == 0 {
+	if err := tx.SelectContext(context.Background(), &exists, sqlQuery, "rid"); err != nil || len(exists) == 0 {
 		return false, err
 	}
-	if !exists[0] {
-		for _, statement := range strings.Split(ddlAddSearch, "--------") {
-			tx.MustExec(statement)
-		}
-	}
 
-	return !exists[0], nil
+	return exists[0], nil
+}
+
+func (db *dbClient) addFts5(tx *sqlx.Tx) {
+	for _, statement := range strings.Split(ddlAddFTS5, "--------") {
+		tx.MustExec(statement)
+	}
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {

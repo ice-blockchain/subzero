@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS events
     sig_alg           text    not null DEFAULT '',
     key_alg           text    not null DEFAULT '',
     content           text    not null,
-    metadata          text    not null DEFAULT '',
+    content_metadata  text    not null DEFAULT '',
     d_tag             text    not null DEFAULT '',
     h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
@@ -243,7 +243,7 @@ create trigger if not exists trigger_events_before_insert_unwind_repost
     when new.kind in (6, 16)
 begin
 insert into events
-    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, metadata, tags, d_tag, h_tag, hidden)
+    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, content_metadata, tags, d_tag, h_tag, hidden)
 select
     json_extract(b, '$.kind'),
     0,
@@ -253,7 +253,7 @@ select
     '',
     '',
     json_extract(b, '$.content'),
-    coalesce(json_extract(b, '$.metadata'), ''),
+    coalesce(json_extract(b, '$.content_metadata'), ''),
     json_extract(b, '$.tags'),
     '',
     json_extract(b, '$.id'),
@@ -423,19 +423,5 @@ begin
         delete from event_counters where reference_id = OLD.event_tag_value1 and value = 0;
 end
 ;
---------
-CREATE VIRTUAL TABLE if not exists events_search USING fts5(content, metadata, content='events', content_rowid=rid);
-CREATE TRIGGER if not exists trigger_events_after_insert_search_index 
-    AFTER INSERT
-    ON events 
-    for each row
-    when (NEW.kind = 0 and NEW.content != '' and json_valid(NEW.content) and (json_extract(NEW.content, '$.name') != '' or json_extract(NEW.content, '$.display_name') != ''))
-    or (NEW.kind in (1, 1063, 30175, 30023) and (NEW.content != '' or NEW.metadata != ''))
-BEGIN
-  INSERT INTO events_search(rowid, content, metadata) VALUES (NEW.rid, NEW.content, NEW.metadata);
-END;
-CREATE TRIGGER if not exists trigger_events_after_delete_search_index AFTER DELETE ON events BEGIN
-    DELETE FROM events_search WHERE rowid = old.rid;
-END;
 --------
 PRAGMA foreign_keys = on;
