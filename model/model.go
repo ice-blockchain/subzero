@@ -21,6 +21,7 @@ type (
 	Subscription struct {
 		SubscriptionID string
 		Filters        Filters
+		OneShot        bool
 	}
 	EventReference interface {
 		Filter() Filter
