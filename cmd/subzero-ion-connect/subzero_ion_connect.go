@@ -33,7 +33,7 @@ var (
 			cfg.MustInit(configPath)
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
-			dvm.MustInit(cmd.Context())
+			dvm.MustInit(cmd.Context(), wsserver.CtxMatchEventsWithSubscription)
 			server.MustListenAndServe(cmd.Context())
 		},
 	}
@@ -82,8 +82,7 @@ func init() {
 
 		return nil
 	})
-	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)
-	wsserver.RegisterDVMResponseStorage(dvm.GetStoredEvents)
+	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 }
 
 func newContext() context.Context {

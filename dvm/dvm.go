@@ -43,7 +43,7 @@ type (
 		Jobs            *xsync.MapOf[string, *jobInfo]
 		RelayConnectTLS *tls.Config
 		PrivateKey      string
-		dvmResponses    *ttlcache.Cache[string, *xsync.MapOf[string, *model.Event]]
+		responseCache   *ttlcache.Cache[string, *xsync.MapOf[string, *model.Event]]
 	}
 	config struct {
 		PrivateKey string `yaml:"private-key"`
@@ -51,28 +51,31 @@ type (
 		TLSKey     string `yaml:"tls-key"`
 		RelayURL   string `yaml:"relay-url" validate:"required,url"`
 	}
+	EventMatcher func(ctx context.Context, sub *model.Subscription, events ...*model.Event) []*model.Event
 )
 
 var (
 	jobTimeoutDeadline = 1 * time.Minute
 	globalDVM          *dvm
 	globalConfig       *config
+	eventMatcher       EventMatcher
 )
 
-func MustInit(ctx context.Context) {
+func MustInit(ctx context.Context, em EventMatcher) {
+	eventMatcher = em
 	globalConfig = cfg.MustGet[config]()
 	globalDVM = &dvm{
-		Jobs:         xsync.NewMapOf[string, *jobInfo](),
-		PrivateKey:   globalConfig.PrivateKey,
-		dvmResponses: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration)),
+		Jobs:          xsync.NewMapOf[string, *jobInfo](),
+		PrivateKey:    globalConfig.PrivateKey,
+		responseCache: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration)),
 	}
-	go globalDVM.dvmResponses.Start()
+	go globalDVM.responseCache.Start()
 	if globalConfig.TLSKey != "-" && globalConfig.TLSCert != "-" {
 		globalDVM.RelayConnectTLS = buildTLS()
 	}
 	go func() {
 		<-ctx.Done()
-		globalDVM.dvmResponses.Stop()
+		globalDVM.responseCache.Stop()
 	}()
 }
 

@@ -4,6 +4,7 @@ package dvm
 
 import (
 	"context"
+	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"log"
 	"os"
 	"testing"
@@ -21,7 +22,7 @@ import (
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
 	query.MustInit(ctx)
-	MustInit(ctx)
+	MustInit(ctx, wsserver.CtxMatchEventsWithSubscription)
 
 	code := m.Run()
 	cancel()

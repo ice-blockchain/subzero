@@ -184,41 +184,25 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 			}
 		}
 	}
-	if wsSubscriptionListener != nil {
-		fetchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
+	if wsSubscriptionListeners != nil {
+		for _, listener := range wsSubscriptionListeners {
+			fetchCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
-		for event, err := range wsSubscriptionListener(fetchCtx, h.prepareSubscription(ctx, sub)) {
-			if err != nil {
-				return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
-			} else if !canForwardEventContext(fetchCtx, event) {
-				continue
-			}
-			wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})
-			if wErr != nil {
-				return errors.Wrapf(wErr, "failed to write event[%+v]", event)
-			}
-		}
-	} else {
-		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
-	}
-	if dvmResponseStorage != nil {
-		fetchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		events, err := dvmResponseStorage(fetchCtx, sub)
-		if err != nil {
-			return errors.Wrapf(err, "failed to fetch dvm responses for subscription %+v", sub)
-		}
-		if len(events) > 0 {
-			master, pk, _ := model.GetUserDataFromContext(ctx)
-			matchedEvents := matchEventsWithSubscription(master, pk, sub, events...)
-			for _, event := range matchedEvents {
-				wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{event}})
+			for event, err := range listener(fetchCtx, sub) {
+				if err != nil {
+					return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
+				} else if !canForwardEventContext(fetchCtx, event) {
+					continue
+				}
+				wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})
 				if wErr != nil {
 					return errors.Wrapf(wErr, "failed to write event[%+v]", event)
 				}
 			}
 		}
+	} else {
+		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
 	}
 
 	err := h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
@@ -298,15 +282,20 @@ func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, c
 	return nil
 }
 
-func matchEventsWithSubscription(masterPublicKey, publicKey string, sub *model.Subscription, events ...*model.Event) []*nostr.Event {
-	filtered := make([]*nostr.Event, 0, len(events))
+func CtxMatchEventsWithSubscription(ctx context.Context, sub *model.Subscription, events ...*model.Event) []*model.Event {
+	master, pk, _ := model.GetUserDataFromContext(ctx)
+	return matchEventsWithSubscription(master, pk, sub, events...)
+}
+
+func matchEventsWithSubscription(masterPublicKey, publicKey string, sub *model.Subscription, events ...*model.Event) []*model.Event {
+	filtered := make([]*model.Event, 0, len(events))
 	for _, event := range events {
 		if !sub.Filters.Match(&event.Event) {
 			continue
 		} else if !canForwardEvent(event, masterPublicKey, publicKey) {
 			continue
 		}
-		filtered = append(filtered, &event.Event)
+		filtered = append(filtered, event)
 	}
 	return filtered
 }
@@ -319,7 +308,11 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 		authData, _ := h.connAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
 			envelope := nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
-			envelope.Events = matchEventsWithSubscription(authData.MasterPublicKey, authData.PublicKey, sub, events...)
+			matchedEvents := matchEventsWithSubscription(authData.MasterPublicKey, authData.PublicKey, sub, events...)
+			for _, ev := range matchedEvents {
+				envelope.Events = append(envelope.Events, &ev.Event)
+			}
+
 			if len(envelope.Events) > 0 {
 				broadcast[writer] = append(broadcast[writer], envelope)
 			}

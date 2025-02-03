@@ -25,7 +25,7 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 	defer cancel()
 	globalConfig = cfg.MustGet[config]()
 	d := dvm{
-		dvmResponses: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](),
+		responseCache: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](),
 	}
 	relayKey, err := model.GetPublicKey(globalConfig.PrivateKey)
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 						incomingEventID := uuid.NewString()
 						e := &model.Event{
 							Event: nostr.Event{
-								CreatedAt: nostr.Timestamp(time.Now().Unix()),
+								CreatedAt: nostr.Now(),
 								Content:   strconv.FormatInt(idx.Load(), 10),
 								Kind:      model.KindDVMCountResponse,
 								Tags: model.Tags{
@@ -56,7 +56,7 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 									{model.CustomIONTagOnBehalfOf, relayKey},
 								},
 							}}
-						require.NoError(t, e.Sign(userPrivKey))
+						require.NoError(t, e.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 						require.NoError(t, d.acceptDVMResponseEvent(e))
 						idx.Add(1)
 					}()
@@ -65,10 +65,14 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 			}
 			queryCtx, cancelQuery := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancelQuery()
-			events, err := d.searchDVMEvents(queryCtx, model.Filters{{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
+			eventsIt := d.searchDVMEvents(queryCtx, &model.Subscription{Filters: model.Filters{{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
 				Append("p", &userKey),
-			}})
-			require.NoError(t, err)
+			}}})
+			events := []*model.Event{}
+			for ev, err := range eventsIt {
+				require.NoError(t, err)
+				events = append(events, ev)
+			}
 			require.Equal(t, int64(len(events)), idx.Load())
 		}()
 	}

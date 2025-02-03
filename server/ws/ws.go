@@ -25,29 +25,24 @@ import (
 type (
 	EventIterator       = query.EventIterator
 	EventGetter         func(context.Context, *model.Subscription) EventIterator
-	DVMResponseStorage  func(context.Context, *model.Subscription) ([]*model.Event, error)
 	ReqMustAuthenticate func(context.Context, *model.Subscription) (authRequired bool)
 	EventAuthenticate   func(context.Context, ...*model.Event) (authRequired bool)
 	EventListener       func(context.Context, ...*model.Event) error
 )
 
 var (
-	wsEventListener        EventListener
-	wsSubscriptionListener EventGetter
-	dvmResponseStorage     DVMResponseStorage
-	reqMustAuth            ReqMustAuthenticate
-	eventMustAuth          EventAuthenticate
+	wsEventListener         EventListener
+	wsSubscriptionListeners []EventGetter
+	reqMustAuth             ReqMustAuthenticate
+	eventMustAuth           EventAuthenticate
 )
 
 func RegisterWSEventListener(listen EventListener) {
 	wsEventListener = listen
 }
 
-func RegisterWSSubscriptionListener(listen EventGetter) {
-	wsSubscriptionListener = listen
-}
-func RegisterDVMResponseStorage(listen DVMResponseStorage) {
-	dvmResponseStorage = listen
+func RegisterWSSubscriptionListener(listen ...EventGetter) {
+	wsSubscriptionListeners = listen
 }
 
 func RegisterReqMustAuthenticate(cb ReqMustAuthenticate) {

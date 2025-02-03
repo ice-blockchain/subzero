@@ -57,7 +57,7 @@ func TestJobOnline(t *testing.T) {
 
 	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		return query.GetStoredEvents(ctx, s)
-	})
+	}, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {
@@ -70,7 +70,6 @@ func TestJobOnline(t *testing.T) {
 
 		return nil
 	})
-	RegisterDVMResponseStorage(dvm.GetStoredEvents)
 	ctx := context.Background()
 	privkey := model.GeneratePrivateKey()
 	servicePubkey, err := dvm.PublicKey()
