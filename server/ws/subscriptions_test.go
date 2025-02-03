@@ -2615,7 +2615,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
-func TestSubscriptionMRF(t *testing.T) {
+func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	t.Cleanup(func() {
 		RegisterReqMustAuthenticate(nil)
 		RegisterEventMustAuthenticate(nil)

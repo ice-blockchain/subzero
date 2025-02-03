@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 	defer serverCancel()
 
 	query.MustInit(serverCtx)
-	dvm.MustInit()
+	dvm.MustInit(serverCtx)
 
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {

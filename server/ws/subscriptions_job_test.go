@@ -42,12 +42,22 @@ func helperWaitFor[T any](t *testing.T, ch <-chan T, deadline time.Duration) T {
 	return zero
 }
 
+func helperQueryEvents(t *testing.T, ctx context.Context, relay *nostrRelay, filter model.Filter) []*model.Event {
+	nResults, err := relay.QuerySync(ctx, filter)
+	require.NoError(t, err)
+	results := make([]*model.Event, 0, len(nResults))
+	for _, r := range nResults {
+		results = append(results, &model.Event{Event: *r})
+	}
+	return results
+}
+
 func TestJobOnline(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
 	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		return query.GetStoredEvents(ctx, s)
-	})
+	}, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {
@@ -60,7 +70,6 @@ func TestJobOnline(t *testing.T) {
 
 		return nil
 	})
-
 	ctx := context.Background()
 	privkey := model.GeneratePrivateKey()
 	servicePubkey, err := dvm.PublicKey()
@@ -117,6 +126,8 @@ func TestJobOnline(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, reaction2, privkey)
 		require.NoError(t, relay.PublishMany(ctx, &reaction1.Event, &reaction2.Event))
 	})
+	responses := make([]*model.Event, 0)
+	commonUserForFirst2Reqs := model.GeneratePrivateKey()
 	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -130,9 +141,10 @@ func TestJobOnline(t *testing.T) {
 				Content: helperNewFilter(t, model.Filter{Search: "foo", Authors: []string{article1.PubKey}}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
+		helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
+		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
 		require.Equal(t, "4", resp.Content) // 2 reactions + 2 articles.
@@ -154,9 +166,10 @@ func TestJobOnline(t *testing.T) {
 				}),
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
+		helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
+		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
 		require.JSONEq(t, `{"+":1,"-":1}`, resp.Content)
@@ -182,9 +195,43 @@ func TestJobOnline(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
+		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
 		require.Equal(t, "1", resp.Content) // 1 article.
+	})
+	t.Run("request dvm result via subscription with #e", func(t *testing.T) {
+		eTag1 := responses[1].GetTag("e").Value()
+		eTag2 := responses[2].GetTag("e").Value()
+		dvmSearchResults := helperQueryEvents(t, ctx, relay,
+			model.Filter{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
+				Append("e", &eTag1).
+				Append("e", &eTag2),
+			})
+		require.Len(t, dvmSearchResults, 2)
+		require.Contains(t, dvmSearchResults, responses[1])
+		require.Contains(t, dvmSearchResults, responses[2])
+	})
+	t.Run("request dvm result via subscription with #p, first 2 requests came from same user", func(t *testing.T) {
+		pTag := responses[0].GetTag("p").Value()
+		dvmSearchResults := helperQueryEvents(t, ctx, relay,
+			model.Filter{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
+				Append("p", &pTag),
+			})
+		require.Len(t, dvmSearchResults, 2)
+		require.Contains(t, dvmSearchResults, responses[0])
+		require.Contains(t, dvmSearchResults, responses[1])
+	})
+	t.Run("request dvm result via subscription with #p and #e", func(t *testing.T) {
+		pTag := responses[1].GetTag("p").Value()
+		eTag1 := responses[1].GetTag("e").Value()
+		dvmSearchResults := helperQueryEvents(t, ctx, relay,
+			model.Filter{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
+				Append("p", &pTag).
+				Append("e", &eTag1),
+			})
+		require.Len(t, dvmSearchResults, 1)
+		require.Equal(t, []*model.Event{responses[1]}, dvmSearchResults)
 	})
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)

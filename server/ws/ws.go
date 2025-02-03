@@ -31,18 +31,18 @@ type (
 )
 
 var (
-	wsEventListener        EventListener
-	wsSubscriptionListener EventGetter
-	reqMustAuth            ReqMustAuthenticate
-	eventMustAuth          EventAuthenticate
+	wsEventListener         EventListener
+	wsSubscriptionListeners []EventGetter
+	reqMustAuth             ReqMustAuthenticate
+	eventMustAuth           EventAuthenticate
 )
 
 func RegisterWSEventListener(listen EventListener) {
 	wsEventListener = listen
 }
 
-func RegisterWSSubscriptionListener(listen EventGetter) {
-	wsSubscriptionListener = listen
+func RegisterWSSubscriptionListener(listen ...EventGetter) {
+	wsSubscriptionListeners = listen
 }
 
 func RegisterReqMustAuthenticate(cb ReqMustAuthenticate) {

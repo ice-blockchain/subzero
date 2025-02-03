@@ -21,7 +21,7 @@ import (
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
 	query.MustInit(ctx)
-	MustInit()
+	MustInit(ctx)
 
 	code := m.Run()
 	cancel()

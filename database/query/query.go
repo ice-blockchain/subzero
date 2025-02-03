@@ -59,18 +59,18 @@ type databaseBatchRequest struct {
 	Delete []databaseFilterDelete
 }
 
-func (req *databaseBatchRequest) Save(e *model.Event) error {
+func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	jtags, err := json.Marshal(e.Tags)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal tags")
+		return nil, errors.Wrap(err, "failed to marshal tags")
 	}
 
 	sigAlg, keyAlg, err := parseSigKeyAlg(e)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	req.InsertOrReplace = append(req.InsertOrReplace, databaseEvent{
+	return &databaseEvent{
 		Event:           *e,
 		MasterPubKey:    e.GetMasterPublicKey(),
 		SystemCreatedAt: time.Now().UnixNano(),
@@ -79,8 +79,15 @@ func (req *databaseBatchRequest) Save(e *model.Event) error {
 		KeyAlg:          keyAlg,
 		Dtag:            e.Tags.GetD(),
 		Htag:            e.GetHTag(),
-	})
+	}, nil
+}
 
+func (req *databaseBatchRequest) Save(e *model.Event) error {
+	dbEvent, err := toDatabaseEvent(e)
+	if err != nil {
+		return err
+	}
+	req.InsertOrReplace = append(req.InsertOrReplace, *dbEvent)
 	return nil
 }
 
@@ -104,6 +111,9 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 
 	for i := range events {
 		if events[i].IsEphemeral() {
+			continue
+		}
+		if events[i].IsJobRequest() || events[i].IsJobResponse() || events[i].Kind == nostr.KindJobFeedback {
 			continue
 		}
 
@@ -405,7 +415,6 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	if hasLimitFilter {
 		limit = int64(filters[0].Limit)
 	}
-
 	it := &eventIterator{
 		OneShot: hasLimitFilter && limit <= selectDefaultBatchLimit,
 		Map:     db.eventTransform,
@@ -434,7 +443,8 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 			}
 
 			return rows, err
-		}}
+		},
+	}
 
 	return func(yield func(*model.Event, error) bool) {
 		err := it.Each(ctx, func(event *model.Event) error {
