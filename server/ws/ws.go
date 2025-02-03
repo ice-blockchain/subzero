@@ -95,7 +95,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 
 func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
 	if v, ok := h.connAuth.Load(respWriter); ok {
-		return model.SetUserDataInContext(ctx, v.MasterPublicKey, v.PublicKey, v.Authenticated)
+		return model.SetUserDataInContext(ctx, v.MasterPublicKey, v.PublicKey, v.Authenticated, v.Kinds)
 	}
 	return ctx
 }

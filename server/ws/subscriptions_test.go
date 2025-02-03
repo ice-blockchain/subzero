@@ -2230,8 +2230,8 @@ func TestCanForwardEvent(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Regular", func(t *testing.T) {
-		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}))
-		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}), "")
+		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}, nil))
+		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}, nil), "")
 	})
 	t.Run("Protected", func(t *testing.T) {
 		user1Priv, user1Pub := model.GenerateKeyPair()
@@ -2242,15 +2242,31 @@ func TestCanForwardEvent(t *testing.T) {
 		ev.Content = "content"
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 
-		require.False(t, canForwardEvent(&ev, user1Pub)) // user1 cannot see it's own event.
-		require.False(t, canForwardEvent(&ev, user2Pub)) // user2 is not included in the event yet.
-		require.False(t, canForwardEvent(&ev))
+		require.False(t, canForwardEvent(&ev, nil, user1Pub)) // user1 cannot see it's own event.
+		require.False(t, canForwardEvent(&ev, nil, user2Pub)) // user2 is not included in the event yet.
+		require.False(t, canForwardEvent(&ev, nil))
 
 		ev.Tags = append(ev.Tags,
 			model.Tag{"p", user2Pub},
 		)
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
-		require.True(t, canForwardEvent(&ev, user2Pub))
+		require.True(t, canForwardEvent(&ev, nil, user2Pub))
+	})
+	t.Run("Not allowed", func(t *testing.T) {
+		user1Priv, user1Pub := model.GenerateKeyPair()
+
+		var ev model.Event
+		ev.Kind = nostr.KindTextNote
+		ev.Content = "content"
+		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
+
+		require.True(t, canForwardEvent(&ev, nil, user1Pub))
+		require.True(t, canForwardEvent(&ev, map[int]struct{}{
+			nostr.KindTextNote: {},
+		}, user1Pub))
+		require.False(t, canForwardEvent(&ev, map[int]struct{}{
+			nostr.KindArticle: {},
+		}, user1Pub))
 	})
 }
 

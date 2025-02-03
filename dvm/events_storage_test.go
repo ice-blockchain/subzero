@@ -30,7 +30,7 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 	relayKey, err := model.GetPublicKey(globalConfig.PrivateKey)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
-	for _ = range 1000 {
+	for range 1000 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -38,7 +38,7 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 			var idx atomic.Int64
 			for ctx.Err() == nil {
 				var inWG sync.WaitGroup
-				for _ = range 5 {
+				for range 5 {
 					inWG.Add(1)
 					go func() {
 						defer inWG.Done()
