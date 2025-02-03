@@ -29,7 +29,7 @@ var (
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
 			query.MustInit(cmd.Context())
-			dvm.MustInit(cmd.Context(), wsserver.CtxMatchEventsWithSubscription)
+			dvm.MustInit(cmd.Context())
 			server.MustListenAndServe(cmd.Context())
 		},
 	}

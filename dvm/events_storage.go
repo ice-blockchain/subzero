@@ -23,52 +23,49 @@ func (d *dvm) searchDVMEvents(ctx context.Context, subscription *model.Subscript
 		filters = subscription.Filters
 	}
 	return func(yield func(*model.Event, error) bool) {
-		for _, f := range filters {
+		for index, f := range filters {
 			if f.Tags.HasValues("p") {
-				for _, e := range eventMatcher(ctx, subscription, d.findByFilterTag(f, "p")...) {
+				for _, e := range d.findByFilterTag(filters, index, "p") {
 					if !yield(e, nil) {
 						return
 					}
 				}
 			} else {
-				events := []*model.Event{}
 				d.responseCache.Range(func(item *ttlcache.Item[string, *xsync.MapOf[string, *model.Event]]) bool {
 					if ctx.Err() != nil {
 						return yield(nil, ctx.Err())
 					}
 					item.Value().Range(func(key string, value *model.Event) bool {
-						events = append(events, value)
+						if filters.Match(&value.Event) { // <-- filters
+							if !yield(value, nil) {
+								return false
+							}
+						}
 						return true
 					})
 					return true
 				})
-				for _, event := range eventMatcher(ctx, subscription, events...) {
-					if !yield(event, nil) {
-						return
-					}
-				}
 			}
 		}
 	}
 }
 
-func (d *dvm) findByFilterTag(
-	f model.Filter,
-	tagName string,
-) []*model.Event {
-	resultEvents := []*model.Event{}
-	for _, pk := range f.Tags.All(tagName) {
-		matchingEvents := d.responseCache.Get(tagCacheKey("p", pk))
-		if matchingEvents != nil {
-			matchingEvents.Value().Range(func(key string, value *model.Event) bool {
-				if f.Matches(&value.Event) {
-					resultEvents = append(resultEvents, value)
-				}
-				return true
-			})
+func (d *dvm) findByFilterTag(filters model.Filters, current int, tagName string) (results []*model.Event) {
+	for _, pk := range filters[current].Tags.All(tagName) {
+		eventsByAuthor := d.responseCache.Get(tagCacheKey("p", pk))
+		if eventsByAuthor == nil {
+			continue
 		}
+
+		eventsByAuthor.Value().Range(func(_ string, value *model.Event) bool {
+			if filters.Match(&value.Event) {
+				results = append(results, value)
+			}
+			return true
+		})
+
 	}
-	return resultEvents
+	return results
 }
 
 func tagCacheKey(tag, value string) string {
@@ -79,9 +76,9 @@ func (d *dvm) acceptDVMResponseEvent(event *model.Event) error {
 	if pTag := event.Tags.GetFirst([]string{"p"}); pTag != nil {
 		key := tagCacheKey("p", pTag.Value())
 		val, _ := d.responseCache.GetOrSet(key, xsync.NewMapOf[string, *model.Event](),
-			ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](ttlcache.DefaultTTL))
+			ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration))
 		val.Value().LoadAndStore(event.ID, event)
-		d.responseCache.Set(key, val.Value(), ttlcache.DefaultTTL)
+		d.responseCache.Set(key, val.Value(), model.DVMJobResultExpiration)
 	}
 
 	return nil

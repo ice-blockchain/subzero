@@ -51,18 +51,15 @@ type (
 		TLSKey     string `yaml:"tls-key"`
 		RelayURL   string `yaml:"relay-url" validate:"required,url"`
 	}
-	EventMatcher func(ctx context.Context, sub *model.Subscription, events ...*model.Event) []*model.Event
 )
 
 var (
 	jobTimeoutDeadline = 1 * time.Minute
 	globalDVM          *dvm
 	globalConfig       *config
-	eventMatcher       EventMatcher
 )
 
-func MustInit(ctx context.Context, em EventMatcher) {
-	eventMatcher = em
+func MustInit(ctx context.Context) {
 	globalConfig = cfg.MustGet[config]()
 	globalDVM = &dvm{
 		Jobs:          xsync.NewMapOf[string, *jobInfo](),

@@ -33,7 +33,7 @@ var (
 			cfg.MustInit(configPath)
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
-			dvm.MustInit(cmd.Context(), wsserver.CtxMatchEventsWithSubscription)
+			dvm.MustInit(cmd.Context())
 			server.MustListenAndServe(cmd.Context())
 		},
 	}

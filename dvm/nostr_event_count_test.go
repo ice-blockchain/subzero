@@ -15,14 +15,13 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
 	query.MustInit(ctx)
-	MustInit(ctx, wsserver.CtxMatchEventsWithSubscription)
+	MustInit(ctx)
 
 	code := m.Run()
 	cancel()

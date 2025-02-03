@@ -185,10 +185,9 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		}
 	}
 	if wsSubscriptionListeners != nil {
+		fetchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
 		for _, listener := range wsSubscriptionListeners {
-			fetchCtx, cancel := context.WithCancel(ctx)
-			defer cancel()
-
 			for event, err := range listener(fetchCtx, h.prepareSubscription(ctx, sub)) {
 				if err != nil {
 					return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
@@ -280,11 +279,6 @@ func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, c
 	}
 
 	return nil
-}
-
-func CtxMatchEventsWithSubscription(ctx context.Context, sub *model.Subscription, events ...*model.Event) []*model.Event {
-	master, pk, _ := model.GetUserDataFromContext(ctx)
-	return matchEventsWithSubscription(master, pk, sub, events...)
 }
 
 func matchEventsWithSubscription(masterPublicKey, publicKey string, sub *model.Subscription, events ...*model.Event) []*model.Event {
