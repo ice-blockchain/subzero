@@ -4,8 +4,6 @@ package dvm
 
 import (
 	"context"
-	"github.com/jellydator/ttlcache/v3"
-	"github.com/puzpuzpuz/xsync/v3"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -13,7 +11,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/cfg"

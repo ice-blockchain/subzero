@@ -4,7 +4,6 @@ package dvm
 
 import (
 	"context"
-	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"log"
 	"os"
 	"testing"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/validation"
 )
 

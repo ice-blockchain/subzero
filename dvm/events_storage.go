@@ -5,11 +5,11 @@ package dvm
 import (
 	"context"
 	"fmt"
-	"github.com/ice-blockchain/subzero/database/query"
 
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/puzpuzpuz/xsync/v3"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
