@@ -189,7 +189,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 			fetchCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			for event, err := range listener(fetchCtx, sub) {
+			for event, err := range listener(fetchCtx, h.prepareSubscription(ctx, sub)) {
 				if err != nil {
 					return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 				} else if !canForwardEventContext(fetchCtx, event) {
