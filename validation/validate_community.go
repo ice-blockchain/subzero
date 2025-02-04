@@ -103,7 +103,7 @@ func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityBanUser},
-				Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals("h", communityID),
+				Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals(model.CustomIONTagCommunity, communityID),
 			},
 		},
 	})

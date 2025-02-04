@@ -759,7 +759,7 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 			}
 		}
 	}
-	if hTag := e.GetTag("h"); hTag != nil {
+	if hTag := e.GetTag(model.CustomIONTagCommunity); hTag != nil {
 		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
 			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v, expected uuid v7", err.Error())
 		}
@@ -917,7 +917,7 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 			"nip-18: repost must include p tag with pubkey of the event being reposted: found %q, expected %q",
 			pTag.Value(), repostedEvent.GetMasterPublicKey())
 	}
-	if hTag := e.GetTag("h"); hTag != nil {
+	if hTag := e.GetTag(model.CustomIONTagCommunity); hTag != nil {
 		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
 			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v", err.Error())
 		}
@@ -1104,20 +1104,18 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 		return errors.Wrap(ErrWrongEventParams, "wrong join event, authorization tag is not required for public open community")
 	}
 	if closedTag := communityDefinitionEvent.GetTag("closed"); closedTag != nil {
-		if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.RegularRole {
-			return nil
+		if authorizationTag == nil {
+			return errors.Wrap(ErrActionForbidden, "can't join closed community")
 		}
-		if authorizationTag != nil {
-			var parsedAuthorizationEvent model.Event
-			if err := json.Unmarshal([]byte(authorizationTag.Value()), &parsedAuthorizationEvent); err != nil {
-				return errors.Wrap(ErrActionForbidden, "wrong authorization event")
-			}
-			if err := Validate(ctx, &parsedAuthorizationEvent); err != nil {
-				return err
-			}
-			if authorizationRole := model.GetCommunityRoleByPubkey(parsedAuthorizationEvent.GetMasterPublicKey(), communityDefinitionEvent); authorizationRole == model.RegularRole {
-				return errors.Wrap(ErrActionForbidden, "user not authorized to join this community")
-			}
+		var parsedAuthorizationEvent model.Event
+		if err := json.Unmarshal([]byte(authorizationTag.Value()), &parsedAuthorizationEvent); err != nil {
+			return errors.Wrap(ErrActionForbidden, "wrong authorization event")
+		}
+		if err := Validate(ctx, &parsedAuthorizationEvent); err != nil {
+			return err
+		}
+		if authorizationRole := model.GetCommunityRoleByPubkey(parsedAuthorizationEvent.GetMasterPublicKey(), communityDefinitionEvent); authorizationRole == model.RegularRole {
+			return errors.Wrap(ErrActionForbidden, "user not authorized to join this community")
 		}
 	}
 
