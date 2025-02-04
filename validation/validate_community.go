@@ -16,7 +16,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event) error {
+func validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event) error {
 	hTag := incomingEvent.GetTag(model.CustomIONTagCommunity)
 	if hTag == nil {
 		return nil
@@ -37,7 +37,7 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 	} else if requiredRole == model.AdminRole && replyRole != model.OwnerRole && replyRole != model.AdminRole {
 		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "admin or owner"))
 	} else if requiredRole == model.RegularRole && replyRole == model.RegularRole {
-		if err := isUserPartOfCommunity(ctx, communityDefinitionEvent, incomingEvent); err != nil {
+		if err := IsUserPartOfCommunity(ctx, communityDefinitionEvent, incomingEvent.GetMasterPublicKey()); err != nil {
 			return errors.Wrapf(err, "user:%v not part of the community", incomingEvent.GetMasterPublicKey())
 		}
 	}
@@ -118,12 +118,12 @@ func isUserBanned(ctx context.Context, event *model.Event) error {
 	return nil
 }
 
-func isUserPartOfCommunity(ctx context.Context, communityDefinitionEvent, event *model.Event) error {
+func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.Event, masterPubkey string) error {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityJoin},
-				Tags:  model.TagMap{}.SetLiterals("p", event.GetMasterPublicKey()),
+				Tags:  model.TagMap{}.SetLiterals("p", masterPubkey),
 			},
 		},
 	})

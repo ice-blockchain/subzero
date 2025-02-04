@@ -51,6 +51,9 @@ func generateChallenge(hints ...string) string {
 
 func canForwardEventContext(ctx context.Context, in *model.Event) bool {
 	master, pk, _ := model.GetUserDataFromContext(ctx)
+	if canForward := canForwardCommunityEvent(ctx, in, master); !canForward {
+		return false
+	}
 
 	return canForwardEvent(in, master, pk)
 }
@@ -66,6 +69,30 @@ func canForwardEvent(in *model.Event, currentKeys ...string) bool {
 		}
 	}
 	return false
+}
+
+func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey string) bool {
+	hTag := in.GetHTag()
+	if hTag == in.GetID() || hTag == "" {
+		return true
+	}
+	if in.Kind != nostr.KindTextNote && in.Kind != nostr.KindArticle && in.Kind != nostr.KindDraftArticle &&
+		in.Kind == model.CustomIONKindEditableTextNote && in.Kind != nostr.KindRepost && in.Kind != nostr.KindGenericRepost {
+		return true
+	}
+	communityDefinitionEvent, err := validation.GetCommunityDefinition(ctx, hTag)
+	if err != nil {
+		log.Printf("ERROR: failed to get community event: %v", err)
+
+		return false
+	}
+	if communityDefinitionEvent.GetTag("private") != nil {
+		if err := validation.IsUserPartOfCommunity(ctx, communityDefinitionEvent, masterPubkey); err != nil {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (h *handler) authRequiredReq(respWriter Writer, sub *model.Subscription, challenge string) error {

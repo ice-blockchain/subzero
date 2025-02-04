@@ -764,7 +764,7 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v, expected uuid v7", err.Error())
 		}
 	}
-	if err := validatePostCommunityEvents(ctx, e); err != nil {
+	if err := validatePostCommunityEvent(ctx, e); err != nil {
 		return err
 	}
 	if err := validateWhoCanReplySettings(ctx, e); err != nil {
@@ -921,7 +921,7 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
 			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v", err.Error())
 		}
-		if err := validatePostCommunityEvents(ctx, e); err != nil {
+		if err := validatePostCommunityEvent(ctx, e); err != nil {
 			return err
 		}
 	}
