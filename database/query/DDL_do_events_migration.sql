@@ -21,7 +21,7 @@ CREATE TABLE events (
     content           text    not null,
     content_metadata  text    not null DEFAULT '',
     d_tag             text    not null DEFAULT '',
-    h_tag             text    not null UNIQUE,
+    h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
     hidden            integer not null default 0
