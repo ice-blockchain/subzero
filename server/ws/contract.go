@@ -30,10 +30,8 @@ var (
 
 type (
 	connAuthData struct {
-		Challenge       string
-		PublicKey       string
-		MasterPublicKey string
-		Authenticated   bool
+		Challenge string
+		model.UserDataContext
 	}
 	connSubscriptions struct {
 		// SubscriptionID -> Subscription

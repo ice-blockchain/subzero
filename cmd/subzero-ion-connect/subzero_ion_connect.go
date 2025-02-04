@@ -60,7 +60,7 @@ func init() {
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, event := range events {
 			if event.Kind == nostr.KindGiftWrap {
-				_, _, authenticated := model.GetUserDataFromContext(ctx)
+				_, _, authenticated, _ := model.GetUserDataFromContext(ctx)
 				if authenticated {
 					return fmt.Errorf("%v: authenticated user is not allowed to send gift wrap events", event.ID)
 				}

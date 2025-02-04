@@ -12,6 +12,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -24,7 +25,7 @@ func TestSelfChat(t *testing.T) {
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, event := range events {
 			if event.Kind == nostr.KindGiftWrap {
-				_, _, authenticated := model.GetUserDataFromContext(ctx)
+				_, _, authenticated, _ := model.GetUserDataFromContext(ctx)
 				if authenticated {
 					return fmt.Errorf("%v: authenticated user is not allowed to send gift wrap events", event.ID)
 				}
@@ -53,7 +54,17 @@ func TestSelfChat(t *testing.T) {
 	})
 
 	priv, pub := model.GenerateKeyPair()
-	_, masterPub := model.GenerateKeyPair()
+	masterPriv, masterPub := model.GenerateKeyPair()
+
+	var attestation model.Event
+	attestation.Kind = model.CustomIONKindAttestation
+	attestation.CreatedAt = 1
+	attestation.Tags = model.Tags{
+		{model.TagAttestationName, pub, "", model.CustomIONAttestationKindActive + ":1"},
+	}
+	helperSignWithMinLeadingZeroBits(t, &attestation, masterPriv)
+	require.NoError(t, query.AcceptEvents(context.Background(), &attestation))
+
 	receiver := helperMustNewRelay(t, pubsubServers[0])
 	t.Run("Auth", func(t *testing.T) {
 		var note model.Event

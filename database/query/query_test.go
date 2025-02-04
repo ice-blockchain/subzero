@@ -1208,3 +1208,49 @@ func TestEditablePostFlow(t *testing.T) {
 		})
 	})
 }
+
+func TestAccountDeleteWithSubAccounts(t *testing.T) {
+	t.Parallel()
+
+	const dummyAmount = 100
+	db, _ := helperEnsureDatabaseWithData(t, dummyAmount)
+	defer db.Close()
+
+	masterPriv, masterPub := model.GenerateKeyPair()
+	user1Priv, user1Pub := model.GenerateKeyPair()
+	user2Priv, user2Pub := model.GenerateKeyPair()
+
+	t.Run("Add attestation", func(t *testing.T) {
+		var attestation model.Event
+		attestation.Kind = model.CustomIONKindAttestation
+		attestation.CreatedAt = 1
+		attestation.Tags = model.Tags{
+			{model.TagAttestationName, user1Pub, "", model.CustomIONAttestationKindActive + ":1"},
+			{model.TagAttestationName, user2Pub, "", model.CustomIONAttestationKindActive + ":1"},
+		}
+		require.NoError(t, attestation.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &attestation))
+	})
+	t.Run("Post events on behalf of users", func(t *testing.T) {
+		for i, key := range []string{user1Priv, user2Priv} {
+			var ev model.Event
+			ev.Kind = nostr.KindTextNote
+			ev.CreatedAt = model.Timestamp(1 + i)
+			ev.Content = "hello world"
+			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPub}}
+			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+		}
+	})
+	require.Len(t, helperSelectEvents(t, db), dummyAmount+3) // 1 attestation, 2 events.
+
+	t.Run("Root account delete", func(t *testing.T) {
+		var delete model.Event
+		delete.Kind = nostr.KindDeletion
+		delete.CreatedAt = 3
+		delete.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPub}}
+		require.NoError(t, delete.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+		require.Len(t, helperSelectEvents(t, db), dummyAmount)
+	})
+}

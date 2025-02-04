@@ -43,6 +43,11 @@ var (
 		nostr.KindRepost:                    {},
 		nostr.KindGenericRepost:             {},
 	}
+
+	errAttestationRecordNotFound    = errors.New("attestation record not found")
+	errAttestationRecordExpired     = errors.New("attestation record is expired")
+	errAttestationRecordRevoked     = errors.New("attestation record is revoked")
+	errAttestationRecordIsNotActive = errors.New("attestation record is not active yet")
 )
 
 func generateChallenge(hints ...string) string {
@@ -59,12 +64,18 @@ func generateChallenge(hints ...string) string {
 }
 
 func canForwardEventContext(ctx context.Context, in *model.Event) bool {
-	master, pk, _ := model.GetUserDataFromContext(ctx)
+	master, pk, _, kinds := model.GetUserDataFromContext(ctx)
 
-	return canForwardCommunityEvent(ctx, in, master) && canForwardEvent(in, master, pk)
+	return canForwardCommunityEvent(ctx, in, master) && canForwardEvent(in, kinds, master, pk)
 }
 
-func canForwardEvent(in *model.Event, currentKeys ...string) bool {
+func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, currentKeys ...string) bool {
+	if len(currentkinds) > 0 {
+		if _, ok := currentkinds[in.Kind]; !ok {
+			return false
+		}
+	}
+
 	if _, ok := protectedEventKinds[in.Kind]; !ok {
 		return true
 	}
@@ -146,7 +157,56 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	return ok
 }
 
-func (h *handler) handleAuth(_ context.Context, respWriter Writer, e *model.Event) *nostr.OKEnvelope {
+func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct{}, error) {
+	it := query.GetStoredEvents(ctx, &model.Subscription{
+		Filters: []model.Filter{
+			{
+				Kinds:   []int{model.CustomIONKindAttestation},
+				Authors: []string{e.GetMasterPublicKey()},
+				Tags:    model.TagMap{}.Set("p", &e.PubKey),
+				Limit:   1,
+			},
+		},
+	})
+	var attestationEvent *model.Event
+	for ev, err := range it {
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to fetch attestation event")
+		}
+		attestationEvent = ev
+	}
+	if attestationEvent == nil {
+		return nil, errAttestationRecordNotFound
+	}
+
+	records, err := model.ParseAttestationTags(attestationEvent.Tags)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse attestation tags")
+	}
+
+	record, ok := records[e.PubKey]
+	if !ok {
+		return nil, errAttestationRecordNotFound
+	}
+
+	now := time.Now()
+	if record.Revoked != nil && now.After(*record.Revoked) {
+		return nil, errAttestationRecordRevoked
+	} else if record.End != nil && now.After(*record.End) {
+		return nil, errAttestationRecordExpired
+	} else if record.Start != nil && now.Before(*record.Start) {
+		return nil, errAttestationRecordIsNotActive
+	}
+
+	kinds := make(map[int]struct{}, len(record.Kinds))
+	for _, kind := range record.Kinds {
+		kinds[kind] = struct{}{}
+	}
+
+	return kinds, nil
+}
+
+func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Event) *nostr.OKEnvelope {
 	var resp = nostr.OKEnvelope{EventID: e.Event.ID}
 
 	state, ok := h.connAuth.Load(respWriter)
@@ -173,12 +233,21 @@ func (h *handler) handleAuth(_ context.Context, respWriter Writer, e *model.Even
 		return &resp
 	}
 
-	h.connAuth.Store(respWriter, connAuthData{
-		Challenge:       state.Challenge,
-		MasterPublicKey: e.GetMasterPublicKey(),
-		PublicKey:       e.PubKey,
-		Authenticated:   true,
-	})
+	var userdata connAuthData
+	if e.PubKey != e.GetMasterPublicKey() {
+		var err error
+		if userdata.Kinds, err = validateOnBehalfAccess(ctx, e); err != nil {
+			resp.Reason = "failed to validate on-behalf access: " + err.Error()
+
+			return &resp
+		}
+	}
+	userdata.Challenge = state.Challenge
+	userdata.MasterPublicKey = e.GetMasterPublicKey()
+	userdata.PublicKey = e.PubKey
+	userdata.Authenticated = true
+
+	h.connAuth.Store(respWriter, userdata)
 
 	resp.OK = true
 
@@ -190,10 +259,13 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 		if !(strings.Contains(sub.Filters[i].Search, filterTextMRF) && sub.Filters[i].Tags.HasValues("p")) {
 			continue
 		}
-		m, pk, authenticated := model.GetUserDataFromContext(ctx)
+		m, pk, authenticated, kinds := model.GetUserDataFromContext(ctx)
 		sub.OneShot = true
 		if !authenticated {
 			// Should not happen, but just in case. Also set it to OneShot mode.
+			continue
+		} else if _, ok := kinds[nostr.KindFollowList]; len(kinds) > 0 && !ok {
+			// Not allowed to access the requested data.
 			continue
 		}
 		sub.Filters[i] = model.Filter{
@@ -214,8 +286,13 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 					Challenge: generateChallenge(sub.SubscriptionID),
 				}
 			})
-			if authRequired && !status.Authenticated {
+			if !status.Authenticated {
 				return h.authRequiredReq(respWriter, sub, status.Challenge)
+			} else if !status.IsFilterAllowed(sub.Filters...) {
+				return h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+					SubscriptionID: sub.SubscriptionID,
+					Reason:         "error: not allowed to access the requested data",
+				})
 			}
 		}
 	}
@@ -272,7 +349,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 					Challenge: generateChallenge(),
 				}
 			})
-			if authRequired && !status.Authenticated {
+			if !status.Authenticated {
 				err := h.writeResponse(respWriter, &nostr.AuthEnvelope{
 					Challenge: &status.Challenge,
 				})
@@ -280,6 +357,8 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 					return errors.Wrap(err, "failed to write AUTH message")
 				}
 				return errAuthRequired
+			} else if !status.IsEventAllowed(events...) {
+				return errors.New("error: not allowed to publish given events")
 			}
 		}
 	}
@@ -316,19 +395,6 @@ func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, c
 	return nil
 }
 
-func matchEventsWithSubscription(masterPublicKey, publicKey string, sub *model.Subscription, events ...*model.Event) []*model.Event {
-	filtered := make([]*model.Event, 0, len(events))
-	for _, event := range events {
-		if !sub.Filters.Match(&event.Event) {
-			continue
-		} else if !canForwardEvent(event, masterPublicKey, publicKey) {
-			continue
-		}
-		filtered = append(filtered, event)
-	}
-	return filtered
-}
-
 func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
 	var broadcast = map[Writer][]nostr.EventEnvelope{}
 
@@ -336,12 +402,15 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
 		authData, _ := h.connAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
-			envelope := nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
-			matchedEvents := matchEventsWithSubscription(authData.MasterPublicKey, authData.PublicKey, sub, events...)
-			for _, ev := range matchedEvents {
-				envelope.Events = append(envelope.Events, &ev.Event)
+			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
+			for _, event := range events {
+				if !sub.Filters.Match(&event.Event) {
+					continue
+				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) {
+					continue
+				}
+				envelope.Events = append(envelope.Events, &event.Event)
 			}
-
 			if len(envelope.Events) > 0 {
 				broadcast[writer] = append(broadcast[writer], envelope)
 			}

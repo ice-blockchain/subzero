@@ -134,7 +134,7 @@ func TestSubscriptionEventAuth(t *testing.T) {
 			t.Logf("received event: %v", event)
 			storedEvents = append(storedEvents, event)
 			if event.Kind == nostr.KindArticle {
-				master, pk, authenticated := model.GetUserDataFromContext(ctx)
+				master, pk, authenticated, _ := model.GetUserDataFromContext(ctx)
 				t.Logf("ctx data: user=%v/%v, auth=%v", master, pk, authenticated)
 				require.True(t, authenticated)
 				require.Equal(t, pubKey, pk)
