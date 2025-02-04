@@ -1104,6 +1104,9 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 		return errors.Wrap(ErrWrongEventParams, "wrong join event, authorization tag is not required for public open community")
 	}
 	if closedTag := communityDefinitionEvent.GetTag("closed"); closedTag != nil {
+		if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.RegularRole {
+			return nil
+		}
 		if authorizationTag == nil {
 			return errors.Wrap(ErrActionForbidden, "can't join closed community")
 		}
