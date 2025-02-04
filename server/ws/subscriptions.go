@@ -34,6 +34,15 @@ var (
 	protectedEventKinds = map[int]struct{}{
 		nostr.KindGiftWrap: {},
 	}
+
+	communityProtectedEventKinds = map[int]struct{}{
+		nostr.KindTextNote:                  {},
+		nostr.KindArticle:                   {},
+		nostr.KindDraftArticle:              {},
+		model.CustomIONKindEditableTextNote: {},
+		nostr.KindRepost:                    {},
+		nostr.KindGenericRepost:             {},
+	}
 )
 
 func generateChallenge(hints ...string) string {
@@ -52,7 +61,7 @@ func generateChallenge(hints ...string) string {
 func canForwardEventContext(ctx context.Context, in *model.Event) bool {
 	master, pk, _ := model.GetUserDataFromContext(ctx)
 
-	return canForwardEvent(in, master, pk)
+	return canForwardCommunityEvent(ctx, in, master) && canForwardEvent(in, master, pk)
 }
 
 func canForwardEvent(in *model.Event, currentKeys ...string) bool {
@@ -66,6 +75,32 @@ func canForwardEvent(in *model.Event, currentKeys ...string) bool {
 		}
 	}
 	return false
+}
+
+func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey string) bool {
+	hTag := in.GetTag(model.CustomIONTagCommunity).Value()
+	if hTag == "" {
+		return true
+	}
+	if _, ok := communityProtectedEventKinds[in.Kind]; !ok {
+		return true
+	}
+	communityDefinitionEvent, err := validation.GetCommunityDefinition(ctx, hTag)
+	if err != nil {
+		log.Printf("ERROR: failed to get community event: %v", err)
+
+		return false
+	}
+	if communityDefinitionEvent.GetTag("private") != nil {
+		if err := validation.IsUserPartOfCommunity(ctx, communityDefinitionEvent, masterPubkey); err != nil {
+			return false
+		}
+		if err := validation.IsUserBanned(ctx, masterPubkey, hTag); err != nil {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (h *handler) authRequiredReq(respWriter Writer, sub *model.Subscription, challenge string) error {

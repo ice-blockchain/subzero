@@ -486,7 +486,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 		if e.Content == "" {
 			return errors.Wrap(ErrWrongEventParams, "nip-23: this kind should have text markdown content")
 		}
-		if err := validatePostCommunityEvents(ctx, e); err != nil {
+		if err := validatePostCommunityEvent(ctx, e); err != nil {
 			return err
 		}
 		if err := validateWhoCanReplySettings(ctx, e); err != nil {
@@ -759,7 +759,7 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 			}
 		}
 	}
-	if err := validatePostCommunityEvents(ctx, e); err != nil {
+	if err := validatePostCommunityEvent(ctx, e); err != nil {
 		return err
 	}
 	if err := validateWhoCanReplySettings(ctx, e); err != nil {
@@ -912,10 +912,8 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 			"nip-18: repost must include p tag with pubkey of the event being reposted: found %q, expected %q",
 			pTag.Value(), repostedEvent.GetMasterPublicKey())
 	}
-	if e.GetTag(model.CustomIONTagCommunity) != nil {
-		if err := validatePostCommunityEvents(ctx, e); err != nil {
-			return err
-		}
+	if err := validatePostCommunityEvent(ctx, e); err != nil {
+		return err
 	}
 	if err := validateWhoCanReplySettings(ctx, e); err != nil {
 		return err
@@ -1089,6 +1087,11 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
 	if err != nil {
 		return err
+	}
+	openTag := communityDefinitionEvent.GetTag("open")
+	publicTag := communityDefinitionEvent.GetTag("public")
+	if openTag != nil && publicTag != nil && e.GetTag("authorization") != nil {
+		return errors.Wrap(ErrWrongEventParams, "wrong join event, authorization tag is not required for public open community")
 	}
 	if closedTag := communityDefinitionEvent.GetTag("closed"); closedTag != nil {
 		if authorRole := model.GetCommunityRoleByPubkey(e.GetMasterPublicKey(), communityDefinitionEvent); authorRole != model.RegularRole {

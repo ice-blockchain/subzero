@@ -16,7 +16,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event) error {
+func validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event) error {
 	hTag := incomingEvent.GetTag(model.CustomIONTagCommunity)
 	if hTag == nil {
 		return nil
@@ -26,7 +26,7 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 	if err != nil {
 		return err
 	}
-	if err := isUserBanned(ctx, incomingEvent); err != nil {
+	if err := IsUserBanned(ctx, incomingEvent.GetMasterPublicKey(), hTag.Value()); err != nil {
 		return errors.Wrapf(err, "user:%v banned", incomingEvent.GetMasterPublicKey())
 	}
 
@@ -36,6 +36,10 @@ func validatePostCommunityEvents(ctx context.Context, incomingEvent *model.Event
 		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "moderator, admin or owner"))
 	} else if requiredRole == model.AdminRole && replyRole != model.OwnerRole && replyRole != model.AdminRole {
 		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "admin or owner"))
+	} else if requiredRole == model.RegularRole && replyRole == model.RegularRole {
+		if err := IsUserPartOfCommunity(ctx, communityDefinitionEvent, incomingEvent.GetMasterPublicKey()); err != nil {
+			return errors.Wrapf(err, "user:%v not part of the community", incomingEvent.GetMasterPublicKey())
+		}
 	}
 	if incomingEvent.Kind == nostr.KindRepost || incomingEvent.Kind == nostr.KindGenericRepost {
 		if !isCommunityCommentsEnabled(communityDefinitionEvent) {
@@ -94,20 +98,48 @@ func ValidateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model
 	return nil
 }
 
-func isUserBanned(ctx context.Context, event *model.Event) error {
+func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityBanUser},
-				Tags:  model.TagMap{}.SetLiterals("p", event.GetMasterPublicKey()),
+				Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals(model.CustomIONTagCommunity, communityID),
 			},
 		},
 	})
-	for range eventIterator {
+	for _, err := range eventIterator {
+		if err != nil {
+			return errors.Wrap(err, "failed to get stored events")
+		}
+
 		return errors.Wrap(ErrActionForbidden, "user was banned")
 	}
 
 	return nil
+}
+
+func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.Event, masterPubkey string) error {
+	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
+		Filters: model.Filters{
+			model.Filter{
+				Kinds: []int{model.CustomIONKindCommunityJoin},
+				Tags:  model.TagMap{}.SetLiterals("p", masterPubkey).SetLiterals(model.CustomIONTagCommunity, communityDefinitionEvent.GetHTag()),
+			},
+		},
+	})
+	for ev, err := range eventIterator {
+		if err != nil {
+			return errors.Wrap(err, "failed to get stored events")
+		}
+		if communityDefinitionEvent.GetTag("open") != nil {
+			return nil
+		}
+		if communityDefinitionEvent.GetTag("closed") != nil && ev.GetTag("authorization") != nil {
+			return nil
+		}
+	}
+
+	return errors.Wrap(ErrActionForbidden, "user is not part of the community")
 }
 
 func getLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
