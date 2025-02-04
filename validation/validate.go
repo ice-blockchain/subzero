@@ -759,11 +759,6 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 			}
 		}
 	}
-	if hTag := e.GetTag(model.CustomIONTagCommunity); hTag != nil {
-		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v, expected uuid v7", err.Error())
-		}
-	}
 	if err := validatePostCommunityEvent(ctx, e); err != nil {
 		return err
 	}
@@ -917,13 +912,8 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
 			"nip-18: repost must include p tag with pubkey of the event being reposted: found %q, expected %q",
 			pTag.Value(), repostedEvent.GetMasterPublicKey())
 	}
-	if hTag := e.GetTag(model.CustomIONTagCommunity); hTag != nil {
-		if val, err := uuid.Parse(hTag.Value()); err != nil || val.Version() != 0x7 {
-			return errors.Wrapf(ErrWrongEventParams, "wrong h tag: %v", err.Error())
-		}
-		if err := validatePostCommunityEvent(ctx, e); err != nil {
-			return err
-		}
+	if err := validatePostCommunityEvent(ctx, e); err != nil {
+		return err
 	}
 	if err := validateWhoCanReplySettings(ctx, e); err != nil {
 		return err
