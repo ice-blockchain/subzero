@@ -406,7 +406,8 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 			for _, event := range events {
 				if !sub.Filters.Match(&event.Event) {
 					continue
-				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) {
+				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) ||
+					canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
 					continue
 				}
 				envelope.Events = append(envelope.Events, &event.Event)
