@@ -214,8 +214,8 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 		resp.Reason = "received unexpected auth message: no challenge was sent"
 
 		return &resp
-	} else if state.Authenticated {
-		resp.Reason = "received unexpected auth message: already authenticated"
+	} else if state.Authenticated && state.PublicKey != e.PubKey {
+		resp.Reason = "received unexpected auth message: already authenticated with a different public key"
 
 		return &resp
 	}
