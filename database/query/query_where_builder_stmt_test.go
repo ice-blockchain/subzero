@@ -347,6 +347,25 @@ func TestParseNostrFilter(t *testing.T) {
 		}, f.Dependencies[0])
 		require.Equal(t, "some content here2", f.Filter.Search)
 	})
+	t.Run("Image with dependencies in the beginning and search", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "\"some text\" include:dependencies:kind1>kind3 some content here2 images:false",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Images)
+		require.Equal(t, "some text", f.SearchText)
+		require.False(t, *f.Images)
+		require.Len(t, f.Dependencies, 1)
+		require.Equal(t, &filterDependencies{
+			Start: filterDependenciesStart{
+				Kind: 1,
+			},
+			Reduce: filterDependenciesReduce{
+				Kinds: []int{3},
+			},
+		}, f.Dependencies[0])
+		require.Equal(t, "some content here2", f.Filter.Search)
+	})
 	t.Run("E marker with reply and images", func(t *testing.T) {
 		f, err := parseNostrFilter(model.Filter{
 			Search: "images:false some content here emarker:reply",
@@ -433,5 +452,46 @@ func applyDeleteFilter(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		_, _, err := newWhereBuilder().BuildForDelete()
 		require.ErrorIs(t, err, ErrEmptyFilter)
+	})
+}
+
+func TestParseNostrFilterText(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Empty", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{})
+		require.NoError(t, err)
+		require.Empty(t, f.Filter)
+		require.Equal(t, "", f.SearchText)
+		require.Equal(t, "", f.Search)
+	})
+	t.Run("With search text", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: "\"some text\" include:dependencies:kind1>kind0"})
+		require.NoError(t, err)
+		require.Equal(t, "some text", f.SearchText)
+		require.Empty(t, f.Search)
+	})
+	t.Run("With search text, no ending quote", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `"some text include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "", f.SearchText)
+		require.Equal(t, `"some text`, f.Search)
+	})
+	t.Run("With search text, doubled quotes in the end", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `"some text "" include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "some text \"", f.SearchText)
+		require.Empty(t, f.Search)
+	})
+	t.Run("With search text, wrong quotes in the start and middle", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `""some "text "" include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "\"some \"text \"", f.SearchText)
+		require.Empty(t, f.Search)
+	})
+	t.Run("With search text, no start quote", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{Search: `some text " include:dependencies:kind1>kind0`})
+		require.NoError(t, err)
+		require.Equal(t, "some text \"", f.Search)
 	})
 }

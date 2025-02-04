@@ -36,8 +36,6 @@ func TestMain(m *testing.M) {
 func TestReplaceableEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
@@ -51,7 +49,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -60,7 +58,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 		})
@@ -72,7 +70,7 @@ func TestReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 1st event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
@@ -93,7 +91,7 @@ func TestReplaceableEvents(t *testing.T) {
 
 		expectedEvents := []*model.Event{}
 		expectedEvents = append(expectedEvents, &model.Event{Event: nostr.Event{Tags: model.Tags{}}})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -104,7 +102,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
@@ -126,7 +124,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      model.Tags{{"p", "event1", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(ctx, ev1))
+		require.NoError(t, db.AcceptEvents(context.TODO(), ev1))
 
 		// Overwrite.
 		ev2 := &model.Event{
@@ -138,7 +136,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{{"p", "event2", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(ctx, ev2))
+		require.NoError(t, db.AcceptEvents(context.TODO(), ev2))
 
 		// Add another event.
 		ev3 := &model.Event{
@@ -150,7 +148,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{{"p", "event3", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(ctx, ev3))
+		require.NoError(t, db.AcceptEvents(context.TODO(), ev3))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindFollowList},
@@ -164,13 +162,11 @@ func TestReplaceableEvents(t *testing.T) {
 func TestParametrizedReplaceableEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
 	t.Run("param replaceable event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 		expectedEvents := []*model.Event{}
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
 			Event: nostr.Event{
 				ID:        "item to be replaced" + uuid.NewString(),
 				PubKey:    "bogus",
@@ -197,7 +193,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
 		// Another D value
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -212,7 +208,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
 		// Another pubkey
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -227,7 +223,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(ctx, expectedEvents[2]))
+		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[2]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindRepositoryAnnouncement},
 		})
@@ -242,12 +238,10 @@ func TestEphemeralEvents(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ephemeral event", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-		defer cancel()
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		require.NoError(t, db.AcceptEvents(ctx, &model.Event{
+		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
 			Event: nostr.Event{
 				ID:        "ephemeral" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
@@ -981,6 +975,7 @@ func TestSelectFilterATagWithAttestation(t *testing.T) {
 		require.Equal(t, eventsByMaster, eventsByDelegated)
 	})
 }
+
 func TestDeleteNestedEvents(t *testing.T) {
 	t.Parallel()
 

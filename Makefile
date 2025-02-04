@@ -60,7 +60,7 @@ checkGenerated: generate
 	true;
 
 build-all@ci/cd:
-	go build -tags "go_json linux sqlite_stat4 sqlite_icu" -a -v -race ./...
+	go build -tags "go_json linux sqlite_stat4 sqlite_icu sqlite_fts5" -a -v -race ./...
 
 build: build-all@ci/cd
 
@@ -90,11 +90,11 @@ coverage: $(COVERAGE_FILE)
 
 test@ci/cd:
 	# TODO make -race work
-	go test -timeout 20m -tags "go_json test linux sqlite_stat4 sqlite_icu" -v -cover -coverprofile=$(COVERAGE_FILE) -covermode atomic
+	go test -timeout 20m -tags "go_json test linux sqlite_stat4 sqlite_icu sqlite_fts5" -v -cover -coverprofile=$(COVERAGE_FILE) -covermode atomic
 
 benchmark@ci/cd:
 	# TODO make -race work
-	go test -timeout 20m -tags "go_json test linux sqlite_stat4 sqlite_icu" -run=^$ -v -bench=. -benchmem -benchtime 10s
+	go test -timeout 20m -tags "go_json test linux sqlite_stat4 sqlite_icu sqlite_fts5" -run=^$ -v -bench=. -benchmem -benchtime 10s
 
 benchmark:
 	set -xe; \
@@ -164,7 +164,7 @@ buildAllBinaries:
 binary-specific-service:
 	set -xe; \
 	echo "$@: $(SERVICE_NAME) / $(GOOS) / $(GOARCH)" ; \
-	go build -tags "go_json linux sqlite_stat4 sqlite_icu" -a -v -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
+	go build -tags "go_json linux sqlite_stat4 sqlite_icu sqlite_fts5" -a -v -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
 	cp ./cmd/$${SERVICE_NAME}/bin ./$${SERVICE_NAME}.$${GOOS}.$${GOARCH}.bin; \
 
 all: checkLicense checkModVersion checkIfAllDependenciesAreUpToDate checkGenerated build test coverage benchmark clean

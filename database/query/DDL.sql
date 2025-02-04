@@ -2,22 +2,24 @@
 
 CREATE TABLE IF NOT EXISTS events
 (
+    rid               integer primary key,
     kind              integer not null,
     created_at        integer not null,
     system_created_at integer not null,
-    id                text    not null primary key,
+    id                text    not null UNIQUE,
     pubkey            text    not null,
     master_pubkey     text    not null,
     sig               text    not null,
     sig_alg           text    not null DEFAULT '',
     key_alg           text    not null DEFAULT '',
     content           text    not null,
+    content_metadata  text    not null DEFAULT '',
     d_tag             text    not null DEFAULT '',
     h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
     hidden            integer not null default 0
-) strict, WITHOUT ROWID;
+) strict;
 --------
 create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
 where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
@@ -232,8 +234,8 @@ begin
     on conflict do nothing;
 end
 ;
-drop   trigger if     exists trigger_events_before_insert_unwind_repost;
 --------
+drop   trigger if     exists trigger_events_before_insert_unwind_repost;
 create trigger if not exists trigger_events_before_insert_unwind_repost
     before insert
     on events
@@ -241,7 +243,7 @@ create trigger if not exists trigger_events_before_insert_unwind_repost
     when new.kind in (6, 16)
 begin
 insert into events
-    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, tags, d_tag, h_tag, hidden)
+    (kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, content, content_metadata, tags, d_tag, h_tag, hidden)
 select
     json_extract(b, '$.kind'),
     0,
@@ -250,7 +252,8 @@ select
     '',
     '',
     '',
-    '',
+    json_extract(b, '$.content'),
+    coalesce(json_extract(b, '$.content_metadata'), ''),
     json_extract(b, '$.tags'),
     '',
     json_extract(b, '$.id'),

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	whereBuilderDefaultWhere = "hidden=0"
+	whereBuilderDefaultWhere = "e.hidden=0"
 )
 
 const (
@@ -35,10 +35,12 @@ type (
 	whereBuilder struct {
 		Params       map[string]any
 		Dependencies []*filterDependencies
+		Prefix       string
 		strings.Builder
 	}
 	databaseFilterSearch struct {
 		model.Filter
+		SearchText   string
 		Expiration   *bool
 		Videos       *bool
 		Images       *bool
@@ -280,7 +282,7 @@ func (w *whereBuilder) applyTimeRange(name string, since, until *model.Timestamp
 	if since != nil && until != nil {
 		if *since == *until {
 			w.maybeAND()
-			w.WriteString("created_at = :")
+			w.WriteString("e.created_at = :")
 			w.WriteString(w.addParam(name, "timestamp", *since))
 
 			return nil
@@ -292,14 +294,14 @@ func (w *whereBuilder) applyTimeRange(name string, since, until *model.Timestamp
 	// If a filter includes the `since` property, events with `created_at` greater than or equal to since are considered to match the filter.
 	if since != nil && *since > 0 {
 		w.maybeAND()
-		w.WriteString("created_at >= :")
+		w.WriteString("e.created_at >= :")
 		w.WriteString(w.addParam(name, "since", *since))
 	}
 
 	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
 	if until != nil && *until > 0 {
 		w.maybeAND()
-		w.WriteString("created_at <= :")
+		w.WriteString("e.created_at <= :")
 		w.WriteString(w.addParam(name, "until", *until))
 	}
 
@@ -377,18 +379,27 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		return nil
 	}
 
-	name := "filter" + strconv.Itoa(idx) + "_"
+	name := w.Prefix + "filter" + strconv.Itoa(idx) + "_"
+
 	w.WriteRune('(') // Begin the filter section.
-	buildFromSlice(w, sqlOpCodeNONE, name, filter.IDs, "id", "")
-	buildFromSlice(w, sqlOpCodeAND, name, filter.Kinds, filterMaybeForceIndex(filter, "kind"), "kind")
+	buildFromSlice(w, sqlOpCodeNONE, name, filter.IDs, "e.id", "")
+	buildFromSlice(w, sqlOpCodeAND, name, filter.Kinds, filterMaybeForceIndex(filter, "e.kind"), "e.kind")
 	w.applyFilterForExtensions(filter)
 	if len(filter.Authors) > 0 {
 		w.maybeAND()
 		w.WriteRune('(')
-		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "pubkey", "")
-		w.WriteString(" and hidden=0 OR ")
-		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "master_pubkey", "pubkey")
-		w.WriteString(" and hidden=0)")
+		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "e.pubkey", "")
+		if w.Prefix == "" {
+			w.WriteString(" and e.hidden=0 OR ")
+		} else {
+			w.WriteString(" OR ")
+		}
+
+		buildFromSlice(w, sqlOpCodeNONE, name, filter.Authors, "e.master_pubkey", "e.pubkey")
+		if w.Prefix == "" {
+			w.WriteString(" and e.hidden=0")
+		}
+		w.WriteString(")")
 	}
 	if err := w.applyTimeRange(name, filter.Since, filter.Until); err != nil {
 		return err
@@ -738,7 +749,14 @@ func (w *whereBuilder) BuildDependencies(cteName string) (sql string, params map
 	return w.String(), w.Params, nil
 }
 
+func (w *whereBuilder) WithPrefix(prefix string) *whereBuilder {
+	w.Prefix = prefix
+
+	return w
+}
+
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
+	var searchKeywords []string
 	for idx := range filters {
 		w.maybeOR()
 		dbFilter, err := parseNostrFilter(filters[idx])
@@ -751,12 +769,23 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		if dbFilter.Dependencies != nil {
 			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
+		if w.Prefix != "" && dbFilter.SearchText != "" {
+			searchKeywords = append(searchKeywords, dbFilter.SearchText+"*")
+		}
 	}
-
-	if w.Len() > 0 {
-		w.WriteString(" AND ")
+	if w.Prefix != "" && len(searchKeywords) > 0 {
+		if w.Len() > 0 {
+			w.WriteString(" AND ")
+		}
+		w.WriteString(" events_search MATCH :search")
+		w.Params["search"] = strings.Join(searchKeywords, " OR ")
 	}
-	w.WriteString(whereBuilderDefaultWhere)
+	if w.Prefix == "" {
+		if w.Len() > 0 {
+			w.WriteString(" AND ")
+		}
+		w.WriteString(whereBuilderDefaultWhere)
+	}
 
 	return w.String(), w.Params, nil
 }

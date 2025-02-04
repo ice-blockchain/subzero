@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,7 @@ type (
 		MasterPubKey    string
 		Dtag            string
 		Htag            string
+		ContentMetadata string
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -79,6 +81,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		KeyAlg:          keyAlg,
 		Dtag:            e.Tags.GetD(),
 		Htag:            e.GetHTag(),
+		ContentMetadata: parseContentMetadata(e),
 	}, nil
 }
 
@@ -307,9 +310,9 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
 	const stmt = `insert into events
-	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id)
+	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id)
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata)
 on conflict do update set
 	id                = excluded.id,
 	kind              = excluded.kind,
@@ -321,6 +324,7 @@ on conflict do update set
 	sig_alg           = excluded.sig_alg,
 	key_alg           = excluded.key_alg,
 	content           = excluded.content,
+	content_metadata  = excluded.content_metadata,
 	tags              = excluded.tags,
 	d_tag             = excluded.d_tag,
 	h_tag             = excluded.h_tag,
@@ -490,7 +494,7 @@ func (db *dbClient) generateEventsCountClause(ctx context.Context, filters ...mo
 		}
 	}
 
-	where, _, params, err := db.generateEventsWhereClause(ctx, filters...)
+	where, _, _, params, err := db.generateEventsWhereClause(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -546,14 +550,14 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 }
 
 func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.Filters, systemCreatedAtPivot, limit int64) (sql string, params map[string]any, err error) {
-	whereMain, depClause, params, err := db.generateEventsWhereClause(ctx, filters...)
+	whereMain, depClause, whereSearch, params, err := db.generateEventsWhereClause(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
 
 	var systemCreatedAtFilter string
 	if systemCreatedAtPivot != 0 {
-		systemCreatedAtFilter = " (system_created_at < :system_created_at_pivot) AND "
+		systemCreatedAtFilter = " (e.system_created_at < :system_created_at_pivot) AND "
 		params["system_created_at_pivot"] = systemCreatedAtPivot
 	}
 
@@ -563,26 +567,43 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 		limitQuery = " limit :mainlimit"
 	}
 
-	orderBy := " order by system_created_at desc"
-	if strings.Contains(filters.String(), "discover content creators to follow") {
+	const discoverContentCreatorsToFollow = "discover content creators to follow"
+	orderBy := " order by e.system_created_at desc"
+	if strings.Contains(filters.String(), discoverContentCreatorsToFollow) {
 		orderBy = " order by random()"
 	}
-
 	if depClause == "" {
+		if whereSearch != "" {
+			sql, err := db.searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery)
+			if err != nil {
+				return "", nil, err
+			}
+
+			return sql, params, nil
+		}
+
 		return `
-select
-	e.kind,
-	e.created_at,
-	e.system_created_at,
-	e.id,
-	e.pubkey,
-	e.master_pubkey,
-	e.sig,
-	e.content,
-	tags as jtags
-from
-	events e
-where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
+			select
+				e.kind,
+				e.created_at,
+				e.system_created_at,
+				e.id,
+				e.pubkey,
+				e.master_pubkey,
+				e.sig,
+				e.content,
+				tags as jtags
+			from
+				events e
+			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
+	}
+	if whereSearch != "" {
+		sql, err := db.searchWithDepsSQL(whereMain, depClause, whereSearch, systemCreatedAtFilter, limitQuery)
+		if err != nil {
+			return "", nil, err
+		}
+
+		return sql, params, nil
 	}
 
 	return `
@@ -689,19 +710,50 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 	return filters
 }
 
-func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...model.Filter) (clauseMain, clauseDeps string, params map[string]any, err error) {
+func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...model.Filter) (clauseMain, clauseDeps, clauseSearch string, params map[string]any, err error) {
 	builder := newWhereBuilder()
 	clauseMain, params, err = builder.Build(db.extendWhereFilters(ctx, filters...)...)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 
 	clauseDeps, params, err = builder.BuildDependencies("eventsmain")
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
+	}
+	handleSearch := false
+	for ix := range filters {
+		f := parseNostrFilterText(&databaseFilterSearch{Filter: filters[ix]})
+		if f.SearchText != "" {
+			handleSearch = true
+
+			break
+		}
+	}
+	if handleSearch {
+		builderSearch := newWhereBuilder()
+		var paramsSearch map[string]any
+		cpy := model.Filters{}
+		cpy = append(cpy, filters...)
+		for ix, filter := range cpy {
+			var toAdd []int
+			for _, kind := range filter.Kinds {
+				if kind == nostr.KindRepost {
+					toAdd = append(toAdd, nostr.KindTextNote)
+				} else if kind == nostr.KindGenericRepost {
+					toAdd = append(toAdd, nostr.KindArticle, model.CustomIONKindEditableTextNote)
+				}
+			}
+			cpy[ix].Kinds = append(filter.Kinds, toAdd...)
+		}
+		clauseSearch, paramsSearch, err = builderSearch.WithPrefix("search").Build(db.extendWhereFilters(ctx, cpy...)...)
+		if err != nil {
+			return "", "", "", nil, err
+		}
+		maps.Copy(params, paramsSearch)
 	}
 
-	return clauseMain, clauseDeps, params, nil
+	return clauseMain, clauseDeps, clauseSearch, params, nil
 }
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
