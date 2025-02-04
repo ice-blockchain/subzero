@@ -34,6 +34,15 @@ var (
 	protectedEventKinds = map[int]struct{}{
 		nostr.KindGiftWrap: {},
 	}
+
+	communityProtectedEventKinds = map[int]struct{}{
+		nostr.KindTextNote:                  {},
+		nostr.KindArticle:                   {},
+		nostr.KindDraftArticle:              {},
+		model.CustomIONKindEditableTextNote: {},
+		nostr.KindRepost:                    {},
+		nostr.KindGenericRepost:             {},
+	}
 )
 
 func generateChallenge(hints ...string) string {
@@ -51,11 +60,8 @@ func generateChallenge(hints ...string) string {
 
 func canForwardEventContext(ctx context.Context, in *model.Event) bool {
 	master, pk, _ := model.GetUserDataFromContext(ctx)
-	if canForward := canForwardCommunityEvent(ctx, in, master); !canForward {
-		return false
-	}
 
-	return canForwardEvent(in, master, pk)
+	return canForwardCommunityEvent(ctx, in, master) && canForwardEvent(in, master, pk)
 }
 
 func canForwardEvent(in *model.Event, currentKeys ...string) bool {
@@ -72,12 +78,11 @@ func canForwardEvent(in *model.Event, currentKeys ...string) bool {
 }
 
 func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey string) bool {
-	hTag := in.GetHTag()
-	if hTag == in.GetID() || hTag == "" {
+	hTag := in.GetTag(model.CustomIONTagCommunity).Value()
+	if hTag == "" {
 		return true
 	}
-	if in.Kind != nostr.KindTextNote && in.Kind != nostr.KindArticle && in.Kind != nostr.KindDraftArticle &&
-		in.Kind == model.CustomIONKindEditableTextNote && in.Kind != nostr.KindRepost && in.Kind != nostr.KindGenericRepost {
+	if _, ok := communityProtectedEventKinds[in.Kind]; !ok {
 		return true
 	}
 	communityDefinitionEvent, err := validation.GetCommunityDefinition(ctx, hTag)

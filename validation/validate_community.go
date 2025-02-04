@@ -123,7 +123,7 @@ func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityJoin},
-				Tags:  model.TagMap{}.SetLiterals("p", masterPubkey),
+				Tags:  model.TagMap{}.SetLiterals("p", masterPubkey).SetLiterals(model.CustomIONTagCommunity, communityDefinitionEvent.GetHTag()),
 			},
 		},
 	})

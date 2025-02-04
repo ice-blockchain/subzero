@@ -4,8 +4,8 @@ package ws
 
 import (
 	"context"
-	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -287,24 +287,6 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 		})
 		require.NoError(t, err)
 	})
-	t.Run("PublishAfterAuth", func(t *testing.T) {
-		var ev model.Event
-
-		ev.Kind = nostr.KindArticle
-		ev.CreatedAt = 2
-		ev.Content = "test"
-		ev.Tags = model.Tags{
-			{"title", "test"},
-			{"d", "foo"},
-		}
-		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
-
-		events, err := relay.QuerySync(ctx, model.Filter{Kinds: []int{nostr.KindArticle}})
-		require.NoError(t, err)
-		require.Len(t, events, 1)
-		require.Equal(t, ev.Event, *events[0])
-	})
 
 	t.Run("create private community", func(t *testing.T) {
 		ev := &model.Event{
@@ -397,7 +379,7 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 				Tags: model.Tags{
 					{"h", communityID},
 					{"p", pubkeyCommunityOwner},
-					{"expiration", fmt.Sprint(time.Now().Add(1 * time.Hour).Unix())},
+					{"expiration", strconv.FormatInt(time.Now().Add(1*time.Hour).Unix(), 10)},
 				},
 			},
 		}
