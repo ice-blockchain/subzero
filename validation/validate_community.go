@@ -26,7 +26,7 @@ func validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event)
 	if err != nil {
 		return err
 	}
-	if err := isUserBanned(ctx, incomingEvent); err != nil {
+	if err := IsUserBanned(ctx, incomingEvent.GetMasterPublicKey(), hTag.Value()); err != nil {
 		return errors.Wrapf(err, "user:%v banned", incomingEvent.GetMasterPublicKey())
 	}
 
@@ -98,12 +98,12 @@ func ValidateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model
 	return nil
 }
 
-func isUserBanned(ctx context.Context, event *model.Event) error {
+func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: model.Filters{
 			model.Filter{
 				Kinds: []int{model.CustomIONKindCommunityBanUser},
-				Tags:  model.TagMap{}.SetLiterals("p", event.GetMasterPublicKey()),
+				Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals("h", communityID),
 			},
 		},
 	})

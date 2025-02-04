@@ -90,6 +90,9 @@ func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey
 		if err := validation.IsUserPartOfCommunity(ctx, communityDefinitionEvent, masterPubkey); err != nil {
 			return false
 		}
+		if err := validation.IsUserBanned(ctx, masterPubkey, hTag); err != nil {
+			return false
+		}
 	}
 
 	return true
