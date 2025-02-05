@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.23.5
+go 1.23.6
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
@@ -26,7 +26,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.49.3
+	github.com/nbd-wtf/go-nostr v0.49.4
 	github.com/puzpuzpuz/xsync/v3 v3.5.0
 	github.com/quic-go/quic-go v0.49.0
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66

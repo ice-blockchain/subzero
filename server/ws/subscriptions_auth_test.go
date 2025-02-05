@@ -400,11 +400,12 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 	})
 
 	t.Run("select data by authorized user that is in the community now", func(t *testing.T) {
-		events, err := relay.QuerySync(ctx, model.Filter{Kinds: []int{nostr.KindTextNote}})
+		events, err := relay.QuerySync(ctx, model.Filter{
+			Kinds: []int{communityPostEvent.Kind},
+			Tags:  model.TagMap{}.SetLiterals(model.CustomIONTagCommunity, communityPostEvent.GetHTag()),
+		})
 		require.NoError(t, err)
-		require.Len(t, events, 2)
-
-		require.Contains(t, events, &nonCommunityEvent.Event)
+		require.Len(t, events, 1)
 		require.Contains(t, events, &communityPostEvent.Event)
 	})
 
