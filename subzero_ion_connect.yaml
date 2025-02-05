@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: ice License 1.0
 
+validation:
+  max-wrapped-event-expiration: 720h
+
 server:
   relay-url: &self "wss://example.com"
   port: 4443

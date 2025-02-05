@@ -373,6 +373,18 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
+func validateKindGiftWrapEvent(e *model.Event) error {
+	val := e.GetTag("expiration").Value()
+	ts, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid expiration value: %q: %v", val, err)
+	}
+	if globalConfig != nil && globalConfig.MaxWrappedEventExpiration > 0 && time.Unix(ts, 0).After(time.Now().Add(globalConfig.MaxWrappedEventExpiration)) {
+		return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is too far in the future, max is %s", globalConfig.MaxWrappedEventExpiration)
+	}
+	return nil
+}
+
 func validateFollowListEvent(e *model.Event) error {
 	keys := make(map[string]struct{})
 	for _, tag := range e.GetTags("p") {
@@ -417,6 +429,8 @@ func Validate(ctx context.Context, e *model.Event) error {
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
+	case nostr.KindGiftWrap:
+		return validateKindGiftWrapEvent(e)
 	case model.CustomIONKindPollVote:
 		return validatePollVote(ctx, e)
 	case nostr.KindCommunityList:
