@@ -1148,3 +1148,25 @@ func TestValidateKindRepostEvent(t *testing.T) {
 		})
 	}
 }
+func TestValidateKindGiftWrapEvent(t *testing.T) {
+	t.Parallel()
+
+	require.Error(t, validateKindGiftWrapEvent(&model.Event{
+		Event: nostr.Event{
+			Tags: model.Tags{
+				{"expiration", "foo"}},
+		},
+	}))
+	require.NoError(t, validateKindGiftWrapEvent(&model.Event{
+		Event: nostr.Event{
+			Tags: model.Tags{
+				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)}},
+		},
+	}))
+	require.Error(t, validateKindGiftWrapEvent(&model.Event{
+		Event: nostr.Event{
+			Tags: model.Tags{
+				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour<<20).Unix(), 10)}},
+		},
+	}))
+}
