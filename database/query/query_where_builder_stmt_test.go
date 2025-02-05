@@ -24,16 +24,6 @@ func TestIsFilterEmpty(t *testing.T) {
 	require.False(t, isFilterEmpty(dbFilter))
 }
 
-func TestWhereBuilderEmpty(t *testing.T) {
-	t.Parallel()
-
-	builder := newWhereBuilder()
-	q, params, err := builder.Build()
-	require.NoError(t, err)
-	require.Equal(t, whereBuilderDefaultWhere, q)
-	require.Empty(t, params)
-}
-
 func helperEnsureParams(t *testing.T, stmt string, params map[string]any) {
 	t.Helper()
 
@@ -49,7 +39,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 		q, params, err := newWhereBuilder().Build()
 		require.NoError(t, err)
 		require.Empty(t, params)
-		require.Equal(t, whereBuilderDefaultWhere, q)
+		require.Contains(t, q, whereBuilderDefaultWhere)
 	})
 	t.Run("WithID", func(t *testing.T) {
 		q, params, err := newWhereBuilder().Build(model.Filter{

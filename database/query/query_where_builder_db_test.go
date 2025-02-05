@@ -1000,3 +1000,32 @@ func TestGetReplyTypeFromValues(t *testing.T) {
 	require.Equal(t, "root", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("root")}}))
 	require.Equal(t, "reply", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("reply")}}))
 }
+
+func TestCommunityEventsLookup(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var event, event2 model.Event
+	event.Kind = nostr.KindTextNote
+	event.ID = "1"
+	event.PubKey = "1"
+
+	event2.Kind = nostr.KindTextNote
+	event2.ID = "2"
+	event2.PubKey = "2"
+	event2.Tags = model.Tags{{model.CustomIONTagCommunity, "foo"}}
+
+	require.NoError(t, db.AcceptEvents(context.TODO(), &event, &event2))
+	eventsNoFilter := helperSelectEvents(t, db)
+	require.Len(t, eventsNoFilter, 1)
+
+	events := helperSelectEvents(t, db, model.Filter{IDs: []string{"1", "2"}, Limit: 3})
+	require.Equal(t, 1, len(events)) // Only one event with ID 1.
+	require.Equal(t, "1", events[0].ID)
+
+	eventsWithCommunity := helperSelectEvents(t, db, model.Filter{Tags: model.TagMap{}.Set(model.CustomIONTagCommunity), Limit: 3})
+	require.Equal(t, 1, len(eventsWithCommunity)) // Only one event with tag "h".
+	require.Equal(t, "2", eventsWithCommunity[0].ID)
+}

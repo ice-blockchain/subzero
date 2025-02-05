@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	whereBuilderDefaultWhere = "e.hidden=0"
+	whereBuilderDefaultWhere    = "e.hidden=0"
+	whereBuilderCommunityFilter = "iif(e.kind in (1, 30023, 30175), NOT EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = 'h'), true)"
 )
 
 const (
@@ -407,6 +408,11 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	w.applyFilterTags(name, filter.Tags)
 	w.applyFilterTagMarkers(name, filter.TagMarkers)
 
+	if _, ok := filter.Tags[model.CustomIONTagCommunity]; !ok {
+		w.maybeAND()
+		w.WriteString(whereBuilderCommunityFilter)
+	}
+
 	w.WriteRune(')') // End the filter section.
 
 	return nil
@@ -779,6 +785,12 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		}
 		w.WriteString(" events_search MATCH :search")
 		w.Params["search"] = strings.Join(searchKeywords, " OR ")
+	}
+	if len(filters) == 0 {
+		if w.Len() > 0 {
+			w.WriteString(" AND ")
+		}
+		w.WriteString(whereBuilderCommunityFilter)
 	}
 	if w.Prefix == "" {
 		if w.Len() > 0 {
