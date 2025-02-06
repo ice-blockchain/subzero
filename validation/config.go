@@ -11,6 +11,7 @@ import (
 type (
 	config struct {
 		MaxWrappedEventExpiration time.Duration `yaml:"max-wrapped-event-expiration"`
+		MaxPostSize               int           `yaml:"max-post-size"`
 	}
 )
 

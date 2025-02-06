@@ -2,6 +2,7 @@
 
 validation:
   max-wrapped-event-expiration: 720h
+  max-post-size: 65535
 
 server:
   relay-url: &self "wss://example.com"
