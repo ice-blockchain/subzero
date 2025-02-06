@@ -124,7 +124,7 @@ var (
 		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
 		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
 		nostr.KindRelaySets:             tagsTable("relay", "d", "title", "image", "description"),
-		nostr.KindBookmarkSets:          tagsTable("e", "a", "t", "r", "d", "title", "image", "description"),
+		nostr.KindBookmarkSets:          tagsTable("e", "a", "t", "r", "d", "title", "image", "description", model.CustomIONTagCommunity),
 		nostr.KindCuratedSets:           tagsTable("a", "e", "d", "title", "image", "description"),
 		nostr.KindCuratedVideoSets:      tagsTable("a", "d", "title", "image", "description"),
 		nostr.KindMuteSets:              tagsTable("p", "d", "title", "image", "description"),
