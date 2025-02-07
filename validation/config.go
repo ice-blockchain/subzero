@@ -11,7 +11,7 @@ import (
 type (
 	config struct {
 		MaxWrappedEventExpiration time.Duration `yaml:"max-wrapped-event-expiration"`
-		MaxPostSize               int           `yaml:"max-post-size"`
+		MaxPostSizes              map[int]int   `yaml:"max-post-sizes"` // Kind -> size (bytes).
 	}
 )
 
@@ -21,4 +21,13 @@ var (
 
 func init() {
 	globalConfig = cfg.MustGet[config]()
+}
+
+func (c *config) MaxPostSizeOf(kind int) int {
+	if c != nil {
+		if size, ok := c.MaxPostSizes[kind]; ok {
+			return size
+		}
+	}
+	return 0
 }

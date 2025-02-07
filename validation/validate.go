@@ -407,6 +407,9 @@ func Validate(ctx context.Context, e *model.Event) error {
 	if err := validateEventTags(e); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
 	}
+	if actualSize, maxSize := len(e.Content), globalConfig.MaxPostSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
+		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", actualSize, maxSize)
+	}
 	switch e.Kind {
 	case nostr.KindProfileMetadata:
 		return validateKindProfileMetadataEvent(e)
@@ -497,9 +500,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	case nostr.KindBadgeDefinition:
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-		if globalConfig != nil && globalConfig.MaxPostSize > 0 && len(e.Content) > globalConfig.MaxPostSize {
-			return errors.Wrapf(ErrWrongEventParams, "content is too long, max is %d", globalConfig.MaxPostSize)
-		} else if len(e.Content) < 1 {
+		if len(e.Content) < 1 {
 			return errors.Wrap(ErrWrongEventParams, "content is empty or too short")
 		}
 		if err := validatePostCommunityEvent(ctx, e); err != nil {
