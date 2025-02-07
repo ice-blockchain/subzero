@@ -407,7 +407,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	if err := validateEventTags(e); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
 	}
-	if actualSize, maxSize := len(e.Content), globalConfig.MaxPostSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
+	if actualSize, maxSize := len(e.Content), globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
 		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", actualSize, maxSize)
 	}
 	switch e.Kind {
