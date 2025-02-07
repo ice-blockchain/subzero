@@ -407,6 +407,9 @@ func Validate(ctx context.Context, e *model.Event) error {
 	if err := validateEventTags(e); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
 	}
+	if actualSize, maxSize := len(e.Content), globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
+		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", actualSize, maxSize)
+	}
 	switch e.Kind {
 	case nostr.KindProfileMetadata:
 		return validateKindProfileMetadataEvent(e)
@@ -496,9 +499,9 @@ func Validate(ctx context.Context, e *model.Event) error {
 		return validateKindProfileBadgesEvent(e)
 	case nostr.KindBadgeDefinition:
 		return validateKindBadgeDefinitionEvent(e)
-	case nostr.KindArticle, nostr.KindDraftArticle:
-		if e.Content == "" {
-			return errors.Wrap(ErrWrongEventParams, "nip-23: this kind should have text markdown content")
+	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+		if len(e.Content) < 1 {
+			return errors.Wrap(ErrWrongEventParams, "content is empty or too short")
 		}
 		if err := validatePostCommunityEvent(ctx, e); err != nil {
 			return err
@@ -515,7 +518,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	case model.CustomIONKindCommunityBanUser:
 		return validateCustomIONKindCommunityBanUserEvent(ctx, e)
 	default:
-		if e.Kind >= 6000 && e.Kind <= 6999 {
+		if e.IsJobResponse() {
 			return validateKindJobResult(e)
 		}
 	}
