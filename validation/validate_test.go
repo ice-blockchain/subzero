@@ -1170,3 +1170,76 @@ func TestValidateKindGiftWrapEvent(t *testing.T) {
 		},
 	}))
 }
+
+func TestValidateArticleSoftDelete(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	nowUnix := time.Now().Unix()
+
+	tests := []struct {
+		name    string
+		event   *model.Event
+		wantErr bool
+	}{
+		{
+			name: "valid article soft delete",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind:      nostr.KindArticle,
+					CreatedAt: nostr.Timestamp(nowUnix),
+					Content:   "",
+					Tags: model.Tags{
+						{"d", "test"},
+						{"published_at", strconv.FormatInt(nowUnix+1, 10)},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid editable text note soft delete",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind:      model.CustomIONKindEditableTextNote,
+					CreatedAt: nostr.Timestamp(nowUnix),
+					Content:   "",
+					Tags: model.Tags{
+						{"d", "test"},
+						{"published_at", strconv.FormatInt(nowUnix+2, 10)},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid editable text note",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind:      model.CustomIONKindEditableTextNote,
+					CreatedAt: nostr.Timestamp(nowUnix),
+					Content:   "",
+					Tags: model.Tags{
+						{"d", "test"},
+						{"published_at", strconv.FormatInt(nowUnix, 10)},
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			err := Validate(ctx, tt.event)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
