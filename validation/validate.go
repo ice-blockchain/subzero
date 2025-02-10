@@ -799,12 +799,6 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 }
 
 func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
-	eTag := e.GetTag("e")
-	aTag := e.GetTag("a")
-	if (eTag == nil || len(eTag) < 4 || (eTag[3] != model.TagMarkerReply && eTag[3] != model.TagMarkerMention)) &&
-		(aTag == nil || len(aTag) < 4 || (aTag[3] != model.TagMarkerReply && aTag[3] != model.TagMarkerMention)) {
-		return nil
-	}
 	rootPost, err := findRootPost(ctx, e)
 	if err != nil {
 		return err
@@ -812,102 +806,118 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
 	if rootPost == nil {
 		return nil
 	}
+
 	settingsTag := getLatestSettingsTag(rootPost, model.WhoCanReplySettings)
 	if settingsTag == nil || (*settingsTag)[1] != model.WhoCanReplySettings {
 		return nil
 	}
-	var (
-		values = strings.Split((*settingsTag)[2], ",")
-		passed = false
-	)
+
+	values := strings.Split((*settingsTag)[2], ",")
+	passed := false
+
 	for _, value := range values {
-		if value == model.FollowingWhoCanReplySettings {
-			events := query.GetStoredEvents(ctx, &model.Subscription{
-				Filters: []nostr.Filter{
-					{
-						Authors: []string{rootPost.GetMasterPublicKey()},
-						Kinds:   []int{nostr.KindFollowList},
-						Tags:    model.TagMap{}.SetLiterals("p", e.GetMasterPublicKey()),
-					},
-				},
-			})
-			for _, err := range events {
-				if err != nil {
-					return err
-				}
-				passed = true
-
-				break
-			}
-		} else if value == model.MentionWhoCanReplySettings {
-			words := strings.Split(rootPost.Content, " ")
-			for _, word := range words {
-				if !strings.HasPrefix(word, "npub") {
-					continue
-				}
-				prefix, pubkey, err := nip19.Decode(word)
-				if err != nil {
-					return errors.Wrapf(ErrWrongEventParams, "can't decode the content: %v", e.Content)
-				}
-				if prefix == "npub" && pubkey.(string) == e.GetMasterPublicKey() {
-					passed = true
-
-					break
-				}
-			}
-		} else if strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix) {
-			splitted := strings.Split(value, "|")
-			if len(splitted) != 2 {
-				return errors.Wrapf(ErrWrongEventParams, "wrong badge who can reply settings: %v", value)
-			}
-			events := query.GetStoredEvents(ctx, &model.Subscription{
-				Filters: []nostr.Filter{
-					{
-						Authors: []string{e.GetMasterPublicKey()},
-						Kinds:   []int{nostr.KindProfileBadges},
-						Tags:    model.TagMap{}.SetLiterals("a", splitted[1]),
-					},
-				},
-			})
-			for _, err := range events {
-				if err != nil {
-					return err
-				}
-				passed = true
-
-				break
-			}
+		if passed, err = checkWhoCanReplySettings(ctx, value, rootPost, e); err != nil {
+			return err
+		}
+		if passed {
+			break
 		}
 	}
-	if !passed {
-		return errors.Wrapf(ErrActionForbidden, "reply can be added only by users with settings %+v badge for event: %v", settingsTag, e.ID)
-	}
 
+	if !passed {
+		return errors.Wrapf(ErrActionForbidden, "reply can be added only by users with settings %+v for event: %v", settingsTag, e.ID)
+	}
 	return nil
 }
 
-func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
-	var filter nostr.Filter
-	if aTag := e.GetTag("a"); aTag != nil && len(strings.Split(aTag.Value(), ":")) == 3 {
-		parts := strings.Split(aTag.Value(), ":")
-		kind, err := strconv.Atoi(parts[0])
+func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *model.Event) (bool, error) {
+	switch {
+	case value == model.FollowingWhoCanReplySettings:
+		return checkFollowingWhoCanReplySettings(ctx, rootPost, e)
+
+	case value == model.MentionWhoCanReplySettings:
+		return checkMentionWhoCanReplySettings(rootPost, e)
+
+	case strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix):
+		return checkBadgeWhoCanReplySettings(ctx, value, e)
+
+	default:
+		return false, nil
+	}
+}
+
+func checkFollowingWhoCanReplySettings(ctx context.Context, rootPost, e *model.Event) (bool, error) {
+	events := query.GetStoredEvents(ctx, &model.Subscription{
+		Filters: []nostr.Filter{
+			{
+				Authors: []string{rootPost.GetMasterPublicKey()},
+				Kinds:   []int{nostr.KindFollowList},
+				Tags:    model.TagMap{}.SetLiterals("p", e.GetMasterPublicKey()),
+			},
+		},
+	})
+	for _, err := range events {
 		if err != nil {
-			return nil, err
+			return false, err
 		}
-		filter = nostr.Filter{
-			Kinds:   []int{kind},
-			Authors: []string{parts[1]},
-			Tags:    nostr.TagMap{}.SetLiterals("d", parts[2]),
+
+		return true, nil
+	}
+	return false, nil
+}
+
+func checkMentionWhoCanReplySettings(rootPost, e *model.Event) (bool, error) {
+	words := strings.Split(rootPost.Content, " ")
+	for _, word := range words {
+		if !strings.HasPrefix(word, "npub") {
+			continue
 		}
-	} else if eTag := e.GetTag("e"); eTag != nil {
-		filter = nostr.Filter{
-			IDs:   []string{eTag.Value()},
-			Kinds: []int{nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, nostr.KindReply, nostr.KindRepost},
+		prefix, pubkey, err := nip19.Decode(word)
+		if err != nil {
+			return false, errors.Wrapf(ErrWrongEventParams, "can't decode the content: %v", e.Content)
 		}
-	} else {
+		if prefix == "npub" && pubkey.(string) == e.GetMasterPublicKey() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func checkBadgeWhoCanReplySettings(ctx context.Context, value string, e *model.Event) (bool, error) {
+	splitted := strings.Split(value, "|")
+	if len(splitted) != 2 {
+		return false, errors.Wrapf(ErrWrongEventParams, "wrong badge who can reply settings: %v", value)
+	}
+	events := query.GetStoredEvents(ctx, &model.Subscription{
+		Filters: []nostr.Filter{
+			{
+				Authors: []string{e.GetMasterPublicKey()},
+				Kinds:   []int{nostr.KindProfileBadges},
+				Tags:    model.TagMap{}.SetLiterals("a", splitted[1]),
+			},
+		},
+	})
+	for _, err := range events {
+		if err != nil {
+			return false, err
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
+	filter, err := createRootPostFilter(e)
+	if err != nil {
+		return nil, err
+	}
+	if filter == nil {
 		return nil, nil
 	}
-	rootPosts := query.GetStoredEvents(ctx, &model.Subscription{Filters: nostr.Filters{filter}})
+
+	rootPosts := query.GetStoredEvents(ctx, &model.Subscription{Filters: nostr.Filters{*filter}})
 	for ev, err := range rootPosts {
 		if err != nil {
 			return nil, err
@@ -918,6 +928,44 @@ func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
 	}
 
 	return nil, nil
+}
+
+func createRootPostFilter(e *model.Event) (*nostr.Filter, error) {
+	for _, tag := range e.GetTags("a") {
+		if !isRootTag(tag) {
+			continue
+		}
+		parts := strings.Split(tag.Value(), ":")
+		if len(parts) != 3 {
+			return nil, errors.Wrapf(ErrWrongEventParams, "invalid tag value: %v", tag.Value())
+		}
+		kind, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, err
+		}
+
+		return &nostr.Filter{
+			Kinds:   []int{kind},
+			Authors: []string{parts[1]},
+			Tags:    nostr.TagMap{}.SetLiterals("d", parts[2]),
+		}, nil
+
+	}
+	for _, tag := range e.GetTags("e") {
+		if !isRootTag(tag) {
+			continue
+		}
+
+		return &nostr.Filter{
+			IDs:   []string{tag.Value()},
+			Kinds: []int{nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, nostr.KindReply, nostr.KindRepost},
+		}, nil
+	}
+	return nil, nil
+}
+
+func isRootTag(tag nostr.Tag) bool {
+	return tag != nil && len(tag) >= 4 && (tag)[3] == model.TagMarkerRoot
 }
 
 func validateKindRepostEvent(ctx context.Context, e *model.Event) error {

@@ -2287,12 +2287,11 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
-	t.Run("create post with mentioned settings", func(t *testing.T) {
+	t.Run("create post with following settings", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", "", "", model.TagMarkerRoot},
 				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
@@ -2315,7 +2314,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser1},
 			},
 		}}
@@ -2327,7 +2326,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.ID, "", model.TagMarkerReply},
+				{"e", post.ID, "", model.TagMarkerRoot},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
@@ -2361,7 +2360,6 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Content:   fmt.Sprintf("hello world: %v", pkey),
 			Tags: nostr.Tags{
-				{"e", "", "", model.TagMarkerRoot},
 				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
@@ -2373,7 +2371,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser1},
 			},
 		}}
@@ -2385,7 +2383,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.ID, "", model.TagMarkerReply},
+				{"e", post.ID, "", model.TagMarkerRoot},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
@@ -2420,7 +2418,6 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Content:   fmt.Sprintf("hello world: %v", pkey),
 			Tags: nostr.Tags{
-				{"e", "", "", model.TagMarkerRoot},
 				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
@@ -2473,7 +2470,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser1},
 			},
 		}}
@@ -2485,7 +2482,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.ID, "", model.TagMarkerReply},
+				{"e", post.ID, "", model.TagMarkerRoot},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
@@ -2523,7 +2520,6 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Content:   fmt.Sprintf("hello world: %v", pkey),
 			Tags: nostr.Tags{
-				{"e", "", "", model.TagMarkerRoot},
 				{"settings", model.WhoCanReplySettings, settingsConfiguration, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
@@ -2586,7 +2582,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser1},
 			},
 		}}
@@ -2598,7 +2594,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser2},
 			},
 		}}
@@ -2610,7 +2606,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser2},
 			},
 		}}
@@ -2622,7 +2618,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.ID, "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser4)
@@ -2648,7 +2644,7 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
-	t.Run("create post with mentioned settings", func(t *testing.T) {
+	t.Run("create post with following settings", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEditableTextNote,
@@ -2662,7 +2658,6 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
 		require.NoError(t, relay.Publish(ctx, post.Event))
 	})
-	fmt.Printf("post ID: %v\n", post.GetID())
 	t.Run("create followers list for post owner", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
@@ -2674,17 +2669,49 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
+	var reply *model.Event
 	t.Run("create reply for the initial post by user1", func(t *testing.T) {
-		ev := &model.Event{Event: nostr.Event{
+		reply = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEditableTextNote,
 			Tags: nostr.Tags{
-				{"a", post.Address(), "", model.TagMarkerReply},
+				{"a", post.Address(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser1},
 				{"published_at", "1296962229"},
 				{"d", "dummy"},
 			},
 			Content: "dummy reply",
+		}}
+		helperSignWithMinLeadingZeroBits(t, reply, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, reply.Event))
+	})
+	t.Run("create reply of reply for the initial post by user1", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				{"a", reply.Address(), "", model.TagMarkerReply},
+				{"a", post.Address(), "", model.TagMarkerRoot},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+				{"published_at", "1296962229"},
+				{"d", "dummy"},
+			},
+			Content: "dummy reply of reply",
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply of reply by user1 with missed `a` root tag: no root tag, we don't know settings, then ok", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				{"a", reply.Address(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+				{"published_at", "1296962229"},
+				{"d", "dummy"},
+			},
+			Content: "dummy reply of reply",
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
@@ -2694,7 +2721,7 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEditableTextNote,
 			Tags: nostr.Tags{
-				{"a", post.Address(), "", model.TagMarkerReply},
+				{"a", post.Address(), "", model.TagMarkerRoot},
 				{"published_at", "1296962229"},
 				{"d", "dummy"},
 			},
