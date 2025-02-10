@@ -787,7 +787,10 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event) error {
 }
 
 func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
-	if eTag := e.GetTag("e"); eTag == nil || len(eTag) < 4 || (eTag[3] != model.TagMarkerReply && eTag[3] != model.TagMarkerMention) {
+	eTag := e.GetTag("e")
+	aTag := e.GetTag("a")
+	if (eTag == nil || len(eTag) < 4 || (eTag[3] != model.TagMarkerReply && eTag[3] != model.TagMarkerMention)) &&
+		(aTag == nil || len(aTag) < 4 || (aTag[3] != model.TagMarkerReply && aTag[3] != model.TagMarkerMention)) {
 		return nil
 	}
 	rootPost, err := findRootPost(ctx, e)
@@ -872,14 +875,27 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
 }
 
 func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
-	rootPosts := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: []nostr.Filter{
-			{
-				IDs:   []string{e.GetTag("e").Value()},
-				Kinds: []int{nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, nostr.KindReply, nostr.KindRepost},
-			},
-		},
-	})
+	var filter nostr.Filter
+	if aTag := e.GetTag("a"); aTag != nil && len(strings.Split(aTag.Value(), ":")) == 3 {
+		parts := strings.Split(aTag.Value(), ":")
+		kind, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, err
+		}
+		filter = nostr.Filter{
+			Kinds:   []int{kind},
+			Authors: []string{parts[1]},
+			Tags:    nostr.TagMap{}.SetLiterals("d", parts[2]),
+		}
+	} else if eTag := e.GetTag("e"); eTag != nil {
+		filter = nostr.Filter{
+			IDs:   []string{eTag.Value()},
+			Kinds: []int{nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, nostr.KindReply, nostr.KindRepost},
+		}
+	} else {
+		return nil, nil
+	}
+	rootPosts := query.GetStoredEvents(ctx, &model.Subscription{Filters: nostr.Filters{filter}})
 	for ev, err := range rootPosts {
 		if err != nil {
 			return nil, err
