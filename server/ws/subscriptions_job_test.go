@@ -511,9 +511,7 @@ func TestJobOffline(t *testing.T) {
 func TestJobMembersCount_OpenCommunity(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	}, dvm.GetStoredEvents)
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {
@@ -593,9 +591,7 @@ func TestJobMembersCount_OpenCommunity(t *testing.T) {
 func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	}, dvm.GetStoredEvents)
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {
@@ -700,9 +696,7 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	}, dvm.GetStoredEvents)
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {
