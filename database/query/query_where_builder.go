@@ -879,7 +879,7 @@ func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []strin
 		return nil, false
 	}
 
-	var supportedTags = []string{"a", "q", "Q", "e", "p"}
+	var supportedTags = []string{"a", "q", "Q", "e", "p", "h"}
 	for _, tag := range supportedTags {
 		values, ok := filter.Tags[tag]
 		if !ok {
@@ -903,6 +903,7 @@ func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []strin
 		nostr.KindArticle:                   {},
 		nostr.KindGenericRepost:             {},
 		model.CustomIONKindEditableTextNote: {},
+		model.CustomIONKindCommunityJoin:    {},
 	}
 	for _, kind := range filter.Kinds {
 		if _, ok := supportedKinds[kind]; !ok {
@@ -972,6 +973,8 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 					} else if _, ref := filter.Tags["a"]; ref {
 						referenceType = getReplyTypeFromValues(filter.Tags["a"])
 					}
+				case model.CustomIONKindCommunityJoin:
+					referenceType = "members"
 				}
 				if referenceType != "" {
 					w.WriteString(" AND reference_type = :")

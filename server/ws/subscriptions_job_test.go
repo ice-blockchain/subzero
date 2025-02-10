@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -505,4 +506,442 @@ func TestJobOffline(t *testing.T) {
 	})
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
+}
+
+func TestJobMembersCount_OpenCommunity(t *testing.T) {
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for _, ev := range events {
+			if ev.Kind == model.KindDVMCountResponse {
+				jobResults <- ev
+			}
+		}
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+
+	t.Run("define open community definition", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityDefinition,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"name", "some name"},
+					{"description", "some description"},
+					{"open"},
+					{"d", "dtagvalue"},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join owner to the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyCommunityOwner,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityOwner},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join user1 to the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyUser1,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+
+	time.Sleep(time.Second)
+	helperMustCloseRelay(t, relay)
+}
+
+func TestJobMembersCount_ClosedCommunity(t *testing.T) {
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for _, ev := range events {
+			if ev.Kind == model.KindDVMCountResponse {
+				jobResults <- ev
+			}
+		}
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+
+	t.Run("define closed community", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityDefinition,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"name", "some name"},
+					{"description", "some description"},
+					{"closed"},
+					{"d", "dtagvalue"},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join owner to the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyCommunityOwner,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityOwner},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("invite user1 by owner", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("accept invitation by user1", func(t *testing.T) {
+		ownerAuthorizationEvent := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+					{"expiration", strconv.FormatInt(time.Now().Add(1*time.Hour).Unix(), 10)},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ownerAuthorizationEvent, privkeyOwner)
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+					{"authorization", ownerAuthorizationEvent.String()},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+
+	time.Sleep(time.Second)
+	helperMustCloseRelay(t, relay)
+}
+
+func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
+	jobResults := make(chan *model.Event, 1)
+
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for _, ev := range events {
+			if ev.Kind == model.KindDVMCountResponse {
+				jobResults <- ev
+			}
+		}
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
+	_, pubkeyUser3 := model.GenerateKeyPair()
+
+	t.Run("define open community definition", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityDefinition,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"name", "some name"},
+					{"description", "some description"},
+					{"open"},
+					{"d", "dtagvalue"},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("join owner to the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyCommunityOwner,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyCommunityOwner},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	var joinUser1Event model.Event
+	t.Run("join user1 to the community", func(t *testing.T) {
+		joinUser1Event = model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyUser1,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser1},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &joinUser1Event, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, joinUser1Event.Event))
+	})
+
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+
+	t.Run("change community definition to closed", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityChangeDefinition,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"name", "some name"},
+					{"description", "some description"},
+					{"closed"},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("invite user2 to the closed community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyUser2,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser2},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+
+	var joinUser2Event model.Event
+	t.Run("accept invitation by user2 after changed openess community option", func(t *testing.T) {
+		ownerAuthorizationEvent := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser2},
+					{"expiration", strconv.FormatInt(time.Now().Add(1*time.Hour).Unix(), 10)},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, ownerAuthorizationEvent, privkeyOwner)
+		joinUser2Event = model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser2},
+					{"authorization", ownerAuthorizationEvent.String()},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &joinUser2Event, privkeyUser2)
+		require.NoError(t, relay.Publish(ctx, joinUser2Event.Event))
+	})
+
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 3)
+
+	t.Run("delete user2 from the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyUser2,
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindDeletion,
+				Tags: model.Tags{
+					{"e", joinUser2Event.GetID()},
+					{"b", pubkeyUser2},
+					{"k", strconv.FormatInt(model.CustomIONKindCommunityJoin, 10)},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser2)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+
+	t.Run("delete user1 from the community", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				PubKey:    pubkeyUser1,
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindDeletion,
+				Tags: model.Tags{
+					{"e", joinUser1Event.GetID()},
+					{"b", pubkeyUser1},
+					{"k", strconv.FormatInt(model.CustomIONKindCommunityJoin, 10)},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 1)
+
+	var inviteUser3Event model.Event
+	t.Run("invite user3 to the closed community", func(t *testing.T) {
+		inviteUser3Event = model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindCommunityJoin,
+				Tags: model.Tags{
+					{"h", communityID},
+					{"p", pubkeyUser3},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &inviteUser3Event, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, inviteUser3Event.Event))
+	})
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 1)
+
+	t.Run("delete user3 invitation", func(t *testing.T) {
+		ev := model.Event{
+			Event: nostr.Event{
+				ID:        uuid.NewString(),
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindDeletion,
+				Tags: model.Tags{
+					{"e", inviteUser3Event.GetID()},
+					{"b", pubkeyCommunityOwner},
+					{"k", strconv.FormatInt(model.CustomIONKindCommunityJoin, 10)},
+				},
+			},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	helperCountMembers(t, ctx, relay, jobResults, communityID, 1)
+
+	time.Sleep(time.Second)
+	helperMustCloseRelay(t, relay)
+}
+
+func helperCountMembers(t *testing.T, ctx context.Context, relay *nostrRelay, jobResults chan *model.Event, communityID string, expectedCount int64) {
+	t.Helper()
+	responses := make([]*model.Event, 0)
+	commonUserForFirst2Reqs := model.GeneratePrivateKey()
+	servicePubkey, err := dvm.PublicKey()
+	require.NoError(t, err)
+	ev := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: 5,
+			Kind:      model.KindJobNostrEventCount,
+			Tags: model.Tags{
+				model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
+				model.Tag{"p", servicePubkey},
+				model.Tag{"relays", pubsubServers[0].Endpoint()},
+			},
+			Content: helperNewFilter(t, model.Filter{Tags: nostr.TagMap{}.SetLiterals("h", communityID), Kinds: []int{model.CustomIONKindCommunityJoin}}),
+		},
+	}
+	helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
+	require.NoError(t, relay.Publish(ctx, ev.Event))
+	resp := helperWaitFor(t, jobResults, time.Second)
+	responses = append(responses, resp)
+	t.Logf("received DVM response: %+v", resp)
+	require.Equal(t, ev.String(), resp.GetTag("request").Value())
+	require.Equal(t, strconv.FormatInt(expectedCount, 10), resp.Content)
 }

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -458,5 +459,123 @@ func TestCounterRootReply(t *testing.T) {
 		deleteEv.Tags = model.Tags{{"e", replyToRoot.ID}}
 		require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
 		helperMustBePrecalculatedCount(t, db, 0, model.Filter{Tags: model.TagMap{}.Set("e", &root.ID)})
+	})
+}
+
+func TestCounterOpenCommunityMembers(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+
+	var openCommunity model.Event
+	openCommunity.ID = "community"
+	openCommunity.Kind = model.CustomIONKindCommunityDefinition
+	openCommunity.PubKey = "owner"
+	openCommunity.CreatedAt = 1
+	openCommunity.Tags = nostr.Tags{
+		{"h", communityID},
+		{"d", "dtagvalue"},
+		{"name", "some name"},
+		{"description", "some description"},
+		{"open"},
+	}
+	require.NoError(t, db.AcceptEvents(context.Background(), &openCommunity))
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds: []int{model.CustomIONKindCommunityDefinition},
+		Limit: 10,
+	})
+	require.Len(t, events, 1)
+
+	var memberEvent model.Event
+	memberEvent.ID = "member1"
+	memberEvent.Kind = model.CustomIONKindCommunityJoin
+	memberEvent.PubKey = "member1"
+	memberEvent.CreatedAt = 1
+	memberEvent.Tags = nostr.Tags{
+		{"p", "member1"},
+		{"h", communityID},
+		{"d", "member1"},
+	}
+	require.NoError(t, db.AcceptEvents(context.Background(), &memberEvent))
+
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+		Tags:  model.TagMap{}.Set("h", &communityID),
+		Kinds: []int{model.CustomIONKindCommunityJoin},
+	})
+}
+
+func TestCounterClosedCommunityMembers(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	hVal, err := uuid.NewV7()
+	require.NoError(t, err)
+	communityID := hVal.String()
+
+	var closedCommunity model.Event
+	t.Run("create closed community", func(t *testing.T) {
+		closedCommunity.ID = "community"
+		closedCommunity.Kind = model.CustomIONKindCommunityDefinition
+		closedCommunity.PubKey = "owner"
+		closedCommunity.CreatedAt = 1
+		closedCommunity.Tags = nostr.Tags{
+			{"h", communityID},
+			{"d", "dtagvalue"},
+			{"name", "some name"},
+			{"description", "some description"},
+			{"closed"},
+		}
+		require.NoError(t, db.AcceptEvents(context.Background(), &closedCommunity))
+
+		events := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{model.CustomIONKindCommunityDefinition},
+			Limit: 10,
+		})
+		require.Len(t, events, 1)
+	})
+
+	var member1 model.Event
+	t.Run("try to add member1 to the community without authorization tag. Not added", func(t *testing.T) {
+		member1.ID = "member1"
+		member1.Kind = model.CustomIONKindCommunityJoin
+		member1.PubKey = "member1"
+		member1.CreatedAt = 1
+		member1.Tags = nostr.Tags{
+			{"p", "member1"},
+			{"h", communityID},
+		}
+		require.NoError(t, db.AcceptEvents(context.Background(), &member1))
+
+		helperMustBePrecalculatedCount(t, db, 0, model.Filter{
+			Tags:  model.TagMap{}.Set("h", &communityID),
+			Kinds: []int{model.CustomIONKindCommunityJoin},
+		})
+	})
+
+	var member2 model.Event
+	t.Run("add member2 to the community with authorization tag", func(t *testing.T) {
+		member2.ID = "member2"
+		member2.Kind = model.CustomIONKindCommunityJoin
+		member2.PubKey = "member2"
+		member2.CreatedAt = 1
+		member2.Tags = nostr.Tags{
+			{"p", "member2"},
+			{"h", communityID},
+			{"authorization", "dummy"},
+		}
+		require.NoError(t, db.AcceptEvents(context.Background(), &member2))
+
+		helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+			Tags:  model.TagMap{}.Set("h", &communityID),
+			Kinds: []int{model.CustomIONKindCommunityJoin},
+		})
 	})
 }
