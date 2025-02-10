@@ -2631,6 +2631,81 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
+func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
+	privkeyPostOwner, _ := model.GenerateKeyPair()
+	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
+	privkeyUser2, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := context.Background()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var post *model.Event
+	t.Run("create post with mentioned settings", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+				{"published_at", "1296962229"},
+				{"d", "dummy"},
+			},
+			Content: "dummy",
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, post.Event))
+	})
+	fmt.Printf("post ID: %v\n", post.GetID())
+	t.Run("create followers list for post owner", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindFollowList,
+			Tags: nostr.Tags{
+				{"p", pubkeyUser1, "", "alice"},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user1", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				{"a", post.Address(), "", model.TagMarkerReply},
+				{"p", post.GetMasterPublicKey(), pubkeyUser1},
+				{"published_at", "1296962229"},
+				{"d", "dummy"},
+			},
+			Content: "dummy reply",
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for the initial post by user2 that is not in the followers list, forbidden", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				{"a", post.Address(), "", model.TagMarkerReply},
+				{"published_at", "1296962229"},
+				{"d", "dummy"},
+			},
+			Content: "dummy reply",
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, post.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
+
 func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	t.Cleanup(func() {
 		RegisterReqMustAuthenticate(nil)
