@@ -507,7 +507,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 			}
 			for _, tag := range e.Tags {
 				switch tag.Key() {
-				case model.CustomIONTagOnBehalfOf, "d", "published_at":
+				case "a", model.CustomIONTagOnBehalfOf, "d", "e", "published_at":
 				default:
 					return errors.Wrapf(ErrWrongEventParams, "tag %q is not allowed", tag.Key())
 				}
