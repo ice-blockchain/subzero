@@ -57,6 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_events_id_kind_master_pubkey_created_at_system_cr
 CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at             ON events(system_created_at DESC, id, created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_system_created_at      ON events(pubkey, master_pubkey, system_created_at DESC) where hidden = 0;
+CREATE INDEX IF NOT EXISTS idx_events_h_tag_system_created_at                     ON events(h_tag, system_created_at DESC) where kind = 1753;
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
@@ -339,12 +340,35 @@ create trigger if not exists trigger_event_tags_after_insert_inc_counter
     after insert
     on event_tags
     for each row
-    when (NEW.event_tag_key in ('a', 'q', 'e', 'p', 'Q')) AND (NEW.event_tag_value1 != '')
+    when (NEW.event_tag_key in ('a', 'q', 'e', 'p', 'Q', 'h')) AND (NEW.event_tag_value1 != '')
 begin
     insert into event_counters (reference_id, reference_type, kind, value)
+    with is_community_closed as (
+        select 
+            community.h_tag,
+            case
+                when exists (
+                    select 1
+                    from events e
+                    where e.h_tag = community.h_tag and e.kind = 1753 and exists (
+                        select 1 from json_each(e.tags) where json_valid(e.tags) and json_extract(value, '$[0]') = 'closed'
+                    )
+                    order by e.system_created_at desc
+                    limit 1
+                ) or exists (
+                    select 1
+                    from json_each(community.tags)
+                    where json_valid(community.tags) and json_extract(value, '$[0]') = 'closed'
+                ) then 1
+                else 0
+            end as closed_status
+        from events community
+        where community.h_tag = NEW.event_tag_value1 and community.kind = 31750
+    )
     select
         NEW.event_tag_value1,
         case
+            when e.kind = 1750 and NEW.event_tag_key = 'h' then 'members'
             when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('a', 'e') and NEW.event_tag_value3 in ('reply', 'root') then NEW.event_tag_value3
             when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('q', 'Q') then 'quote'
             when e.kind = 3 and NEW.event_tag_key = 'p' then 'follower'
@@ -355,10 +379,12 @@ begin
         1
     from
         events e
+    left join events community on community.h_tag = e.h_tag and community.kind = 31750
+    left join is_community_closed c on c.h_tag = NEW.event_tag_value1
     where
-            (e.id = NEW.event_id)
-        and (e.kind in (1, 3, 6, 7, 16, 30023, 30175))
-        and (e.kind = 3 OR NEW.event_tag_key in ('a', 'Q') OR exists (select 1 from events where id = NEW.event_tag_value1))
+            e.id = NEW.event_id
+        and e.kind in (1, 3, 6, 7, 16, 1750, 30023, 30175)
+        and (e.kind = 3 OR NEW.event_tag_key in ('a', 'Q', 'h') OR exists (select 1 from events where id = NEW.event_tag_value1))
         and (
             case
                 when e.kind = 7 then
@@ -373,8 +399,41 @@ begin
                     ) OR NEW.event_tag_key = 'a'
                 when e.kind in (1, 6, 16, 30023, 30175) and NEW.event_tag_key in ('a', 'e') and NEW.event_tag_value3 != '' then
                     ((NEW.event_tag_value3 = 'root' AND NEW.event_tag_value5 = '') OR (NEW.event_tag_value3 = 'reply'))
-                else
-                    true
+                when e.kind = 1750 and NEW.event_tag_key = 'h' and NEW.event_tag_value1 = community.h_tag then
+                    (
+                        c.closed_status = 1 AND
+                        (
+                            -- Filtering invitations for closed communities, take into the account only joins.
+                            EXISTS(
+                                select
+                                    1
+                                from
+                                    json_each(e.tags)
+                                where
+                                    json_valid(e.tags) and json_extract(value, '$[0]') = 'authorization'
+                            )
+                            -- Increase counter for the owner's join event without authorization tag also when community is closed.
+                            OR (
+                                (
+                                    e.pubkey = community.pubkey OR 
+                                    e.master_pubkey = community.master_pubkey
+                                )
+                                AND
+                                (
+                                    EXISTS(
+                                        select
+                                            1
+                                        from
+                                            json_each(e.tags)
+                                        where
+                                            json_valid(e.tags) and json_extract(value, '$[0]') = 'p' and (json_extract(value, '$[1]') = community.pubkey or json_extract(value, '$[0]') == community.master_pubkey)
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    OR c.closed_status = 0
+                else true
             end
         )
     on conflict do update
@@ -388,12 +447,14 @@ create trigger if not exists trigger_event_tags_after_delete_dec_counter
     after delete
     on event_tags
     for each row
-    when (OLD.event_tag_key in ('a', 'q', 'e', 'p', 'Q')) AND (OLD.event_tag_value1 != '')
+    when (OLD.event_tag_key in ('a', 'q', 'e', 'p', 'Q', 'h')) AND (OLD.event_tag_value1 != '')
 begin
     update event_counters set
         value = max(value - 1, 0)
     from
         events e
+    left join events community 
+        ON community.h_tag = e.h_tag AND community.kind = 31750
     where
             e.id = OLD.event_id
         and event_counters.reference_id = OLD.event_tag_value1
@@ -404,6 +465,7 @@ begin
             when e.kind in (1, 6, 16, 30023, 30175) and OLD.event_tag_key in ('q', 'Q') then 'quote'
             when e.kind = 3 and OLD.event_tag_key = 'p' then 'follower'
             when e.kind = 7 then e.content
+            when e.kind = 1750 and OLD.event_tag_key = 'h' then 'members'
             else ''
         end
         and (
@@ -417,6 +479,15 @@ begin
                         where
                             json_valid(e.tags) and json_extract(je.value, '$[0]') = 'e'
                     ) OR OLD.event_tag_key = 'a'
+                when e.kind = 1750 and OLD.event_tag_key = 'h' and OLD.event_tag_value1 = community.h_tag then
+                    exists(
+                        select
+                            1
+                        from
+                            json_each(e.tags)
+                        where
+                            json_valid(e.tags) and json_extract(value, '$[0]') = 'p' and (json_extract(value, '$[1]') = e.pubkey or json_extract(value, '$[0]') == e.master_pubkey)
+                    )
                 else true
             end
         );
