@@ -501,13 +501,25 @@ func Validate(ctx context.Context, e *model.Event) error {
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 		if len(e.Content) < 1 {
-			return errors.Wrap(ErrWrongEventParams, "content is empty or too short")
-		}
-		if err := validatePostCommunityEvent(ctx, e); err != nil {
-			return err
-		}
-		if err := validateWhoCanReplySettings(ctx, e); err != nil {
-			return err
+			pubAt := e.GetTag("published_at").Value()
+			if val, err := strconv.ParseInt(pubAt, 10, 64); err != nil || val == int64(e.CreatedAt) {
+				return errors.Wrap(ErrWrongEventParams, "content is empty or too short")
+			}
+			for _, tag := range e.Tags {
+				switch tag.Key() {
+				case model.CustomIONTagOnBehalfOf, "d", "published_at":
+				default:
+					return errors.Wrapf(ErrWrongEventParams, "tag %q is not allowed", tag.Key())
+				}
+			}
+			// This is a `soft delete`, accept empty content.
+		} else {
+			if err := validatePostCommunityEvent(ctx, e); err != nil {
+				return err
+			}
+			if err := validateWhoCanReplySettings(ctx, e); err != nil {
+				return err
+			}
 		}
 	case model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition:
 		return validateCustomIONKindCommunityDefinitionEvent(ctx, e)
@@ -1366,12 +1378,12 @@ func validateEventTags(e *model.Event) error {
 			if err := validatePollTag(tag); err != nil {
 				return err
 			}
-		case "expiration":
+		case "expiration", "published_at", "editing_ended_at":
 			v, err := strconv.ParseInt(tag.Value(), 10, 64)
 			if err != nil {
-				return errors.Wrapf(ErrWrongEventParams, "tag: expiration: should be int: %v", err)
+				return errors.Wrapf(ErrWrongEventParams, "tag: %s: should be uint: %v", tag.Key(), err)
 			} else if v < 0 {
-				return errors.Wrapf(ErrWrongEventParams, "tag: expiration: should be positive: %d", v)
+				return errors.Wrapf(ErrWrongEventParams, "tag: %s: should be positive: %d", tag.Key(), v)
 			}
 		case "settings":
 			if err := validateSettingsTag(e.Kind, tag); err != nil {
