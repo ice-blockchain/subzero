@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events
     h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
+    deleted           integer not null default 0,
     hidden            integer not null default 0
 ) strict;
 --------
@@ -344,7 +345,7 @@ create trigger if not exists trigger_event_tags_after_insert_inc_counter
 begin
     insert into event_counters (reference_id, reference_type, kind, value)
     with is_community_closed as (
-        select 
+        select
             community.h_tag,
             case
                 when exists (
@@ -415,7 +416,7 @@ begin
                             -- Increase counter for the owner's join event without authorization tag also when community is closed.
                             OR (
                                 (
-                                    e.pubkey = community.pubkey OR 
+                                    e.pubkey = community.pubkey OR
                                     e.master_pubkey = community.master_pubkey
                                 )
                                 AND
@@ -453,7 +454,7 @@ begin
         value = max(value - 1, 0)
     from
         events e
-    left join events community 
+    left join events community
         ON community.h_tag = e.h_tag AND community.kind = 31750
     where
             e.id = OLD.event_id
@@ -494,5 +495,26 @@ begin
         delete from event_counters where reference_id = OLD.event_tag_value1 and value = 0;
 end
 ;
+--------
+CREATE VIRTUAL TABLE if not exists events_search USING fts5(content, content_metadata, content='events', content_rowid=rid);
+--------
+drop   trigger if     exists trigger_events_after_insert_search_index;
+create trigger if not exists trigger_events_after_insert_search_index
+    after insert
+    ON events
+    for each row
+    when (NEW.kind = 0 and NEW.content != '' and json_valid(NEW.content) and (json_extract(NEW.content, '$.name') != '' or json_extract(NEW.content, '$.display_name') != ''))
+        or (NEW.kind in (1, 30175, 30023) and (NEW.content != '' or NEW.content_metadata != '')) or (NEW.kind in (1063) and NEW.content_metadata != '')
+begin
+  INSERT INTO events_search(rowid, content, content_metadata) VALUES (NEW.rid, NEW.content, NEW.content_metadata);
+end;
+--------
+drop   trigger if     exists trigger_events_after_delete_search_index;
+create trigger if not exists trigger_events_after_delete_search_index
+    after delete
+    ON events
+begin
+    DELETE FROM events_search WHERE rowid = OLD.rid;
+end;
 --------
 PRAGMA foreign_keys = on;

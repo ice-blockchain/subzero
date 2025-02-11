@@ -28,7 +28,8 @@ const (
 var (
 	ErrUnexpectedRowsAffected    = errors.New("unexpected rows affected")
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
-	errEventIteratorInterrupted  = errors.New("interrupted")
+
+	errEventIteratorInterrupted = errors.New("interrupted")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
@@ -45,6 +46,7 @@ type (
 		Dtag            string
 		Htag            string
 		ContentMetadata string
+		Deleted         bool
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -62,6 +64,8 @@ type databaseBatchRequest struct {
 }
 
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
+	var deleted bool
+
 	jtags, err := json.Marshal(e.Tags)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal tags")
@@ -70,6 +74,15 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	sigAlg, keyAlg, err := parseSigKeyAlg(e)
 	if err != nil {
 		return nil, err
+	}
+
+	// Is it a soft delete?
+	if len(e.Content) < 1 {
+		switch e.Kind {
+		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+			val, err := strconv.ParseInt(e.GetTag("published_at").Value(), 10, 64)
+			deleted = err == nil && int64(e.CreatedAt) > val
+		}
 	}
 
 	return &databaseEvent{
@@ -81,6 +94,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		KeyAlg:          keyAlg,
 		Dtag:            e.Tags.GetD(),
 		Htag:            e.GetHTag(),
+		Deleted:         deleted,
 		ContentMetadata: parseContentMetadata(e),
 	}, nil
 }
@@ -310,9 +324,9 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
 	const stmt = `insert into events
-	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata)
+	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata, deleted)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata)
+	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata, :deleted)
 on conflict do update set
 	id                = excluded.id,
 	kind              = excluded.kind,
@@ -329,6 +343,7 @@ on conflict do update set
 	d_tag             = excluded.d_tag,
 	h_tag             = excluded.h_tag,
 	reference_id      = excluded.reference_id,
+	deleted           = excluded.deleted,
 	hidden            = 0
 `
 

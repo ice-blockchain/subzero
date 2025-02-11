@@ -29,15 +29,6 @@ type (
 var (
 	//go:embed DDL.sql
 	ddl string
-
-	//go:embed DDL_do_events_migration.sql
-	ddlDoEventsMigration string
-
-	//go:embed DDL_cleanup_events_migration.sql
-	ddlCleanupMigration string
-
-	//go:embed DDL_add_fts5.sql
-	ddlAddFTS5 string
 )
 
 func init() {
@@ -140,61 +131,23 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
-		requireMigration, err := client.requireMigration(tx)
-		if err != nil {
-			panic(err)
-		}
-		if requireMigration {
-			client.addFts5(tx)
-			tx.Commit()
-
-			return client
-		}
 		tx.Commit()
-
-		client.doMigration()
 	}
 
 	return client
 }
 
-func (db *dbClient) doMigration() {
-	tx1 := db.MustBegin()
-	defer tx1.Rollback()
-	for _, statement := range strings.Split(ddlDoEventsMigration, "--------") {
-		tx1.MustExec(statement)
-	}
-	tx1.Commit()
+func (db *dbClient) alterEventsTable(tx *sqlx.Tx) error {
+	var doAlter bool
 
-	tx2 := db.MustBegin()
-	defer tx2.Rollback()
-	for _, statement := range strings.Split(ddlCleanupMigration, "--------") {
-		tx2.MustExec(statement)
-	}
-	tx2.Commit()
-
-	tx3 := db.MustBegin()
-	defer tx3.Rollback()
-	for _, statement := range strings.Split(ddl, "--------") {
-		tx3.MustExec(statement)
-	}
-	tx3.Commit()
-}
-
-func (db *dbClient) requireMigration(tx *sqlx.Tx) (bool, error) {
-	sqlQuery := "SELECT exists (select name from pragma_table_info('events') WHERE name = $1);"
-	var exists []bool
-	if err := tx.SelectContext(context.Background(), &exists, sqlQuery, "rid"); err != nil || len(exists) == 0 {
-		return false, err
+	err := tx.QueryRowx("SELECT exists (select name from pragma_table_info('events') WHERE name = 'deleted')").Scan(&doAlter)
+	if err != nil || !doAlter {
+		return err
 	}
 
-	return exists[0], nil
-}
+	_, err = tx.Exec("ALTER TABLE events ADD COLUMN deleted integer not null DEFAULT 0")
 
-func (db *dbClient) addFts5(tx *sqlx.Tx) {
-	for _, statement := range strings.Split(ddlAddFTS5, "--------") {
-		tx.MustExec(statement)
-	}
+	return err
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
