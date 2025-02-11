@@ -1254,3 +1254,91 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 		require.Len(t, helperSelectEvents(t, db), dummyAmount)
 	})
 }
+
+func TestSelectSoftDeletedPosts(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := time.Now().Unix()
+	var posts []*model.Event
+	var keys []string
+
+	t.Run("Create posts", func(t *testing.T) {
+		posts = []*model.Event{
+			{
+				Event: nostr.Event{
+					Kind:      nostr.KindArticle,
+					Content:   "The quick brown fox jumps over the lazy dog",
+					CreatedAt: model.Timestamp(now),
+					Tags: model.Tags{
+						{"published_at", strconv.FormatInt(now, 10)},
+					},
+				},
+			},
+			{
+				Event: nostr.Event{
+					Kind:      nostr.KindArticle,
+					Content:   "Pack my box with five dozen liquor jugs",
+					CreatedAt: nostr.Timestamp(now),
+					Tags: model.Tags{
+						{"published_at", strconv.FormatInt(now, 10)},
+					},
+				},
+			},
+			{
+				Event: nostr.Event{
+					Kind:      model.CustomIONKindEditableTextNote,
+					Content:   "How vexingly quick daft zebras jump",
+					CreatedAt: nostr.Timestamp(now),
+					Tags: model.Tags{
+						{"published_at", strconv.FormatInt(now, 10)},
+					},
+				},
+			},
+		}
+		for i := range posts {
+			key := model.GeneratePrivateKey()
+			keys = append(keys, key)
+			require.NoError(t, posts[i].SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		}
+		require.NoError(t, db.AcceptEvents(context.TODO(), posts...))
+	})
+
+	t.Run("Soft delete second post", func(t *testing.T) {
+		deletedPost := &model.Event{
+			Event: nostr.Event{
+				Kind:      posts[1].Kind,
+				Content:   "",                       // Empty content for soft deletion.
+				CreatedAt: nostr.Timestamp(now + 1), // Should be newer than the original post.
+				Tags: model.Tags{
+					{"published_at", strconv.FormatInt(now, 10)},
+				},
+			},
+		}
+		require.NoError(t, deletedPost.SignWithAlg(keys[1], model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), deletedPost))
+		posts[1] = deletedPost
+	})
+
+	t.Run("Fetch without filters", func(t *testing.T) {
+		events := helperSelectEvents(t, db)
+		require.Len(t, events, 2, "should return only non-deleted posts")
+		require.ElementsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
+	})
+
+	t.Run("Fetch without ID filters", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Kinds: []int{nostr.KindArticle, model.CustomIONKindEditableTextNote}})
+		require.Len(t, events, 2, "should return only non-deleted posts")
+		require.ElementsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
+	})
+
+	t.Run("Fetch with ID filters", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs: []string{posts[0].ID, posts[1].ID, posts[2].ID},
+		})
+		require.Len(t, events, 3, "should return all posts including deleted")
+		require.ElementsMatch(t, posts, events)
+	})
+}

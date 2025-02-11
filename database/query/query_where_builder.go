@@ -17,6 +17,7 @@ import (
 const (
 	whereBuilderDefaultWhere    = "e.hidden=0"
 	whereBuilderCommunityFilter = "iif(e.kind in (1, 30023, 30175), NOT EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = 'h'), true)"
+	whereBuilderNoSoftDeleted   = "e.deleted=0"
 )
 
 const (
@@ -407,6 +408,10 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	}
 	w.applyFilterTags(name, filter.Tags)
 	w.applyFilterTagMarkers(name, filter.TagMarkers)
+	if len(filter.IDs) == 0 {
+		w.maybeAND()
+		w.WriteString(whereBuilderNoSoftDeleted)
+	}
 
 	if _, ok := filter.Tags[model.CustomIONTagCommunity]; !ok {
 		w.maybeAND()
@@ -791,6 +796,8 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			w.WriteString(" AND ")
 		}
 		w.WriteString(whereBuilderCommunityFilter)
+		w.WriteString(" AND ")
+		w.WriteString(whereBuilderNoSoftDeleted)
 	}
 	if w.Prefix == "" {
 		if w.Len() > 0 {

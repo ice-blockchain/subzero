@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events
     h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags              text    not null DEFAULT '[]',
+    deleted           integer not null default 0,
     hidden            integer not null default 0
 ) strict;
 --------

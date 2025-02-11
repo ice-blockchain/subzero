@@ -137,6 +137,19 @@ func openDatabase(target string, runDDL bool) *dbClient {
 	return client
 }
 
+func (db *dbClient) alterEventsTable(tx *sqlx.Tx) error {
+	var doAlter bool
+
+	err := tx.QueryRowx("SELECT exists (select name from pragma_table_info('events') WHERE name = 'deleted')").Scan(&doAlter)
+	if err != nil || !doAlter {
+		return err
+	}
+
+	_, err = tx.Exec("ALTER TABLE events ADD COLUMN deleted integer not null DEFAULT 0")
+
+	return err
+}
+
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
 	db.relayURL = relayURL
 
