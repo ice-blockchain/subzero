@@ -131,6 +131,9 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
+		if err := client.alterEventsTable(tx); err != nil {
+			panic(err)
+		}
 		tx.Commit()
 	}
 
@@ -140,7 +143,7 @@ func openDatabase(target string, runDDL bool) *dbClient {
 func (db *dbClient) alterEventsTable(tx *sqlx.Tx) error {
 	var doAlter bool
 
-	err := tx.QueryRowx("SELECT exists (select name from pragma_table_info('events') WHERE name = 'deleted')").Scan(&doAlter)
+	err := tx.QueryRowx("SELECT not exists (select name from pragma_table_info('events') WHERE name = 'deleted')").Scan(&doAlter)
 	if err != nil || !doAlter {
 		return err
 	}
