@@ -168,27 +168,6 @@ func (db *dbClient) WithPrivateKey(privateKey string) *dbClient {
 	return db
 }
 
-func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected int64, err error) {
-	var (
-		hash = hashSQL(sql)
-	)
-
-	stmt, err := db.prepare(ctx, sql, hash)
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed to prepare exec sql: `%v`", sql)
-	}
-
-	result, err := stmt.ExecContext(ctx, arg)
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed to exec prepared sql: `%v`", sql)
-	}
-	if rowsAffected, err = result.RowsAffected(); err != nil {
-		return 0, errors.Wrapf(err, "failed to process rows affected for exec prepared sql: `%v`", sql)
-	}
-
-	return rowsAffected, nil
-}
-
 func (db *dbClient) prepare(ctx context.Context, sql, hash string) (stmt *sqlx.NamedStmt, err error) {
 	db.stmtCacheMx.RLock()
 	stmt, found := db.stmtCache[hash]
