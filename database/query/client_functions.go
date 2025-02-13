@@ -98,33 +98,33 @@ func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) str
 	return eventID
 }
 
-func sqlGenerateContentMetadata(eventKind int64, content string, tags string) (string, error) {
+func sqlGenerateContentMetadata(eventKind int, content string, jsonTags string) (string, error) {
 	switch eventKind {
-	case int64(nostr.KindProfileMetadata):
+	case nostr.KindProfileMetadata:
 		return parseJSONFields(content, "name", "display_name")
-	case int64(nostr.KindTextNote), int64(nostr.KindArticle), int64(model.CustomIONKindEditableTextNote):
-		var tagList [][]string
-		if err := json.Unmarshal([]byte(tags), &tagList); err != nil {
-			return "", nil
+	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
+		var tags model.Tags
+		if err := tags.Scan(jsonTags); err != nil {
+			return "", errors.Wrap(err, "failed to unmarshal tags")
 		}
 
-		return processIMetaTags(tagList), nil
-	case int64(nostr.KindFileMetadata):
-		var tagList [][]string
-		if err := json.Unmarshal([]byte(tags), &tagList); err != nil {
-			return "", nil
+		return processIMetaTags(tags), nil
+	case nostr.KindFileMetadata:
+		var tags model.Tags
+		if err := tags.Scan(jsonTags); err != nil {
+			return "", errors.Wrap(err, "failed to unmarshal tags")
 		}
 
-		return processAltSummaryTags(tagList), nil
+		return processAltSummaryTags(tags), nil
 	default:
 		return "", nil
 	}
 }
 
-func processIMetaTags(tags [][]string) string {
+func processIMetaTags(tags model.Tags) string {
 	var metadata []string
 	for _, tag := range tags {
-		if tag[0] != "imeta" {
+		if tag.Key() != "imeta" {
 			continue
 		}
 		for _, val := range tag[1:] {
@@ -139,11 +139,11 @@ func processIMetaTags(tags [][]string) string {
 	return strings.Join(metadata, " ")
 }
 
-func processAltSummaryTags(tags [][]string) string {
+func processAltSummaryTags(tags model.Tags) string {
 	var metadata []string
 	for _, tag := range tags {
-		if len(tag) >= 2 && (tag[0] == "alt" || tag[0] == "summary") {
-			metadata = append(metadata, strings.TrimSpace(tag[1]))
+		if k := tag.Key(); k == "alt" || k == "summary" {
+			metadata = append(metadata, strings.TrimSpace(tag.Value()))
 		}
 	}
 

@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"slices"
@@ -50,7 +49,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				Sig:       "end" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -63,7 +62,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 
 		var tags2 nostr.Tags
 		tags2 = append(tags2, nostr.Tag{
@@ -88,7 +87,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				Sig:       "bogusssss" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[2]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindTextNote},
@@ -207,7 +206,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				Sig:       "end" + uuid.NewString(),
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
 			Search: `"summ"`,
@@ -216,7 +215,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			},
 		})
 		require.Len(t, stored, 0)
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev))
 		require.Len(t, stored, 0)
 	})
 }
@@ -239,7 +238,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 				Sig:       "ev1" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -252,7 +251,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 				Sig:       "ev2" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -265,7 +264,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 				Sig:       "ev3" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[2]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindProfileMetadata},
@@ -320,7 +319,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 				Sig:       "ev1" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "ev2" + uuid.NewString(),
@@ -331,7 +330,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 				Sig:       "ev2" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "ev3" + uuid.NewString(),
@@ -342,7 +341,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 				Sig:       "ev3" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[2]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindFileMetadata},
@@ -442,7 +441,7 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 				Sig:       "ev1" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -455,7 +454,7 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 				Sig:       "ev2" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindArticle},
@@ -513,7 +512,7 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 		ev.PubKey = "pk1"
 		ev.CreatedAt = 1
 		ev.Content = `{"name":"notcoin"}`
-		err := db.AcceptEvents(context.Background(), &ev)
+		err := db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "id2"
@@ -521,7 +520,7 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 		ev.PubKey = "pk1"
 		ev.CreatedAt = 2
 		ev.Content = "content of the note"
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -607,7 +606,7 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 			Sig:     "sig123",
 		},
 	}
-	require.NoError(t, db.AcceptEvents(context.TODO(), initialEvent))
+	require.NoError(t, db.AcceptEvents(t.Context(), initialEvent))
 
 	t.Run("search initial event", func(t *testing.T) {
 		searchResult := helperSelectEvents(t, db, model.Filter{
@@ -640,7 +639,7 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 			Sig:     "sig123_updated",
 		},
 	}
-	require.NoError(t, db.AcceptEvents(context.TODO(), updatedEvent))
+	require.NoError(t, db.AcceptEvents(t.Context(), updatedEvent))
 
 	storedUpdated := helperSelectEvents(t, db, model.Filter{
 		Kinds: []int{nostr.KindTextNote},
@@ -689,13 +688,13 @@ func TestQuerySearchFuzzNoUseTempBTREEOrScan(t *testing.T) {
 		for i, set := range sets {
 			filter := helperNewFilterFromElements(t, set)
 			filter.Search = fmt.Sprintf("%q", generateRandomString(3)) + filter.Search
-			sql, params, err := db.generateSelectEventsSQL(context.TODO(), model.Filters{filter}, 0, 100)
+			sql, params, err := db.generateSelectEventsSQL(t.Context(), model.Filters{filter}, 0, 100)
 			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
 			sql = "EXPLAIN QUERY PLAN " + sql
-			stmt, err := db.prepare(context.Background(), sql, hashSQL(sql))
+			stmt, err := db.prepare(t.Context(), sql, hashSQL(sql))
 			require.NoError(t, err)
 
-			rows, err := stmt.QueryContext(context.Background(), params)
+			rows, err := stmt.QueryContext(t.Context(), params)
 			require.NoError(t, err)
 			var hasIndex bool
 			for rows.Next() {
@@ -760,7 +759,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		root.Kind = nostr.KindTextNote
 		root.Content = "root event"
 		require.NoError(t, root.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &root))
+		require.NoError(t, db.AcceptEvents(t.Context(), &root))
 
 		// First level events.
 		var ev1 model.Event
@@ -769,7 +768,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		ev1.Content = "regular event"
 		ev1.Tags = model.Tags{{"e", root.ID}}
 		require.NoError(t, ev1.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev1))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev1))
 
 		var ev2 model.Event
 		ev2.CreatedAt = 3
@@ -780,7 +779,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 			{"e", root.ID},
 		}
 		require.NoError(t, ev2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev2))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev2))
 
 		var ev3 model.Event
 		ev3.CreatedAt = 4
@@ -788,7 +787,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		ev3.Content = "replaceable event"
 		ev3.Tags = model.Tags{{"e", root.ID}}
 		require.NoError(t, ev3.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev3))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev3))
 
 		// Second level events.
 		var ev4 model.Event
@@ -797,7 +796,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		ev4.Content = "regular child event"
 		ev4.Tags = model.Tags{{"e", ev1.ID}}
 		require.NoError(t, ev4.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev4))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev4))
 
 		var ev5 model.Event
 		ev5.CreatedAt = 6
@@ -808,7 +807,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 			{"a", ev2.Address()},
 		}
 		require.NoError(t, ev5.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev5))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev5))
 
 		var ev6 model.Event
 		ev6.CreatedAt = 7
@@ -818,7 +817,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 			{"a", ev3.Address()},
 		}
 		require.NoError(t, ev6.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev6))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev6))
 	})
 
 	events := helperSelectEvents(t, db)
@@ -837,7 +836,7 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 	rootDelete.Content = "delete root event"
 	rootDelete.Tags = model.Tags{{"e", root.ID}}
 	require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(context.TODO(), &rootDelete))
+	require.NoError(t, db.AcceptEvents(t.Context(), &rootDelete))
 
 	require.Zero(t, len(helperSelectEvents(t, db)))
 	stored = helperSelectEvents(t, db, model.Filter{
