@@ -4,7 +4,6 @@ package query
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -13,27 +12,21 @@ import (
 )
 
 func parseContentMetadata(ev *model.Event) string {
-	content := ""
+	var content string
 	switch ev.Kind {
 	case nostr.KindProfileMetadata:
-		if ev.Content == "" {
+		var err error
+		content, err = parseJSONFields(ev.Content, "name", "display_name")
+		if err != nil {
 			return ""
 		}
-		var parsedContent model.ProfileMetadataContent
-		if err := json.Unmarshal([]byte(ev.Content), &parsedContent); err != nil {
-			return ""
-		}
-		content = fmt.Sprintf("%v %v", parsedContent.Name, parsedContent.DisplayName)
 	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
-		content = strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " ")
+		content = strings.Join((extractFTS5IMeta(ev.GetTags("imeta"))), " ")
 	case nostr.KindFileMetadata:
 		altTags := ev.GetTags("alt")
 		summaryTags := ev.GetTags("summary")
 		var values []string
-		for _, tag := range altTags {
-			values = append(values, strings.TrimSpace(tag.Value()))
-		}
-		for _, tag := range summaryTags {
+		for _, tag := range append(altTags, summaryTags...) {
 			values = append(values, strings.TrimSpace(tag.Value()))
 		}
 		content = strings.Join(values, " ")
@@ -55,6 +48,26 @@ func extractFTS5IMeta(tags []model.Tag) []string {
 	}
 
 	return imetaVals
+}
+
+func parseJSONFields(content string, fields ...string) (string, error) {
+	if content == "" || !json.Valid([]byte(content)) {
+		return "", nil
+	}
+
+	var parsedContent map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &parsedContent); err != nil {
+		return "", err
+	}
+
+	var result []string
+	for _, field := range fields {
+		if value, ok := parsedContent[field]; ok {
+			result = append(result, value.(string))
+		}
+	}
+
+	return strings.Join(result, " "), nil
 }
 
 func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {

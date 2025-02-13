@@ -97,3 +97,55 @@ func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) str
 	}
 	return eventID
 }
+
+func sqlGenerateContentMetadata(eventKind int64, content string, tags string) (string, error) {
+	switch eventKind {
+	case int64(nostr.KindProfileMetadata):
+		return parseJSONFields(content, "name", "display_name")
+	case int64(nostr.KindTextNote), int64(nostr.KindArticle), int64(model.CustomIONKindEditableTextNote):
+		var tagList [][]string
+		if err := json.Unmarshal([]byte(tags), &tagList); err != nil {
+			return "", nil
+		}
+
+		return processIMetaTags(tagList), nil
+	case int64(nostr.KindFileMetadata):
+		var tagList [][]string
+		if err := json.Unmarshal([]byte(tags), &tagList); err != nil {
+			return "", nil
+		}
+
+		return processAltSummaryTags(tagList), nil
+	default:
+		return "", nil
+	}
+}
+
+func processIMetaTags(tags [][]string) string {
+	var metadata []string
+	for _, tag := range tags {
+		if tag[0] != "imeta" {
+			continue
+		}
+		for _, val := range tag[1:] {
+			if strings.HasPrefix(val, "alt") {
+				metadata = append(metadata, strings.TrimSpace(strings.TrimPrefix(val, "alt")))
+			} else if strings.HasPrefix(val, "summary") {
+				metadata = append(metadata, strings.TrimSpace(strings.TrimPrefix(val, "summary")))
+			}
+		}
+	}
+
+	return strings.Join(metadata, " ")
+}
+
+func processAltSummaryTags(tags [][]string) string {
+	var metadata []string
+	for _, tag := range tags {
+		if len(tag) >= 2 && (tag[0] == "alt" || tag[0] == "summary") {
+			metadata = append(metadata, strings.TrimSpace(tag[1]))
+		}
+	}
+
+	return strings.Join(metadata, " ")
+}

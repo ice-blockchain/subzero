@@ -78,6 +78,11 @@ func init() {
 						Ptr:  sqlGetEventAddress,
 						Pure: true,
 					},
+					{
+						Name: "subzero_nostr_generate_content_metadata",
+						Ptr:  sqlGenerateContentMetadata,
+						Pure: true,
+					},
 				}
 
 				for idx := range funcTable {

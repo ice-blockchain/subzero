@@ -580,16 +580,15 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 	})
 }
 
-func TestSearchEvents_Replace(t *testing.T) {
+func TestSearchEvents_Replace_Update(t *testing.T) {
 	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
-	expectedEvents := []*model.Event{}
-	expectedEvents = append(expectedEvents, &model.Event{
+
+	initialEvent := &model.Event{
 		Event: nostr.Event{
-			ID:        "normal" + uuid.NewString(),
-			PubKey:    "end" + uuid.NewString(),
+			ID:        "initial" + uuid.NewString(),
+			PubKey:    "pubkey123",
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
@@ -598,41 +597,64 @@ func TestSearchEvents_Replace(t *testing.T) {
 					"url https://alicerelay.example.com",
 					"m image/jpg",
 					"dim 3024x4032",
-					"i foobar",
-					"alt alt1 text",
-					"summary dummy summa;:,ry1 content",
+					"alt initial alt text",
+					"summary initial summary content",
 					fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 					fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 				},
 			},
-			Content: "end, and, ond",
-			Sig:     "end" + uuid.NewString(),
+			Content: "initial",
+			Sig:     "sig123",
 		},
-	})
-	t.Run("Create events with text note kind with imeta alt and summary tags", func(t *testing.T) {
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindTextNote},
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[0], stored[0])
-	})
-	t.Run("search event end", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
+	}
+	require.NoError(t, db.AcceptEvents(context.TODO(), initialEvent))
+
+	t.Run("search initial event", func(t *testing.T) {
+		searchResult := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"end"`,
+			Search: `"initial"`,
 		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[0], stored[0])
+		require.Len(t, searchResult, 1)
+		require.EqualValues(t, initialEvent, searchResult[0])
 	})
-	require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
-	t.Run("search event end", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
+
+	updatedEvent := &model.Event{
+		Event: nostr.Event{
+			ID:        initialEvent.ID,
+			PubKey:    "pubkey123",
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{
+					"imeta",
+					"url https://alicerelay.example.com",
+					"m image/jpg",
+					"dim 3024x4032",
+					"alt updated alt text",
+					"summary updated summary content",
+					fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
+					fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
+				},
+			},
+			Content: "updated, content",
+			Sig:     "sig123_updated",
+		},
+	}
+	require.NoError(t, db.AcceptEvents(context.TODO(), updatedEvent))
+
+	storedUpdated := helperSelectEvents(t, db, model.Filter{
+		Kinds: []int{nostr.KindTextNote},
+	})
+	require.Len(t, storedUpdated, 1)
+	require.EqualValues(t, updatedEvent, storedUpdated[0])
+
+	t.Run("search updated event", func(t *testing.T) {
+		searchResult := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"end"`,
+			Search: `"updated"`,
 		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[0], stored[0])
+		require.Len(t, searchResult, 1)
+		require.EqualValues(t, updatedEvent, searchResult[0])
 	})
 }
 
