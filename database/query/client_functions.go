@@ -101,7 +101,7 @@ func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) str
 func sqlGenerateContentMetadata(eventKind int, content string, jsonTags string) (string, error) {
 	switch eventKind {
 	case nostr.KindProfileMetadata:
-		return parseJSONFields(content, "name", "display_name")
+		return parseProfileContentMetadata(content), nil
 	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
 		var tags model.Tags
 		if err := tags.Scan(jsonTags); err != nil {

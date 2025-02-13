@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/tidwall/gjson"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -15,11 +16,7 @@ func parseContentMetadata(ev *model.Event) string {
 	var content string
 	switch ev.Kind {
 	case nostr.KindProfileMetadata:
-		var err error
-		content, err = parseJSONFields(ev.Content, "name", "display_name")
-		if err != nil {
-			return ""
-		}
+		content = parseProfileContentMetadata(ev.Content)
 	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
 		content = strings.Join((extractFTS5IMeta(ev.GetTags("imeta"))), " ")
 	case nostr.KindFileMetadata:
@@ -50,24 +47,12 @@ func extractFTS5IMeta(tags []model.Tag) []string {
 	return imetaVals
 }
 
-func parseJSONFields(content string, fields ...string) (string, error) {
+func parseProfileContentMetadata(content string) string {
 	if content == "" || !json.Valid([]byte(content)) {
-		return "", nil
+		return ""
 	}
 
-	var parsedContent map[string]interface{}
-	if err := json.Unmarshal([]byte(content), &parsedContent); err != nil {
-		return "", err
-	}
-
-	var result []string
-	for _, field := range fields {
-		if value, ok := parsedContent[field]; ok {
-			result = append(result, value.(string))
-		}
-	}
-
-	return strings.Join(result, " "), nil
+	return strings.Join([]string{gjson.Get(content, "name").String(), gjson.Get(content, "display_name").String()}, " ")
 }
 
 func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
