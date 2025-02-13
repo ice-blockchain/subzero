@@ -446,6 +446,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			{"e", "t4id2"},
 		}
 		err = db.AcceptEvents(context.Background(), &ev)
+		require.NoError(t, err)
 
 		events := helperSelectEvents(t, db, model.Filter{
 			Authors: []string{"t4pk3"},

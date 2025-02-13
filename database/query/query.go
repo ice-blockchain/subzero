@@ -350,8 +350,8 @@ on conflict do update set
 	result, err := db.NamedExecContext(ctx, stmt, events)
 	if err != nil {
 		err = errors.Wrap(db.handleError(err), "failed to exec insert event sql")
-	} else if rows, err := result.RowsAffected(); err != nil {
-		err = errors.Wrap(err, "failed to get rows affected")
+	} else if rows, rowsErr := result.RowsAffected(); rowsErr != nil {
+		err = errors.Wrap(rowsErr, "failed to get rows affected")
 	} else if expected := int64(len(events)); rows < expected {
 		err = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expected, rows)
 	}
@@ -727,7 +727,7 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 
 func (db *dbClient) generateEventsWhereClause(ctx context.Context, filters ...model.Filter) (clauseMain, clauseDeps, clauseSearch string, params map[string]any, err error) {
 	builder := newWhereBuilder()
-	clauseMain, params, err = builder.Build(db.extendWhereFilters(ctx, filters...)...)
+	clauseMain, _, err = builder.Build(db.extendWhereFilters(ctx, filters...)...)
 	if err != nil {
 		return "", "", "", nil, err
 	}

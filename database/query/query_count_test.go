@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -30,13 +29,13 @@ func TestQueryEventsCount(t *testing.T) {
 		}
 	})
 	t.Run("CountAll", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO())
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.EqualValues(t, len(data.Events), count)
 	})
 	t.Run("CountByAuthor", func(t *testing.T) {
 		for author, expectedCount := range authors {
-			count, err := db.CountEvents(context.TODO(), model.Filter{
+			count, err := db.CountEvents(t.Context(), model.Filter{
 				Authors: []string{author},
 				Search:  "countbyauthor",
 			})
@@ -47,7 +46,7 @@ func TestQueryEventsCount(t *testing.T) {
 	t.Run("RandomTag", func(t *testing.T) {
 		for range 10 {
 			ev := data.Random(t)
-			count, err := db.CountEvents(context.TODO(), model.Filter{
+			count, err := db.CountEvents(t.Context(), model.Filter{
 				Tags: model.TagMap{}.SetLiterals(ev.Tags[0][0], ev.Tags[0][1:]...),
 			})
 			require.NoError(t, err)
@@ -58,7 +57,7 @@ func TestQueryEventsCount(t *testing.T) {
 		ev1 := data.Random(t)
 		ev2 := data.Random(t)
 		ev3 := data.Random(t)
-		count, err := db.CountEvents(context.TODO(),
+		count, err := db.CountEvents(t.Context(),
 			model.Filter{
 				IDs: []string{ev1.ID},
 			},
@@ -99,7 +98,7 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkey1"
 			ev.CreatedAt = 1
 			ev.Content = "content"
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("Do", func(t *testing.T) {
 			for i := range 3 {
@@ -111,7 +110,7 @@ func TestEventCounters(t *testing.T) {
 				q.CreatedAt = model.Timestamp(i)
 				q.Tags = model.Tags{{"q", "1"}}
 
-				require.NoError(t, db.AcceptEvents(context.Background(), &q))
+				require.NoError(t, db.AcceptEvents(t.Context(), &q))
 			}
 			helperMustBePrecalculatedCount(t, db, 3, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "1")})
 		})
@@ -122,9 +121,9 @@ func TestEventCounters(t *testing.T) {
 			ev.ID = "delete"
 			ev.Kind = nostr.KindDeletion
 			ev.Tags = model.Tags{{"e", "q2"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
-			c, err := db.CountEvents(context.Background())
+			c, err := db.CountEvents(t.Context())
 			require.NoError(t, err)
 			require.Equal(t, int64(13), c) // 11 posts, 2 quotes.
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "1")})
@@ -136,7 +135,7 @@ func TestEventCounters(t *testing.T) {
 			q.PubKey = "pubkey"
 			q.CreatedAt = 1
 			q.Tags = model.Tags{{"q", "foo"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &q))
+			require.NoError(t, db.AcceptEvents(t.Context(), &q))
 			helperMustBePrecalculatedCount(t, db, 0, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "foo")})
 		})
 	})
@@ -152,7 +151,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "bobkey", "wss://bobrelay.com/nostr", "bob"},
 				{"p", "carolkey", "ws://carolrelay.com/ws", "carol"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			for _, key := range []string{"alicekey", "bobkey", "carolkey"} {
 				helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("p", key)})
 			}
@@ -167,7 +166,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "alicekey", "wss://alicerelay.com/", "alice"},
 				{"p", "bobkey", "wss://bobrelay.com/nostr", "bob"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			for _, key := range []string{"alicekey", "bobkey"} {
 				helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("p", key)})
 			}
@@ -184,7 +183,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "bobkey", "wss://bobrelay.com/nostr", "bob"},
 				{"p", "megankey", "wss://meganrelay.com/", "megan"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 3, model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("p", "alicekey", "bobkey", "megankey")})
 		})
 		t.Run("AddMeganToJoe", func(t *testing.T) {
@@ -196,7 +195,7 @@ func TestEventCounters(t *testing.T) {
 			ev.Tags = model.Tags{
 				{"p", "megankey", "wss://meganrelay.com/", "megan"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("p", "megankey")})
 		})
 		t.Run("RemoveOriginalList", func(t *testing.T) {
@@ -205,7 +204,7 @@ func TestEventCounters(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.PubKey = "pubkeyf3"
 			ev.Tags = model.Tags{{"e", "3f"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			for _, key := range []string{"alicekey", "bobkey"} {
 				helperMustBePrecalculatedCount(t, db, 0, model.Filter{Kinds: []int{nostr.KindFollowList}, Tags: model.TagMap{}.SetLiterals("p", key)})
 			}
@@ -220,7 +219,7 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkeyr1"
 			ev.CreatedAt = 1
 			ev.Content = "content"
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("Reaction simple", func(t *testing.T) {
 			var ev model.Event
@@ -229,7 +228,7 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkeyr2"
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{{"e", "1r"}, {"p", "pubkeyr1"}, {"k", "1"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 		})
 		t.Run("Reaction with multiple E tags", func(t *testing.T) {
@@ -248,7 +247,7 @@ func TestEventCounters(t *testing.T) {
 				{"p", "pkey3"},
 				{"p", "pubkeyr2"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 		})
 		t.Run("Delete", func(t *testing.T) {
@@ -256,12 +255,12 @@ func TestEventCounters(t *testing.T) {
 			ev.Kind = nostr.KindDeletion
 			ev.PubKey = "pubkeyr2"
 			ev.Tags = model.Tags{{"e", "2r"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 
 			ev.PubKey = "pubkeyr3"
 			ev.Tags = model.Tags{{"e", "3r"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 0, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 		})
 	})
@@ -273,7 +272,7 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkeyrp1"
 			ev.CreatedAt = 1
 			ev.Content = "content"
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("Reply", func(t *testing.T) {
 			var ev model.Event
@@ -282,7 +281,7 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkeyrp2"
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{{"e", "1rp", "", "reply", "pubkeyrp2"}, {"p", "pubkeyrp1"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("e", "1rp")})
 		})
 		t.Run("Root", func(t *testing.T) {
@@ -292,7 +291,7 @@ func TestEventCounters(t *testing.T) {
 			ev.PubKey = "pubkeyrp3"
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{{"e", "1rp", "", "root", "pubkeyrp2"}, {"p", "pubkeyrp1"}}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			// Total: root + reply.
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("e", "1rp")})
 			// Only root.
@@ -311,7 +310,7 @@ func TestEventCounters(t *testing.T) {
 				{"e", "2rp"},
 				{"p", "pkey1"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindRepost}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.SetLiterals("e", "2rp")})
 		})
@@ -326,7 +325,7 @@ func TestEventCounters(t *testing.T) {
 				{"q", "2rp"},
 				{"p", "pkey1"},
 			}
-			require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			f1 := model.Filter{Kinds: []int{nostr.KindRepost}, Tags: model.TagMap{}.SetLiterals("e", "1r")}
 			f2 := model.Filter{Kinds: []int{nostr.KindRepost}, Tags: model.TagMap{}.SetLiterals("q", "2rp")}
 			helperMustBePrecalculatedCount(t, db, 2, f1)
@@ -347,7 +346,7 @@ func TestEventMultiReactions(t *testing.T) {
 	ev.Content = "hello world"
 	ev.CreatedAt = 1
 	ev.PubKey = "t1pub1"
-	require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+	require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 	helperMustBePrecalculatedCount(t, db, 0, model.Filter{Tags: model.TagMap{}.Set("e", &ev.ID), Kinds: []int{nostr.KindReaction}})
 
 	for _, r := range []string{"+", "-", "*"} {
@@ -361,7 +360,7 @@ func TestEventMultiReactions(t *testing.T) {
 				reaction.CreatedAt = model.Timestamp(i)
 				reaction.Content = r
 				reaction.Tags = model.Tags{{"e", "t1id1"}, {"p", "t1pub1"}}
-				require.NoError(t, db.AcceptEvents(context.Background(), &reaction))
+				require.NoError(t, db.AcceptEvents(t.Context(), &reaction))
 			}
 		})
 	}
@@ -372,21 +371,21 @@ func TestEventMultiReactions(t *testing.T) {
 	deleteEv.Kind = nostr.KindDeletion
 	deleteEv.PubKey = "-pubkeyr1"
 	deleteEv.Tags = model.Tags{{"e", "-reaction1"}}
-	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+	require.NoError(t, db.AcceptEvents(t.Context(), &deleteEv))
 	helperMustBePrecalculatedCount(t, db, 5, model.Filter{Tags: model.TagMap{}.Set("e", &ev.ID), Kinds: []int{nostr.KindReaction}})
 
 	// Remove one `*` reaction.
 	deleteEv.Kind = nostr.KindDeletion
 	deleteEv.PubKey = "*pubkeyr0"
 	deleteEv.Tags = model.Tags{{"e", "*reaction0"}}
-	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+	require.NoError(t, db.AcceptEvents(t.Context(), &deleteEv))
 	helperMustBePrecalculatedCount(t, db, 4, model.Filter{Tags: model.TagMap{}.Set("e", &ev.ID), Kinds: []int{nostr.KindReaction}})
 
 	// Remove original event.
 	deleteEv.Kind = nostr.KindDeletion
 	deleteEv.PubKey = "t1pub1"
 	deleteEv.Tags = model.Tags{{"e", "t1id1"}}
-	require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+	require.NoError(t, db.AcceptEvents(t.Context(), &deleteEv))
 	helperMustBePrecalculatedCount(t, db, 0, model.Filter{Tags: model.TagMap{}.Set("e", &ev.ID), Kinds: []int{nostr.KindReaction}})
 }
 
@@ -402,7 +401,7 @@ func TestCounterRootReply(t *testing.T) {
 	root.Content = "root"
 	root.PubKey = "rootpub"
 	root.CreatedAt = 1
-	require.NoError(t, db.AcceptEvents(context.Background(), &root))
+	require.NoError(t, db.AcceptEvents(t.Context(), &root))
 
 	var replyToRoot model.Event
 	replyToRoot.ID = "replytorootid"
@@ -411,7 +410,7 @@ func TestCounterRootReply(t *testing.T) {
 	replyToRoot.PubKey = "replypub"
 	replyToRoot.CreatedAt = 2
 	replyToRoot.Tags = model.Tags{{"e", "rootid", "", "root"}}
-	require.NoError(t, db.AcceptEvents(context.Background(), &replyToRoot))
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyToRoot))
 
 	var replyToReply model.Event
 	replyToReply.ID = "replytoreplyid"
@@ -423,7 +422,7 @@ func TestCounterRootReply(t *testing.T) {
 		{"e", "replytorootid", "", "reply"},
 		{"e", "rootid", "", "root"},
 	}
-	require.NoError(t, db.AcceptEvents(context.Background(), &replyToReply))
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyToReply))
 
 	var replyToReplyToReply model.Event
 	replyToReplyToReply.ID = "replytoreplytoreplyid"
@@ -435,7 +434,7 @@ func TestCounterRootReply(t *testing.T) {
 		{"e", "replytoreplyid", "", "reply"},
 		{"e", "rootid", "", "root"},
 	}
-	require.NoError(t, db.AcceptEvents(context.Background(), &replyToReplyToReply))
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyToReplyToReply))
 
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.Set("e", &root.ID)})
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.Set("e", &replyToReply.ID)})
@@ -457,7 +456,7 @@ func TestCounterRootReply(t *testing.T) {
 		deleteEv.Kind = nostr.KindDeletion
 		deleteEv.PubKey = "replypub"
 		deleteEv.Tags = model.Tags{{"e", replyToRoot.ID}}
-		require.NoError(t, db.AcceptEvents(context.Background(), &deleteEv))
+		require.NoError(t, db.AcceptEvents(t.Context(), &deleteEv))
 		helperMustBePrecalculatedCount(t, db, 0, model.Filter{Tags: model.TagMap{}.Set("e", &root.ID)})
 	})
 }
@@ -484,7 +483,7 @@ func TestCounterOpenCommunityMembers(t *testing.T) {
 		{"description", "some description"},
 		{"open"},
 	}
-	require.NoError(t, db.AcceptEvents(context.Background(), &openCommunity))
+	require.NoError(t, db.AcceptEvents(t.Context(), &openCommunity))
 
 	events := helperSelectEvents(t, db, model.Filter{
 		Kinds: []int{model.CustomIONKindCommunityDefinition},
@@ -502,7 +501,7 @@ func TestCounterOpenCommunityMembers(t *testing.T) {
 		{"h", communityID},
 		{"d", "member1"},
 	}
-	require.NoError(t, db.AcceptEvents(context.Background(), &memberEvent))
+	require.NoError(t, db.AcceptEvents(t.Context(), &memberEvent))
 
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{
 		Tags:  model.TagMap{}.Set("h", &communityID),
@@ -533,7 +532,7 @@ func TestCounterClosedCommunityMembers(t *testing.T) {
 			{"description", "some description"},
 			{"closed"},
 		}
-		require.NoError(t, db.AcceptEvents(context.Background(), &closedCommunity))
+		require.NoError(t, db.AcceptEvents(t.Context(), &closedCommunity))
 
 		events := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{model.CustomIONKindCommunityDefinition},
@@ -552,7 +551,7 @@ func TestCounterClosedCommunityMembers(t *testing.T) {
 			{"p", "member1"},
 			{"h", communityID},
 		}
-		require.NoError(t, db.AcceptEvents(context.Background(), &member1))
+		require.NoError(t, db.AcceptEvents(t.Context(), &member1))
 
 		helperMustBePrecalculatedCount(t, db, 0, model.Filter{
 			Tags:  model.TagMap{}.Set("h", &communityID),
@@ -571,11 +570,81 @@ func TestCounterClosedCommunityMembers(t *testing.T) {
 			{"h", communityID},
 			{"authorization", "dummy"},
 		}
-		require.NoError(t, db.AcceptEvents(context.Background(), &member2))
+		require.NoError(t, db.AcceptEvents(t.Context(), &member2))
 
 		helperMustBePrecalculatedCount(t, db, 1, model.Filter{
 			Tags:  model.TagMap{}.Set("h", &communityID),
 			Kinds: []int{model.CustomIONKindCommunityJoin},
 		})
 	})
+}
+
+func TestCounterRootReplyAddressable(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var root model.Event
+	root.ID = "rootid"
+	root.Kind = nostr.KindArticle
+	root.Content = "root"
+	root.PubKey = "rootpub"
+	root.CreatedAt = 1
+	root.Tags = model.Tags{
+		{"d", "root"},
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), &root))
+
+	var replyToRoot model.Event
+	replyToRoot.ID = "replytorootid"
+	replyToRoot.Kind = nostr.KindArticle
+	replyToRoot.Content = "reply"
+	replyToRoot.PubKey = "replytorootpub"
+	replyToRoot.CreatedAt = 2
+	replyToRoot.Tags = model.Tags{
+		{"d", "reply_to_root"},
+		{"a", root.Address(), "", "root"},
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyToRoot))
+
+	var replyToReply model.Event
+	replyToReply.ID = "replytoreplyid"
+	replyToReply.Kind = nostr.KindArticle
+	replyToReply.Content = "reply"
+	replyToReply.PubKey = "replytoreplypub"
+	replyToReply.CreatedAt = 3
+	replyToReply.Tags = model.Tags{
+		{"d", "reply_to_reply"},
+		{"a", replyToRoot.Address(), "", "reply"},
+		{"a", root.Address(), "", "root"},
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyToReply))
+
+	var replyToReplyToReply model.Event
+	replyToReplyToReply.ID = "replytoreplytoreplyid"
+	replyToReplyToReply.Kind = nostr.KindArticle
+	replyToReplyToReply.Content = "reply"
+	replyToReplyToReply.PubKey = "replytoreplytoreplypub"
+	replyToReplyToReply.CreatedAt = 4
+	replyToReplyToReply.Tags = model.Tags{
+		{"d", "reply_to_reply_to_reply"},
+		{"a", replyToReply.Address(), "", "reply"},
+		{"a", root.Address(), "", "root"},
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyToReplyToReply))
+
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.SetLiterals("a", root.Address())})
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.SetLiterals("a", replyToReply.Address())})
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.SetLiterals("a", replyToRoot.Address())})
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindArticle, nostr.KindRepost},
+		Limit:  10,
+		Search: "references:false expiration:false include:dependencies:kind30023>kind6400+kind30023+group+root !amarker:reply",
+	})
+	require.Len(t, events, 2) // Root + DVM.
+	require.Equal(t, "rootid", events[0].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
+	require.Equal(t, "1", events[1].Content)
 }

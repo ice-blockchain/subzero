@@ -19,8 +19,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-const testDeadline = 30 * time.Second
-
 func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
