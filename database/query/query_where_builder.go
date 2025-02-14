@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -781,7 +782,7 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
 		if w.Prefix != "" && dbFilter.SearchText != "" {
-			searchKeywords = append(searchKeywords, dbFilter.SearchText+"*")
+			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilter.SearchText)+"*")
 		}
 	}
 	if w.Prefix != "" && len(searchKeywords) > 0 {
@@ -998,4 +999,18 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 	}
 
 	return w.String(), w.Params, nil
+}
+
+func replaceSpecialChars(input string) string {
+	if input == "" {
+		return ""
+	}
+
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) || unicode.IsSymbol('_') {
+			return r
+		}
+
+		return '_'
+	}, input)
 }
