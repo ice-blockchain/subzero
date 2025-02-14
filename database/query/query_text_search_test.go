@@ -3,7 +3,9 @@
 package query
 
 import (
+	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"reflect"
 	"slices"
 	"strings"
@@ -300,6 +302,95 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 		require.EqualValues(t, expectedEvents[1], stored[1])
 		require.EqualValues(t, expectedEvents[0], stored[2])
 	})
+}
+
+func TestSearchEvents_KindProfileMetadata_SpecialChars(t *testing.T) {
+	t.Parallel()
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	expectedEvents := []*model.Event{}
+
+	t.Run("Events with profile metadata kind", func(t *testing.T) {
+		for i := 0; i < 3; i++ {
+			randomName := helperGenerateRandomStringWithSpecialChars(t, 10)
+			randomDisplayName := helperGenerateRandomStringWithSpecialChars(t, 10)
+			fmt.Printf("randomName: %s, randomDisplayName: %s\n", randomName, randomDisplayName)
+
+			event := &model.Event{
+				Event: nostr.Event{
+					ID:        uuid.NewString(),
+					PubKey:    uuid.NewString(),
+					CreatedAt: nostr.Now(),
+					Kind:      nostr.KindProfileMetadata,
+					Tags:      model.Tags{},
+					Content:   `{"name":"` + randomName + `","display_name":"` + randomDisplayName + `"}`,
+					Sig:       uuid.NewString(),
+				},
+			}
+			expectedEvents = append(expectedEvents, event)
+			require.NoError(t, db.AcceptEvents(t.Context(), event))
+		}
+
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindProfileMetadata},
+		})
+		require.Len(t, stored, 3)
+		for i := 0; i < len(expectedEvents); i++ {
+			require.EqualValues(t, expectedEvents[len(expectedEvents)-i-1], stored[i])
+		}
+	})
+
+	t.Run("search profile by name with special characters", func(t *testing.T) {
+		name, _ := helperExtractProfileMetadataFields(t, expectedEvents[0].Event.Content)
+		if len(name) > 1 {
+			name = name[0 : len(name)/2]
+		}
+		fmt.Printf("searchTerm: %s\n", name)
+
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"` + name + `"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[0], stored[0])
+	})
+
+	t.Run("search profile by display_name with special characters", func(t *testing.T) {
+		_, displayName := helperExtractProfileMetadataFields(t, expectedEvents[0].Event.Content)
+		if len(displayName) > 1 {
+			displayName = displayName[0 : len(displayName)/2]
+		}
+
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"` + displayName + `"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[0], stored[0])
+	})
+}
+
+func helperExtractProfileMetadataFields(t *testing.T, content string) (string, string) {
+	t.Helper()
+
+	var parsedContent model.ProfileMetadataContent
+	require.NoError(t, json.Unmarshal([]byte(content), &parsedContent))
+
+	return parsedContent.Name, parsedContent.DisplayName
+}
+
+func helperGenerateRandomStringWithSpecialChars(t *testing.T, length int) string {
+	t.Helper()
+	specialChars := "!@#$%^&*()-_=+[]{}|;:,.<>?/~`"
+	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " + specialChars
+	var result strings.Builder
+	for i := 0; i < length; i++ {
+		idx := int(rand.IntN(len(allChars)))
+		result.WriteByte(allChars[idx])
+	}
+
+	return result.String()
 }
 
 func TestSearchEvents_KindFileMetadata(t *testing.T) {

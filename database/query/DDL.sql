@@ -534,8 +534,13 @@ begin
     insert or replace into events_search(rowid, content, content_metadata) values (NEW.rid, NEW.content, NEW.content_metadata);
 end;
 --------
+-- Temporary fix for the content_metadata special characters replacement
 update events
-set content_metadata = subzero_nostr_generate_content_metadata(kind, content, tags)
-where ((kind = 0 and json_valid(content)) or kind IN (1, 30175, 30023) or kind = 1063) AND content_metadata = '';
+    set content_metadata = subzero_nostr_replace_special_chars(content_metadata)
+    where ((kind = 0 and json_valid(content)) or kind IN (1, 1063, 30175, 30023));
+-- Temporary fix for the content_metadata generation
+update events
+    set content_metadata = subzero_nostr_generate_content_metadata(kind, content, tags)
+    where ((kind = 0 and json_valid(content)) or kind IN (1, 30175, 30023) or kind = 1063) AND content_metadata = '';
 --------
 PRAGMA foreign_keys = on;

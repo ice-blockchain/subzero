@@ -29,7 +29,7 @@ func parseContentMetadata(ev *model.Event) string {
 		content = strings.Join(values, " ")
 	}
 
-	return content
+	return removeSpecialChars(content)
 }
 
 func extractFTS5IMeta(tags []model.Tag) []string {

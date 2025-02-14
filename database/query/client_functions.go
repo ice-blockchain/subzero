@@ -101,21 +101,21 @@ func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) str
 func sqlGenerateContentMetadata(eventKind int, content string, jsonTags string) (string, error) {
 	switch eventKind {
 	case nostr.KindProfileMetadata:
-		return parseProfileContentMetadata(content), nil
+		return removeSpecialChars(parseProfileContentMetadata(content)), nil
 	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
 		var tags model.Tags
 		if err := tags.Scan(jsonTags); err != nil {
 			return "", errors.Wrap(err, "failed to unmarshal tags")
 		}
 
-		return processIMetaTags(tags), nil
+		return removeSpecialChars(processIMetaTags(tags)), nil
 	case nostr.KindFileMetadata:
 		var tags model.Tags
 		if err := tags.Scan(jsonTags); err != nil {
 			return "", errors.Wrap(err, "failed to unmarshal tags")
 		}
 
-		return processAltSummaryTags(tags), nil
+		return removeSpecialChars(processAltSummaryTags(tags)), nil
 	default:
 		return "", nil
 	}
@@ -148,4 +148,8 @@ func processAltSummaryTags(tags model.Tags) string {
 	}
 
 	return strings.Join(metadata, " ")
+}
+
+func subzeroNostrRemoveSpecialChars(value string) string {
+	return removeSpecialChars(value)
 }

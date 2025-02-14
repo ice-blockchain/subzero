@@ -83,6 +83,11 @@ func init() {
 						Ptr:  sqlGenerateContentMetadata,
 						Pure: true,
 					},
+					{
+						Name: "subzero_nostr_replace_special_chars",
+						Ptr:  subzeroNostrRemoveSpecialChars,
+						Pure: true,
+					},
 				}
 
 				for idx := range funcTable {
