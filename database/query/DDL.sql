@@ -517,4 +517,25 @@ begin
     DELETE FROM events_search WHERE rowid = OLD.rid;
 end;
 --------
+drop trigger if exists trigger_events_after_update_search_index;
+create trigger if not exists trigger_events_after_update_search_index
+after update
+ON events
+for each row
+when (
+    (NEW.content_metadata != OLD.content_metadata or NEW.content != OLD.content)
+    and (
+        (NEW.kind = 0 and NEW.content != '' and json_valid(NEW.content) and (json_extract(NEW.content, '$.name') != '' or json_extract(NEW.content, '$.display_name') != ''))
+        or (NEW.kind in (1, 30175, 30023) and (NEW.content != '' or NEW.content_metadata != ''))
+        or (NEW.kind in (1063) and NEW.content_metadata != '')
+    )
+)
+begin
+    insert or replace into events_search(rowid, content, content_metadata) values (NEW.rid, NEW.content, NEW.content_metadata);
+end;
+--------
+update events
+set content_metadata = subzero_nostr_generate_content_metadata(kind, content, tags)
+where ((kind = 0 and json_valid(content)) or kind IN (1, 30175, 30023) or kind = 1063) AND content_metadata = '';
+--------
 PRAGMA foreign_keys = on;

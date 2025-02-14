@@ -4,36 +4,26 @@ package query
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/tidwall/gjson"
 
 	"github.com/ice-blockchain/subzero/model"
 )
 
 func parseContentMetadata(ev *model.Event) string {
-	content := ""
+	var content string
 	switch ev.Kind {
 	case nostr.KindProfileMetadata:
-		if ev.Content == "" {
-			return ""
-		}
-		var parsedContent model.ProfileMetadataContent
-		if err := json.Unmarshal([]byte(ev.Content), &parsedContent); err != nil {
-			return ""
-		}
-		content = fmt.Sprintf("%v %v", parsedContent.Name, parsedContent.DisplayName)
+		content = parseProfileContentMetadata(ev.Content)
 	case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
-		content = strings.Join(extractFTS5IMeta(ev.GetTags("imeta")), " ")
+		content = strings.Join((extractFTS5IMeta(ev.GetTags("imeta"))), " ")
 	case nostr.KindFileMetadata:
 		altTags := ev.GetTags("alt")
 		summaryTags := ev.GetTags("summary")
 		var values []string
-		for _, tag := range altTags {
-			values = append(values, strings.TrimSpace(tag.Value()))
-		}
-		for _, tag := range summaryTags {
+		for _, tag := range append(altTags, summaryTags...) {
 			values = append(values, strings.TrimSpace(tag.Value()))
 		}
 		content = strings.Join(values, " ")
@@ -55,6 +45,14 @@ func extractFTS5IMeta(tags []model.Tag) []string {
 	}
 
 	return imetaVals
+}
+
+func parseProfileContentMetadata(content string) string {
+	if content == "" || !json.Valid([]byte(content)) {
+		return ""
+	}
+
+	return strings.Join([]string{gjson.Get(content, "name").String(), gjson.Get(content, "display_name").String()}, " ")
 }
 
 func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
