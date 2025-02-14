@@ -59,7 +59,6 @@ CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at           
 CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_system_created_at      ON events(pubkey, master_pubkey, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_h_tag_system_created_at                     ON events(h_tag, system_created_at DESC) where kind = 1753;
-CREATE INDEX IF NOT EXISTS idx_events_kind_content_metadata                       ON events(kind, content_metadata) where kind IN (0, 1, 1063, 30175, 30023) AND content_metadata = '';;
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
