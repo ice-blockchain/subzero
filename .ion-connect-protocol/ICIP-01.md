@@ -59,6 +59,8 @@ These are the extra fields not specified in [NIP-01](https://github.com/nostr-pr
 * `location`
   * Users can input their geolocation here, freely. 
     * Relays and Clients MUST not validate this information
+* `registered_at`
+    * Clients MUST set this information once, when the event is first created
 * `category`
   * Users can input a category for their profile that can define their main area of expertise or interest. 
     * Clients SHOULD make users select from a predefined list of categories, to standardize user interactions later on. Relays MUST not validate this information.

@@ -120,6 +120,7 @@ type (
 	JobFeedbackStatus      = string
 	Role                   string
 	ProfileMetadataContent struct {
+		RegisteredAt            Timestamp         `json:"registered_at" `
 		Name                    string            `json:"name" example:"username"`
 		About                   string            `json:"about" example:"about"`
 		Picture                 string            `json:"picture" example:"https://example.com/pic.jpg"`
