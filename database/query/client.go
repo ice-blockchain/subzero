@@ -85,7 +85,7 @@ func init() {
 					},
 					{
 						Name: "subzero_nostr_replace_special_chars",
-						Ptr:  subzeroNostrRemoveSpecialChars,
+						Ptr:  subzeroNostrReplaceSpecialChars,
 						Pure: true,
 					},
 				}

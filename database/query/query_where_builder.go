@@ -782,7 +782,7 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
 		}
 		if w.Prefix != "" && dbFilter.SearchText != "" {
-			searchKeywords = append(searchKeywords, removeSpecialChars(dbFilter.SearchText)+"*")
+			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilter.SearchText)+"*")
 		}
 	}
 	if w.Prefix != "" && len(searchKeywords) > 0 {
@@ -1001,16 +1001,16 @@ func (w *whereBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 	return w.String(), w.Params, nil
 }
 
-func removeSpecialChars(input string) string {
+func replaceSpecialChars(input string) string {
 	if input == "" {
 		return ""
 	}
 
 	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) || unicode.IsSymbol('_') {
 			return r
 		}
 
-		return -1
+		return '_'
 	}, input)
 }
