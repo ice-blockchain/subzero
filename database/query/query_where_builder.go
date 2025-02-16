@@ -427,6 +427,10 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 		w.WriteString(whereBuilderCommunityFilter)
 	}
 
+	if filter.Rank != rankUndef {
+		w.Params["rank"] = filter.Rank
+	}
+
 	w.WriteRune(')') // End the filter section.
 
 	return nil

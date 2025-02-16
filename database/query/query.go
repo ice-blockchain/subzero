@@ -616,6 +616,21 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 	if strings.Contains(filters.String(), discoverContentCreatorsToFollow) {
 		orderBy = " order by random()"
 	}
+
+	var JoinString string
+	if v, ok := params["rank"]; ok && v.(rank) != rankUndef {
+		switch v.(rank) {
+		case rankTOP:
+			// All time top.
+			JoinString = ` inner join ranked_events r on e.rid = r.event_rid`
+			orderBy = ` order by r.score desc, e.system_created_at desc`
+		case rankTrending:
+			// 24h trending.
+			JoinString = ` inner join ranked_events r on e.rid = r.event_rid and ((unixepoch() - min(unixepoch(), e.created_at)) < 86400)`
+			orderBy = ` order by r.score desc, e.system_created_at desc`
+		}
+	}
+
 	if depClause == "" {
 		if whereSearch != "" {
 			sql, err := db.searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery)
@@ -638,7 +653,7 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 				e.content,
 				tags as jtags
 			from
-				events e
+				events e` + JoinString + `
 			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
 	}
 	if whereSearch != "" {
@@ -665,11 +680,8 @@ with eventsmain as (
 		e.h_tag,
 		tags as jtags
 	from
-		events e
-	where ` + systemCreatedAtFilter + `(` + whereMain + `)
-order by
-	system_created_at desc
-` + limitQuery + `
+		events e` + JoinString + `
+	where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery + `
 )
 select
 	*
