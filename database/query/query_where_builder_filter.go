@@ -103,6 +103,8 @@ func parseNostrFilterDependencies(f *databaseFilterSearch) (*databaseFilterSearc
 		depStrEnd := strings.Index(f.Search[depStrStart:], " ")
 		if depStrEnd == -1 {
 			depStrEnd = len(f.Search)
+		} else {
+			depStrEnd += depStrStart
 		}
 		dep, err := parseDepRequest(f.Search[depStrStart+len(dependenciesPrefix) : depStrEnd])
 		if err != nil {
@@ -130,6 +132,24 @@ func parseNostrFilterText(f *databaseFilterSearch) *databaseFilterSearch {
 	return f
 }
 
+func parseRank(f *databaseFilterSearch) *databaseFilterSearch {
+	f.Rank = rankUndef
+	for _, r := range []string{"top", "trending"} {
+		start := strings.Index(f.Search, r)
+		if start == -1 {
+			continue
+		}
+		switch r {
+		case "top":
+			f.Rank = rankTOP
+		case "trending":
+			f.Rank = rankTrending
+		}
+		f.Search = strings.TrimSpace(f.Search[:start] + f.Search[start+len(r):])
+	}
+	return f
+}
+
 func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 	f := parseNostrFilterText(&databaseFilterSearch{
 		Filter: filter,
@@ -141,6 +161,7 @@ func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 	if err != nil {
 		return nil, err
 	}
+	f = parseRank(f)
 
 	if f.Expiration != nil && *f.Expiration {
 		f.Dependencies = append(f.Dependencies, &filterDependencies{

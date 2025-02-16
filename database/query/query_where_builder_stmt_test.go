@@ -303,7 +303,7 @@ func TestParseNostrFilter(t *testing.T) {
 	})
 	t.Run("Image with dependencies", func(t *testing.T) {
 		f, err := parseNostrFilter(model.Filter{
-			Search: "images:true some content here include:dependencies:kind1>kind2",
+			Search: "images:true some content here include:dependencies:kind1>kind2 top",
 		})
 		require.NoError(t, err)
 		require.NotNil(t, f.Images)
@@ -317,11 +317,12 @@ func TestParseNostrFilter(t *testing.T) {
 				Kinds: []int{2},
 			},
 		}, f.Dependencies[0])
+		require.Equal(t, rankTOP, f.Rank)
 		require.Equal(t, "some content here", f.Filter.Search)
 	})
 	t.Run("Image with dependencies in the beginning", func(t *testing.T) {
 		f, err := parseNostrFilter(model.Filter{
-			Search: "include:dependencies:kind1>kind3 some content here2 images:false",
+			Search: "include:dependencies:kind1>kind3 trending some content here2 images:false",
 		})
 		require.NoError(t, err)
 		require.NotNil(t, f.Images)
@@ -335,6 +336,7 @@ func TestParseNostrFilter(t *testing.T) {
 				Kinds: []int{3},
 			},
 		}, f.Dependencies[0])
+		require.Equal(t, rankTrending, f.Rank)
 		require.Equal(t, "some content here2", f.Filter.Search)
 	})
 	t.Run("Image with dependencies in the beginning and search", func(t *testing.T) {

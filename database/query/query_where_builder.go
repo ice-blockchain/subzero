@@ -22,6 +22,12 @@ const (
 )
 
 const (
+	rankUndef rank = iota
+	rankTOP
+	rankTrending
+)
+
+const (
 	sqlOpCodeNONE = iota
 	sqlOpCodeAND
 	sqlOpCodeOR
@@ -35,6 +41,7 @@ var (
 )
 
 type (
+	rank         int
 	whereBuilder struct {
 		Params       map[string]any
 		Dependencies []*filterDependencies
@@ -51,6 +58,7 @@ type (
 		References   *bool
 		TagMarkers   []databaseFilterMarker
 		Dependencies []*filterDependencies
+		Rank         rank
 	}
 	databaseFilterDelete struct {
 		Author string
