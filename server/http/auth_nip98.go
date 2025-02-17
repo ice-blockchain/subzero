@@ -81,8 +81,7 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 	if event.Kind != nostrHttpAuthKind {
 		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token event kind: %d, expected: %d", event.Kind, nostrHttpAuthKind)
 	}
-
-	if event.CreatedAt.Time().After(now) || (event.CreatedAt.Time().Before(now) && now.Sub(event.CreatedAt.Time()) > tokenExpirationWindow) {
+	if event.CreatedAt.Time().After(now.Add(tokenExpirationWindow)) || event.CreatedAt.Time().Before(now.Add(-tokenExpirationWindow)) {
 		return nil, ErrTokenExpired
 	}
 	if urlTag := event.Tags.GetFirst([]string{"u"}); urlTag != nil && len(*urlTag) > 1 {
