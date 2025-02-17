@@ -1,11 +1,17 @@
 -- SPDX-License-Identifier: ice License 1.0
 
+-- system_kind:
+--  1: quote
+--  2: comment_root
+--  3: comment_reply
+
 CREATE TABLE IF NOT EXISTS events
 (
     rid               integer primary key,
     kind              integer not null,
     created_at        integer not null,
     system_created_at integer not null,
+    system_kind       integer,
     id                text    not null UNIQUE,
     pubkey            text    not null,
     master_pubkey     text    not null,
@@ -17,6 +23,12 @@ CREATE TABLE IF NOT EXISTS events
     d_tag             text    not null DEFAULT '',
     h_tag             text    not null DEFAULT '',
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    address           text    not null generated always as (
+        CASE
+            WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3 THEN concat(coalesce(kind,0), ':', coalesce(master_pubkey,pubkey,''),':')
+            WHEN 30000 <= kind AND kind < 40000                           THEN concat(coalesce(kind,0), ':', coalesce(master_pubkey,pubkey,''),':',coalesce(d_tag,''))
+            ELSE id
+        END) VIRTUAL,
     tags              text    not null DEFAULT '[]',
     deleted           integer not null default 0,
     hidden            integer not null default 0
@@ -59,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_events_system_created_at_id_created_at           
 CREATE INDEX IF NOT EXISTS idx_events_reference_id_system_created_at              ON events(reference_id, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_system_created_at      ON events(pubkey, master_pubkey, system_created_at DESC) where hidden = 0;
 CREATE INDEX IF NOT EXISTS idx_events_h_tag_system_created_at                     ON events(h_tag, system_created_at DESC) where kind = 1753;
+CREATE INDEX IF NOT EXISTS idx_events_address                                     ON events(address);
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
@@ -542,5 +555,213 @@ update events
 update events
     set content_metadata = subzero_nostr_generate_content_metadata(kind, content, tags)
     where ((kind = 0 and json_valid(content)) or kind IN (1, 30175, 30023) or kind = 1063) AND content_metadata = '';
+--------
+CREATE TABLE IF NOT EXISTS ranked_events
+(
+    event_rid         integer not null primary key references events (rid) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    event_kind        integer not null,
+    event_created_at  integer not null,
+    points            integer not null,
+    score             real    not null
+) strict, WITHOUT ROWID;
+--------
+create index if not exists ranked_events_points_ix           on ranked_events(points) where points <= 0;
+create index if not exists ranked_events_score_ix            on ranked_events(score desc);
+create index if not exists ranked_events_created_at_score_ix on ranked_events(event_created_at desc, score desc);
+--------
+drop   trigger if     exists trigger_events_after_insert_score_add;
+create trigger if not exists trigger_events_after_insert_score_add
+    after insert
+    ON events
+    for each row
+    when NEW.kind in (1, 6, 7, 16, 30023, 30175) and NEW.hidden = 0 and NEW.deleted = 0
+begin
+  insert into ranked_events(event_rid, event_kind, event_created_at, points, score)
+  with cte as (
+    select
+      json_extract(je.value, '$[1]') as event_address
+    from
+      json_each(NEW.tags) je
+    where
+      json_extract(je.value, '$[0]') in ('a', 'e', 'q', 'Q')
+      and (NEW.system_kind is null or case
+        when NEW.system_kind = 2 then json_extract(je.value, '$[3]') = 'root'
+        when NEW.system_kind = 3 then false -- ignore replies
+        else true
+      end)
+  )
+  select
+    e.rid,
+    e.kind,
+    e.created_at,
+    case
+        when NEW.kind = 7 then 1                                        -- like
+        when NEW.kind in (6, 16) then 3                                 -- repost
+        when NEW.system_kind is not null and NEW.system_kind = 1 then 4 -- quote
+        when NEW.system_kind is not null and NEW.system_kind = 2 then 2 -- top level comment (root)
+        else 0
+    end,
+    (round(( case
+        when NEW.kind = 7 then 1
+        when NEW.kind in (6, 16) then 3
+        when NEW.system_kind is not null and NEW.system_kind = 1 then 4
+        when NEW.system_kind is not null and NEW.system_kind = 2 then 2
+        else 0
+    end / power((1 + (unixepoch() - min(unixepoch(), e.created_at))/3600.0), 0.9)), 4))
+  from
+    events e
+  inner join cte on e.address = cte.event_address
+  where
+    e.hidden = 0
+    and e.deleted = 0
+    and e.id = e.h_tag
+    and e.created_at > 0
+    and e.kind in (1, 30023, 30175)
+    and (NEW.system_kind is null or NEW.system_kind != 3)
+  on conflict do update
+  set
+    points = points + excluded.points,
+    score = (round((points + excluded.points / power((1 + (unixepoch() - min(unixepoch(), event_created_at))/3600.0), 0.9)), 4));
+end;
+--------
+drop   trigger if     exists trigger_events_after_update_score_add;
+create trigger if not exists trigger_events_after_update_score_add
+    after update
+    ON events
+    for each row
+    when ((NEW.kind in (1, 6, 7, 16, 30023, 30175)) and (NEW.hidden = 0) and (NEW.tags != OLD.tags)) OR (OLD.deleted != NEW.deleted)
+begin
+  update ranked_events
+  set
+    points = points - case
+        when OLD.kind = 7 then 1                                        -- like
+        when OLD.kind in (6, 16) then 3                                 -- repost
+        when OLD.system_kind is not null and OLD.system_kind = 1 then 4 -- quote
+        when OLD.system_kind is not null and OLD.system_kind = 2 then 2 -- top level comment (root)
+        else 0
+    end,
+    score = (round((points - case
+        when OLD.kind = 7 then 1
+        when OLD.kind in (6, 16) then 3
+        when OLD.system_kind is not null and OLD.system_kind = 1 then 4
+        when OLD.system_kind is not null and OLD.system_kind = 2 then 2
+        else 0
+    end) / power((1 + (unixepoch() - min(unixepoch(), event_created_at))/3600.0), 0.9), 4))
+  where exists (
+    select 1
+    from json_each(OLD.tags) je
+    where json_extract(je.value, '$[0]') in ('a', 'e', 'q', 'Q')
+    and ranked_events.event_rid in (
+      select rid
+      from events e
+      where e.address = json_extract(je.value, '$[1]')
+      and e.hidden = 0
+      and e.id = e.h_tag
+      and e.created_at > 0
+      and e.kind in (1, 30023, 30175)
+      and (OLD.system_kind is null or OLD.system_kind != 3)
+      and (OLD.system_kind is null or case
+        when OLD.system_kind = 2 then json_extract(je.value, '$[3]') = 'root'
+        when OLD.system_kind = 3 then false
+        else true
+      end)
+    )
+  );
+  insert into ranked_events(event_rid, event_kind, event_created_at, points, score)
+  with cte as (
+    select
+      json_extract(je.value, '$[1]') as event_address
+    from
+      json_each(NEW.tags) je
+    where
+      json_extract(je.value, '$[0]') in ('a', 'e', 'q', 'Q')
+      and (NEW.system_kind is null or case
+        when NEW.system_kind = 2 then json_extract(je.value, '$[3]') = 'root'
+        when NEW.system_kind = 3 then false -- ignore replies
+        else true
+      end)
+  )
+  select
+    e.rid,
+    e.kind,
+    e.created_at,
+    case
+        when NEW.kind = 7 then 1                                        -- like
+        when NEW.kind in (6, 16) then 3                                 -- repost
+        when NEW.system_kind is not null and NEW.system_kind = 1 then 4 -- quote
+        when NEW.system_kind is not null and NEW.system_kind = 2 then 2 -- top level comment (root)
+        else 0
+    end,
+    (round(( case
+        when NEW.kind = 7 then 1
+        when NEW.kind in (6, 16) then 3
+        when NEW.system_kind is not null and NEW.system_kind = 1 then 4
+        when NEW.system_kind is not null and NEW.system_kind = 2 then 2
+        else 0
+    end / power((1 + (unixepoch() - min(unixepoch(), e.created_at))/3600.0), 0.9)), 4))
+  from
+    events e
+  inner join cte on e.address = cte.event_address
+  where
+    e.hidden = 0
+    and e.deleted = 0
+    and e.id = e.h_tag
+    and e.created_at > 0
+    and e.kind in (1, 30023, 30175)
+    and NEW.deleted = 0
+    and (NEW.system_kind is null or NEW.system_kind != 3)
+  on conflict do update
+  set
+    points = points + excluded.points,
+    score = (round((points + excluded.points / power((1 + (unixepoch() - min(unixepoch(), event_created_at))/3600.0), 0.9)), 4));
+  delete from ranked_events where points <= 0;
+end;
+--------
+drop   trigger if     exists trigger_events_after_delete_score_dec;
+create trigger if not exists trigger_events_after_delete_score_dec
+    after delete
+    ON events
+    for each row
+    when OLD.kind in (1, 6, 7, 16, 30023, 30175) and OLD.hidden = 0 and OLD.deleted = 0
+begin
+  update ranked_events
+  set
+    points = points - case
+        when OLD.kind = 7 then 1                                        -- like
+        when OLD.kind in (6, 16) then 3                                 -- repost
+        when OLD.system_kind is not null and OLD.system_kind = 1 then 4 -- quote
+        when OLD.system_kind is not null and OLD.system_kind = 2 then 2 -- top level comment (root)
+        else 0
+    end,
+    score = (round((points - case
+        when OLD.kind = 7 then 1
+        when OLD.kind in (6, 16) then 3
+        when OLD.system_kind is not null and OLD.system_kind = 1 then 4
+        when OLD.system_kind is not null and OLD.system_kind = 2 then 2
+        else 0
+    end) / power((1 + (unixepoch() - min(unixepoch(), event_created_at))/3600.0), 0.9), 4))
+  where exists (
+    select 1
+    from json_each(OLD.tags) je
+    where json_extract(je.value, '$[0]') in ('a', 'e', 'q', 'Q')
+    and ranked_events.event_rid in (
+      select rid
+      from events e
+      where e.address = json_extract(je.value, '$[1]')
+      and e.hidden = 0
+      and e.deleted = 0
+      and e.id = e.h_tag
+      and e.created_at > 0
+      and e.kind in (1, 30023, 30175)
+      and (OLD.system_kind is null or OLD.system_kind != 3)
+      and (OLD.system_kind is null or case
+        when OLD.system_kind = 2 then json_extract(je.value, '$[3]') = 'root'
+        when OLD.system_kind = 3 then false
+        else true
+      end)
+    )
+  );
+  delete from ranked_events where points <= 0;
+end;
 --------
 PRAGMA foreign_keys = on;

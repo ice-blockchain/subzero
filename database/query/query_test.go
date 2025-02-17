@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"slices"
@@ -47,7 +46,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -56,7 +55,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 		})
@@ -68,7 +67,7 @@ func TestReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 1st event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
@@ -89,7 +88,7 @@ func TestReplaceableEvents(t *testing.T) {
 
 		expectedEvents := []*model.Event{}
 		expectedEvents = append(expectedEvents, &model.Event{Event: nostr.Event{Tags: model.Tags{}}})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -100,7 +99,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
@@ -122,7 +121,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      model.Tags{{"p", "event1", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev1))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev1))
 
 		// Overwrite.
 		ev2 := &model.Event{
@@ -134,7 +133,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{{"p", "event2", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev2))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev2))
 
 		// Add another event.
 		ev3 := &model.Event{
@@ -146,7 +145,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{{"p", "event3", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev3))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev3))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindFollowList},
@@ -164,7 +163,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 		expectedEvents := []*model.Event{}
-		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:        "item to be replaced" + uuid.NewString(),
 				PubKey:    "bogus",
@@ -191,7 +190,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		// Another D value
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -206,7 +205,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		// Another pubkey
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -221,7 +220,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[2]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindRepositoryAnnouncement},
 		})
@@ -239,7 +238,7 @@ func TestEphemeralEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:        "ephemeral" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
@@ -269,14 +268,14 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
+		require.NoError(t, db.AcceptEvents(t.Context(), publishedEvent))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
 
-		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:     "deletion event",
 				PubKey: publishedEvent.PubKey,
@@ -298,14 +297,14 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Content:   "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
+		require.NoError(t, db.AcceptEvents(t.Context(), publishedEvent))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
 
-		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:     "deletion event2",
 				PubKey: publishedEvent.PubKey,
@@ -330,14 +329,14 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				Content: "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
+		require.NoError(t, db.AcceptEvents(t.Context(), publishedEvent))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindArticle},
 		})
 		require.Len(t, stored, 1)
 		require.Contains(t, stored, publishedEvent)
 
-		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:     "deletion event3",
 				PubKey: publishedEvent.PubKey,
@@ -350,7 +349,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 		require.Empty(t, helperSelectEvents(t, db))
 	})
 	t.Run("event that doesn't exist", func(t *testing.T) {
-		require.NoError(t, db.AcceptEvents(context.Background(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				PubKey: "bogus",
 				Kind:   nostr.KindDeletion,
@@ -361,7 +360,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 		}))
 	})
 	t.Run("account delete", func(t *testing.T) {
-		require.NoError(t, db.AcceptEvents(context.Background(),
+		require.NoError(t, db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:        "replaceable1",
@@ -380,7 +379,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				}},
 		))
 		require.Equal(t, 2, len(helperSelectEvents(t, db)))
-		require.NoError(t, db.AcceptEvents(context.Background(),
+		require.NoError(t, db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:      "deletion event4",
@@ -409,12 +408,12 @@ func TestSaveEventWithRepost(t *testing.T) {
 		event.Tags = slices.Clone(tags)
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		t.Run("CheckSelect", func(t *testing.T) {
 			var event2 model.Event
-			for ev, err := range db.SelectEvents(context.TODO(), model.Filter{
+			for ev, err := range db.SelectEvents(t.Context(), model.Filter{
 				IDs: []string{event.ID},
 			}) {
 				require.NoError(t, err)
@@ -446,7 +445,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 		event.CreatedAt = 2
 		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		t.Run("CheckTags", func(t *testing.T) {
@@ -479,7 +478,7 @@ func TestSaveEventWithRepost(t *testing.T) {
 			event.CreatedAt = 2
 			event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
 
-			err := db.AcceptEvents(context.TODO(), &event)
+			err := db.AcceptEvents(t.Context(), &event)
 			require.NoError(t, err)
 		})
 	})
@@ -508,7 +507,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 		t.Run("Save", func(t *testing.T) {
-			err := db.AcceptEvents(context.Background(), &ev)
+			err := db.AcceptEvents(t.Context(), &ev)
 			require.NoError(t, err)
 		})
 		t.Run("ByID", func(t *testing.T) {
@@ -552,7 +551,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 		defer db.Close()
 
 		t.Run("Save", func(t *testing.T) {
-			err := db.AcceptEvents(context.Background(), &repostEvent)
+			err := db.AcceptEvents(t.Context(), &repostEvent)
 			require.NoError(t, err)
 		})
 		t.Run("ByID", func(t *testing.T) {
@@ -578,7 +577,7 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 			require.True(t, ok)
 		})
 		t.Run("Count", func(t *testing.T) {
-			count, err := db.CountEvents(context.TODO())
+			count, err := db.CountEvents(t.Context())
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count) // Only the reposted event should be counted.
 		})
@@ -608,9 +607,9 @@ func TestQueryEventAttestation(t *testing.T) {
 		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event %+v", ev)
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Kinds:   []int{model.CustomIONKindAttestation},
 			Authors: []string{masterPk},
 			Search:  "nostr",
@@ -625,7 +624,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			}
 			require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
-			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), ErrAttestationUpdateRejected)
+			require.ErrorIs(t, db.AcceptEvents(t.Context(), &ev), ErrAttestationUpdateRejected)
 		})
 
 		t.Log("add second attestation")
@@ -639,9 +638,9 @@ func TestQueryEventAttestation(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event %+v", ev)
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
-		count, err = db.CountEvents(context.TODO(), model.Filter{
+		count, err = db.CountEvents(t.Context(), model.Filter{
 			Kinds:   []int{model.CustomIONKindAttestation},
 			Authors: []string{masterPk},
 			Search:  "nostr",
@@ -656,7 +655,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.CreatedAt = 1
 			ev.Content = "hello world"
 			require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("OnBehalf", func(t *testing.T) {
 			var ev model.Event
@@ -666,7 +665,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPk}}
 			require.NoError(t, ev.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("OnBehalfOfUnknownUser", func(t *testing.T) {
 			var ev model.Event
@@ -676,10 +675,10 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, model.GeneratePrivateKey()}}
 			require.NoError(t, ev.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
-			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
+			require.ErrorIs(t, db.AcceptEvents(t.Context(), &ev), model.ErrOnBehalfAccessDenied)
 		})
 		t.Run("Count", func(t *testing.T) {
-			count, err := db.CountEvents(context.TODO(), model.Filter{
+			count, err := db.CountEvents(t.Context(), model.Filter{
 				Kinds:   []int{nostr.KindTextNote},
 				Authors: []string{masterPk},
 				Search:  "nostr",
@@ -711,7 +710,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 	user2MessageIds := []string{}
 
 	counter := func(t *testing.T, kinds []int, ids, authors []string) int64 {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Authors: authors,
 			Kinds:   kinds,
 			IDs:     ids,
@@ -733,7 +732,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 		ev.CreatedAt = 1
 		ev.Tags = baseAttestation
 		require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 	})
 	t.Run("AddEvents", func(t *testing.T) {
 		t.Run("Master", func(t *testing.T) {
@@ -744,7 +743,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.Content = "hello world" + strconv.Itoa(n)
 				require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				masterMessageIds = append(masterMessageIds, ev.ID)
-				require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			}
 		})
 		t.Run("Master of behalf of user1", func(t *testing.T) {
@@ -756,7 +755,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}}
 				require.NoError(t, ev.SignWithAlg(user1Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				user1MessageIds = append(user1MessageIds, ev.ID)
-				require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			}
 			t.Logf("user 1 messages = %v", user1MessageIds)
 		})
@@ -769,7 +768,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPublic}}
 				require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				user2MessageIds = append(user2MessageIds, ev.ID)
-				require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			}
 			t.Logf("user 2 messages = %v", user2MessageIds)
 		})
@@ -784,7 +783,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, hackerPublic, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-1))})
 			ev.Tags = append(ev.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterPublic})
 			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.ErrorIs(t, db.AcceptEvents(context.TODO(), &ev), model.ErrOnBehalfAccessDenied)
+			require.ErrorIs(t, db.AcceptEvents(t.Context(), &ev), model.ErrOnBehalfAccessDenied)
 		})
 	})
 	t.Run("DeleteEvents", func(t *testing.T) {
@@ -794,7 +793,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 10
 			ev.Tags = model.Tags{{"e", user1MessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
 			mustBeZero(t, user1MessageIds[0])
 			require.Equal(t, int64(5), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
@@ -805,7 +804,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
 			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
 			mustBeZero(t, user1MessageIds[1])
 			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
@@ -816,7 +815,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
 			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
 			mustBeZero(t, user1MessageIds[1])
 			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
@@ -827,11 +826,11 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(hackerPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
+			require.Error(t, db.AcceptEvents(t.Context(), &ev))
 
 			ev.Tags = model.Tags{{"e", masterMessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(hackerPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
+			require.Error(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("User1 could not remove master events", func(t *testing.T) {
 			var ev model.Event
@@ -839,7 +838,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", masterMessageIds[1]}}
 			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
+			require.Error(t, db.AcceptEvents(t.Context(), &ev))
 			mustBeOne(t, masterMessageIds[1])
 			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
 		})
@@ -852,7 +851,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.Tags = append(ev.Tags, baseAttestation...)
 			ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, user1Public, "", model.CustomIONAttestationKindRevoked + ":" + strconv.Itoa(int(now-3))})
 			require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
 		t.Run("User1 could not remove events of user2", func(t *testing.T) {
 			var ev model.Event
@@ -860,7 +859,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(user1Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(context.TODO(), &ev))
+			require.Error(t, db.AcceptEvents(t.Context(), &ev))
 			mustBeOne(t, user2MessageIds[0])
 		})
 	})
@@ -889,7 +888,7 @@ func TestQueryReply(t *testing.T) {
 		ev2.CreatedAt = 2
 		ev2.Content = "hello world 2"
 		ev2.Tags = model.Tags{{"e", "event2", "", "root"}}
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev, &ev2))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev, &ev2))
 	})
 	t.Run("Filter", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
@@ -942,7 +941,7 @@ func TestSelectFilterATagWithAttestation(t *testing.T) {
 			{model.TagAttestationName, pub2, "", model.CustomIONAttestationKindActive + ":1"},
 		}
 		require.NoError(t, attestation.SignWithAlg(priv1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &attestation))
+		require.NoError(t, db.AcceptEvents(t.Context(), &attestation))
 	})
 	t.Run("Create event", func(t *testing.T) {
 		var evMain model.Event
@@ -953,7 +952,7 @@ func TestSelectFilterATagWithAttestation(t *testing.T) {
 			{"a", "1:" + pub1 + ":"},
 		}
 		require.NoError(t, evMain.SignWithAlg(priv1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &evMain))
+		require.NoError(t, db.AcceptEvents(t.Context(), &evMain))
 	})
 	t.Run("Lookup", func(t *testing.T) {
 		eventsByMaster := helperSelectEvents(t, db, model.Filter{
@@ -989,7 +988,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 		root.Kind = nostr.KindTextNote
 		root.Content = "root event"
 		require.NoError(t, root.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &root))
+		require.NoError(t, db.AcceptEvents(t.Context(), &root))
 
 		// First level events.
 		var ev1 model.Event
@@ -998,7 +997,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 		ev1.Content = "regular event"
 		ev1.Tags = model.Tags{{"e", root.ID}}
 		require.NoError(t, ev1.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev1))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev1))
 
 		var ev2 model.Event
 		ev2.CreatedAt = 3
@@ -1009,7 +1008,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 			{"e", root.ID},
 		}
 		require.NoError(t, ev2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev2))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev2))
 
 		var ev3 model.Event
 		ev3.CreatedAt = 4
@@ -1017,7 +1016,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 		ev3.Content = "replaceable event"
 		ev3.Tags = model.Tags{{"e", root.ID}}
 		require.NoError(t, ev3.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev3))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev3))
 
 		// Second level events.
 		var ev4 model.Event
@@ -1026,7 +1025,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 		ev4.Content = "regular child event"
 		ev4.Tags = model.Tags{{"e", ev1.ID}}
 		require.NoError(t, ev4.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev4))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev4))
 
 		var ev5 model.Event
 		ev5.CreatedAt = 6
@@ -1037,7 +1036,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 			{"a", fmt.Sprintf("%v:%v:%v", ev2.Kind, ev2.PubKey, ev2.Tags.GetD())},
 		}
 		require.NoError(t, ev5.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev5))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev5))
 
 		var ev6 model.Event
 		ev6.CreatedAt = 7
@@ -1047,7 +1046,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 			{"a", fmt.Sprintf("%v:%v:", ev3.Kind, ev3.PubKey)},
 		}
 		require.NoError(t, ev6.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &ev6))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev6))
 	})
 
 	events := helperSelectEvents(t, db)
@@ -1060,7 +1059,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 	rootDelete.Content = "delete root event"
 	rootDelete.Tags = model.Tags{{"e", root.ID}}
 	require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(context.TODO(), &rootDelete))
+	require.NoError(t, db.AcceptEvents(t.Context(), &rootDelete))
 
 	// Check if all events are deleted.
 	require.Zero(t, len(helperSelectEvents(t, db)))
@@ -1078,7 +1077,7 @@ func TestEditablePostFlow(t *testing.T) {
 	post.PubKey = "1pub"
 	post.CreatedAt = 1
 	post.Content = "hello world"
-	require.NoError(t, db.AcceptEvents(context.TODO(), &post))
+	require.NoError(t, db.AcceptEvents(t.Context(), &post))
 
 	t.Run("Quote", func(t *testing.T) {
 		var quote1, quote2 model.Event
@@ -1103,7 +1102,7 @@ func TestEditablePostFlow(t *testing.T) {
 			{"d", "article2"},
 		}
 
-		require.NoError(t, db.AcceptEvents(context.TODO(), &quote1, &quote2))
+		require.NoError(t, db.AcceptEvents(t.Context(), &quote1, &quote2))
 
 		helperMustBePrecalculatedCount(t, db, 2, model.Filter{
 			Kinds: []int{nostr.KindArticle},
@@ -1118,7 +1117,7 @@ func TestEditablePostFlow(t *testing.T) {
 			delete.PubKey = "2pub"
 			delete.CreatedAt = 3
 			delete.Tags = model.Tags{{"e", quote1.ID}}
-			require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+			require.NoError(t, db.AcceptEvents(t.Context(), &delete))
 
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{
 				Kinds: []int{nostr.KindArticle},
@@ -1150,7 +1149,7 @@ func TestEditablePostFlow(t *testing.T) {
 			{"d", "reply2"},
 		}
 
-		require.NoError(t, db.AcceptEvents(context.TODO(), &reply1, &reply2))
+		require.NoError(t, db.AcceptEvents(t.Context(), &reply1, &reply2))
 
 		postAddress := post.Address()
 		helperMustBePrecalculatedCount(t, db, 3, model.Filter{ // 1 root, 1 reply, 1 quote.
@@ -1174,7 +1173,7 @@ func TestEditablePostFlow(t *testing.T) {
 			delete.PubKey = "2pub"
 			delete.CreatedAt = 3
 			delete.Tags = model.Tags{{"e", reply1.ID}}
-			require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+			require.NoError(t, db.AcceptEvents(t.Context(), &delete))
 
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{ // 1 root, 1 quote.
 				Kinds: []int{nostr.KindArticle},
@@ -1194,7 +1193,7 @@ func TestEditablePostFlow(t *testing.T) {
 		delete.PubKey = "1pub"
 		delete.CreatedAt = 4
 		delete.Tags = model.Tags{{"e", post.ID}}
-		require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+		require.NoError(t, db.AcceptEvents(t.Context(), &delete))
 
 		helperMustBePrecalculatedCount(t, db, 0, model.Filter{
 			Kinds: []int{nostr.KindArticle},
@@ -1227,7 +1226,7 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 			{model.TagAttestationName, user2Pub, "", model.CustomIONAttestationKindActive + ":1"},
 		}
 		require.NoError(t, attestation.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &attestation))
+		require.NoError(t, db.AcceptEvents(t.Context(), &attestation))
 	})
 	t.Run("Post events on behalf of users", func(t *testing.T) {
 		for i, key := range []string{user1Priv, user2Priv} {
@@ -1237,7 +1236,7 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 			ev.Content = "hello world"
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPub}}
 			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		}
 	})
 	require.Len(t, helperSelectEvents(t, db), dummyAmount+3) // 1 attestation, 2 events.
@@ -1248,7 +1247,7 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 		delete.CreatedAt = 3
 		delete.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPub}}
 		require.NoError(t, delete.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &delete))
+		require.NoError(t, db.AcceptEvents(t.Context(), &delete))
 		require.Len(t, helperSelectEvents(t, db), dummyAmount)
 	})
 }
@@ -1301,7 +1300,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 			keys = append(keys, key)
 			require.NoError(t, posts[i].SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), posts...))
+		require.NoError(t, db.AcceptEvents(t.Context(), posts...))
 	})
 
 	t.Run("Soft delete second post", func(t *testing.T) {
@@ -1316,7 +1315,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 			},
 		}
 		require.NoError(t, deletedPost.SignWithAlg(keys[1], model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), deletedPost))
+		require.NoError(t, db.AcceptEvents(t.Context(), deletedPost))
 		posts[1] = deletedPost
 	})
 
@@ -1339,4 +1338,78 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		require.Len(t, events, 3, "should return all posts including deleted")
 		require.ElementsMatch(t, posts, events)
 	})
+}
+
+func TestSelectRankTopEvents(t *testing.T) {
+	t.Parallel()
+
+	const (
+		numLikes  = 5
+		numQuotes = 3
+	)
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	// Create 3 text notes.
+	notes := make([]*model.Event, 3)
+	for i := range notes {
+		notes[i] = &model.Event{
+			Event: nostr.Event{
+				ID:        "note" + strconv.Itoa(i+1),
+				PubKey:    "pub" + strconv.Itoa(i+1),
+				Kind:      nostr.KindTextNote,
+				CreatedAt: nostr.Timestamp(time.Now().Unix() + int64(i)),
+				Content:   "my text note " + strconv.Itoa(i+1),
+			},
+		}
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), notes...))
+
+	// Add likes and quotes to first two notes.
+	for i := 0; i < 2; i++ {
+		// Add likes.
+		for j := 0; j < numLikes+i; j++ {
+			like := &model.Event{
+				Event: nostr.Event{
+					ID:        "like" + strconv.Itoa(i+1) + "_" + strconv.Itoa(j+1),
+					PubKey:    "like_pub" + strconv.Itoa(j+10),
+					Kind:      nostr.KindReaction,
+					CreatedAt: nostr.Now(),
+					Tags:      model.Tags{{"e", notes[i].ID}},
+					Content:   "+",
+				},
+			}
+			require.NoError(t, db.AcceptEvents(t.Context(), like))
+		}
+
+		// Add quotes.
+		for j := 0; j < numQuotes+i; j++ {
+			quote := &model.Event{
+				Event: nostr.Event{
+					ID:        "quote" + strconv.Itoa(i+1) + "_" + strconv.Itoa(j+1),
+					PubKey:    "quote_pub" + strconv.Itoa(j+10),
+					Kind:      nostr.KindTextNote,
+					CreatedAt: nostr.Now(),
+					Tags:      model.Tags{{"q", notes[i].ID}},
+					Content:   "quote " + strconv.Itoa(j+1),
+				},
+			}
+			require.NoError(t, db.AcceptEvents(t.Context(), quote))
+		}
+	}
+
+	// Query top ranked events
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindTextNote},
+		Search: "top",
+	})
+
+	// Should return top 2 events with most reactions.
+	require.Len(t, events, 2)
+	require.Equal(t, notes[1].ID, events[0].ID)
+	require.Equal(t, notes[0].ID, events[1].ID)
+
+	helperPointsScoreEqual(t, db, notes[1].ID, 22, 22.0)
+	helperPointsScoreEqual(t, db, notes[0].ID, 17, 17.0)
 }

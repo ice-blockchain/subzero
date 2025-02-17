@@ -114,6 +114,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "created_at"
 		case "systemcreatedat":
 			out = "system_created_at"
+		case "systemkind":
+			out = "system_kind"
 		case "referenceid":
 			out = "reference_id"
 		case "sigalg":
@@ -141,26 +143,37 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
-		if err := client.alterEventsTable(tx); err != nil {
-			panic(err)
-		}
+		client.alterEventsTable(tx)
 		tx.Commit()
 	}
 
 	return client
 }
 
-func (db *dbClient) alterEventsTable(tx *sqlx.Tx) error {
-	var doAlter bool
-
-	err := tx.QueryRowx("SELECT not exists (select name from pragma_table_info('events') WHERE name = 'deleted')").Scan(&doAlter)
-	if err != nil || !doAlter {
-		return err
+func (db *dbClient) alterEventsTable(tx *sqlx.Tx) {
+	columns := map[string]string{
+		"system_kind": "ALTER TABLE events ADD COLUMN system_kind integer",
+		"deleted":     "ALTER TABLE events ADD COLUMN deleted integer not null DEFAULT 0",
+		"address": `ALTER TABLE events ADD COLUMN address text not null generated always as (
+CASE
+WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3 THEN concat(coalesce(kind,0), ':', coalesce(master_pubkey,pubkey,''),':')
+WHEN 30000 <= kind AND kind < 40000                           THEN concat(coalesce(kind,0), ':', coalesce(master_pubkey,pubkey,''),':',coalesce(d_tag,''))
+ELSE id
+END) VIRTUAL`,
 	}
 
-	_, err = tx.Exec("ALTER TABLE events ADD COLUMN deleted integer not null DEFAULT 0")
+	for column, statement := range columns {
+		var doAlter bool
 
-	return err
+		err := tx.QueryRow("SELECT not exists (select name from pragma_table_xinfo('events') WHERE name = $1)", column).Scan(&doAlter)
+		if err != nil {
+			panic("failed to check if column " + column + " exists: " + err.Error())
+		}
+
+		if doAlter {
+			tx.MustExec(statement)
+		}
+	}
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {

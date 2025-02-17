@@ -23,6 +23,10 @@ import (
 
 const (
 	selectDefaultBatchLimit = 100
+
+	systemKindQuote        = 1
+	systemKindCommentRoot  = 2
+	systemKindCommentReply = 3
 )
 
 var (
@@ -38,6 +42,7 @@ type (
 	databaseEvent struct {
 		model.Event
 		SystemCreatedAt int64
+		SystemKind      sql.NullInt64
 		ReferenceID     sql.NullString
 		Jtags           string
 		SigAlg          string
@@ -63,6 +68,25 @@ type databaseBatchRequest struct {
 	Delete []databaseFilterDelete
 }
 
+func detectSystemKind(e *model.Event) (int64, bool) {
+	var hasReply, hasRoot bool
+	for i := range e.Tags {
+		switch e.Tags[i].Key() {
+		case "a", "e":
+			hasReply = hasReply || len(e.Tags[i]) > replyMarkerIndex && strings.EqualFold(e.Tags[i][replyMarkerIndex], "reply")
+			hasRoot = hasRoot || len(e.Tags[i]) > replyMarkerIndex && strings.EqualFold(e.Tags[i][replyMarkerIndex], "root")
+		case "q", "Q":
+			return systemKindQuote, true
+		}
+	}
+	if hasReply {
+		return systemKindCommentReply, true
+	} else if hasRoot {
+		return systemKindCommentRoot, true
+	}
+	return -1, false
+}
+
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	var deleted bool
 
@@ -85,10 +109,14 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		}
 	}
 
+	var systemKind sql.NullInt64
+	systemKind.Int64, systemKind.Valid = detectSystemKind(e)
+
 	return &databaseEvent{
 		Event:           *e,
 		MasterPubKey:    e.GetMasterPublicKey(),
 		SystemCreatedAt: time.Now().UnixNano(),
+		SystemKind:      systemKind,
 		Jtags:           string(jtags),
 		SigAlg:          sigAlg,
 		KeyAlg:          keyAlg,
@@ -324,14 +352,15 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
 	const stmt = `insert into events
-	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata, deleted)
+	(kind, created_at, system_created_at, system_kind, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata, deleted)
 values
-	(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata, :deleted)
+	(:kind, :created_at, :system_created_at, :system_kind, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata, :deleted)
 on conflict do update set
 	id                = excluded.id,
 	kind              = excluded.kind,
 	created_at        = excluded.created_at,
 	system_created_at = excluded.system_created_at,
+	system_kind       = excluded.system_kind,
 	pubkey            = excluded.pubkey,
 	master_pubkey     = excluded.master_pubkey,
 	sig               = excluded.sig,
@@ -587,6 +616,21 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 	if strings.Contains(filters.String(), discoverContentCreatorsToFollow) {
 		orderBy = " order by random()"
 	}
+
+	var JoinString string
+	if v, ok := params["rank"]; ok && v.(rank) != rankUndef {
+		switch v.(rank) {
+		case rankTOP:
+			// All time top.
+			JoinString = ` inner join ranked_events r on e.rid = r.event_rid`
+			orderBy = ` order by r.score desc, e.system_created_at desc`
+		case rankTrending:
+			// 24h trending.
+			JoinString = ` inner join ranked_events r on e.rid = r.event_rid and ((unixepoch() - min(unixepoch(), e.created_at)) < 86400)`
+			orderBy = ` order by r.score desc, e.system_created_at desc`
+		}
+	}
+
 	if depClause == "" {
 		if whereSearch != "" {
 			sql, err := db.searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery)
@@ -609,7 +653,7 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 				e.content,
 				tags as jtags
 			from
-				events e
+				events e` + JoinString + `
 			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
 	}
 	if whereSearch != "" {
@@ -636,11 +680,8 @@ with eventsmain as (
 		e.h_tag,
 		tags as jtags
 	from
-		events e
-	where ` + systemCreatedAtFilter + `(` + whereMain + `)
-order by
-	system_created_at desc
-` + limitQuery + `
+		events e` + JoinString + `
+	where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery + `
 )
 select
 	*

@@ -312,10 +312,10 @@ func TestSearchEvents_KindProfileMetadata_SpecialChars(t *testing.T) {
 	expectedEvents := []*model.Event{}
 
 	t.Run("Events with profile metadata kind", func(t *testing.T) {
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			randomName := helperGenerateRandomStringWithSpecialChars(t, 10)
 			randomDisplayName := helperGenerateRandomStringWithSpecialChars(t, 10)
-			fmt.Printf("randomName: %s, randomDisplayName: %s\n", randomName, randomDisplayName)
+			t.Logf("randomName: %s, randomDisplayName: %s", randomName, randomDisplayName)
 
 			event := &model.Event{
 				Event: nostr.Event{
@@ -346,7 +346,7 @@ func TestSearchEvents_KindProfileMetadata_SpecialChars(t *testing.T) {
 		if len(name) > 1 {
 			name = name[0 : len(name)/2]
 		}
-		fmt.Printf("searchTerm: %s\n", name)
+		t.Logf("searchTerm: %s", name)
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},

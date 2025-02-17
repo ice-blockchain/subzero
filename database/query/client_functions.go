@@ -13,6 +13,11 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+const (
+	replyMarkerIndex = 3 // event_tag_value3.
+	patchMarkerIndex = 5 // event_tag_value5.
+)
+
 func sqlObehalfIsAllowed(masterJsonTags, onBehalfPubkey, masterPubkey string, kind int, nowUnix int64) (bool, error) {
 	if masterJsonTags == "" || masterJsonTags == "[]" {
 		return false, nil
@@ -28,10 +33,6 @@ func sqlObehalfIsAllowed(masterJsonTags, onBehalfPubkey, masterPubkey string, ki
 }
 
 func sqlEventTagsReorderJSON(jsonTags string) (string, error) {
-	const (
-		replyMarkerIndex = 3 // event_tag_value3.
-		patchMarkerIndex = 5 // event_tag_value5.
-	)
 	var tags model.Tags
 
 	if jsonTags == "" {

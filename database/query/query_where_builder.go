@@ -22,6 +22,12 @@ const (
 )
 
 const (
+	rankUndef rank = iota
+	rankTOP
+	rankTrending
+)
+
+const (
 	sqlOpCodeNONE = iota
 	sqlOpCodeAND
 	sqlOpCodeOR
@@ -35,6 +41,7 @@ var (
 )
 
 type (
+	rank         int
 	whereBuilder struct {
 		Params       map[string]any
 		Dependencies []*filterDependencies
@@ -51,6 +58,7 @@ type (
 		References   *bool
 		TagMarkers   []databaseFilterMarker
 		Dependencies []*filterDependencies
+		Rank         rank
 	}
 	databaseFilterDelete struct {
 		Author string
@@ -417,6 +425,10 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	if _, ok := filter.Tags[model.CustomIONTagCommunity]; !ok {
 		w.maybeAND()
 		w.WriteString(whereBuilderCommunityFilter)
+	}
+
+	if filter.Rank != rankUndef {
+		w.Params["rank"] = filter.Rank
 	}
 
 	w.WriteRune(')') // End the filter section.
