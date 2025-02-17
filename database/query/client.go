@@ -174,6 +174,8 @@ END) VIRTUAL`,
 			tx.MustExec(statement)
 		}
 	}
+	// TODO: move it to the ddl after the migration.
+	tx.MustExec(`CREATE INDEX IF NOT EXISTS idx_events_address ON events(address)`)
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
