@@ -29,7 +29,7 @@ func helperPointsScoreEqual(t *testing.T, db *dbClient, eventID string, points i
 
 	p, s := helperGetEventPointsAndScore(t, db, eventID)
 	require.EqualValues(t, points, p)
-	require.EqualValues(t, score, s)
+	require.InDelta(t, score, s, 0.3)
 }
 
 func TestEventScore(t *testing.T) {

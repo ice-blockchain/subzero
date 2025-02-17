@@ -40,6 +40,12 @@ var (
 	initFlags = func() {
 		subzero.Flags().StringVar(&configPath, "config", cfg.DefaultYAMLConfigurationFilePath, "absolute path to the service config yaml file")
 	}
+
+	// Do not require authentication for these kinds of events (publishing).
+	eventKindsNoAuth = map[int]struct{}{
+		nostr.KindGiftWrap:     {},
+		nostr.KindFileMetadata: {},
+	}
 )
 
 func init() {
@@ -50,8 +56,8 @@ func init() {
 		return true
 	})
 	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
-		for _, event := range events {
-			if event.Kind != nostr.KindGiftWrap {
+		for _, e := range events {
+			if _, exists := eventKindsNoAuth[e.Kind]; !exists {
 				return true
 			}
 		}
