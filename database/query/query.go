@@ -815,20 +815,25 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
 }
 
 func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingEvent *model.Event) (filters []databaseFilterDelete, err error) {
-	var ids []string
-	for _, eTag := range incomingEvent.Tags.GetAll([]string{"e"}) {
-		if eTag.Key() == "e" {
-			ids = append(ids, eTag.Value())
-		}
+	selectFilter := model.Filter{
+		Tags: model.TagMap{}.Set(model.CustomIONTagCommunity),
 	}
+	for _, tag := range incomingEvent.GetTags("e") {
+		selectFilter.IDs = append(selectFilter.IDs, tag.Value())
+	}
+	if len(selectFilter.IDs) == 0 {
+		// Nothing to delete.
+		return nil, nil
+	}
+
 	filters = make([]databaseFilterDelete, 0)
-	for ev := range db.SelectEvents(ctx, model.Filter{IDs: ids}) {
-		if hTag := ev.GetTag("h"); hTag == nil {
-			continue
+	for ev, err := range db.SelectEvents(ctx, selectFilter) {
+		if err != nil {
+			return nil, errors.Wrap(db.handleError(err), "failed to select community events for deletion")
 		}
 		filters = append(filters, databaseFilterDelete{
 			Author: ev.GetMasterPublicKey(),
-			IDs:    []string{ev.GetID()},
+			IDs:    []string{ev.ID},
 		})
 	}
 
