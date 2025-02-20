@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
@@ -86,6 +87,11 @@ func init() {
 					{
 						Name: "subzero_nostr_replace_special_chars",
 						Ptr:  subzeroNostrReplaceSpecialChars,
+						Pure: true,
+					},
+					{
+						Name: "subzero_nostr_event_detect_systemd_kind",
+						Ptr:  sqlEventDetectSystemdKind,
 						Pure: true,
 					},
 				}
@@ -176,6 +182,81 @@ END) VIRTUAL`,
 	}
 	// TODO: move it to the ddl after the migration.
 	tx.MustExec(`CREATE INDEX IF NOT EXISTS idx_events_address ON events(address)`)
+
+	var minEventDate int64
+	err := tx.QueryRow("select coalesce(min(event_created_at), 0) from ranked_events").Scan(&minEventDate)
+	if err != nil {
+		panic("failed to get min event date: " + err.Error())
+	}
+
+	dateCutOff := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
+	if minEventDate == 0 || minEventDate > dateCutOff {
+		tx.MustExec(`
+		update events
+		set
+			system_kind = iif(subzero_nostr_event_detect_systemd_kind(tags) >= 0, subzero_nostr_event_detect_systemd_kind(tags), NULL)
+		where
+			system_kind is null
+			and hidden=0
+			and deleted=0
+		`)
+		tx.MustExec(`delete from ranked_events`)
+
+		const rankUpdate = `
+		insert into ranked_events(event_rid, event_kind, event_created_at, points, score)
+		with cte as (
+			select
+				e.*,
+				et.event_tag_value1 as event_address
+			from
+				events e
+			inner join event_tags et on e.id = et.event_id
+			where
+				et.event_tag_key in ('a', 'e', 'q', 'Q')
+				and (e.system_kind is null or
+					case
+						when e.system_kind = 2 then et.event_tag_value3 = 'root'
+						when e.system_kind = 3 then false -- ignore replies
+						else true
+					end)
+				and hidden=0
+				and deleted=0
+		)
+		select
+			e.rid,
+			e.kind,
+			e.created_at,
+			case
+				when cte.kind = 7 then 1                                        -- like
+				when cte.kind in (6, 16) then 3                                 -- repost
+				when cte.system_kind is not null and cte.system_kind = 1 then 4 -- quote
+				when cte.system_kind is not null and cte.system_kind = 2 then 2 -- top level comment (root)
+				else 0
+			end,
+			(round(( case
+				when cte.kind = 7 then 1
+				when cte.kind in (6, 16) then 3
+				when cte.system_kind is not null and cte.system_kind = 1 then 4
+				when cte.system_kind is not null and cte.system_kind = 2 then 2
+				else 0
+			end / power((1 + (unixepoch() - min(unixepoch(), e.created_at))/3600.0), 0.9)), 4))
+		from
+			events e
+		inner join cte on e.address = cte.event_address
+		where
+			e.hidden = 0
+			and e.deleted = 0
+			and e.id = e.h_tag
+			and e.created_at > 0
+			and e.kind in (1, 30023, 30175)
+			and (cte.system_kind is null or cte.system_kind != 3)
+		on conflict do update
+		set
+			points = points + excluded.points,
+			score = (round((points + excluded.points / power((1 + (unixepoch() - min(unixepoch(), event_created_at))/3600.0), 0.9)), 4));
+		`
+		tx.MustExec(rankUpdate)
+	}
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {

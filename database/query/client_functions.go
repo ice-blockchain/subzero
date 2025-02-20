@@ -154,3 +154,20 @@ func processAltSummaryTags(tags model.Tags) string {
 func subzeroNostrReplaceSpecialChars(value string) string {
 	return replaceSpecialChars(value)
 }
+
+func sqlEventDetectSystemdKind(jsonTags string) int64 {
+	if jsonTags == "" || jsonTags == "[]" {
+		return -1
+	}
+
+	var tags model.Tags
+	if err := tags.Scan(jsonTags); err != nil {
+		return -1
+	}
+
+	val, ok := detectSystemKind(tags)
+	if ok {
+		return val
+	}
+	return -1
+}

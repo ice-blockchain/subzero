@@ -68,13 +68,13 @@ type databaseBatchRequest struct {
 	Delete []databaseFilterDelete
 }
 
-func detectSystemKind(e *model.Event) (int64, bool) {
+func detectSystemKind(tags model.Tags) (int64, bool) {
 	var hasReply, hasRoot bool
-	for i := range e.Tags {
-		switch e.Tags[i].Key() {
+	for i := range tags {
+		switch tags[i].Key() {
 		case "a", "e":
-			hasReply = hasReply || len(e.Tags[i]) > replyMarkerIndex && strings.EqualFold(e.Tags[i][replyMarkerIndex], "reply")
-			hasRoot = hasRoot || len(e.Tags[i]) > replyMarkerIndex && strings.EqualFold(e.Tags[i][replyMarkerIndex], "root")
+			hasReply = hasReply || len(tags[i]) > replyMarkerIndex && strings.EqualFold(tags[i][replyMarkerIndex], "reply")
+			hasRoot = hasRoot || len(tags[i]) > replyMarkerIndex && strings.EqualFold(tags[i][replyMarkerIndex], "root")
 		case "q", "Q":
 			return systemKindQuote, true
 		}
@@ -110,7 +110,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	}
 
 	var systemKind sql.NullInt64
-	systemKind.Int64, systemKind.Valid = detectSystemKind(e)
+	systemKind.Int64, systemKind.Valid = detectSystemKind(e.Tags)
 
 	return &databaseEvent{
 		Event:           *e,
