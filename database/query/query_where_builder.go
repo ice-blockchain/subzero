@@ -754,7 +754,7 @@ group by e.master_pubkey`)
 		}
 		w.WriteString(")")
 		if filter.Reduce.Group && filter.Reduce.Kinds[1] == nostr.KindReaction {
-			w.WriteString(" GROUP BY reference_id")
+			w.WriteString(" GROUP BY f.reference_id")
 		}
 	}
 }
