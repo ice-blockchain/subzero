@@ -74,17 +74,8 @@ func TestSelfChat(t *testing.T) {
 		note.Content = "test"
 		helperSignWithMinLeadingZeroBits(t, &note, priv)
 		err := receiver.Publish(context.Background(), note.Event)
-		if err != nil {
-			require.NoError(t, receiver.Auth(context.Background(), func(event *nostr.Event) error {
-				sEvent := model.Event{Event: *event}
-				sEvent.Tags = append(sEvent.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterPub})
-
-				require.NoError(t, sEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-				*event = sEvent.Event
-
-				return nil
-			}))
-		}
+		require.Error(t, err)
+		helperDoAuth(t, receiver.Relay, priv, masterPub)
 	})
 
 	sub, err := receiver.Subscribe(context.Background(), []model.Filter{

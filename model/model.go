@@ -21,6 +21,7 @@ type (
 	Subscription struct {
 		SubscriptionID string
 		Filters        Filters
+		Reduce         func(*Event) (skip bool)
 		OneShot        bool
 	}
 	EventReference interface {

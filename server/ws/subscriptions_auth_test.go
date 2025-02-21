@@ -89,17 +89,7 @@ func TestSubscriptionReqWithAuth(t *testing.T) {
 			})
 			t.Logf("auth error: %v", err)
 			require.Error(t, err)
-
-			err = relay.Auth(context.Background(), func(event *nostr.Event) error {
-				subZeroEvent := model.Event{Event: *event}
-				if err := subZeroEvent.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-					return err
-				}
-				*event = subZeroEvent.Event
-
-				return nil
-			})
-			require.NoError(t, err)
+			helperDoAuth(t, relay.Relay, model.GeneratePrivateKey())
 		})
 		t.Run("SubscribeAfterAuth", func(t *testing.T) {
 			sub, err := relay.Subscribe(context.Background(), []model.Filter{
@@ -184,16 +174,7 @@ func TestSubscriptionEventAuth(t *testing.T) {
 		require.Contains(t, err.Error(), errAuthRequired.Error())
 	})
 	t.Run("DoAuth", func(t *testing.T) {
-		err := relay.Auth(context.Background(), func(event *nostr.Event) error {
-			subZeroEvent := model.Event{Event: *event}
-			if err := subZeroEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-				return err
-			}
-			*event = subZeroEvent.Event
-
-			return nil
-		})
-		require.NoError(t, err)
+		helperDoAuth(t, relay.Relay, privKey)
 	})
 	t.Run("PublishAfterAuth", func(t *testing.T) {
 		var ev model.Event
@@ -276,16 +257,7 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 		require.Contains(t, err.Error(), errAuthRequired.Error())
 	})
 	t.Run("DoAuth", func(t *testing.T) {
-		err := relay.Auth(ctx, func(event *nostr.Event) error {
-			subZeroEvent := model.Event{Event: *event}
-			if err := subZeroEvent.SignWithAlg(privkeyUser1, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-				return err
-			}
-			*event = subZeroEvent.Event
-
-			return nil
-		})
-		require.NoError(t, err)
+		helperDoAuth(t, relay.Relay, privkeyUser1)
 	})
 
 	t.Run("create private community", func(t *testing.T) {

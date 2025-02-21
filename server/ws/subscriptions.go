@@ -276,6 +276,15 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(sub.Filters[i].Tags.All("p"), ",") + "|",
 			Limit:   1,
 		}
+		sub.Reduce = func(e *model.Event) bool {
+			// Skip if the event belongs to the current authenticated user.
+			f := model.Filter{
+				Kinds:   []int{nostr.KindFollowList},
+				Authors: []string{m, pk},
+			}
+
+			return f.Matches(&e.Event)
+		}
 	}
 	return sub
 }
@@ -299,13 +308,16 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		}
 	}
 	if wsSubscriptionListeners != nil {
+		sub = h.prepareSubscription(ctx, sub)
 		fetchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		for _, listener := range wsSubscriptionListeners {
-			for event, err := range listener(fetchCtx, h.prepareSubscription(ctx, sub)) {
+			for event, err := range listener(fetchCtx, sub) {
 				if err != nil {
 					return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
 				} else if !canForwardEventContext(fetchCtx, event) {
+					continue
+				} else if sub.Reduce != nil && sub.Reduce(event) {
 					continue
 				}
 				wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})

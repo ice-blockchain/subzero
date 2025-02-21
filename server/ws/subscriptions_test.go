@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func helperMustNewRelay(t *testing.T, service *fixture.MockService) *nostrRelay 
 	t.Helper()
 
 	service.Reset()
-	relay, err := fixture.NewRelayClient(context.Background(), service.Endpoint())
+	relay, err := fixture.NewRelayClient(t.Context(), service.Endpoint())
 	require.NoError(t, err)
 	require.NotNil(t, relay)
 
@@ -102,7 +103,7 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 }
 
 func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+	ctx, cancel := context.WithTimeout(t.Context(), testDeadline)
 	defer cancel()
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{{Event: nostr.Event{
@@ -228,7 +229,7 @@ func TestPublishingEvents(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	validEvent := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Now(),
@@ -357,7 +358,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validEventNIP09WithEKTags, validEventNIP09AllTags *model.Event
@@ -442,7 +443,7 @@ func TestPublishingNIP09Events_NoEvent(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var deletionEvent *model.Event
@@ -522,7 +523,7 @@ func TestPublishingNIP10Events(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	t.Run("kind 1 (NIP-10): e tags required params", func(t *testing.T) {
@@ -582,7 +583,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validEventKindArticle, validEventKindBlogPost *model.Event
@@ -648,7 +649,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validEventNIP01, validEventNIP24 *model.Event
@@ -737,7 +738,7 @@ func TestPublishingNIP32LabelingEvents(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validLabelingEvent, validUGCLabelingEvent *model.Event
@@ -877,7 +878,7 @@ func TestPublishingNIP56(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validReportEventWithPTagOnly *model.Event
@@ -995,7 +996,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent *model.Event
@@ -1157,7 +1158,7 @@ func TestPublishingNIP65RelayListMetadataEvents(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validRelayListEvent *model.Event
@@ -1228,7 +1229,7 @@ func TestPublishingNIP51ListsSetsEvents(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validEvents []*model.Event
@@ -1977,7 +1978,7 @@ func TestCountEvents(t *testing.T) {
 		return query.AcceptEvents(ctx, events...)
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	t.Run("SaveEvent", func(t *testing.T) {
@@ -2003,7 +2004,7 @@ func TestCountEvents(t *testing.T) {
 func helperSignWithMinLeadingZeroBits(t *testing.T, event *model.Event, privkey string) {
 	t.Helper()
 	require.NoError(t, event.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, event.GenerateNIP13(context.Background(), NIP13MinLeadingZeroBits))
+	require.NoError(t, event.GenerateNIP13(t.Context(), NIP13MinLeadingZeroBits))
 	require.NoError(t, event.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 }
 
@@ -2011,7 +2012,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validEvents []*model.Event
@@ -2207,11 +2208,11 @@ func TestRelayMultiEventsAndFilter(t *testing.T) {
 
 	t.Run("Publish", func(t *testing.T) {
 		t.Logf("publishing %v event(s)", len(generatedEvents))
-		err := relay.PublishMany(context.Background(), generatedEvents...)
+		err := relay.PublishMany(t.Context(), generatedEvents...)
 		require.NoError(t, err)
 	})
 
-	receivedEvents, err := relay.QuerySync(context.Background(),
+	receivedEvents, err := relay.QuerySync(t.Context(),
 		model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 			Tags: model.TagMap{}.
@@ -2283,7 +2284,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -2348,7 +2349,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -2405,7 +2406,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -2506,7 +2507,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -2640,7 +2641,7 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -2733,6 +2734,48 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
+func helperDoAuth(t *testing.T, relay *nostr.Relay, privateKey string, masterKey ...string) {
+	t.Helper()
+
+	err := relay.Auth(t.Context(), func(event *nostr.Event) error {
+		subZeroEvent := model.Event{Event: *event}
+		if len(masterKey) > 0 {
+			subZeroEvent.Tags = append(subZeroEvent.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterKey[0]})
+		}
+		if err := subZeroEvent.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+			return err
+		}
+		*event = subZeroEvent.Event
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func helperQueryEventsWithOptions(t *testing.T, relay *nostr.Relay, options []nostr.SubscriptionOption, filters ...model.Filter) (events []*model.Event) {
+	t.Helper()
+
+	sub, err := relay.Subscribe(t.Context(), filters, options...)
+	require.NoError(t, err)
+
+	go func() {
+		select {
+		case r := <-sub.ClosedReason:
+			t.Log("subscription closed: ", r)
+		case <-sub.EndOfStoredEvents:
+		case <-t.Context().Done():
+		case <-relay.Context().Done():
+		}
+		sub.Unsub()
+	}()
+
+	for evt := range sub.Events {
+		events = append(events, &model.Event{Event: *evt})
+	}
+
+	return events
+}
+
 func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	t.Cleanup(func() {
 		RegisterReqMustAuthenticate(nil)
@@ -2740,7 +2783,50 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	})
 
 	privKey, pubKey := model.GenerateKeyPair()
-	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+	var usersPrivs, usersPubs []string
+	for range 5 {
+		priv, pub := model.GenerateKeyPair()
+		usersPrivs = append(usersPrivs, priv)
+		usersPubs = append(usersPubs, pub)
+	}
+
+	var root model.Event
+	root.Kind = nostr.KindFollowList
+	root.Tags = model.Tags{ // No user3.
+		{"p", usersPubs[0]},
+		{"p", usersPubs[1]},
+		{"p", usersPubs[2]},
+		{"p", usersPubs[4]},
+	}
+	helperSignWithMinLeadingZeroBits(t, &root, privKey)
+	require.NoError(t, query.AcceptEvents(t.Context(), &root))
+
+	var ev1, ev2 model.Event
+	ev1.Kind = nostr.KindFollowList
+	ev1.Tags = model.Tags{ // No user0, user1.
+		{"p", usersPubs[2]},
+		{"p", usersPubs[3]},
+		{"p", usersPubs[4]},
+	}
+	helperSignWithMinLeadingZeroBits(t, &ev1, usersPrivs[1])
+
+	ev2.Kind = nostr.KindFollowList
+	ev2.Tags = model.Tags{ // No user0, user2.
+		{"p", usersPubs[1]},
+		{"p", usersPubs[3]},
+		{"p", usersPubs[4]},
+	}
+	helperSignWithMinLeadingZeroBits(t, &ev2, usersPrivs[2])
+	require.NoError(t, query.AcceptEvents(t.Context(), &ev1, &ev2))
+
+	var ev3, ev4 model.Event
+	ev3.Kind = nostr.KindProfileMetadata
+	ev4.Kind = nostr.KindProfileMetadata
+	helperSignWithMinLeadingZeroBits(t, &ev3, usersPrivs[3])
+	helperSignWithMinLeadingZeroBits(t, &ev4, usersPrivs[4])
+	require.NoError(t, query.AcceptEvents(t.Context(), &ev3, &ev4))
+
+	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
 		return nil
 	})
 	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
@@ -2749,47 +2835,36 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 		require.Len(t, subscription.Filters[0].Kinds, 1)
 		require.Equal(t, nostr.KindFollowList, subscription.Filters[0].Kinds[0])
 		require.Contains(t, subscription.Filters[0].Authors, pubKey)
-		require.Equal(t, `include:dependencies:kind3>kind0+p+|test1|`, subscription.Filters[0].Search)
+		require.Equal(t, `include:dependencies:kind3>kind0+p+|`+strings.Join([]string{usersPubs[3], usersPubs[4]}, ",")+`|`, subscription.Filters[0].Search)
 
 		return query.GetStoredEvents(ctx, subscription)
 	})
-	RegisterReqMustAuthenticate(func(ctx context.Context, sub *model.Subscription) bool {
+	RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) bool {
 		return false
 	})
-	RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) bool {
+	RegisterEventMustAuthenticate(func(context.Context, ...*model.Event) bool {
 		return true
 	})
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	t.Run("DoAuth", func(t *testing.T) {
 		var ev model.Event
-
 		ev.Kind = nostr.KindTextNote
 		ev.CreatedAt = 1
 		ev.Content = "test"
 		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
-		err := relay.Publish(context.Background(), ev.Event)
-		t.Logf("publish error: %v", err)
+		err := relay.Publish(t.Context(), ev.Event)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), errAuthRequired.Error())
-
-		err = relay.Auth(context.Background(), func(event *nostr.Event) error {
-			subZeroEvent := model.Event{Event: *event}
-			if err := subZeroEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-				return err
-			}
-			*event = subZeroEvent.Event
-
-			return nil
-		})
-		require.NoError(t, err)
+		helperDoAuth(t, relay.Relay, privKey)
 	})
 	t.Run("Request", func(t *testing.T) {
-		_, err := relay.QuerySync(context.Background(), model.Filter{
+		events := helperQueryEventsWithOptions(t, relay.Relay, []nostr.SubscriptionOption{nostr.WithDoNotCheckFilters()}, model.Filter{
 			Search: filterTextMRF,
-			Tags:   model.TagMap{}.SetLiterals("p", "test1"),
+			Tags:   model.TagMap{}.Set("p", &usersPubs[3]).Append("p", &usersPubs[4]),
 		})
-		require.NoError(t, err)
+		require.Len(t, events, 1)                        // Only relevant follower, no user's follower list.
+		require.Equal(t, usersPubs[4], events[0].PubKey) // User4.
 	})
 	helperMustCloseRelay(t, relay)
 }
