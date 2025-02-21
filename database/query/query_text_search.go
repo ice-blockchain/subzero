@@ -89,14 +89,14 @@ func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAt
 			e.sig,
 			e.content,
 			tags as jtags
-		from(
+		from (
 			select
 				*
-			from events e WHERE id IN (select id from pre_search) ` + where + `
+			from events e WHERE e.id IN (select id from pre_search) ` + where + `
 			UNION ALL
 			select
 				*
-			from events e WHERE reference_id IS NOT NULL AND reference_id IN(select id from pre_search)
+			from events e WHERE e.reference_id IS NOT NULL AND e.reference_id IN(select id from pre_search)
 		) e ` + limitQuery + `;`
 
 	return sql, nil
@@ -137,8 +137,8 @@ func (db *dbClient) searchWithDepsSQL(whereMain, depClause, whereSearch, systemC
 				SELECT
 					ev.*
 				FROM events ev
-				WHERE reference_id IS NOT NULL
-				AND reference_id IN (SELECT id FROM eventsmain)
+				WHERE ev.reference_id IS NOT NULL
+				AND ev.reference_id IN (SELECT id FROM eventsmain)
 			) e 
 			` + depClause + `;`
 
