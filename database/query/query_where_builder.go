@@ -780,15 +780,21 @@ func (w *whereBuilder) WithPrefix(prefix string) *whereBuilder {
 }
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
-	var searchKeywords []string
-	needWrapperBrackets := len(filters) > 0
+	var (
+		searchKeywords      []string
+		needWrapperBrackets = len(filters) > 0
+		dbFilters           = make([]*databaseFilterSearch, 0, len(filters))
+	)
+	for idx := range filters {
+		dbFilter, err := parseNostrFilter(filters[idx])
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "failed to parse filter  %d", idx)
+		}
+		dbFilters = append(dbFilters, dbFilter)
+	}
 	if needWrapperBrackets {
-		for idx := range filters {
-			dbFilter, err := parseNostrFilter(filters[idx])
-			if err != nil {
-				return "", nil, errors.Wrapf(err, "failed to parse filter")
-			}
-			if dbFilter.isFilterEmptyExceptSearch() {
+		for idx := range dbFilters {
+			if dbFilters[idx].isFilterEmptyExceptSearch() {
 				needWrapperBrackets = false
 			}
 		}
@@ -796,20 +802,16 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			w.WriteRune('(')
 		}
 	}
-	for idx := range filters {
+	for idx := range dbFilters {
 		w.maybeOR()
-		dbFilter, err := parseNostrFilter(filters[idx])
-		if err != nil {
-			return "", nil, errors.Wrapf(err, "failed to parse filter %d", idx)
-		}
-		if err := w.applyFilter(idx, dbFilter); err != nil {
+		if err := w.applyFilter(idx, dbFilters[idx]); err != nil {
 			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
 		}
-		if dbFilter.Dependencies != nil {
-			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
+		if dbFilters[idx].Dependencies != nil {
+			w.Dependencies = append(w.Dependencies, dbFilters[idx].Dependencies...)
 		}
-		if w.Prefix != "" && dbFilter.SearchText != "" {
-			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilter.SearchText)+"*")
+		if w.Prefix != "" && dbFilters[idx].SearchText != "" {
+			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilters[idx].SearchText)+"*")
 		}
 	}
 	if needWrapperBrackets {
