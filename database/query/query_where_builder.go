@@ -780,22 +780,42 @@ func (w *whereBuilder) WithPrefix(prefix string) *whereBuilder {
 }
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
-	var searchKeywords []string
+	var (
+		searchKeywords      []string
+		needWrapperBrackets = len(filters) > 0
+		dbFilters           = make([]*databaseFilterSearch, 0, len(filters))
+	)
 	for idx := range filters {
-		w.maybeOR()
 		dbFilter, err := parseNostrFilter(filters[idx])
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "failed to parse filter %d", idx)
+			return "", nil, errors.Wrapf(err, "failed to parse filter  %d", idx)
 		}
-		if err := w.applyFilter(idx, dbFilter); err != nil {
+		dbFilters = append(dbFilters, dbFilter)
+	}
+	if needWrapperBrackets {
+		for idx := range dbFilters {
+			if dbFilters[idx].isFilterEmptyExceptSearch() {
+				needWrapperBrackets = false
+			}
+		}
+		if needWrapperBrackets {
+			w.WriteRune('(')
+		}
+	}
+	for idx := range dbFilters {
+		w.maybeOR()
+		if err := w.applyFilter(idx, dbFilters[idx]); err != nil {
 			return "", nil, errors.Wrapf(err, "failed to apply filter %d", idx)
 		}
-		if dbFilter.Dependencies != nil {
-			w.Dependencies = append(w.Dependencies, dbFilter.Dependencies...)
+		if dbFilters[idx].Dependencies != nil {
+			w.Dependencies = append(w.Dependencies, dbFilters[idx].Dependencies...)
 		}
-		if w.Prefix != "" && dbFilter.SearchText != "" {
-			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilter.SearchText)+"*")
+		if w.Prefix != "" && dbFilters[idx].SearchText != "" {
+			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilters[idx].SearchText)+"*")
 		}
+	}
+	if needWrapperBrackets {
+		w.WriteRune(')')
 	}
 	if w.Prefix != "" && len(searchKeywords) > 0 {
 		if w.Len() > 0 {

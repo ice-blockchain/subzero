@@ -173,3 +173,9 @@ func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 
 	return f, nil
 }
+
+func (d *databaseFilterSearch) isFilterEmptyExceptSearch() bool {
+	return d.Authors == nil && d.Dependencies == nil && d.IDs == nil && d.Expiration == nil && d.Images == nil &&
+		d.Kinds == nil && d.Quotes == nil && d.References == nil && d.Since == nil && d.Tags == nil &&
+		d.Videos == nil && d.Until == nil
+}
