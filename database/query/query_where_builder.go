@@ -781,6 +781,21 @@ func (w *whereBuilder) WithPrefix(prefix string) *whereBuilder {
 
 func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
 	var searchKeywords []string
+	needWrapperBrackets := len(filters) > 0
+	if needWrapperBrackets {
+		for idx := range filters {
+			dbFilter, err := parseNostrFilter(filters[idx])
+			if err != nil {
+				return "", nil, errors.Wrapf(err, "failed to parse filter")
+			}
+			if dbFilter.isFilterEmptyExceptSearch() {
+				needWrapperBrackets = false
+			}
+		}
+		if needWrapperBrackets {
+			w.WriteRune('(')
+		}
+	}
 	for idx := range filters {
 		w.maybeOR()
 		dbFilter, err := parseNostrFilter(filters[idx])
@@ -796,6 +811,9 @@ func (w *whereBuilder) Build(filters ...model.Filter) (sql string, params map[st
 		if w.Prefix != "" && dbFilter.SearchText != "" {
 			searchKeywords = append(searchKeywords, replaceSpecialChars(dbFilter.SearchText)+"*")
 		}
+	}
+	if needWrapperBrackets {
+		w.WriteRune(')')
 	}
 	if w.Prefix != "" && len(searchKeywords) > 0 {
 		if w.Len() > 0 {

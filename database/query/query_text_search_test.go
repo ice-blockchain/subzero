@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -60,7 +61,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags:      model.Tags{},
-				Content:   "bogus",
+				Content:   "post",
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		})
@@ -104,9 +105,8 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			Kinds:  []int{nostr.KindTextNote},
 			Search: `"bogu"`,
 		})
-		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[2], stored[1])
-		require.EqualValues(t, expectedEvents[1], stored[0])
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
 	t.Run("search by imeta alt tag alt1 value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -192,10 +192,9 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			},
 		}
 		stored := helperSelectEvents(t, db, filters...)
-		require.Len(t, stored, 3)
-		require.EqualValues(t, expectedEvents[1], stored[0])
-		require.EqualValues(t, expectedEvents[2], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.Len(t, stored, 2)
+		require.EqualValues(t, expectedEvents[0], stored[1])
+		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
 	t.Run("delete events", func(t *testing.T) {
 		ev := &model.Event{
@@ -219,6 +218,107 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		require.Len(t, stored, 0)
 		require.NoError(t, db.AcceptEvents(t.Context(), ev))
 		require.Len(t, stored, 0)
+	})
+}
+
+func TestSearchEvents_EditableTextNote(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+	expectedEvents := []*model.Event{}
+	searchPubkey := "bogusssss" + uuid.NewString()
+	searchID := "normal, 3nd event" + uuid.NewString()
+	t.Run("Create events with text note kind with imeta alt and summary tags", func(t *testing.T) {
+		var tags1 nostr.Tags
+		tags1 = append(tags1, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024x4032",
+			"i foobar",
+			"alt alt1 text",
+			"summary dummy summary1 content",
+			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
+			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
+		})
+		expectedEvents = append(expectedEvents, &model.Event{
+			Event: nostr.Event{
+				ID:        "normal" + uuid.NewString(),
+				PubKey:    "end" + uuid.NewString(),
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEditableTextNote,
+				Tags:      tags1,
+				Content:   "Test post 12345\n",
+				Sig:       "1" + uuid.NewString(),
+			},
+		})
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
+
+		expectedEvents = append(expectedEvents, &model.Event{
+			Event: nostr.Event{
+				ID:        "normal, 2nd event" + uuid.NewString(),
+				PubKey:    "bogus" + uuid.NewString(),
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEditableTextNote,
+				Tags:      model.Tags{},
+				Content:   "lalala hey",
+				Sig:       "2" + uuid.NewString(),
+			},
+		})
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
+
+		var tags2 nostr.Tags
+		tags2 = append(tags2, nostr.Tag{
+			"imeta",
+			"url https://alicerelay.example.com",
+			"m image/jpg",
+			"dim 3024x4032",
+			"i foobar",
+			"alt alt2 text",
+			"summary dummy summary2 content",
+			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
+			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
+		})
+		expectedEvents = append(expectedEvents, &model.Event{
+			Event: nostr.Event{
+				ID:        searchID,
+				PubKey:    searchPubkey,
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEditableTextNote,
+				Tags:      tags2,
+				Content:   "abcd",
+				Sig:       "3" + uuid.NewString(),
+			},
+		})
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
+
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{model.CustomIONKindEditableTextNote},
+		})
+		require.Len(t, stored, 3)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+		require.EqualValues(t, expectedEvents[1], stored[1])
+		require.EqualValues(t, expectedEvents[0], stored[2])
+	})
+	t.Run("search by 2 filters with search field", func(t *testing.T) {
+		filters := model.Filters{
+			model.Filter{
+				Kinds:  []int{nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindRepost},
+				Search: `"pos"`,
+				Limit:  20,
+			},
+			model.Filter{
+				Kinds:  []int{nostr.KindGenericRepost},
+				Tags:   model.TagMap{}.SetLiterals("k", strconv.Itoa(model.CustomIONKindEditableTextNote)),
+				Search: `"lala"`,
+				Limit:  20,
+			},
+		}
+		stored := helperSelectEvents(t, db, filters...)
+		require.Len(t, stored, 2)
+		require.EqualValues(t, expectedEvents[1], stored[0])
+		require.EqualValues(t, expectedEvents[0], stored[1])
 	})
 }
 
