@@ -31,9 +31,34 @@ type (
 func MustInit(ctx context.Context) {
 	globalDB.Once.Do(func() {
 		globalConfig = cfg.MustGet[config]()
-		globalDB.Client = openDatabase(globalConfig.URL, true).
+
+		// TODO: make this from config.
+		cfg := Config{
+			Storage: StorageCfg{
+				Credentials: struct {
+					User     string `yaml:"user"`
+					Password string `yaml:"password"`
+				}{
+					User:     "TODO",
+					Password: "TODO",
+				},
+				Timeout:    "30s",
+				PrimaryURL: "TODO:",
+				ReplicaURLs: []string{
+					"TODO:",
+				},
+				RunDDL:       true,
+				IgnoreGlobal: false,
+			},
+		}
+
+		globalDB.Client = openPostgresDatabase(&cfg, true).
 			WithPrivateKey(globalConfig.PrivateKey).
 			WithRelayURL(globalConfig.RelayURL)
+
+		// TODO:
+		// globalDB.Client.db.Ping()
+
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go func() {
 			<-ctx.Done()

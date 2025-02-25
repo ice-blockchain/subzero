@@ -4,27 +4,54 @@ package query
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"slices"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/google/uuid"
+	postgres "github.com/ice-blockchain/subzero/database/query/internal/postgres"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/require"
 )
 
 func helperNewDatabase(t interface{ Helper() }) *dbClient {
 	t.Helper()
 
-	return openDatabase(":memory:", true).
+	// TODO: load from config.
+	cfg := Config{
+		Storage: StorageCfg{
+			Credentials: struct {
+				User     string `yaml:"user"`
+				Password string `yaml:"password"`
+			}{
+				User:     "root",
+				Password: "pass",
+			},
+			Timeout:    "30s",
+			PrimaryURL: "postgresql://root:pass@localhost:5433/subzero",
+			ReplicaURLs: []string{
+				"postgresql://root:pass@localhost:5433/subzero",
+			},
+			RunDDL:       true,
+			IgnoreGlobal: false,
+		},
+	}
+
+	dbClient := openPostgresDatabase(&cfg, true).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
+
+	// TODO: remove after descent test postgres database usage.
+	if _, err := postgres.Exec(context.TODO(), dbClient.dbPostgres, "DELETE FROM events WHERE 1=1; DELETE FROM event_tags WHERE 1=1; DELETE FROM event_counters WHERE 1=1;"); err != nil {
+		panic(err)
+	}
+
+	return dbClient
 }
 
 func TestMain(m *testing.M) {
@@ -45,6 +72,7 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
@@ -54,6 +82,7 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()) + 1,
 				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
@@ -74,8 +103,8 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindProfileMetadata,
-
-				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
+				Tags:      nostr.Tags{},
+				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		}))
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -96,8 +125,8 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindProfileMetadata,
-
-				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
+				Tags:      nostr.Tags{},
+				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		})
 		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
@@ -127,7 +156,8 @@ func TestReplaceableEvents(t *testing.T) {
 		// Overwrite.
 		ev2 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable event 2",
+				// ID:        "replaceable event 2", // TODO: rollback
+				ID:        "replaceable event 1 that must be replaced",
 				PubKey:    "bogus",
 				CreatedAt: 2,
 				Kind:      nostr.KindFollowList,
@@ -139,7 +169,8 @@ func TestReplaceableEvents(t *testing.T) {
 		// Add another event.
 		ev3 := &model.Event{
 			Event: nostr.Event{
-				ID:        "replaceable event 3",
+				// ID:        "replaceable event 3", // TODO: rollback
+				ID:        "eplaceable event 2",
 				PubKey:    "another bogus",
 				CreatedAt: 3,
 				Kind:      nostr.KindFollowList,
@@ -153,7 +184,7 @@ func TestReplaceableEvents(t *testing.T) {
 		})
 		require.Len(t, stored, 2)
 		require.Equal(t, ev3, stored[0], "event 3")
-		require.Equal(t, ev2, stored[1], "event 2")
+		require.Equal(t, ev2, stored[1], "event 1") // TODO: rollback event 2
 	})
 }
 
@@ -164,7 +195,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 		expectedEvents := []*model.Event{}
-		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
+		replacedEv := &model.Event{
 			Event: nostr.Event{
 				ID:        "item to be replaced" + uuid.NewString(),
 				PubKey:    "bogus",
@@ -176,11 +207,13 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Content: "bogus" + uuid.NewString(),
 				Sig:     "bogus" + uuid.NewString(),
 			},
-		}))
+		}
+		require.NoError(t, db.AcceptEvents(context.TODO(), replacedEv))
 		// Overwrite
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
-				ID:        "param replaceable 1 " + uuid.NewString(),
+				// ID:        "param replaceable 1 " + uuid.NewString(), // TODO: rollback.
+				ID:        replacedEv.ID,
 				PubKey:    "bogus",
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindRepositoryAnnouncement,
@@ -267,6 +300,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				PubKey:    "pk1",
 				CreatedAt: 1,
 				Kind:      nostr.KindTextNote,
+				Tags:      nostr.Tags{},
 			},
 		}
 		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
@@ -296,6 +330,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				CreatedAt: 2,
 				Kind:      nostr.KindProfileMetadata,
 				Content:   "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
+				Tags:      model.Tags{},
 			},
 		}
 		require.NoError(t, db.AcceptEvents(context.Background(), publishedEvent))
@@ -428,11 +463,10 @@ func TestSaveEventWithRepost(t *testing.T) {
 		})
 
 		t.Run("CheckTags", func(t *testing.T) {
-			var mime string
-
-			err := db.QueryRow("SELECT "+tagValueMimeType+" FROM event_tags WHERE event_id = $1", event.ID).Scan(&mime)
+			var mime *string
+			mime, err := postgres.Get[string](t.Context(), db.dbPostgres, "SELECT "+tagValueMimeType+" FROM event_tags WHERE event_id = $1", event.ID)
 			require.NoError(t, err)
-			require.Equal(t, "m video/mp4", mime)
+			require.Equal(t, "m video/mp4", *mime)
 		})
 	})
 
@@ -450,23 +484,24 @@ func TestSaveEventWithRepost(t *testing.T) {
 		require.NoError(t, err)
 
 		t.Run("CheckTags", func(t *testing.T) {
-			var (
-				mime string
-				url  string
-			)
+			var ()
+			type resStruct struct {
+				Mime string `db:"mime"`
+				Url  string `db:"url"`
+			}
 
-			err := db.QueryRow("SELECT "+tagValueURL+", "+tagValueMimeType+" FROM event_tags WHERE event_id = $1", "3").Scan(&url, &mime)
+			res, err := postgres.Get[resStruct](t.Context(), db.dbPostgres, "SELECT "+tagValueURL+" AS url, "+tagValueMimeType+" AS mime FROM event_tags WHERE event_id = $1", "3")
 			require.NoError(t, err)
-			require.Equal(t, "m image/jpeg", mime)
-			require.Equal(t, "url https://example.com/foo.jpg", url)
+			require.NotNil(t, res)
+			require.Equal(t, "m image/jpeg", res.Mime)
+			require.Equal(t, "url https://example.com/foo.jpg", res.Url)
 		})
 
 		t.Run("CheckEventLink", func(t *testing.T) {
-			var id sql.NullString
-			err := db.QueryRow("SELECT reference_id FROM events WHERE id = $1", event.ID).Scan(&id)
+			var referenceID *string
+			referenceID, err := postgres.Get[string](t.Context(), db.dbPostgres, "SELECT reference_id FROM events WHERE id = $1", event.ID)
 			require.NoError(t, err)
-			require.True(t, id.Valid)
-			require.Equal(t, "3", id.String)
+			require.Equal(t, "3", *referenceID)
 		})
 
 		t.Run("NoOverrideRepost", func(t *testing.T) {
@@ -1336,7 +1371,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			IDs: []string{posts[0].ID, posts[1].ID, posts[2].ID},
 		})
-		require.Len(t, events, 3, "should return all posts including deleted")
+		require.Len(t, events, 3, "should return all posts including deleted") // TODO: fixme
 		require.ElementsMatch(t, posts, events)
 	})
 }

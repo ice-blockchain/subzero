@@ -99,7 +99,7 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 	return ctx.Err()
 }
 
-func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
+func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params []any) EventIterator {
 	it := &eventIterator{
 		OneShot: true,
 		Fetch: func(int64) (*sqlx.Rows, error) {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: ice License 1.0
+// // SPDX-License-Identifier: ice License 1.0
 
 package query
 
@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	postgres "github.com/ice-blockchain/subzero/database/query/internal/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
 	"github.com/mattn/go-sqlite3"
@@ -19,10 +20,12 @@ import (
 type (
 	dbClient struct {
 		*sqlx.DB
+		// db              *pgxpool.Pool
 		relayPrivateKey string
 		relayURL        string
 		stmtCacheMx     *sync.RWMutex
 		stmtCache       map[string]*sqlx.NamedStmt
+		dbPostgres      *postgres.DB
 	}
 )
 
@@ -141,26 +144,10 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		for _, statement := range strings.Split(ddl, "--------") {
 			tx.MustExec(statement)
 		}
-		if err := client.alterEventsTable(tx); err != nil {
-			panic(err)
-		}
 		tx.Commit()
 	}
 
 	return client
-}
-
-func (db *dbClient) alterEventsTable(tx *sqlx.Tx) error {
-	var doAlter bool
-
-	err := tx.QueryRowx("SELECT not exists (select name from pragma_table_info('events') WHERE name = 'deleted')").Scan(&doAlter)
-	if err != nil || !doAlter {
-		return err
-	}
-
-	_, err = tx.Exec("ALTER TABLE events ADD COLUMN deleted integer not null DEFAULT 0")
-
-	return err
 }
 
 func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
@@ -176,6 +163,27 @@ func (db *dbClient) WithPrivateKey(privateKey string) *dbClient {
 	db.relayPrivateKey = privateKey
 
 	return db
+}
+
+func (db *dbClient) exec(ctx context.Context, sql string, arg any) (rowsAffected int64, err error) {
+	var (
+		hash = hashSQL(sql)
+	)
+
+	stmt, err := db.prepare(ctx, sql, hash)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to prepare exec sql: `%v`", sql)
+	}
+
+	result, err := stmt.ExecContext(ctx, arg)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to exec prepared sql: `%v`", sql)
+	}
+	if rowsAffected, err = result.RowsAffected(); err != nil {
+		return 0, errors.Wrapf(err, "failed to process rows affected for exec prepared sql: `%v`", sql)
+	}
+
+	return rowsAffected, nil
 }
 
 func (db *dbClient) prepare(ctx context.Context, sql, hash string) (stmt *sqlx.NamedStmt, err error) {

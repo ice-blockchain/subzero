@@ -5,7 +5,6 @@ package query
 import (
 	"context"
 	crand "crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"math/rand/v2"
@@ -15,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
-	"github.com/jmoiron/sqlx"
+	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
+	postgres "github.com/ice-blockchain/subzero/database/query/internal/postgres"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -62,38 +61,29 @@ func helperPreloadDataForFilter(
 	},
 	db *dbClient,
 ) (events []*model.Event) {
-	const stmt = `select
-	e.kind,
-	e.created_at,
-	e.system_created_at,
-	e.id,
-	e.pubkey,
-	e.sig,
-	e.content,
-	'[]' as tags,
-	(select json_group_array(json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)) from event_tags where event_id = e.id) as jtags
-from
-	events e
-order by
-	random()
-limit 1000`
+	const stmt = `SELECT
+		e.kind,
+		e.created_at,
+		e.system_created_at,
+		e.id,
+		e.pubkey,
+		e.sig,
+		e.content,
+		(
+			SELECT jsonb_agg(jsonb_build_array(event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3, event_tag_value4))
+			FROM event_tags
+			WHERE event_id = e.id
+		) AS tags
+	FROM
+		events e
+	ORDER BY
+		RANDOM()
+	LIMIT 1000;`
 
-	it := &eventIterator{
-		OneShot: true,
-		Fetch: func(int64) (*sqlx.Rows, error) {
-			stmt, err := db.prepare(context.TODO(), stmt, hashSQL(stmt))
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to prepare query sql: %v", stmt)
-			}
-
-			return stmt.QueryxContext(context.TODO(), map[string]any{})
-		}}
-
-	err := it.Each(context.TODO(), func(ev *model.Event) error {
-		events = append(events, ev)
-
-		return nil
-	})
+	res, err := postgres.Select[model.DatabaseEvent](context.TODO(), db.dbPostgres, stmt)
+	for _, ev := range res {
+		events = append(events, ev.ToEvent())
+	}
 	require.NoError(t, err)
 	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })
 
@@ -198,7 +188,7 @@ func helperGenerateEvent(
 
 	var ev model.Event
 
-	ev.ID = generateHexString()
+	ev.ID = uuid.NewString()
 	ev.PubKey = generateHexString()
 	ev.CreatedAt = model.Timestamp(generateCreatedAt())
 	ev.Kind = generateKind()
@@ -222,16 +212,17 @@ func helperGenerateEvent(
 func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 	t.Helper()
 
-	var eventsCount []int
-	err := db.Select(&eventsCount, "select count(*) from events")
+	eventsCount, err := postgres.Get[int](t.Context(), db.dbPostgres, "select count(*) from events")
+
+	require.NotNil(t, eventsCount)
 	require.NoError(t, err)
 
-	if eventsCount[0] >= size {
+	if *eventsCount >= size {
 		return
 	}
-	t.Logf("found %d event(s)", eventsCount[0])
+	t.Logf("found %d event(s)", *eventsCount)
 
-	need := size - eventsCount[0]
+	need := size - *eventsCount
 	t.Logf("generating %d event(s)", need)
 
 	bar := progressbar.Default(int64(need), "generating events")
@@ -626,11 +617,12 @@ func TestSelectQuotesReferences(t *testing.T) {
 
 func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
 	t.Helper()
-	var count int
-	err := db.QueryRow("select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as integer) <= unixepoch())))").Scan(&count)
+	sql := "select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as bigint) <= EXTRACT(EPOCH FROM CURRENT_TIMESTAMP))))"
+
+	count, err := postgres.Get[int](t.Context(), db.dbPostgres, sql)
 	require.NoError(t, err)
 
-	return count
+	return *count
 }
 
 func TestSelectEventsExpiration(t *testing.T) {
@@ -866,14 +858,11 @@ func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...m
 	where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
 	require.NoError(t, err, filters)
 
-	stmt, err := db.PrepareNamed(`select coalesce(sum(value), 0) from event_counters where ` + where)
+	sql := `select coalesce(sum(value), 0) from event_counters where ` + where
+	res, err := postgres.Get[int64](t.Context(), db.dbPostgres, sql, params...)
 	require.NoErrorf(t, err, "failed to prepare statement where: %v", where)
-
-	err = stmt.QueryRowx(params).Scan(&counter)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
-	}
-	require.NoError(t, err)
+	require.NotNil(t, res)
+	counter = *res
 
 	t.Logf("Precalculated count result:\n\tWhere: %v\n\tParams: %+v\n\tCounter: %v", where, params, counter)
 

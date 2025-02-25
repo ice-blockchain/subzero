@@ -3,6 +3,7 @@
 package query
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,11 +25,11 @@ func TestIsFilterEmpty(t *testing.T) {
 	require.False(t, isFilterEmpty(dbFilter))
 }
 
-func helperEnsureParams(t *testing.T, stmt string, params map[string]any) {
+func helperEnsureParams(t *testing.T, stmt string, params []any) {
 	t.Helper()
 
-	for k := range params {
-		require.Contains(t, stmt, ":"+k)
+	for ix := range params {
+		require.Contains(t, stmt, "$"+strconv.FormatUint(uint64(ix+1), 10))
 	}
 }
 
@@ -77,7 +78,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 4)
+		require.Len(t, params, 6)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("WithTimeRange", func(t *testing.T) {
@@ -179,7 +180,7 @@ func TestWhereBuilderMulti(t *testing.T) {
 	q, params, err := builder.Build(filters...)
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
-	require.Len(t, params, 16)
+	require.Len(t, params, 18)
 	helperEnsureParams(t, q, params)
 }
 
@@ -218,7 +219,7 @@ func TestWhereBuilderSameElements(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
 	t.Logf("params: %+v", params)
-	require.Len(t, params, 4)
+	require.Len(t, params, 6)
 	helperEnsureParams(t, q, params)
 }
 

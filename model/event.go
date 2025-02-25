@@ -21,6 +21,19 @@ type (
 	Event struct {
 		nostr.Event
 	}
+	DatabaseEvent struct {
+		ID              string    `db:"id"`
+		PubKey          string    `db:"pubkey"`
+		MasterPubKey    string    `db:"master_pubkey"`
+		CreatedAt       Timestamp `db:"created_at"`
+		SystemCreatedAt Timestamp `db:"system_created_at"`
+		Kind            int       `db:"kind"`
+		Tags            *Tags     `db:"tags"`
+		DTag            string    `db:"d_tag"`
+		HTag            string    `db:"h_tag"`
+		Content         string    `db:"content"`
+		Sig             string    `db:"sig"`
+	}
 	EventSignAlg string
 	EventKeyAlg  string
 )
@@ -32,6 +45,29 @@ const (
 	KeyAlgSecp256k1  EventKeyAlg = "secp256k1"
 	KeyAlgCurve25519 EventKeyAlg = "curve25519"
 )
+
+func (de *DatabaseEvent) ToEvent() *Event {
+	masterPubkey := de.MasterPubKey
+	if masterPubkey == "" {
+		masterPubkey = de.PubKey
+	}
+	var tags nostr.Tags
+	if de.Tags != nil {
+		tags = *de.Tags
+	}
+
+	return &Event{
+		Event: nostr.Event{
+			ID:        de.ID,
+			PubKey:    masterPubkey,
+			CreatedAt: de.CreatedAt,
+			Kind:      de.Kind,
+			Tags:      tags,
+			Content:   de.Content,
+			Sig:       de.Sig,
+		},
+	}
+}
 
 func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
 	if (e.Kind >= 6000 && e.Kind < 7000) || e.Kind == nostr.KindJobFeedback {
