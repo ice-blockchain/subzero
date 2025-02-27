@@ -4,7 +4,10 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 
@@ -17,8 +20,8 @@ type (
 	config struct {
 		TLSCert            string `yaml:"tls-cert"`
 		TLSKey             string `yaml:"tls-key"`
-		RelayURL           string `yaml:"relay-url" validate:"required,url"`
-		Port               uint16 `yaml:"port"`
+		RelayURL           string `yaml:"relay-url"     validate:"required,url"`
+		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
 		Debug              bool   `yaml:"debug"`
 		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
 	}
@@ -31,13 +34,30 @@ var (
 	globalRouter *router
 )
 
+func extractServerNameFromRelayURL(relayURL string) string {
+	pared, err := url.Parse(relayURL)
+	if err != nil {
+		log.Panic(err)
+	}
+	return pared.Hostname()
+}
+
 func MustListenAndServe(ctx context.Context) {
+	var serverTLS *tls.Config
+
 	globalConfig = cfg.MustGet[config]()
+	if (globalConfig.TLSCert == "" && globalConfig.TLSKey == "") || (globalConfig.TLSCert == "-" && globalConfig.TLSKey == "-") {
+		log.Printf("using ACME to obtain TLS certificate for %v", globalConfig.RelayURL)
+		serverTLS = MustLoadTLSConfigFromACME(ctx, extractServerNameFromRelayURL(globalConfig.RelayURL), int(globalConfig.Port))
+	} else {
+		serverTLS = wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey)
+	}
+
 	globalRouter = &router{}
 	internalCfg := &wsserver.Config{
 		Port:      globalConfig.Port,
 		Debug:     globalConfig.Debug,
-		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		TLSConfig: serverTLS,
 	}
 	wsserver.New(internalCfg, globalRouter).
 		MustListenAndServe(ctx)
@@ -53,6 +73,5 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info()).
 		GET("/health-check", func(c *gin.Context) {
 			c.JSON(http.StatusOK, map[string]any{})
-			return
 		})
 }

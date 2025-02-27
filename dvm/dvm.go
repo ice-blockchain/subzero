@@ -46,7 +46,7 @@ type (
 		responseCache   *ttlcache.Cache[string, *xsync.MapOf[string, *model.Event]]
 	}
 	config struct {
-		PrivateKey string `yaml:"private-key"`
+		PrivateKey string `yaml:"private-key" validate:"required"`
 		TLSCert    string `yaml:"tls-cert"`
 		TLSKey     string `yaml:"tls-key"`
 		RelayURL   string `yaml:"relay-url" validate:"required,url"`
@@ -64,7 +64,7 @@ func MustInit(ctx context.Context) {
 	globalDVM = &dvm{
 		Jobs:          xsync.NewMapOf[string, *jobInfo](),
 		PrivateKey:    globalConfig.PrivateKey,
-		responseCache: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration)),
+		responseCache: ttlcache.New(ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration)),
 	}
 	go globalDVM.responseCache.Start()
 	if globalConfig.TLSKey != "-" && globalConfig.TLSCert != "-" {
