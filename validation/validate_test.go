@@ -1247,7 +1247,7 @@ func TestValidateArticleSoftDelete(t *testing.T) {
 func TestValidateTagsBAndP(t *testing.T) {
 	t.Parallel()
 
-	require.Error(t, validateEventTags(&model.Event{Event: nostr.Event{Tags: model.Tags{
+	require.Error(t, validateFollowListEvent(&model.Event{Event: nostr.Event{Tags: model.Tags{
 		{"b", "foo"},
 		{"p", "foo"},
 	}}}))
@@ -1262,7 +1262,7 @@ func TestValidateTagsBAndP(t *testing.T) {
 		{"p", "foo"},
 	}}}))
 
-	require.Error(t, validateEventTags(&model.Event{Event: nostr.Event{PubKey: "foo", Tags: model.Tags{
+	require.Error(t, validateFollowListEvent(&model.Event{Event: nostr.Event{PubKey: "foo", Tags: model.Tags{
 		{"p", "foo"},
 	}}}))
 

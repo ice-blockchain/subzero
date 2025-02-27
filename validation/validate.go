@@ -387,16 +387,18 @@ func validateKindGiftWrapEvent(e *model.Event) error {
 
 func validateFollowListEvent(e *model.Event) error {
 	keys := make(map[string]struct{})
+	master := e.GetMasterPublicKey()
 	for _, tag := range e.GetTags("p") {
-		if v := tag.Value(); v == "" {
+		v := tag.Value()
+		switch v {
+		case "":
 			return errors.Wrap(ErrWrongEventParams, "nip-02: missing public key")
-		} else {
-			if _, ok := keys[v]; ok {
-				return errors.Wrapf(ErrWrongEventParams, "nip-02: duplicate public key: %q", v)
-			}
-			keys[v] = struct{}{}
+		case master, e.PubKey:
+			return errors.Wrapf(ErrWrongEventParams, "tag %q: cannot have the same value as public key or %q", "p", model.CustomIONTagOnBehalfOf)
 		}
+		keys[v] = struct{}{}
 	}
+
 	return nil
 }
 
@@ -1448,12 +1450,6 @@ func validateEventTags(e *model.Event) error {
 			pTags[tag.Value()]++
 		}
 		currentTags[tag.Key()]++
-	}
-
-	for _, v := range []string{bTag, e.PubKey} {
-		if _, found := pTags[v]; found && v != "" {
-			return errors.Wrapf(ErrWrongEventParams, "tag %q: cannot have the same value as public key or %q", "p", model.CustomIONTagOnBehalfOf)
-		}
 	}
 	for val, count := range pTags {
 		if count > 1 {
