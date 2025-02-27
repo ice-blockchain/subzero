@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/go-playground/validator/v10"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 )
@@ -21,6 +22,7 @@ var (
 	yamlConfigurationFilePathInitializer = new(sync.Once)
 	yamlConfigurationFilePath            string
 	globalViper                          = viper.NewWithOptions(viper.KeyDelimiter("/"))
+	globalValidator                      = validator.New(validator.WithRequiredStructEnabled())
 )
 
 func MustInit(absoluteCfgPaths ...string) {
@@ -60,7 +62,6 @@ func MustGet[T any]() *T {
 	}
 	key := strings.Replace(typeOf.PkgPath(), "github.com/ice-blockchain/subzero/", "", 1)
 	if err := globalViper.UnmarshalKey(key, &t, func(decoderConfig *mapstructure.DecoderConfig) {
-		decoderConfig.ErrorUnset = true
 		decoderConfig.ZeroFields = true
 		decoderConfig.WeaklyTypedInput = true
 		decoderConfig.Squash = true
@@ -70,6 +71,10 @@ func MustGet[T any]() *T {
 		log.Panic(errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t))
 	}
 	log.Printf("info: [%v]config loaded: %+v", key, t)
+
+	if err := globalValidator.Struct(&t); err != nil {
+		log.Panic(errors.Wrapf(err, "could not validate `%v` yaml key `%v`: %v", yamlConfigurationFilePath, key, err))
+	}
 
 	return &t
 }
