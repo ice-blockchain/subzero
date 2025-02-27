@@ -1398,7 +1398,9 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 }
 
 func validateEventTags(e *model.Event) error {
+	var bTag string
 	currentTags := make(map[string]int)
+	pTags := make(map[string]int)
 	supportedTags, known := KindSupportedTags[e.Kind]
 	for _, tag := range e.Tags {
 		if data, ok := supportedTags[tag.Key()]; known && !ok {
@@ -1437,8 +1439,26 @@ func validateEventTags(e *model.Event) error {
 			if err := validateSettingsTag(e.Kind, tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
+		case model.CustomIONTagOnBehalfOf:
+			if bTag != "" {
+				return errors.Wrapf(ErrWrongEventParams, "tag %q: cannot be used more than once", tag.Key())
+			}
+			bTag = tag.Value()
+		case "p":
+			pTags[tag.Value()]++
 		}
 		currentTags[tag.Key()]++
+	}
+
+	for _, v := range []string{bTag, e.PubKey} {
+		if _, found := pTags[v]; found && v != "" {
+			return errors.Wrapf(ErrWrongEventParams, "tag %q: cannot have the same value as public key or %q", "p", model.CustomIONTagOnBehalfOf)
+		}
+	}
+	for val, count := range pTags {
+		if count > 1 {
+			return errors.Wrapf(ErrWrongEventParams, "tag %q: %v used more than once", "p", val)
+		}
 	}
 
 	for key, data := range supportedTags {
