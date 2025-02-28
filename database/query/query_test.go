@@ -1304,6 +1304,24 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), posts...))
 	})
 
+	t.Run("Create repost of post1", func(t *testing.T) {
+		var repost model.Event
+
+		repost.Kind = nostr.KindGenericRepost
+		repost.Content = posts[1].String()
+		repost.CreatedAt = nostr.Now()
+		repost.Tags = model.Tags{
+			{"k", strconv.Itoa(posts[1].Kind)},
+			{"a", posts[1].Address()},
+		}
+		require.NoError(t, repost.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &repost))
+	})
+
+	t.Run("Fetch all", func(t *testing.T) {
+		require.Len(t, helperSelectEvents(t, db), 4, "should return all posts plus repost")
+	})
+
 	t.Run("Soft delete second post", func(t *testing.T) {
 		deletedPost := &model.Event{
 			Event: nostr.Event{
@@ -1323,7 +1341,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 
 	t.Run("Fetch without filters", func(t *testing.T) {
 		events := helperSelectEvents(t, db)
-		require.Len(t, events, 2, "should return only non-deleted posts")
+		require.Len(t, events, 2, "should return only non-deleted posts and no reposts")
 		require.ElementsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
 	})
 
