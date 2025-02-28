@@ -1281,6 +1281,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 					CreatedAt: nostr.Timestamp(now),
 					Tags: model.Tags{
 						{"published_at", strconv.FormatInt(now, 10)},
+						{"d", "article1"},
 					},
 				},
 			},
@@ -1311,6 +1312,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 				CreatedAt: nostr.Timestamp(now + 1), // Should be newer than the original post.
 				Tags: model.Tags{
 					{"published_at", strconv.FormatInt(now, 10)},
+					{"d", "article1"},
 				},
 			},
 		}
@@ -1335,6 +1337,22 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			IDs: []string{posts[0].ID, posts[1].ID, posts[2].ID},
 		})
+		require.Len(t, events, 3, "should return all posts including deleted")
+		require.ElementsMatch(t, posts, events)
+	})
+
+	t.Run("Fetch with addressable filters", func(t *testing.T) {
+		events := helperSelectEvents(t, db,
+			model.Filter{
+				IDs: []string{posts[0].ID, posts[2].ID},
+			},
+			model.Filter{
+				Kinds:   []int{posts[1].Kind},
+				Authors: []string{posts[1].PubKey},
+				Tags:    model.TagMap{}.SetLiterals("d", posts[1].Tags.GetD()),
+				Limit:   10,
+			},
+		)
 		require.Len(t, events, 3, "should return all posts including deleted")
 		require.ElementsMatch(t, posts, events)
 	})

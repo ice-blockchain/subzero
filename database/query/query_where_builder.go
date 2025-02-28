@@ -385,6 +385,18 @@ func filterMaybeForceIndex(filter *databaseFilterSearch, field string) string {
 	return field
 }
 
+func (w *whereBuilder) applyFilterSoftDeleted(_ string, filter *databaseFilterSearch) {
+	if len(filter.Kinds) > 0 && len(filter.Authors) > 0 && filter.Tags.HasValues("d") {
+		// Addressable event.
+		return
+	}
+
+	if len(filter.IDs) == 0 {
+		w.maybeAND()
+		w.WriteString(whereBuilderNoSoftDeleted)
+	}
+}
+
 func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
@@ -417,10 +429,7 @@ func (w *whereBuilder) applyFilter(idx int, filter *databaseFilterSearch) error 
 	}
 	w.applyFilterTags(name, filter.Tags)
 	w.applyFilterTagMarkers(name, filter.TagMarkers)
-	if len(filter.IDs) == 0 {
-		w.maybeAND()
-		w.WriteString(whereBuilderNoSoftDeleted)
-	}
+	w.applyFilterSoftDeleted(name, filter)
 
 	if _, ok := filter.Tags[model.CustomIONTagCommunity]; !ok {
 		w.maybeAND()
