@@ -80,6 +80,11 @@ func init() {
 						Pure: true,
 					},
 					{
+						Name: "subzero_nostr_get_event_address_json",
+						Ptr:  sqlGetEventAddressJSON,
+						Pure: true,
+					},
+					{
 						Name: "subzero_nostr_generate_content_metadata",
 						Ptr:  sqlGenerateContentMetadata,
 						Pure: true,

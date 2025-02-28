@@ -90,6 +90,16 @@ func sqlTagAGetAt(pos int) func(string) string {
 	}
 }
 
+func sqlGetEventAddressJSON(eventJSON string) (string, error) {
+	var event model.Event
+
+	if err := json.Unmarshal([]byte(eventJSON), &event); err != nil {
+		return "", errors.Wrap(err, "failed to unmarshal event")
+	}
+
+	return event.Address(), nil
+}
+
 func sqlGetEventAddress(eventID string, kind int, masterPubkey, dTag string) string {
 	if nostr.IsAddressableKind(kind) {
 		return strconv.Itoa(kind) + ":" + masterPubkey + ":" + dTag

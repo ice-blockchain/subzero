@@ -1304,9 +1304,8 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), posts...))
 	})
 
+	var repost model.Event
 	t.Run("Create repost of post1", func(t *testing.T) {
-		var repost model.Event
-
 		repost.Kind = nostr.KindGenericRepost
 		repost.Content = posts[1].String()
 		repost.CreatedAt = nostr.Now()
@@ -1337,6 +1336,10 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		require.NoError(t, deletedPost.SignWithAlg(keys[1], model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(t.Context(), deletedPost))
 		posts[1] = deletedPost
+	})
+
+	t.Run("Repost of deleted post", func(t *testing.T) {
+		require.ErrorIs(t, db.AcceptEvents(t.Context(), &repost), ErrRepostOfDeletedPost)
 	})
 
 	t.Run("Fetch without filters", func(t *testing.T) {
