@@ -186,6 +186,21 @@ begin
 end
 ;
 --------
+drop   trigger if     exists trigger_events_after_update_mark_refereces_deleted;
+create trigger if not exists trigger_events_after_update_mark_refereces_deleted
+    after update
+    on events
+    for each row
+    when new.deleted = 1 AND old.deleted = 0 AND ((new.tags != old.tags) OR (new.id != old.id)) AND new.kind in (30023, 30024, 30175) AND new.reference_id is null
+begin
+    update events
+    set
+        deleted = new.deleted
+    where
+        reference_id in (new.id, old.id);
+end
+;
+--------
 drop   trigger if     exists trigger_events_after_update_generate_tags;
 create trigger if not exists trigger_events_after_update_generate_tags
     after update
