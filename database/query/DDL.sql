@@ -193,11 +193,7 @@ create trigger if not exists trigger_events_after_update_mark_refereces_deleted
     for each row
     when new.deleted = 1 AND old.deleted = 0 AND ((new.tags != old.tags) OR (new.id != old.id)) AND new.kind in (30023, 30024, 30175) AND new.reference_id is null
 begin
-    update events
-    set
-        deleted = new.deleted
-    where
-        reference_id in (new.id, old.id);
+    delete from events where reference_id in (new.id, old.id) and kind in (6, 16);
 end
 ;
 --------
