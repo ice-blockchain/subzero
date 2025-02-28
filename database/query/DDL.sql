@@ -288,6 +288,16 @@ from
 where
     NEW.content != '' AND json_valid(NEW.content)
 on conflict do nothing;
+select
+    raise(ABORT, 'repost of deleted post')
+from
+    events
+where
+    json_valid(NEW.content) and
+    (
+        id = json_extract(NEW.content, '$.id') OR address = subzero_nostr_get_event_address_json(NEW.content)
+    ) and
+    deleted = 1;
 end
 ;
 --------

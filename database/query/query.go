@@ -32,6 +32,7 @@ const (
 var (
 	ErrUnexpectedRowsAffected    = errors.New("unexpected rows affected")
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
+	ErrRepostOfDeletedPost       = errors.New("repost of deleted post")
 
 	errEventIteratorInterrupted = errors.New("interrupted")
 
@@ -522,6 +523,8 @@ func (db *dbClient) handleError(err error) error {
 			err = model.ErrOnBehalfAccessDenied
 		case "attestation list update must be linear":
 			err = ErrAttestationUpdateRejected
+		case "repost of deleted post":
+			err = ErrRepostOfDeletedPost
 		}
 	}
 
