@@ -129,38 +129,70 @@ func maybeOpCode(builder *whereBuilder, op int) {
 	}
 }
 
-func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string, s []T, name, paramName string) *whereBuilder {
-	if len(s) == 0 {
+type sliceBuilder[T comparable] struct {
+	Slice     []T
+	Negative  bool
+	ParamName string
+	Op        int
+}
+
+func (b *sliceBuilder[T]) Build(builder *whereBuilder, filterID string, name string) *whereBuilder {
+	if len(b.Slice) == 0 {
 		return builder
 	}
 
-	if paramName == "" {
-		paramName = name
+	if b.ParamName == "" {
+		b.ParamName = name
 	}
 
-	maybeOpCode(builder, op)
+	maybeOpCode(builder, b.Op)
 	builder.WriteString(name)
-	s = model.DeduplicateSlice(s, func(elem T) T { return elem })
+	s := model.DeduplicateSlice(b.Slice, func(elem T) T { return elem })
 	if len(s) == 1 {
 		// X = :X_name.
-		builder.WriteString(" = :")
-		builder.WriteString(builder.addParam(filterID, paramName, s[0]))
+		if b.Negative {
+			builder.WriteString(" != :")
+		} else {
+			builder.WriteString(" = :")
+		}
+		builder.WriteString(builder.addParam(filterID, b.ParamName, s[0]))
 
 		return builder
 	}
 
 	// X in (:X_name0, :X_name1, ...).
-	builder.WriteString(" IN (")
+	if b.Negative {
+		builder.WriteString(" NOT IN (")
+	} else {
+		builder.WriteString(" IN (")
+	}
 	for i := range len(s) - 1 {
 		builder.WriteRune(':')
-		builder.WriteString(builder.addParam(filterID, paramName+strconv.Itoa(i), s[i]))
+		builder.WriteString(builder.addParam(filterID, b.ParamName+strconv.Itoa(i), s[i]))
 		builder.WriteRune(',')
 	}
 	builder.WriteRune(':')
-	builder.WriteString(builder.addParam(filterID, paramName+strconv.Itoa(len(s)-1), s[len(s)-1]))
+	builder.WriteString(builder.addParam(filterID, b.ParamName+strconv.Itoa(len(s)-1), s[len(s)-1]))
 	builder.WriteRune(')')
 
 	return builder
+}
+
+func buildFromSlice[T comparable](builder *whereBuilder, op int, filterID string, s []T, name, paramName string) *whereBuilder {
+	return (&sliceBuilder[T]{
+		Op:        op,
+		Slice:     s,
+		ParamName: paramName,
+	}).Build(builder, filterID, name)
+}
+
+func buildFromSliceNegative[T comparable](builder *whereBuilder, op int, filterID string, s []T, name, paramName string) *whereBuilder {
+	return (&sliceBuilder[T]{
+		Op:        op,
+		Negative:  true,
+		Slice:     s,
+		ParamName: paramName,
+	}).Build(builder, filterID, name)
 }
 
 func (w *whereBuilder) isOnBegin() bool {
@@ -594,10 +626,35 @@ select
 	tags as jtags
 from
 	events e
-where
 `)
-		w.WriteString(` exists (select 1 FROM eventsmain) AND `)
-		w.WriteString(`e.id not in (select `)
+		if len(filter.Reduce.Kinds) > 0 && filter.Reduce.Kinds[0] == nostr.KindProfileMetadata && filter.Reduce.Author != "" {
+			authors := strings.Split(filter.Reduce.Author, ",")
+			// Most relevant follwers.
+			w.WriteString(`
+INNER JOIN (
+SELECT e.master_pubkey
+FROM events e
+WHERE e.kind = 3
+AND EXISTS (
+SELECT 1
+FROM event_tags et
+WHERE et.event_id = e.id
+	AND et.event_tag_key = 'p'
+	AND `)
+			buildFromSlice(w, sqlOpCodeNONE, filterID, authors, "et.event_tag_value1", "mrf")
+			w.WriteString(`)
+AND EXISTS (
+SELECT 1
+FROM event_tags et
+JOIN ` + cteName + ` em ON et.event_id = em.id
+WHERE et.event_tag_key = 'p'
+	AND et.event_tag_value1 = e.master_pubkey
+)
+AND `)
+			buildFromSliceNegative(w, sqlOpCodeNONE, filterID, authors, "e.master_pubkey", "mrf")
+			w.WriteString(` AND e.hidden = 0) t ON e.master_pubkey = t.master_pubkey`)
+		}
+		w.WriteString(` where exists (select 1 FROM eventsmain) AND e.id not in (select `)
 		w.WriteString(cteName)
 		w.WriteString(`.id from `)
 		w.WriteString(cteName)
@@ -707,27 +764,14 @@ group by e.master_pubkey`)
 		// Check for `Author` in the filter.
 		w.WriteString("e.kind = :")
 		w.WriteString(w.addParam(filterID, "rkind", filter.Reduce.Kinds[0]))
-		if filter.Reduce.Author != "" {
-			// Most relevant followers.
-			w.WriteString(`
-		and e.master_pubkey in (select l1tags.event_tag_value1 from event_tags l1tags inner join ` + cteName + ` l1 on l1.id = event_id and l1.kind= 3 where l1tags.event_tag_key = 'p')
-		and exists (
-			select true
-			from events l2
-			inner join event_tags l2tags on l2.id = l2tags.event_id
-			where
-				l2.kind = 3
-				and l2.hidden = 0
-				and l2tags.event_tag_key = 'p' `)
-			buildFromSlice(w, sqlOpCodeAND, filterID, strings.Split(filter.Reduce.Author, ","), "l2tags.event_tag_value1", "")
-			w.WriteString(") and e.hidden=0")
-		} else {
+		if filter.Reduce.Author == "" {
 			w.WriteString(" AND ( master_pubkey IN (")
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
 			w.WriteString(") OR pubkey IN (")
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "pubkey", &filter.Start))
-			w.WriteString(")) AND e.hidden=0")
+			w.WriteString("))")
 		}
+		w.WriteString(" and e.hidden=0")
 
 	case model.KindDVMCountResponse:
 		w.WriteString("f.kind = :")

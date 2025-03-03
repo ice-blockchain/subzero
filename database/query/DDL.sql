@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS events
     reference_id      text    references events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     address           text    not null generated always as (
         CASE
-            WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3 THEN concat(coalesce(kind,0), ':', coalesce(master_pubkey,pubkey,''),':')
-            WHEN 30000 <= kind AND kind < 40000                           THEN concat(coalesce(kind,0), ':', coalesce(master_pubkey,pubkey,''),':',coalesce(d_tag,''))
+            WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3 THEN coalesce(kind,0) || ':' || coalesce(master_pubkey,pubkey,'') || ':'
+            WHEN 30000 <= kind AND kind < 40000                           THEN coalesce(kind,0) || ':' || coalesce(master_pubkey,pubkey,'') || ':' || coalesce(d_tag,'')
             ELSE id
         END) VIRTUAL,
     tags              text    not null DEFAULT '[]',

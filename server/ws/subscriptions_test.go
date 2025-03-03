@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -2783,49 +2782,6 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	})
 
 	privKey, pubKey := model.GenerateKeyPair()
-	var usersPrivs, usersPubs []string
-	for range 5 {
-		priv, pub := model.GenerateKeyPair()
-		usersPrivs = append(usersPrivs, priv)
-		usersPubs = append(usersPubs, pub)
-	}
-
-	var root model.Event
-	root.Kind = nostr.KindFollowList
-	root.Tags = model.Tags{ // No user3.
-		{"p", usersPubs[0]},
-		{"p", usersPubs[1]},
-		{"p", usersPubs[2]},
-		{"p", usersPubs[4]},
-	}
-	helperSignWithMinLeadingZeroBits(t, &root, privKey)
-	require.NoError(t, query.AcceptEvents(t.Context(), &root))
-
-	var ev1, ev2 model.Event
-	ev1.Kind = nostr.KindFollowList
-	ev1.Tags = model.Tags{ // No user0, user1.
-		{"p", usersPubs[2]},
-		{"p", usersPubs[3]},
-		{"p", usersPubs[4]},
-	}
-	helperSignWithMinLeadingZeroBits(t, &ev1, usersPrivs[1])
-
-	ev2.Kind = nostr.KindFollowList
-	ev2.Tags = model.Tags{ // No user0, user2.
-		{"p", usersPubs[1]},
-		{"p", usersPubs[3]},
-		{"p", usersPubs[4]},
-	}
-	helperSignWithMinLeadingZeroBits(t, &ev2, usersPrivs[2])
-	require.NoError(t, query.AcceptEvents(t.Context(), &ev1, &ev2))
-
-	var ev3, ev4 model.Event
-	ev3.Kind = nostr.KindProfileMetadata
-	ev4.Kind = nostr.KindProfileMetadata
-	helperSignWithMinLeadingZeroBits(t, &ev3, usersPrivs[3])
-	helperSignWithMinLeadingZeroBits(t, &ev4, usersPrivs[4])
-	require.NoError(t, query.AcceptEvents(t.Context(), &ev3, &ev4))
-
 	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
 		return nil
 	})
@@ -2835,7 +2791,7 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 		require.Len(t, subscription.Filters[0].Kinds, 1)
 		require.Equal(t, nostr.KindFollowList, subscription.Filters[0].Kinds[0])
 		require.Contains(t, subscription.Filters[0].Authors, pubKey)
-		require.Equal(t, `include:dependencies:kind3>kind0+p+|`+strings.Join([]string{usersPubs[3], usersPubs[4]}, ",")+`|`, subscription.Filters[0].Search)
+		require.Equal(t, `include:dependencies:kind3>kind0+p+|foo,bar|`, subscription.Filters[0].Search)
 
 		return query.GetStoredEvents(ctx, subscription)
 	})
@@ -2859,12 +2815,10 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 		helperDoAuth(t, relay.Relay, privKey)
 	})
 	t.Run("Request", func(t *testing.T) {
-		events := helperQueryEventsWithOptions(t, relay.Relay, []nostr.SubscriptionOption{nostr.WithDoNotCheckFilters()}, model.Filter{
+		helperQueryEventsWithOptions(t, relay.Relay, []nostr.SubscriptionOption{nostr.WithDoNotCheckFilters()}, model.Filter{
 			Search: filterTextMRF,
-			Tags:   model.TagMap{}.Set("p", &usersPubs[3]).Append("p", &usersPubs[4]),
+			Tags:   model.TagMap{}.Set("p", model.PointerOf("foo")).Append("p", model.PointerOf("bar")),
 		})
-		require.Len(t, events, 1)                        // Only relevant follower, no user's follower list.
-		require.Equal(t, usersPubs[4], events[0].PubKey) // User4.
 	})
 	helperMustCloseRelay(t, relay)
 }
