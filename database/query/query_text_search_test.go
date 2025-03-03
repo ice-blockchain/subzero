@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	combinations "github.com/mxschmitt/golang-combinations"
@@ -567,9 +568,9 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 		})
 		require.Len(t, stored, 3)
 
-		require.EqualValues(t, expectedEvents[2], stored[2])
+		require.EqualValues(t, expectedEvents[2], stored[0])
 		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[0])
+		require.EqualValues(t, expectedEvents[0], stored[2])
 	})
 	t.Run("search by imeta alt tag summary1 value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -596,9 +597,9 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 		})
 		require.Len(t, stored, 3)
 
-		require.EqualValues(t, expectedEvents[2], stored[2])
+		require.EqualValues(t, expectedEvents[2], stored[0])
 		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[0])
+		require.EqualValues(t, expectedEvents[0], stored[2])
 	})
 }
 
@@ -1036,4 +1037,121 @@ func TestFts5DeleteNestedEvents(t *testing.T) {
 		Limit:  100,
 	})
 	require.Zero(t, stored, 0)
+}
+
+func TestEventScoreWithSearch(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	ts := time.Now().Add(time.Hour).Unix()
+
+	var evNote, evArticle model.Event
+	evNote.ID = "note"
+	evNote.Kind = nostr.KindTextNote
+	evNote.PubKey = "note_pub"
+	evNote.CreatedAt = model.Timestamp(ts)
+	evNote.Content = "content 1"
+
+	evArticle.ID = "article"
+	evArticle.Kind = nostr.KindTextNote
+	evArticle.PubKey = "article_pub"
+	evArticle.CreatedAt = model.Timestamp(ts)
+	evArticle.Content = "content 2"
+	evArticle.Tags = model.Tags{
+		{"d", "my article"},
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), &evNote, &evArticle))
+
+	type target struct {
+		Tag     string
+		ID      string
+		Address string
+		JSON    string
+	}
+
+	targetEventArticle := target{"a", evArticle.ID, evArticle.Address(), evArticle.String()}
+	targetEventNote := target{"e", evNote.ID, evNote.Address(), evNote.String()}
+
+	t.Run("Like article", func(t *testing.T) {
+		var ev model.Event
+		ev.Content = "+"
+		ev.ID = "like_" + targetEventArticle.ID
+		ev.PubKey = "like_pub_" + targetEventArticle.ID
+		ev.Kind = nostr.KindReaction
+		ev.CreatedAt = nostr.Now()
+		ev.Tags = model.Tags{
+			{targetEventArticle.Tag, targetEventArticle.Address},
+		}
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+		helperPointsScoreEqual(t, db, targetEventArticle.ID, 1, 1.0)
+	})
+	t.Run("search ranked events", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"content" top`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, evArticle, *stored[0])
+	})
+	t.Run("Repost note", func(t *testing.T) {
+		var ev model.Event
+		ev.Content = targetEventNote.JSON
+		ev.ID = "repost_" + targetEventNote.ID
+		ev.PubKey = "repost_pub_" + targetEventNote.ID
+		ev.Kind = nostr.KindRepost
+		ev.CreatedAt = nostr.Now()
+		ev.Tags = model.Tags{
+			{targetEventNote.Tag, targetEventNote.Address},
+		}
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+		helperPointsScoreEqual(t, db, targetEventNote.ID, 3, 3.0) // repost (3).
+	})
+	t.Run("search ranked events", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"content" top`,
+		})
+		require.Len(t, stored, 2)
+		require.EqualValues(t, evNote, *stored[0])
+		require.EqualValues(t, evArticle, *stored[1])
+	})
+
+	var quotes []string
+	t.Run("Now quote article", func(t *testing.T) {
+		var ev model.Event
+		ev.Content = "quote"
+		ev.ID = "quote" + targetEventArticle.ID
+		ev.PubKey = "quote_pub"
+		ev.Kind = nostr.KindTextNote
+		ev.Kind = model.CustomIONKindEditableTextNote
+		ev.Tags = model.Tags{
+			{model.CustomIONTagAddressableQ, targetEventArticle.Address},
+			{"d", "quote"},
+		}
+		ev.CreatedAt = nostr.Now()
+		quotes = append(quotes, ev.ID)
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+		helperPointsScoreEqual(t, db, targetEventArticle.ID, 5, 5.0) // like (1) + quote (4).
+	})
+
+	t.Run("search ranked events", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"content" top`,
+		})
+		require.Len(t, stored, 2)
+		require.EqualValues(t, evArticle, *stored[0])
+		require.EqualValues(t, evNote, *stored[1])
+	})
+	t.Run("search ranked events with dependencies", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"content" top include:dependencies:kind1>kind0`,
+		})
+		require.Len(t, stored, 2)
+		require.EqualValues(t, evArticle, *stored[0])
+		require.EqualValues(t, evNote, *stored[1])
+	})
 }
