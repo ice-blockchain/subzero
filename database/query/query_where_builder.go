@@ -509,6 +509,7 @@ from (
 	left join events ve ON ve.id = et.event_id AND ve.kind = 1754 AND json_valid(ve.content)
 	left join json_each(ve.content) j on true
 	where
+		exists (select 1 FROM eventsmain) AND
 		exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll') and mainev.kind = :`)
 	w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
 	w.WriteString(`
@@ -574,6 +575,7 @@ inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
 		f.reference_id = subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag)
 	)
 where
+	exists (select 1 FROM eventsmain) AND
 `)
 	} else {
 		w.WriteString(`
@@ -594,6 +596,7 @@ from
 	events e
 where
 `)
+		w.WriteString(` exists (select 1 FROM eventsmain) AND `)
 		w.WriteString(`e.id not in (select `)
 		w.WriteString(cteName)
 		w.WriteString(`.id from `)
@@ -680,7 +683,8 @@ inner join `)
 		w.WriteString(cteName)
 		w.WriteString(` on e.id = `)
 		w.WriteString(cteName)
-		w.WriteString(`.id where e.kind =:`)
+		w.WriteString(`.id where exists (select 1 FROM eventsmain) AND e.kind =:`)
+
 		w.WriteString(w.addParam(filterID, "kind", filter.Start.Kind))
 		if filter.Start.Tag != "" {
 			w.WriteString(" AND EXISTS (select true from event_tags where event_id = ")
