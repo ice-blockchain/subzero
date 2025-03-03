@@ -55,7 +55,7 @@ func parseProfileContentMetadata(content string) string {
 	return strings.Join([]string{gjson.Get(content, "name").String(), gjson.Get(content, "display_name").String()}, " ")
 }
 
-func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
+func (db *dbClient) searchWithoutDepsSQL(rnk rank, whereMain, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
 	var preSearchWhere string
 	if whereSearch != "" {
 		preSearchWhere = ` (` + whereSearch + `) `
@@ -68,6 +68,7 @@ func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAt
 	if systemCreatedAtFilter == "" {
 		systemCreatedAtWhere = " e.system_created_at >= 0 AND "
 	}
+	orderBy, joinString := orderedRankedSQL(rnk)
 
 	sql = `with pre_search as (
 			select
@@ -77,7 +78,7 @@ func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAt
 				on ref.reference_id = e.id
 			join events_search es
 					on es.rowid = e.rid
-				where ` + systemCreatedAtWhere + preSearchWhere + `
+			where ` + systemCreatedAtWhere + preSearchWhere + `
 		)
 		select
 			e.kind,
@@ -97,12 +98,13 @@ func (db *dbClient) searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAt
 			select
 				*
 			from events e WHERE e.reference_id IS NOT NULL AND e.reference_id IN(select id from pre_search)
-		) e ` + limitQuery + `;`
+		) e ` + joinString + orderBy + limitQuery + `;`
 
 	return sql, nil
 }
 
-func (db *dbClient) searchWithDepsSQL(whereMain, depClause, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
+func (db *dbClient) searchWithDepsSQL(rnk rank, whereMain, depClause, whereSearch, systemCreatedAtFilter, limitQuery string) (sql string, err error) {
+	orderBy, joinString := orderedRankedSQL(rnk)
 	sql = `with eventsmain as (
 				SELECT
 					e.*
@@ -111,8 +113,7 @@ func (db *dbClient) searchWithDepsSQL(whereMain, depClause, whereSearch, systemC
 					ON ref.reference_id = e.id
 				JOIN events_search es
 					ON es.rowid = e.rid
-				WHERE ` + systemCreatedAtFilter + `(` + whereSearch + `)
-				` + limitQuery + `
+				WHERE ` + systemCreatedAtFilter + `(` + whereSearch + `)` + limitQuery + `
 			)
 			select
 				e.kind,
@@ -128,19 +129,21 @@ func (db *dbClient) searchWithDepsSQL(whereMain, depClause, whereSearch, systemC
 				tags AS jtags
 			from
 			(
-				SELECT
-					e.*
-				FROM events e
-				WHERE e.id IN (SELECT id FROM eventsmain)
-				AND (` + whereMain + `)
-				UNION ALL
-				SELECT
-					ev.*
-				FROM events ev
-				WHERE ev.reference_id IS NOT NULL
-				AND ev.reference_id IN (SELECT id FROM eventsmain)
-			) e 
-			` + depClause + `;`
+				SELECT e.* FROM (
+					SELECT
+						e.*
+					FROM events e
+					WHERE e.id IN (SELECT id FROM eventsmain)
+						AND (` + whereMain + `)
+					UNION ALL
+					SELECT
+						ev.*
+					FROM events ev
+					WHERE ev.reference_id IS NOT NULL
+					AND ev.reference_id IN (SELECT id FROM eventsmain)
+				) e ` + joinString + orderBy + `
+			) e ` +
+		depClause + `;`
 
 	return sql, nil
 }

@@ -620,23 +620,17 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 		orderBy = " order by random()"
 	}
 
-	var JoinString string
-	if v, ok := params["rank"]; ok && v.(rank) != rankUndef {
-		switch v.(rank) {
-		case rankTOP:
-			// All time top.
-			JoinString = ` inner join ranked_events r on e.rid = r.event_rid`
-			orderBy = ` order by r.score desc, e.system_created_at desc`
-		case rankTrending:
-			// 24h trending.
-			JoinString = ` inner join ranked_events r on e.rid = r.event_rid and ((unixepoch() - min(unixepoch(), e.created_at)) < 86400)`
-			orderBy = ` order by r.score desc, e.system_created_at desc`
-		}
+	var joinString string
+	rnk := rankUndef
+	val, ok := params["rank"]
+	if ok && val.(rank) != rankUndef {
+		rnk = val.(rank)
+		orderBy, joinString = orderedRankedSQL(rnk)
 	}
 
 	if depClause == "" {
 		if whereSearch != "" {
-			sql, err := db.searchWithoutDepsSQL(whereMain, whereSearch, systemCreatedAtFilter, limitQuery)
+			sql, err := db.searchWithoutDepsSQL(rnk, whereMain, whereSearch, systemCreatedAtFilter, limitQuery)
 			if err != nil {
 				return "", nil, err
 			}
@@ -656,11 +650,11 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 				e.content,
 				tags as jtags
 			from
-				events e` + JoinString + `
+				events e` + joinString + `
 			where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery, params, nil
 	}
 	if whereSearch != "" {
-		sql, err := db.searchWithDepsSQL(whereMain, depClause, whereSearch, systemCreatedAtFilter, limitQuery)
+		sql, err := db.searchWithDepsSQL(rnk, whereMain, depClause, whereSearch, systemCreatedAtFilter, limitQuery)
 		if err != nil {
 			return "", nil, err
 		}
@@ -683,7 +677,7 @@ with eventsmain as (
 		e.h_tag,
 		tags as jtags
 	from
-		events e` + JoinString + `
+		events e` + joinString + `
 	where ` + systemCreatedAtFilter + `(` + whereMain + `)` + orderBy + limitQuery + `
 )
 select
@@ -691,6 +685,23 @@ select
 from
 	eventsmain
 ` + depClause, params, nil
+}
+
+func orderedRankedSQL(rnk rank) (string, string) {
+	var joinString string
+	orderBy := " order by e.system_created_at desc"
+	switch rnk {
+	case rankTOP:
+		// All time top.
+		joinString = ` inner join ranked_events r on e.rid = r.event_rid`
+		orderBy = ` order by r.score desc, e.system_created_at desc`
+	case rankTrending:
+		// 24h trending.
+		joinString = ` inner join ranked_events r on e.rid = r.event_rid and ((unixepoch() - min(unixepoch(), e.created_at)) < 86400)`
+		orderBy = ` order by r.score desc, e.system_created_at desc`
+	}
+
+	return orderBy, joinString
 }
 
 func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []string, err error) {
