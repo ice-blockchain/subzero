@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"encoding/json"
 	"math/rand/v2"
 	"strconv"
@@ -260,7 +259,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Kind = nostr.KindProfileMetadata
 		ev.PubKey = "pk1"
 		ev.CreatedAt = 1
-		err := db.AcceptEvents(context.Background(), &ev)
+		err := db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "id2"
@@ -268,7 +267,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.PubKey = "pk1"
 		ev.CreatedAt = 2
 		ev.Content = "content of the note"
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		events := helperSelectEvents(t, db, model.Filter{
@@ -287,14 +286,14 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.PubKey = "t2pk1"
 		ev.CreatedAt = 1
 		ev.Content = "text note 1"
-		err := db.AcceptEvents(context.Background(), &ev)
+		err := db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t2id4"
 		ev.Kind = nostr.KindTextNote
 		ev.PubKey = "t2pk1"
 		ev.CreatedAt = 1
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t2id2"
@@ -304,7 +303,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"e", "t2id1", "", "root"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t2id3"
@@ -314,7 +313,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"e", "t2id1", "", "root"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t2id5"
@@ -325,7 +324,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			{"e", "id2", "", "root"},
 			{"e", "t2id3", "", "reply"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t2id6"
@@ -335,7 +334,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"e", "id2", "", "root"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		events := helperSelectEvents(t, db, model.Filter{
@@ -359,7 +358,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"e", "t2id3"},
 		}
-		err := db.AcceptEvents(context.Background(), &ev)
+		err := db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t3id2"
@@ -370,11 +369,11 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"e", "t2id3"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 		helperMustBePrecalculatedCount(t, db, 2, model.Filter{Tags: model.TagMap{}.Set("e", model.PointerOf("t2id3")), Kinds: []int{nostr.KindReaction}})
 
-		result, err := db.CountGroupedEventReactions(context.Background(), model.Filter{
+		result, err := db.CountGroupedEventReactions(t.Context(), model.Filter{
 			Kinds: []int{nostr.KindReaction},
 			Tags: model.TagMap{}.
 				Append("e", model.PointerOf("t2id2")).
@@ -421,7 +420,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			{"d", "testbadge"},
 			{"name", "Test Badge"},
 		}
-		err := db.AcceptEvents(context.Background(), &ev)
+		err := db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		// t4pk2 wants to award t4pk3 the badge `testbadge`.
@@ -432,7 +431,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"a", "30009:t4pk1:testbadge"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		// t4pk3 accepts the badge and updates their profile.
@@ -445,7 +444,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			{"a", "30009:t4pk1:testbadge"},
 			{"e", "t4id2"},
 		}
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		events := helperSelectEvents(t, db, model.Filter{
@@ -482,7 +481,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			ev2.Tags = model.Tags{
 				{"e", "t2id5"},
 			}
-			err := db.AcceptEvents(context.Background(), &ev1, &ev2)
+			err := db.AcceptEvents(t.Context(), &ev1, &ev2)
 			require.NoError(t, err)
 
 			evRelayMetadata := model.Event{}
@@ -493,7 +492,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			evRelayMetadata.Tags = model.Tags{
 				{"r", "wss://foo.bar"},
 			}
-			err = db.AcceptEvents(context.Background(), &evRelayMetadata)
+			err = db.AcceptEvents(t.Context(), &evRelayMetadata)
 			require.NoError(t, err)
 			events := helperSelectEvents(t, db, model.Filter{
 				IDs:    []string{"t6id1", "t6id2", "t2id5"},
@@ -527,7 +526,7 @@ func TestSelectWithDependencies(t *testing.T) {
 				{"r", "wss://foo.bar2"},
 			}
 
-			err := db.AcceptEvents(context.Background(), &ev1, &ev2)
+			err := db.AcceptEvents(t.Context(), &ev1, &ev2)
 			require.NoError(t, err)
 
 			ev1.ID = "t7id3"
@@ -535,7 +534,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			ev1.PubKey = "t7pk3"
 			ev1.CreatedAt = 16
 			ev1.Tags = model.Tags{}
-			err = db.AcceptEvents(context.Background(), &ev1)
+			err = db.AcceptEvents(t.Context(), &ev1)
 			require.NoError(t, err)
 
 			events := helperSelectEvents(t, db, model.Filter{
@@ -555,7 +554,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.Kind = nostr.KindProfileMetadata
 		ev.PubKey = "t8pk1"
 		ev.CreatedAt = 1
-		err := db.AcceptEvents(context.Background(), &ev)
+		err := db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		ev.ID = "t8id2"
@@ -563,7 +562,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.PubKey = "t8pk1"
 		ev.CreatedAt = 2
 		ev.Content = "content of the article"
-		err = db.AcceptEvents(context.Background(), &ev)
+		err = db.AcceptEvents(t.Context(), &ev)
 		require.NoError(t, err)
 
 		events := helperSelectEvents(t, db, model.Filter{
@@ -576,7 +575,7 @@ func TestSelectWithDependencies(t *testing.T) {
 	})
 	t.Run("kind0>kind6400+kind3+group+p", func(t *testing.T) {
 		// Celebrity 1, and two fans.
-		require.NoError(t, db.AcceptEvents(context.Background(),
+		require.NoError(t, db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:        "t9id1",
@@ -609,7 +608,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			},
 		))
 		// Celebrity 2, and single fan.
-		require.NoError(t, db.AcceptEvents(context.Background(),
+		require.NoError(t, db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:        "t9id4",
@@ -695,7 +694,7 @@ func TestSelectWithDependencies(t *testing.T) {
 				},
 			}
 			require.NoError(t, ev.SignWithAlg(masterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), ev))
 
 			meta := &model.Event{
 				Event: nostr.Event{
@@ -705,9 +704,9 @@ func TestSelectWithDependencies(t *testing.T) {
 				},
 			}
 			require.NoError(t, meta.SignWithAlg(userPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, db.AcceptEvents(context.TODO(), meta))
+			require.NoError(t, db.AcceptEvents(t.Context(), meta))
 
-			require.NoError(t, db.AcceptEvents(context.Background(),
+			require.NoError(t, db.AcceptEvents(t.Context(),
 				&model.Event{
 					Event: nostr.Event{
 						ID:        "t10id1",
@@ -764,7 +763,7 @@ func TestSelectExpirationWithDependencies(t *testing.T) {
 	expiration := strconv.FormatInt(now+3600, 10)
 
 	t.Run("Insert", func(t *testing.T) {
-		require.NoError(t, db.AcceptEvents(context.Background(),
+		require.NoError(t, db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:        "t1id1",
@@ -849,7 +848,7 @@ func TestSelectDependenciesQuote(t *testing.T) {
 		{"q", event1.ID, "", user1Pub},
 	}
 	require.NoError(t, event2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(context.Background(), &event1, &event2))
+	require.NoError(t, db.AcceptEvents(t.Context(), &event1, &event2))
 
 	events := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
@@ -869,7 +868,7 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 	defer db.Close()
 
 	// Original note.
-	err := db.AcceptEvents(context.Background(), &model.Event{
+	err := db.AcceptEvents(t.Context(), &model.Event{
 		Event: nostr.Event{
 			ID:        "id1",
 			Kind:      nostr.KindTextNote,
@@ -881,7 +880,7 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 	require.NoError(t, err)
 
 	// Two replies, different authors.
-	err = db.AcceptEvents(context.Background(),
+	err = db.AcceptEvents(t.Context(),
 		&model.Event{
 			Event: nostr.Event{
 				ID:        "id2",
@@ -936,7 +935,7 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 	db, _ := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
-	err := db.AcceptEvents(context.Background(),
+	err := db.AcceptEvents(t.Context(),
 		// Has no KindRelayListMetadata and no KindMuteList.
 		&model.Event{
 			Event: nostr.Event{
@@ -1103,7 +1102,7 @@ func TestDVMVoteResults(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Create", func(t *testing.T) {
-		require.NoError(t, db.AcceptEvents(context.Background(),
+		require.NoError(t, db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:     "poll1",
@@ -1188,7 +1187,7 @@ func TestDVMVoteResults(t *testing.T) {
 						require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 						events = append(events, &ev)
 					}
-					require.NoError(t, db.AcceptEvents(context.Background(), events...))
+					require.NoError(t, db.AcceptEvents(t.Context(), events...))
 				}
 			})
 		}
@@ -1264,7 +1263,7 @@ func TestSelectDependenciesWithAddressableEvents(t *testing.T) {
 	}
 	require.NoError(t, event3.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	require.NoError(t, db.AcceptEvents(context.Background(), &event1, &event2, &event3))
+	require.NoError(t, db.AcceptEvents(t.Context(), &event1, &event2, &event3))
 
 	events := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{model.CustomIONKindEditableTextNote},
@@ -1294,7 +1293,7 @@ func TestSelectDependenciesReactionAddressable(t *testing.T) {
 		{"d", "dtag1"},
 	}
 	require.NoError(t, event1.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(context.Background(), &event1))
+	require.NoError(t, db.AcceptEvents(t.Context(), &event1))
 
 	var reaction1, reaction2 model.Event
 
@@ -1320,11 +1319,11 @@ func TestSelectDependenciesReactionAddressable(t *testing.T) {
 		{"k", strconv.Itoa(event1.Kind)},
 	}
 
-	require.NoError(t, db.AcceptEvents(context.Background(), &reaction1, &reaction2))
+	require.NoError(t, db.AcceptEvents(t.Context(), &reaction1, &reaction2))
 
 	helperMustBePrecalculatedCount(t, db, 2, model.Filter{Tags: model.TagMap{}.Set("a", model.PointerOf(event1.Address())), Kinds: []int{nostr.KindReaction}})
 
-	result, err := db.CountGroupedEventReactions(context.Background(), model.Filter{
+	result, err := db.CountGroupedEventReactions(t.Context(), model.Filter{
 		Kinds: []int{nostr.KindReaction},
 		Tags: model.TagMap{}.
 			Append("a", model.PointerOf(event1.Address())),
@@ -1349,56 +1348,132 @@ func TestMostRelevantFollowers(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	var ev model.Event
-	ev.Kind = nostr.KindFollowList
-	ev.PubKey = "root"
-	ev.ID = "id1"
-	ev.Tags = model.Tags{ // No pk4.
-		{"p", "pk1"},
-		{"p", "pk2"},
-		{"p", "pk3"},
-		{"p", "pk5"},
-	}
-	require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+	t.Run("Create metadata", func(t *testing.T) {
+		var bobMeta, aliceMeta, alexMeta, annaMeta, johnMeta, martinMeta model.Event
+		bobMeta.ID = "id1"
+		bobMeta.Kind = nostr.KindProfileMetadata
+		bobMeta.PubKey = "bob"
+		bobMeta.Content = "{\"name\":\"Bob\"}"
 
-	var ev1, ev2 model.Event
-	ev1.Kind = nostr.KindFollowList
-	ev1.PubKey = "pk1"
-	ev1.ID = "id2"
-	ev1.Tags = model.Tags{
-		{"p", "pk2"},
-		{"p", "pk3"},
-		{"p", "pk4"},
-	}
-	ev2.Kind = nostr.KindFollowList
-	ev2.PubKey = "pk2"
-	ev2.ID = "id3"
-	ev2.Tags = model.Tags{
-		{"p", "pk1"},
-		{"p", "pk3"},
-		{"p", "pk4"},
-	}
-	require.NoError(t, db.AcceptEvents(context.Background(), &ev1, &ev2))
+		aliceMeta.ID = "id4"
+		aliceMeta.Kind = nostr.KindProfileMetadata
+		aliceMeta.PubKey = "alice"
+		aliceMeta.Content = "{\"name\":\"Alice\"}"
 
-	var ev3, ev4 model.Event
-	ev3.Kind = nostr.KindProfileMetadata
-	ev3.PubKey = "pk3"
-	ev3.ID = "id4"
-	ev4.Kind = nostr.KindProfileMetadata
-	ev4.PubKey = "pk4"
-	ev4.ID = "id5"
-	require.NoError(t, db.AcceptEvents(context.Background(), &ev3, &ev4))
+		alexMeta.ID = "id2"
+		alexMeta.Kind = nostr.KindProfileMetadata
+		alexMeta.PubKey = "alex"
+		alexMeta.Content = "{\"name\":\"Alex\"}"
 
-	f := model.Filter{
-		Kinds:   []int{nostr.KindFollowList},
-		Authors: []string{"root"},
-		Search:  "include:dependencies:kind3>kind0+p+|pk3,pk4|",
-		Limit:   1,
-	}
+		annaMeta.ID = "id3"
+		annaMeta.Kind = nostr.KindProfileMetadata
+		annaMeta.PubKey = "anna"
+		annaMeta.Content = "{\"name\":\"Anna\"}"
 
-	events := helperSelectEvents(t, db, f)
-	require.Len(t, events, 2) // 1 follow list (root), 1 relevant follower (pk3).
-	require.Equal(t, "id1", events[0].ID)
-	require.Equal(t, nostr.KindProfileMetadata, events[1].Kind)
-	require.Equal(t, "id4", events[1].ID)
+		johnMeta.ID = "id5"
+		johnMeta.Kind = nostr.KindProfileMetadata
+		johnMeta.PubKey = "john"
+		johnMeta.Content = "{\"name\":\"John\"}"
+
+		martinMeta.ID = "id6"
+		martinMeta.Kind = nostr.KindProfileMetadata
+		martinMeta.PubKey = "martin"
+		martinMeta.Content = "{\"name\":\"Martin\"}"
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &bobMeta, &aliceMeta, &alexMeta, &annaMeta, &johnMeta, &martinMeta))
+	})
+	t.Run("Create follow lists", func(t *testing.T) {
+		var johnList, bobList, aliceList, alexList, annaList, martinList model.Event
+		bobList.Kind = nostr.KindFollowList
+		bobList.PubKey = "bob"
+		bobList.ID = "bob_id"
+		bobList.Tags = model.Tags{
+			{"p", "john"},
+			{"p", "alice"},
+			{"p", "anna"},
+		}
+
+		aliceList.Kind = nostr.KindFollowList
+		aliceList.PubKey = "alice"
+		aliceList.ID = "alice_id"
+		aliceList.Tags = model.Tags{
+			{"p", "john"},
+			{"p", "bob"},
+			{"p", "alex"},
+		}
+
+		alexList.Kind = nostr.KindFollowList
+		alexList.PubKey = "alex"
+		alexList.ID = "alex_id"
+		alexList.Tags = model.Tags{
+			{"p", "anna"},
+			{"p", "john"},
+		}
+
+		annaList.Kind = nostr.KindFollowList
+		annaList.PubKey = "anna"
+		annaList.ID = "anna_id"
+		annaList.Tags = model.Tags{
+			{"p", "alex"},
+			{"p", "alice"},
+		}
+
+		martinList.Kind = nostr.KindFollowList
+		martinList.PubKey = "martin"
+		martinList.ID = "martin_id"
+		martinList.Tags = model.Tags{
+			{"p", "john"},
+			{"p", "bob"},
+		}
+
+		johnList.Kind = nostr.KindFollowList
+		johnList.PubKey = "john"
+		johnList.ID = "john_id"
+		johnList.Tags = model.Tags{
+			{"p", "alex"},
+			{"p", "anna"},
+			{"p", "bob"},
+			{"p", "alice"},
+		}
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &johnList, &bobList, &aliceList, &alexList, &annaList, &martinList))
+	})
+
+	// It's intersection between user's (Authors) follow list and users who follow X (include:dependencies:kind3>kind0+p+|X|).
+	// Users who follow bob: martin, alice, john.
+	// Users who follow alice: anna, bob, john.
+	// John follows: alex, anna, bob, alice.
+	t.Run("Find most relevant followers of john with alien", func(t *testing.T) {
+		f := model.Filter{
+			Kinds:   []int{nostr.KindFollowList},
+			Authors: []string{"john"},
+			Search:  "include:dependencies:kind3>kind0+p+|alien|",
+			Limit:   1,
+		}
+		events := helperSelectEvents(t, db, f)
+		require.Len(t, events, 1) // 1 main event (follow list).
+	})
+	t.Run("Find most relevant followers of john with bob", func(t *testing.T) {
+		f := model.Filter{
+			Kinds:   []int{nostr.KindFollowList},
+			Authors: []string{"john"},
+			Search:  "include:dependencies:kind3>kind0+p+|bob|",
+			Limit:   1,
+		}
+		events := helperSelectEvents(t, db, f)
+		require.Len(t, events, 2) // 1 main event (follow list), 1 kind 0 of relevant followers.
+		require.Equal(t, "alice", events[1].PubKey)
+	})
+	t.Run("Find most relevant followers of john with alice", func(t *testing.T) {
+		f := model.Filter{
+			Kinds:   []int{nostr.KindFollowList},
+			Authors: []string{"john"},
+			Search:  "include:dependencies:kind3>kind0+p+|alice|",
+			Limit:   1,
+		}
+		events := helperSelectEvents(t, db, f)
+		require.Len(t, events, 3) // 1 main event (follow list), 2 kind 0 of relevant followers.
+		require.Equal(t, "anna", events[1].PubKey)
+		require.Equal(t, "bob", events[2].PubKey)
+	})
 }

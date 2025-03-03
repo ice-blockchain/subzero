@@ -42,7 +42,7 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.11.1
-	github.com/xssnick/tonutils-storage v0.7.2
+	github.com/xssnick/tonutils-storage v0.7.4
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.35.0
 )

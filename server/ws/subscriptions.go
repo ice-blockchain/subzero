@@ -277,13 +277,7 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 			Limit:   1,
 		}
 		sub.Reduce = func(e *model.Event) bool {
-			// Skip if the event belongs to the current authenticated user.
-			f := model.Filter{
-				Kinds:   []int{nostr.KindFollowList},
-				Authors: []string{m, pk},
-			}
-
-			return f.Matches(&e.Event)
+			return e.Kind != nostr.KindProfileMetadata
 		}
 	}
 	return sub
