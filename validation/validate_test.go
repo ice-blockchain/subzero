@@ -40,19 +40,19 @@ func TestValidateGiftWrap(t *testing.T) {
 	ev.Kind = nostr.KindGiftWrap
 	ev.CreatedAt = 1
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(context.TODO(), &ev))
+	require.Error(t, Validate(t.Context(), &ev))
 
 	ev.Tags = append(ev.Tags, model.Tag{"p", "foop"}, model.Tag{"k", "123"})
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(context.TODO(), &ev))
+	require.Error(t, Validate(t.Context(), &ev))
 
 	ev.Tags = append(ev.Tags, model.Tag{"expiration", "foo"})
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(context.TODO(), &ev))
+	require.Error(t, Validate(t.Context(), &ev))
 
 	ev.Tags = append(ev.Tags[:len(ev.Tags)-2], model.Tag{"expiration", "123"})
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(context.TODO(), &ev))
+	require.Error(t, Validate(t.Context(), &ev))
 }
 
 func TestValidatePollTag(t *testing.T) {
@@ -96,7 +96,7 @@ func TestValidatePollTag(t *testing.T) {
 		}
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(context.TODO(), &ev))
+		require.NoError(t, Validate(t.Context(), &ev))
 	})
 }
 
@@ -598,8 +598,6 @@ func TestApplyChangeCommunityPatch(t *testing.T) {
 func TestValidatePollVote(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.TODO()
-
 	var pollSingle, pollMulti, pollExpired model.Event
 	t.Run("CreatePolls", func(t *testing.T) {
 		deadline := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
@@ -609,23 +607,23 @@ func TestValidatePollVote(t *testing.T) {
 			{model.CustomIONTagPoll, "type single", "ttl " + deadline, "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollSingle.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(ctx, &pollSingle))
+		require.NoError(t, Validate(t.Context(), &pollSingle))
 
 		pollMulti.Kind = nostr.KindTextNote
 		pollMulti.Tags = model.Tags{
 			{model.CustomIONTagPoll, "type multi", "ttl " + deadline, "title Test multi Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollMulti.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(ctx, &pollMulti))
+		require.NoError(t, Validate(t.Context(), &pollMulti))
 
 		pollExpired.Kind = nostr.KindTextNote
 		pollExpired.Tags = model.Tags{
 			{model.CustomIONTagPoll, "type single", "ttl 1", "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollExpired.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(ctx, &pollExpired)) // pollExpired is not valid.
+		require.Error(t, Validate(t.Context(), &pollExpired)) // pollExpired is not valid.
 
-		require.NoError(t, query.AcceptEvents(ctx, &pollSingle, &pollMulti, &pollExpired))
+		require.NoError(t, query.AcceptEvents(t.Context(), &pollSingle, &pollMulti, &pollExpired))
 	})
 
 	tests := []struct {
@@ -758,7 +756,7 @@ func TestValidatePollVote(t *testing.T) {
 			tt.event.CreatedAt = nostr.Timestamp(time.Now().Unix())
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			err := Validate(ctx, tt.event)
+			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -772,16 +770,15 @@ func TestValidateDtag(t *testing.T) {
 	t.Parallel()
 
 	// Known event kind.
-	ctx := context.TODO()
 	var ev model.Event
 	ev.Kind = nostr.KindArticle
-	require.Error(t, Validate(ctx, &ev))
+	require.Error(t, Validate(t.Context(), &ev))
 
 	// Unknown event kind, but addressable.
 	ev.Kind = nostr.KindLiveEvent
-	require.Error(t, Validate(ctx, &ev))
+	require.Error(t, Validate(t.Context(), &ev))
 	ev.Tags = append(ev.Tags, model.Tag{"d", "foo"})
-	require.NoError(t, Validate(ctx, &ev))
+	require.NoError(t, Validate(t.Context(), &ev))
 }
 func TestValidateFollowListEvent(t *testing.T) {
 	t.Parallel()
@@ -866,7 +863,7 @@ func TestValidateFollowListEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Validate(context.Background(), tt.event)
+			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -970,7 +967,7 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Validate(context.Background(), tt.event)
+			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -982,7 +979,6 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 
 func TestValidateKindRepostEvent(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	// Create original event to be reposted.
 	originalEvent := &model.Event{
@@ -1139,7 +1135,7 @@ func TestValidateKindRepostEvent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			err := Validate(ctx, tt.event)
+			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -1173,8 +1169,6 @@ func TestValidateKindGiftWrapEvent(t *testing.T) {
 
 func TestValidateArticleSoftDelete(t *testing.T) {
 	t.Parallel()
-
-	ctx := context.Background()
 
 	nowUnix := time.Now().Unix()
 
@@ -1234,7 +1228,7 @@ func TestValidateArticleSoftDelete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			err := Validate(ctx, tt.event)
+			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -1270,4 +1264,23 @@ func TestValidateTagsBAndP(t *testing.T) {
 		{"b", "foo"},
 		{"p", "bar"},
 	}}}))
+}
+
+func TestValidateFundSend(t *testing.T) {
+	t.Parallel()
+
+	var ev model.Event
+	ev.Kind = model.CustomIONKindFundSendNotify
+	ev.Tags = model.Tags{
+		{"p", "foo"},
+		{"b", "bar"},
+		{"network", "ion"},
+		{"asset_class", "native"},
+		{"asset_address", "localhost"},
+		{"encrypted"},
+	}
+	require.Error(t, Validate(t.Context(), &ev))
+
+	ev.Content = "foo"
+	require.NoError(t, Validate(t.Context(), &ev))
 }
