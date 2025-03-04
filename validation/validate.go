@@ -54,6 +54,8 @@ const (
 	tagStateRequired
 	tagStateForbidden
 	tagStateOneOf
+
+	kindValidatorFlagContentRequired uint = 1 << 0
 )
 
 type (
@@ -70,10 +72,17 @@ type (
 
 	tagState uint
 	tagData  struct {
+		// Tag state, one of: required, optional, forbidden, etc.
 		State tagState
-		Tags  []string
+		// Additional tags for `oneOf` state.
+		Tags []string
 	}
-	tagLookupTable map[string]tagData
+	kindValidator struct {
+		// Tag map: tag key -> tag state.
+		Tags map[string]tagData
+		// Additional flags for given kind.
+		Flags uint
+	}
 )
 
 var (
@@ -83,6 +92,7 @@ var (
 	ErrUnsupportedKind  = errors.New("unsupported kind")
 	ErrActionForbidden  = errors.New("forbidden")
 	ErrNotFound         = errors.New("not found")
+	ErrContentEmpty     = errors.New("content is empty")
 
 	CommongTags = []string{
 		"t",
@@ -96,19 +106,18 @@ var (
 		"encrypted",
 	}
 
-	KindSupportedTags = map[model.Kind]tagLookupTable{
+	KindSupportedTags = map[model.Kind]kindValidator{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
 		nostr.KindTextNote:              tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity),
 		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
 		nostr.KindFollowList:            tagsTable("p"),
-		nostr.KindDeletion:              newEmptyTable().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
-		nostr.KindRepost:                newTable().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
-		nostr.KindReaction:              newTable().Required("p", "k").OneOf("e", "a").Build(),
+		nostr.KindDeletion:              newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
+		nostr.KindRepost:                newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
+		nostr.KindReaction:              newKindValidatorBuilder().Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindBadgeAward:            tagsTable("a", "p"),
-		nostr.KindGenericRepost:         newTable().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
+		nostr.KindGenericRepost:         newKindValidatorBuilder().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindReactionToWebsite:     tagsTable("r"),
 		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
-		model.CustomIONKindPollVote:     newTable().OneOf("e", "a").Forbidden("expiration").Build(),
 		nostr.KindPinList:               tagsTable("e"),
 		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
 		nostr.KindCommunityList:         tagsTable("a"),
@@ -166,7 +175,7 @@ var (
 		model.CustomIONKindCommunityBanUser:               tagsTable(model.CustomIONTagCommunity, "p"),
 		model.CustomIONKindCommunityChangeDefinition:      tagsTable(model.CustomIONTagCommunity, "name", "description", "public", "private", "open", "closed", "p"),
 
-		model.CustomIONKindEditableTextNote: newTable().
+		model.CustomIONKindEditableTextNote: newKindValidatorBuilder().
 			Optional("a", "e", "d", "p", "q",
 				"editing_ended_at",
 				model.CustomIONTagPoll,
@@ -174,6 +183,20 @@ var (
 				model.CustomIONTagAddressableQ,
 			).
 			Required("published_at").
+			Build(),
+
+		model.CustomIONKindPollVote: newKindValidatorBuilder().OneOf("e", "a").Forbidden("expiration").Build(),
+
+		model.CustomIONKindFundReceive: newKindValidatorBuilderEmpty().
+			ContentNotEmpty().
+			Optional("encrypted").
+			Required(model.CustomIONTagOnBehalfOf, "network", "p", "asset_class", "asset_address").
+			Build(),
+
+		model.CustomIONKindFundSendNotify: newKindValidatorBuilderEmpty().
+			ContentNotEmpty().
+			Optional("request", "encrypted").
+			Required(model.CustomIONTagOnBehalfOf, "network", "p", "asset_class", "asset_address").
 			Build(),
 	}
 
@@ -411,6 +434,11 @@ func Validate(ctx context.Context, e *model.Event) error {
 	}
 	if actualSize, maxSize := len(e.Content), globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
 		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", actualSize, maxSize)
+	}
+	if v, ok := KindSupportedTags[e.Kind]; ok {
+		if err := v.Execute(e); err != nil {
+			return errors.Wrap(ErrWrongEventParams, err.Error())
+		}
 	}
 	switch e.Kind {
 	case nostr.KindProfileMetadata:
@@ -967,7 +995,7 @@ func createRootPostFilter(e *model.Event) (*nostr.Filter, error) {
 }
 
 func isRootTag(tag nostr.Tag) bool {
-	return tag != nil && len(tag) >= 4 && (tag)[3] == model.TagMarkerRoot
+	return len(tag) >= 4 && (tag)[3] == model.TagMarkerRoot
 }
 
 func validateKindRepostEvent(ctx context.Context, e *model.Event) error {
@@ -1219,7 +1247,7 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 		currentTime   = time.Now().Unix()
 	)
 	for _, aTag := range aTags {
-		if aTag == nil || len(aTag) < 2 {
+		if len(aTag) < 2 {
 			return errors.Wrapf(ErrWrongEventParams, "community ownership must have a valid a tag: %+v", e)
 		}
 		if splitted := strings.Split(aTag.Value(), ":"); len(splitted) != 3 || splitted[0] != fmt.Sprint(model.CustomIONKindCommunityDefinition) {
@@ -1346,7 +1374,7 @@ func validateIMetaTag(tag nostr.Tag) error {
 }
 
 func validateSettingsTag(kind int, tag nostr.Tag) error {
-	if tag == nil || len(tag) < 4 {
+	if len(tag) < 4 {
 		return errors.Wrapf(ErrWrongEventParams, "settings tag is incomplete: %+v", tag)
 	}
 	settingType := tag[1]
@@ -1403,9 +1431,9 @@ func validateEventTags(e *model.Event) error {
 	var bTag string
 	currentTags := make(map[string]int)
 	pTags := make(map[string]int)
-	supportedTags, known := KindSupportedTags[e.Kind]
+	kindValidator, known := KindSupportedTags[e.Kind]
 	for _, tag := range e.Tags {
-		if data, ok := supportedTags[tag.Key()]; known && !ok {
+		if data, ok := kindValidator.Tags[tag.Key()]; known && !ok {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
 		} else if data.State == tagStateForbidden {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v: cannot be used with this kind", tag)
@@ -1457,7 +1485,7 @@ func validateEventTags(e *model.Event) error {
 		}
 	}
 
-	for key, data := range supportedTags {
+	for key, data := range kindValidator.Tags {
 		switch data.State {
 		case tagStateRequired:
 			if _, ok := currentTags[key]; !ok {
@@ -1489,59 +1517,75 @@ func validateEventTags(e *model.Event) error {
 	return nil
 }
 
-func tagsTable(tags ...string) tagLookupTable {
-	return newTable().Optional(tags...).Build()
+func tagsTable(tags ...string) kindValidator {
+	return newKindValidatorBuilder().Optional(tags...).Build()
 }
 
-func tagsTableRequired(tags ...string) tagLookupTable {
-	return newTable().Required(tags...).Build()
+func tagsTableRequired(tags ...string) kindValidator {
+	return newKindValidatorBuilder().Required(tags...).Build()
 }
 
-type tagTableBuilder struct {
-	M tagLookupTable
+type kindValidatorBuilder struct {
+	Validator kindValidator
 }
 
-func newTable() *tagTableBuilder {
-	t := newEmptyTable()
+func newKindValidatorBuilder() *kindValidatorBuilder {
+	t := newKindValidatorBuilderEmpty()
 	for _, tag := range CommongTags {
 		t = t.Optional(tag)
 	}
 	return t
 }
 
-func newEmptyTable() *tagTableBuilder {
-	return &tagTableBuilder{M: make(tagLookupTable)}
+func newKindValidatorBuilderEmpty() *kindValidatorBuilder {
+	return &kindValidatorBuilder{
+		Validator: kindValidator{
+			Tags: make(map[string]tagData),
+		},
+	}
 }
 
-func (t *tagTableBuilder) Optional(tags ...string) *tagTableBuilder {
+func (t *kindValidatorBuilder) ContentNotEmpty() *kindValidatorBuilder {
+	t.Validator.Flags |= kindValidatorFlagContentRequired
+	return t
+}
+
+func (t *kindValidatorBuilder) Optional(tags ...string) *kindValidatorBuilder {
 	for _, tag := range tags {
-		t.M[tag] = tagData{State: tagStateOptional}
+		t.Validator.Tags[tag] = tagData{State: tagStateOptional}
 	}
 	return t
 }
 
-func (t *tagTableBuilder) Required(tags ...string) *tagTableBuilder {
+func (t *kindValidatorBuilder) Required(tags ...string) *kindValidatorBuilder {
 	for _, tag := range tags {
-		t.M[tag] = tagData{State: tagStateRequired}
+		t.Validator.Tags[tag] = tagData{State: tagStateRequired}
 	}
 	return t
 }
 
-func (t *tagTableBuilder) Forbidden(tags ...string) *tagTableBuilder {
+func (t *kindValidatorBuilder) Forbidden(tags ...string) *kindValidatorBuilder {
 	for _, tag := range tags {
-		t.M[tag] = tagData{State: tagStateForbidden}
+		t.Validator.Tags[tag] = tagData{State: tagStateForbidden}
 	}
 	return t
 }
 
-func (t *tagTableBuilder) OneOf(tags ...string) *tagTableBuilder {
+func (t *kindValidatorBuilder) OneOf(tags ...string) *kindValidatorBuilder {
 	data := tagData{Tags: tags, State: tagStateOneOf}
 	for _, tag := range tags {
-		t.M[tag] = data
+		t.Validator.Tags[tag] = data
 	}
 	return t
 }
 
-func (t *tagTableBuilder) Build() tagLookupTable {
-	return t.M
+func (t *kindValidatorBuilder) Build() kindValidator {
+	return t.Validator
+}
+
+func (v *kindValidator) Execute(e *model.Event) (err error) {
+	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
+		err = errors.Join(err, ErrContentEmpty)
+	}
+	return err
 }
