@@ -189,14 +189,14 @@ var (
 
 		model.CustomIONKindFundReceive: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional(model.CustomIONTagOnBehalfOf).
-			Required("encrypted", "network", "p", "asset_class", "asset_address").
+			Optional("encrypted").
+			Required(model.CustomIONTagOnBehalfOf, "network", "p", "asset_class", "asset_address").
 			Build(),
 
 		model.CustomIONKindFundSendNotify: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional("request", model.CustomIONTagOnBehalfOf).
-			Required("encrypted", "network", "p", "asset_class", "asset_address").
+			Optional("request", "encrypted").
+			Required(model.CustomIONTagOnBehalfOf, "network", "p", "asset_class", "asset_address").
 			Build(),
 	}
 
