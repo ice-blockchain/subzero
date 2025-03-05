@@ -224,6 +224,11 @@ var (
 		model.JobFeedbackStatusSuccess:         {},
 		model.JobFeedbackStatusPartial:         {},
 	}
+
+	// Allow multiple `p` tags for given kinds that point to the same user.
+	kindAllowMultipleTagsP = map[model.Kind]struct{}{
+		model.CustomIONKindAttestation: {}, // Could be multiple attestations, like active, revoked, etc.
+	}
 )
 
 func validatePollTag(tag model.Tag) error {
@@ -1479,9 +1484,12 @@ func validateEventTags(e *model.Event) error {
 		}
 		currentTags[tag.Key()]++
 	}
-	for val, count := range pTags {
-		if count > 1 {
-			return errors.Wrapf(ErrWrongEventParams, "tag %q: %v used more than once", "p", val)
+
+	if _, allow := kindAllowMultipleTagsP[e.Kind]; !allow {
+		for val, count := range pTags {
+			if count > 1 {
+				return errors.Wrapf(ErrWrongEventParams, "tag %q: %v used more than once", "p", val)
+			}
 		}
 	}
 
