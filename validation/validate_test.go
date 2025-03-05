@@ -1284,3 +1284,26 @@ func TestValidateFundSend(t *testing.T) {
 	ev.Content = "foo"
 	require.NoError(t, Validate(t.Context(), &ev))
 }
+
+func TestMultipleTagsP(t *testing.T) {
+	t.Parallel()
+
+	require.Error(t, validateEventTags(&model.Event{Event: nostr.Event{
+		Kind: nostr.KindTextNote,
+		Tags: model.Tags{
+			{"p", "foo"},
+			{"p", "foo"},
+		}}}))
+
+	require.NoError(t, validateEventTags(&model.Event{Event: nostr.Event{
+		Kind: func() int {
+			for k := range kindAllowMultipleTagsP {
+				return k
+			}
+			panic("unreachable")
+		}(),
+		Tags: model.Tags{
+			{"p", "foo"},
+			{"p", "foo"},
+		}}}))
+}

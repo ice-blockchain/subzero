@@ -29,7 +29,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.50.0
+	github.com/nbd-wtf/go-nostr v0.50.1
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/quic-go/quic-go v0.50.0
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
@@ -44,7 +44,7 @@ require (
 	github.com/xssnick/tonutils-go v1.11.1
 	github.com/xssnick/tonutils-storage v0.7.4
 	go.uber.org/goleak v1.3.0
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.36.0
 )
 
 require (
