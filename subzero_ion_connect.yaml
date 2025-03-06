@@ -8,6 +8,8 @@ validation:
 
 server:
   relay-url: &self "wss://example.com"
+  acme:
+    api-key: foo
   port: 4443
   tls-cert: &tls-cert |
     -----BEGIN CERTIFICATE-----
