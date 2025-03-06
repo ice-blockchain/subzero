@@ -9,17 +9,26 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	"github.com/cockroachdb/errors"
+	"github.com/libdns/cloudflare"
 )
 
-func LoadTLSConfigFromACME(ctx context.Context, domain string, listenPort int) (*tls.Config, error) {
+func LoadTLSConfigFromACMEWithDNS(ctx context.Context, domain, apiKey string) (*tls.Config, error) {
 	magic := certmagic.NewDefault()
 	magic.DefaultServerName = domain
 	magic.Issuers = []certmagic.Issuer{
 		certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
-			CA:                   certmagic.LetsEncryptProductionCA,
-			Email:                "ssl@ice.io",
-			Agreed:               true,
-			DisableHTTPChallenge: true,
+			CA:                      certmagic.LetsEncryptProductionCA,
+			Email:                   "ssl@ice.io",
+			Agreed:                  true,
+			DisableHTTPChallenge:    true,
+			DisableTLSALPNChallenge: true,
+			DNS01Solver: &certmagic.DNS01Solver{
+				DNSManager: certmagic.DNSManager{
+					DNSProvider: &cloudflare.Provider{
+						APIToken: apiKey,
+					},
+				},
+			},
 		}),
 	}
 
@@ -28,23 +37,11 @@ func LoadTLSConfigFromACME(ctx context.Context, domain string, listenPort int) (
 		return nil, errors.Wrapf(err, "failed to manage TLS for %v", domain)
 	}
 
-	if listenPort != 443 {
-		log.Println("listening on port 443 for ACME")
-		ln, err := tls.Listen("tcp", ":443", magic.TLSConfig())
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to listen on port 443")
-		}
-		go func() {
-			<-ctx.Done()
-			ln.Close()
-		}()
-	}
-
 	return magic.TLSConfig(), nil
 }
 
-func MustLoadTLSConfigFromACME(ctx context.Context, domain string, listenPort int) *tls.Config {
-	conf, err := LoadTLSConfigFromACME(ctx, domain, listenPort)
+func MustLoadTLSConfigFromACMEWithDNS(ctx context.Context, domain, apiKey string) *tls.Config {
+	conf, err := LoadTLSConfigFromACMEWithDNS(ctx, domain, apiKey)
 	if err != nil {
 		log.Panic(err)
 	}

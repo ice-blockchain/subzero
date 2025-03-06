@@ -24,6 +24,9 @@ type (
 		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
 		Debug              bool   `yaml:"debug"`
 		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
+		ACME               struct {
+			APIKey string `yaml:"api-key"`
+		} `yaml:"acme"`
 	}
 	router struct {
 	}
@@ -48,7 +51,10 @@ func MustListenAndServe(ctx context.Context) {
 	globalConfig = cfg.MustGet[config]()
 	if (globalConfig.TLSCert == "" && globalConfig.TLSKey == "") || (globalConfig.TLSCert == "-" && globalConfig.TLSKey == "-") {
 		log.Printf("using ACME to obtain TLS certificate for %v", globalConfig.RelayURL)
-		serverTLS = MustLoadTLSConfigFromACME(ctx, extractServerNameFromRelayURL(globalConfig.RelayURL), int(globalConfig.Port))
+		if globalConfig.ACME.APIKey == "" {
+			log.Panic("API key is required for ACME DNS challenge")
+		}
+		serverTLS = MustLoadTLSConfigFromACMEWithDNS(ctx, extractServerNameFromRelayURL(globalConfig.RelayURL), globalConfig.ACME.APIKey)
 	} else {
 		serverTLS = wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey)
 	}
