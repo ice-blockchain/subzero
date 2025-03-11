@@ -206,6 +206,8 @@ var (
 				}
 				if label := e.GetTag("L").Value(); label != "wallet.address" {
 					return errors.Errorf("fund receive: invalid L tag value: %q", label)
+				} else if e.GetTag("encrypted") != nil {
+					return nil
 				}
 
 				if err := json.Unmarshal([]byte(e.Content), &address); err != nil {
@@ -238,6 +240,8 @@ var (
 				}
 				if label := e.GetTag("L").Value(); label != "wallet.address" {
 					return errors.Errorf("fund send notify: invalid L tag value: %q", label)
+				} else if e.GetTag("encrypted") != nil {
+					return nil
 				}
 
 				if err := json.Unmarshal([]byte(e.Content), &address); err != nil {
