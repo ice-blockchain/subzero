@@ -769,6 +769,9 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 					}
 				}
 			}
+			if len(delegatedTags) == 0 {
+				continue
+			}
 
 			filters[i].Tags.Set(tag)
 			for _, entry := range model.DeduplicateSlice(delegatedTags, func(elem *string) string { return *elem }) {

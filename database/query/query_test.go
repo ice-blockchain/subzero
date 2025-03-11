@@ -1452,3 +1452,17 @@ func TestSelectRankTopEvents(t *testing.T) {
 	helperPointsScoreEqual(t, db, notes[1].ID, 22, 22.0)
 	helperPointsScoreEqual(t, db, notes[0].ID, 17, 17.0)
 }
+
+func TestExtendWhereFilters(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	in := model.Filter{
+		Tags: model.TagMap{}.Set("Q", nil, nil, model.PointerOf("foo")),
+	}
+	out := db.extendWhereFilters(t.Context(), in.Clone())
+	require.Len(t, out, 1)
+	require.Equal(t, in, out[0])
+}
