@@ -1269,20 +1269,65 @@ func TestValidateTagsBAndP(t *testing.T) {
 func TestValidateFundSend(t *testing.T) {
 	t.Parallel()
 
-	var ev model.Event
-	ev.Kind = model.CustomIONKindFundSendNotify
-	ev.Tags = model.Tags{
-		{"p", "foo"},
-		{"b", "bar"},
-		{"network", "ion"},
-		{"asset_class", "native"},
-		{"asset_address", "localhost"},
-		{"encrypted"},
-	}
-	require.Error(t, Validate(t.Context(), &ev))
+	t.Run("With p", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.CustomIONKindFundSendNotify
+		ev.Tags = model.Tags{
+			{"b", "bar"},
+			{"network", "ion"},
+			{"asset_class", "native"},
+			{"asset_address", "localhost"},
+			{"encrypted"},
+		}
+		require.Error(t, Validate(t.Context(), &ev))
 
-	ev.Content = "foo"
-	require.NoError(t, Validate(t.Context(), &ev))
+		ev.Tags = append(ev.Tags, model.Tag{"p", "foo"})
+		require.Error(t, Validate(t.Context(), &ev))
+
+		ev.Content = "foo"
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("With l+L", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.CustomIONKindFundSendNotify
+		ev.Tags = model.Tags{
+			{"b", "bar"},
+			{"l", "1234", "wallet.address"},
+			{"network", "ion"},
+			{"asset_class", "native"},
+			{"asset_address", "localhost"},
+		}
+		ev.Content = `{"to":"1234"}`
+		require.Error(t, Validate(t.Context(), &ev))
+
+		ev.Tags = append(ev.Tags, model.Tag{"L", "wallet.address"})
+		require.NoError(t, Validate(t.Context(), &ev))
+
+		ev.Tags = append(ev.Tags, model.Tag{"p", "bar"})
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("With l+L encrypted", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.CustomIONKindFundSendNotify
+		ev.Tags = model.Tags{
+			{"b", "bar"},
+			{"l", "1234", "wallet.address"},
+			{"network", "ion"},
+			{"asset_class", "native"},
+			{"asset_address", "localhost"},
+			{"encrypted"},
+		}
+		ev.Content = `fooo`
+		require.Error(t, Validate(t.Context(), &ev))
+
+		ev.Tags = append(ev.Tags, model.Tag{"L", "wallet.address"})
+		require.NoError(t, Validate(t.Context(), &ev))
+
+		ev.Tags = append(ev.Tags, model.Tag{"p", "bar"})
+		require.Error(t, Validate(t.Context(), &ev))
+	})
 }
 
 func TestMultipleTagsP(t *testing.T) {

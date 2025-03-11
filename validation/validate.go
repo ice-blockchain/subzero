@@ -52,6 +52,7 @@ const (
 
 	tagStateOptional tagState = iota
 	tagStateRequired
+	tagStateRequiredWith
 	tagStateForbidden
 	tagStateOneOf
 
@@ -74,7 +75,7 @@ type (
 	tagData  struct {
 		// Tag state, one of: required, optional, forbidden, etc.
 		State tagState
-		// Additional tags for `oneOf` state.
+		// Additional tags.
 		Tags []string
 	}
 	kindValidator struct {
@@ -82,6 +83,8 @@ type (
 		Tags map[string]tagData
 		// Additional flags for given kind.
 		Flags uint
+		// Additional validation function.
+		Validate func(e *model.Event) error
 	}
 )
 
@@ -189,14 +192,70 @@ var (
 
 		model.CustomIONKindFundReceive: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional("encrypted").
-			Required(model.CustomIONTagOnBehalfOf, "network", "p", "asset_class", "asset_address").
+			Optional("encrypted", "asset_address").
+			OneOf("p", "l").
+			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
+			RequiredWith("l", "L").
+			Validate(func(e *model.Event) error {
+				if e.GetTag("p").Value() != "" {
+					return nil
+				}
+
+				var address struct {
+					From string `json:"from"`
+				}
+				if label := e.GetTag("L").Value(); label != "wallet.address" {
+					return errors.Errorf("fund receive: invalid L tag value: %q", label)
+				} else if e.GetTag("encrypted") != nil {
+					return nil
+				}
+
+				if err := json.Unmarshal([]byte(e.Content), &address); err != nil {
+					return errors.Errorf("fund receive: invalid content: %v", err)
+				} else if address.From == "" {
+					return errors.Errorf("fund receive: empty address in content")
+				} else if addr := e.GetTag("l"); address.From != addr.Value() {
+					return errors.Errorf("fund receive: address in content %q does not match tag l %q", address.From, addr.Value())
+				} else if len(addr) < 3 || addr[2] != "wallet.address" {
+					return errors.Errorf("fund send notify: invalid alias in tag l %q", addr.Value())
+				}
+
+				return nil
+			}).
 			Build(),
 
 		model.CustomIONKindFundSendNotify: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional("request", "encrypted").
-			Required(model.CustomIONTagOnBehalfOf, "network", "p", "asset_class", "asset_address").
+			Optional("request", "encrypted", "asset_address").
+			OneOf("p", "l").
+			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
+			RequiredWith("l", "L").
+			Validate(func(e *model.Event) error {
+				if e.GetTag("p").Value() != "" {
+					return nil
+				}
+
+				var address struct {
+					To string `json:"to"`
+				}
+				if label := e.GetTag("L").Value(); label != "wallet.address" {
+					return errors.Errorf("fund send notify: invalid L tag value: %q", label)
+				} else if e.GetTag("encrypted") != nil {
+					return nil
+				}
+
+				if err := json.Unmarshal([]byte(e.Content), &address); err != nil {
+					return errors.Errorf("fund send notify: invalid content: %v", err)
+				} else if address.To == "" {
+					return errors.Errorf("fund send notify: empty address in content")
+				} else if addr := e.GetTag("l"); address.To != addr.Value() {
+					return errors.Errorf("fund send notify: address in content %q does not match tag l %q", address.To, addr.Value())
+				} else if len(addr) < 3 || addr[2] != "wallet.address" {
+					return errors.Errorf("fund send notify: invalid alias in tag l %q", addr.Value())
+				}
+
+				return nil
+			}).
 			Build(),
 	}
 
@@ -1495,6 +1554,15 @@ func validateEventTags(e *model.Event) error {
 
 	for key, data := range kindValidator.Tags {
 		switch data.State {
+		case tagStateRequiredWith:
+			if _, ok := currentTags[key]; !ok {
+				continue
+			}
+			for _, dependentTag := range data.Tags {
+				if _, ok := currentTags[dependentTag]; !ok {
+					return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required with %q: not found", key, dependentTag)
+				}
+			}
 		case tagStateRequired:
 			if _, ok := currentTags[key]; !ok {
 				return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found", key)
@@ -1579,11 +1647,23 @@ func (t *kindValidatorBuilder) Forbidden(tags ...string) *kindValidatorBuilder {
 	return t
 }
 
+func (t *kindValidatorBuilder) RequiredWith(root string, tags ...string) *kindValidatorBuilder {
+	t.Validator.Tags[root] = tagData{Tags: tags, State: tagStateRequiredWith}
+
+	return t.Optional(tags...)
+}
+
 func (t *kindValidatorBuilder) OneOf(tags ...string) *kindValidatorBuilder {
 	data := tagData{Tags: tags, State: tagStateOneOf}
 	for _, tag := range tags {
 		t.Validator.Tags[tag] = data
 	}
+	return t
+}
+
+func (t *kindValidatorBuilder) Validate(f func(e *model.Event) error) *kindValidatorBuilder {
+	t.Validator.Validate = f
+
 	return t
 }
 
@@ -1594,6 +1674,9 @@ func (t *kindValidatorBuilder) Build() kindValidator {
 func (v *kindValidator) Execute(e *model.Event) (err error) {
 	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
 		err = errors.Join(err, ErrContentEmpty)
+	}
+	if v.Validate != nil {
+		err = errors.Join(err, v.Validate(e))
 	}
 	return err
 }
