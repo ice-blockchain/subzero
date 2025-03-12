@@ -26,10 +26,6 @@ import (
 	"github.com/ice-blockchain/subzero/validation"
 )
 
-const (
-	filterTextMRF = `most relevant followers`
-)
-
 var (
 	protectedEventKinds = map[int]struct{}{
 		nostr.KindGiftWrap: {},
@@ -258,7 +254,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 
 func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscription) *model.Subscription {
 	for i := range sub.Filters {
-		if !(strings.Contains(sub.Filters[i].Search, filterTextMRF) && sub.Filters[i].Tags.HasValues("p")) {
+		if !(strings.Contains(sub.Filters[i].Search, model.ExtensionTextMRF) && sub.Filters[i].Tags.HasValues("p")) {
 			continue
 		}
 		m, pk, authenticated, kinds := model.GetUserDataFromContext(ctx)

@@ -36,7 +36,7 @@ func (d *dvm) searchDVMEvents(ctx context.Context, subscription *model.Subscript
 						return yield(nil, ctx.Err())
 					}
 					item.Value().Range(func(key string, value *model.Event) bool {
-						if filters.Match(&value.Event) { // <-- filters
+						if filters.Match(&value.Event) {
 							if !yield(value, nil) {
 								return false
 							}

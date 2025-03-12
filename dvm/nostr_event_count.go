@@ -70,7 +70,40 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 	return n.doCountRemote(ctx, filters, queryRelays, groupBy)
 }
 
+func (n *nostrEventCountJob) doCountMRF(ctx context.Context, filter model.Filter) (string, error) {
+	m, pk, authenticated, kinds := model.GetUserDataFromContext(ctx)
+	if !authenticated {
+		return "", model.ErrNotAuthorized
+	} else if _, ok := kinds[nostr.KindFollowList]; len(kinds) > 0 && !ok {
+		return "", model.ErrNotAuthorized
+	}
+
+	var total int64
+	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: []model.Filter{
+		{
+			Kinds:   []int{nostr.KindFollowList},
+			Authors: []string{m, pk},
+			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(filter.Tags.All("p"), ",") + "|",
+			Limit:   1,
+		},
+	}}) {
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get events")
+		} else if ev.Kind != nostr.KindProfileMetadata {
+			continue
+		}
+		total++
+	}
+	return strconv.FormatInt(total, 10), nil
+}
+
 func (n *nostrEventCountJob) doCountLocal(ctx context.Context, filters model.Filters, groupBy string) (string, error) {
+	for _, filter := range filters {
+		if strings.EqualFold(filter.Search, model.ExtensionTextMRF) {
+			return n.doCountMRF(ctx, filter)
+		}
+	}
+
 	if groupBy == "" {
 		count, err := query.CountEvents(ctx, &model.Subscription{Filters: filters})
 

@@ -40,6 +40,7 @@ type (
 var (
 	ErrUnsupportedAlg       = errors.New("unsupported signature/key algorithm combination")
 	ErrOnBehalfAccessDenied = errors.New("on-behalf access denied")
+	ErrNotAuthorized        = errors.New("unauthorized")
 )
 
 const (
@@ -92,6 +93,8 @@ const (
 	FollowingWhoCanReplySettings   string = "following"
 	MentionWhoCanReplySettings     string = "mentioned"
 	BadgeWhoCanReplySettingsPrefix string = "badge"
+
+	ExtensionTextMRF = `most relevant followers`
 
 	KindJobTextExtraction            = 5000
 	KindJobSummarization             = 5001
