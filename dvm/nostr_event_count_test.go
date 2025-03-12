@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
@@ -20,6 +19,7 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
+
 	query.MustInit(ctx)
 	MustInit(ctx)
 
@@ -526,25 +526,39 @@ func TestIsBidAmountEnough(t *testing.T) {
 	})
 }
 
-func helperExecuteJob(t *testing.T, req *model.Event) *model.Event {
+func helperExecuteJob(t *testing.T, ctx context.Context, req *model.Event) (*model.Event, error) {
 	t.Helper()
 
 	pk, err := PublicKey()
 	require.NoError(t, err)
 	req.Tags = append(req.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pk})
 
-	req.CreatedAt = model.Timestamp(time.Now().Unix())
+	req.CreatedAt = nostr.Now()
 	require.NoError(t, req.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, validation.Validate(context.TODO(), req))
+	require.NoError(t, validation.Validate(ctx, req))
 
 	job := newNostrEventCountJob(nil)
 	require.NotNil(t, job)
 
-	payload, err := job.Process(context.Background(), req)
-	require.NoError(t, err)
+	payload, err := job.Process(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 
 	result, err := globalDVM.finalizeJob(req, payload, job.RequiredPaymentAmount())
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func helperMustExecuteJob(t *testing.T, ctx context.Context, req *model.Event) *model.Event {
+	t.Helper()
+
+	result, err := helperExecuteJob(t, ctx, req)
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	return result
 }
@@ -552,7 +566,7 @@ func helperExecuteJob(t *testing.T, req *model.Event) *model.Event {
 func helperReadFromDB(t *testing.T, req model.Filter) *model.Event {
 	var result *model.Event
 
-	it := query.GetStoredEvents(context.Background(), &model.Subscription{Filters: model.Filters{req}})
+	it := query.GetStoredEvents(t.Context(), &model.Subscription{Filters: model.Filters{req}})
 	for ev, err := range it {
 		require.NoError(t, err)
 		require.NotNil(t, ev)
@@ -834,14 +848,149 @@ func TestEventCountersConsistency(t *testing.T) {
 				c.Before(t, events, &c.RequestDB, &c.RequestDVM)
 			}
 			t.Run("Insert", func(t *testing.T) {
-				require.NoError(t, query.AcceptEvents(context.Background(), events...))
+				require.NoError(t, query.AcceptEvents(t.Context(), events...))
 			})
 			t.Run("Do", func(t *testing.T) {
 				resultDB := helperReadFromDB(t, c.RequestDB)
-				resultDVM := helperExecuteJob(t, &c.RequestDVM)
+				resultDVM := helperMustExecuteJob(t, t.Context(), &c.RequestDVM)
 				helperCompareResults(t, resultDB, resultDVM)
 				require.Equal(t, c.Count, resultDB.Content)
 			})
 		})
 	}
+}
+
+func TestCountMostRelevantFollowers(t *testing.T) {
+	// NOT PARALLEL.
+	t.Cleanup(func() {
+		query.DeleteAllEvents(t.Context())
+	})
+
+	t.Run("Populate", func(t *testing.T) {
+		t.Run("Create metadata", func(t *testing.T) {
+			var bobMeta, aliceMeta, alexMeta, annaMeta, johnMeta, martinMeta model.Event
+			bobMeta.ID = "id1"
+			bobMeta.Kind = nostr.KindProfileMetadata
+			bobMeta.PubKey = "bob"
+			bobMeta.Content = "{\"name\":\"Bob\"}"
+
+			aliceMeta.ID = "id4"
+			aliceMeta.Kind = nostr.KindProfileMetadata
+			aliceMeta.PubKey = "alice"
+			aliceMeta.Content = "{\"name\":\"Alice\"}"
+
+			alexMeta.ID = "id2"
+			alexMeta.Kind = nostr.KindProfileMetadata
+			alexMeta.PubKey = "alex"
+			alexMeta.Content = "{\"name\":\"Alex\"}"
+
+			annaMeta.ID = "id3"
+			annaMeta.Kind = nostr.KindProfileMetadata
+			annaMeta.PubKey = "anna"
+			annaMeta.Content = "{\"name\":\"Anna\"}"
+
+			johnMeta.ID = "id5"
+			johnMeta.Kind = nostr.KindProfileMetadata
+			johnMeta.PubKey = "john"
+			johnMeta.Content = "{\"name\":\"John\"}"
+
+			martinMeta.ID = "id6"
+			martinMeta.Kind = nostr.KindProfileMetadata
+			martinMeta.PubKey = "martin"
+			martinMeta.Content = "{\"name\":\"Martin\"}"
+
+			require.NoError(t, query.AcceptEvents(t.Context(), &bobMeta, &aliceMeta, &alexMeta, &annaMeta, &johnMeta, &martinMeta))
+		})
+		t.Run("Create follow lists", func(t *testing.T) {
+			var johnList, bobList, aliceList, alexList, annaList, martinList model.Event
+			bobList.Kind = nostr.KindFollowList
+			bobList.PubKey = "bob"
+			bobList.ID = "bob_id"
+			bobList.Tags = model.Tags{
+				{"p", "john"},
+				{"p", "alice"},
+				{"p", "anna"},
+			}
+
+			aliceList.Kind = nostr.KindFollowList
+			aliceList.PubKey = "alice"
+			aliceList.ID = "alice_id"
+			aliceList.Tags = model.Tags{
+				{"p", "john"},
+				{"p", "bob"},
+				{"p", "alex"},
+			}
+
+			alexList.Kind = nostr.KindFollowList
+			alexList.PubKey = "alex"
+			alexList.ID = "alex_id"
+			alexList.Tags = model.Tags{
+				{"p", "anna"},
+				{"p", "john"},
+			}
+
+			annaList.Kind = nostr.KindFollowList
+			annaList.PubKey = "anna"
+			annaList.ID = "anna_id"
+			annaList.Tags = model.Tags{
+				{"p", "alex"},
+				{"p", "alice"},
+			}
+
+			martinList.Kind = nostr.KindFollowList
+			martinList.PubKey = "martin"
+			martinList.ID = "martin_id"
+			martinList.Tags = model.Tags{
+				{"p", "john"},
+				{"p", "bob"},
+			}
+
+			johnList.Kind = nostr.KindFollowList
+			johnList.PubKey = "john"
+			johnList.ID = "john_id"
+			johnList.Tags = model.Tags{
+				{"p", "alex"},
+				{"p", "anna"},
+				{"p", "bob"},
+				{"p", "alice"},
+			}
+
+			require.NoError(t, query.AcceptEvents(t.Context(), &johnList, &bobList, &aliceList, &alexList, &annaList, &martinList))
+		})
+	})
+
+	t.Run("Find most relevant followers of john with alice", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.KindJobNostrEventCount
+		ev.Tags = model.Tags{
+			{"param", "relay", globalConfig.RelayURL},
+		}
+		ev.Content = model.Filters{
+			{
+				Search: model.ExtensionTextMRF,
+				Tags:   model.TagMap{}.SetLiterals("p", "alice"),
+			},
+		}.String()
+
+		ctx := model.SetUserDataInContext(t.Context(), "john", "john", true, nil)
+		result := helperMustExecuteJob(t, ctx, &ev)
+		require.Equal(t, "2", result.Content, "expected 2 followers") // Anna and Bob.
+	})
+	t.Run("Find most relevant followers of unknown with alice", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.KindJobNostrEventCount
+		ev.Tags = model.Tags{
+			{"param", "relay", globalConfig.RelayURL},
+		}
+		ev.Content = model.Filters{
+			{
+				Search: model.ExtensionTextMRF,
+				Tags:   model.TagMap{}.SetLiterals("p", "alice"),
+			},
+		}.String()
+
+		result, err := helperExecuteJob(t, t.Context(), &ev)
+		require.ErrorIs(t, err, model.ErrNotAuthorized)
+		require.Nil(t, result)
+	})
 }

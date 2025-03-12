@@ -2816,7 +2816,7 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	})
 	t.Run("Request", func(t *testing.T) {
 		helperQueryEventsWithOptions(t, relay.Relay, []nostr.SubscriptionOption{nostr.WithDoNotCheckFilters()}, model.Filter{
-			Search: filterTextMRF,
+			Search: model.ExtensionTextMRF,
 			Tags:   model.TagMap{}.Set("p", model.PointerOf("foo")).Append("p", model.PointerOf("bar")),
 		})
 	})
