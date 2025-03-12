@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS events
     tags JSONB NOT NULL DEFAULT '[]',
     deleted BOOLEAN NOT NULL default FALSE,
     hidden BOOLEAN NOT NULL DEFAULT FALSE
-    -- lookup tsvector NOT NULL -- TODO: 
 );
 --------
 create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
@@ -63,9 +62,6 @@ CREATE INDEX IF NOT EXISTS idx_events_h_tag_system_created_at  ON events(h_tag, 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
 
--- TODO: 
--- CREATE EXTENSION IF NOT EXISTS btree_gin;
--- CREATE INDEX IF NOT EXISTS events_lookup_gin_idx ON events USING GIN (lookup);
 --------
 CREATE TABLE IF NOT EXISTS event_tags
 (
@@ -544,107 +540,113 @@ EXECUTE FUNCTION trigger_event_tags_after_delete_dec_counter();
 
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_onbehalf_is_allowed(
-    master_tags JSONB,
-    on_behalf_pubkey TEXT,
-    kind INTEGER,
-    now NUMERIC
-) RETURNS BOOLEAN AS $$
+    master_tags jsonb,
+    on_behalf_pubkey text,
+    kind integer,
+    now_unix bigint
+) RETURNS boolean AS $$
 DECLARE
-    entries JSONB;
-    entry JSONB;
-    now_timestamp TIMESTAMP WITH TIME ZONE := TO_TIMESTAMP(now);
+    entries         jsonb;
+    entry           jsonb;
+    now_ts          timestamp;
+    start_ts        timestamp;
+    end_ts          timestamp;
 BEGIN
-    IF master_tags IS NULL OR master_tags = '[]' THEN
-        RETURN FALSE;
+    IF kind = 10100 THEN
+        RETURN false;
+    END IF;
+	entries := parse_attestation_tags(master_tags);
+    entry := entries -> on_behalf_pubkey;
+    IF entry IS NULL OR entry ? 'revoked' THEN
+        RETURN false;
     END IF;
 
-    entries := parse_attestation_tags(master_tags);
-    entry := entries->on_behalf_pubkey;
-
-    IF entry IS NULL OR entry->>'revoked' IS NOT NULL THEN
-        RETURN FALSE;
+    IF kind > 0 THEN
+        IF entry ? 'kinds' AND jsonb_array_length(entry->'kinds') > 0 THEN
+            IF NOT (entry->'kinds') @> jsonb_build_array(kind) THEN
+                RETURN false;
+            END IF;
+        END IF;
     END IF;
 
-    IF kind > 0 
-        AND jsonb_array_length(entry->'kinds') > 0 
-        AND NOT kind = ANY(
-            ARRAY(SELECT CAST(value AS INTEGER) FROM jsonb_array_elements_text(entry->'kinds'))
-        ) THEN
-        RETURN FALSE;
+    now_ts := to_timestamp(now_unix);
+    start_ts := (entry ->> 'start')::timestamp;
+    end_ts := (entry ->> 'end')::timestamp;
+
+    IF start_ts IS NULL THEN
+        RETURN false;
     END IF;
 
-     IF now_timestamp >= (entry->>'start')::TIMESTAMP WITH TIME ZONE AND (
-        entry->>'end' IS NULL OR now_timestamp < (entry->>'end')::TIMESTAMP WITH TIME ZONE
-    ) THEN
-        RETURN TRUE;
-    ELSE
-        RETURN FALSE;
+    IF now_ts <= start_ts THEN
+        RETURN false;
     END IF;
+
+    IF end_ts IS NOT NULL AND now_ts >= end_ts THEN
+        RETURN false;
+    END IF;
+
+    RETURN true;
+
+EXCEPTION WHEN OTHERS THEN
+    RETURN false;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION parse_attestation_tags(tags JSONB)
-RETURNS JSONB AS $$
+$$ LANGUAGE plpgsql;
+--------
+CREATE OR REPLACE FUNCTION parse_attestation_tags(tags jsonb)
+RETURNS jsonb AS $$
 DECLARE
-    attestation_tags JSONB := '{}'::JSONB;
-    tag JSONB;
-    action TEXT;
-    ts TIMESTAMP WITH TIME ZONE;
-    kinds INTEGER[];
+    tag_item        jsonb;
+    pubkey          text;
+    action_str      text;
+    parsed_action   text;
+    parsed_ts       timestamp;
+    parsed_kinds    integer[];
+    current_entry   jsonb;
+    entries         jsonb := '{}'::jsonb;
 BEGIN
-    FOR tag IN SELECT jsonb_array_elements(tags) LOOP
-        IF jsonb_array_length(tag) < 4 OR tag->>0 != 'p' THEN
+    FOR tag_item IN SELECT * FROM jsonb_array_elements(tags) LOOP
+        IF jsonb_array_length(tag_item) < 4 OR tag_item->>0 <> 'p' THEN
             CONTINUE;
         END IF;
 
-        SELECT * INTO action, ts, kinds FROM parse_attestation_string(tag->>3);
+        pubkey := tag_item->>1;
+        action_str := tag_item->>3;
 
-        CASE
-            WHEN action = 'revoked' THEN
-                attestation_tags := jsonb_set(attestation_tags, ARRAY[CAST(tag->>1 AS TEXT)], jsonb_build_object('revoked', ts));
-            WHEN action = 'active' THEN
-                attestation_tags := jsonb_set(attestation_tags, ARRAY[CAST(tag->>1 AS TEXT)], jsonb_build_object('start', ts, 'kinds', kinds));
-            WHEN action = 'inactive' THEN
-                attestation_tags := jsonb_set(attestation_tags, ARRAY[CAST(tag->>1 AS TEXT)], jsonb_build_object('end', ts));
+        SELECT a.action, a.ts, a.kinds INTO parsed_action, parsed_ts, parsed_kinds
+        FROM parse_attestation_string(action_str) a;
+        
+        IF NOT FOUND THEN
+            CONTINUE;
+        END IF;
+
+        current_entry := coalesce(entries->pubkey, '{}'::jsonb);
+
+        CASE parsed_action
+            WHEN 'revoked' THEN
+                current_entry := jsonb_set(current_entry, '{revoked}', to_jsonb(parsed_ts));
+            
+            WHEN 'active' THEN
+                current_entry := jsonb_set(current_entry, '{start}', to_jsonb(parsed_ts));
+                current_entry := jsonb_set(current_entry, '{end}', 'null'::jsonb);
+
+                IF parsed_kinds IS NOT NULL THEN
+                    current_entry := jsonb_set(current_entry, '{kinds}', to_jsonb(parsed_kinds));
+                END IF;
+            
+            WHEN 'inactive' THEN
+                current_entry := jsonb_set(current_entry, '{end}', to_jsonb(parsed_ts));
+            
+            ELSE
+                CONTINUE;
         END CASE;
+
+        entries := jsonb_set(entries, ARRAY[pubkey], current_entry);
     END LOOP;
 
-    RETURN attestation_tags;
+    RETURN entries;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql;
 
-
-CREATE OR REPLACE FUNCTION parse_attestation_string(s TEXT)
-RETURNS TABLE (
-    action TEXT,
-    ts TIMESTAMP WITH TIME ZONE,
-    kinds INTEGER[]
-) AS $$
-DECLARE
-    action_end INT;
-    ts_str TEXT;
-    kinds_tokens TEXT[];
-BEGIN
-    action_end := position(':' IN s);
-    IF action_end = 0 THEN
-        RAISE EXCEPTION 'Invalid attestation string format: %', s;
-    END IF;
-
-    action := substr(s, 1, action_end - 1);
-
-    ts_str := substr(s, action_end + 1);
-    IF position(':' IN ts_str) > 0 THEN
-        ts := TO_TIMESTAMP(CAST(substr(ts_str, 1, position(':' IN ts_str) - 1) AS BIGINT));
-        kinds_tokens := string_to_array(substr(ts_str, position(':' IN ts_str) + 1), ',');
-        kinds := ARRAY(SELECT CAST(kind_token AS INTEGER) FROM unnest(kinds_tokens) AS kind_token WHERE kind_token != '');
-    ELSE
-        ts := TO_TIMESTAMP(CAST(ts_str AS BIGINT));
-        kinds := '{}'::INTEGER[];
-    END IF;
-
-    RETURN NEXT;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
 --------
 CREATE OR REPLACE FUNCTION trigger_events_before_insert_check_onbehalf_permission()
 RETURNS TRIGGER AS $$
@@ -656,9 +658,9 @@ BEGIN
                 FROM events 
                 WHERE kind = 10100 AND pubkey = NEW.master_pubkey AND hidden = FALSE
             ), '[]'::JSONB),
-            NEW.pubkey,
+            NEW.pubkey::text,
             NEW.kind,
-            EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)
+            EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint
         ) THEN
             RAISE EXCEPTION 'onbehalf permission denied';
         END IF;
@@ -670,11 +672,10 @@ $$ LANGUAGE plpgsql;
 
 drop trigger if exists trigger_events_before_insert_check_onbehalf_permission ON events;
 CREATE TRIGGER trigger_events_before_insert_check_onbehalf_permission
-BEFORE INSERT ON events
+BEFORE INSERT OR UPDATE ON events
 FOR EACH ROW
-WHEN (NEW.master_pubkey IS DISTINCT FROM NEW.pubkey)
+WHEN (NEW.master_pubkey != NEW.pubkey)
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
-
 --------
 CREATE OR REPLACE FUNCTION event_tag_reorder(tag JSONB)
 RETURNS JSONB AS $$
@@ -814,89 +815,140 @@ CREATE OR REPLACE FUNCTION subzero_nostr_attestation_update_is_allowed(
     new_tags JSONB
 ) RETURNS BOOLEAN AS $$
 DECLARE
-    revoked_pubkeys TEXT[] := '{}';
+    old_len INT;
+    new_len INT;
     tag JSONB;
-    action TEXT;
-    ts BIGINT;
-    kinds INTEGER[];
+    action_str TEXT;
+    parsed_action TEXT;
+    pubkey TEXT;
+    revoked_pubkeys TEXT[] := '{}';
+	prefix JSONB;
 BEGIN
-    IF jsonb_array_length(new_tags) < jsonb_array_length(old_tags) THEN
+    old_len := jsonb_array_length(old_tags);
+    new_len := jsonb_array_length(new_tags);
+    
+    IF new_len < old_len THEN
         RETURN FALSE;
     END IF;
 
-    FOREACH tag IN ARRAY jsonb_array_elements(old_tags) LOOP
-        IF NOT (tag <@ new_tags) THEN
-            RETURN FALSE;
-        END IF;
+    SELECT jsonb_agg(elem ORDER BY ordinality) INTO prefix
+    FROM jsonb_array_elements(new_tags) WITH ORDINALITY AS t(elem, ordinality)
+    WHERE ordinality <= old_len;
 
-        IF tag->>0 = 'p' AND jsonb_array_length(tag) >= 4 AND split_part(tag->>3, ':', 1) = 'revoked' THEN
-            revoked_pubkeys := array_append(revoked_pubkeys, tag->>1);
-        END IF;
-    END LOOP;
+    IF old_tags <> prefix THEN
+        RETURN FALSE;
+    END IF;
 
-    FOR i IN jsonb_array_length(old_tags) .. jsonb_array_length(new_tags) - 1 LOOP
+	RAISE NOTICE '2';
+
+    WITH old_attestations AS (
+        SELECT elem->>1 AS pubkey
+        FROM jsonb_array_elements(old_tags) elem
+        WHERE 
+            elem->>0 = 'p' AND 
+            jsonb_array_length(elem) >= 4 AND
+            split_part(elem->>3, ':', 1) = 'revoked'
+    )
+    SELECT array_agg(old_attestations.pubkey) INTO revoked_pubkeys FROM old_attestations;
+
+	RAISE NOTICE '3';
+    FOR i IN old_len..new_len-1 LOOP
         tag := new_tags->i;
-
-        IF tag->>0 != 'p' THEN
-            CONTINUE;
-        END IF;
-
+        
+        CONTINUE WHEN tag->>0 <> 'p';
+        
         IF jsonb_array_length(tag) < 4 THEN
-            RAISE WARNING 'Malformed attestation tag: %', tag;
             RETURN FALSE;
         END IF;
 
-        SELECT * INTO action, ts, kinds FROM parse_attestation_string(tag->>3);
-
-        IF tag->>1 = ANY(revoked_pubkeys) THEN
-            RAISE WARNING 'Found attestations for revoked pubkey: %', tag->>1;
+        action_str := tag->>3;
+        BEGIN
+            SELECT a.action INTO parsed_action 
+            FROM parse_attestation_string(action_str) a;
+        EXCEPTION WHEN OTHERS THEN
+            RETURN FALSE;
+        END;
+        
+        IF parsed_action IS NULL THEN
             RETURN FALSE;
         END IF;
 
-        IF split_part(action, ':', 1) = 'revoked' THEN
-            revoked_pubkeys := array_append(revoked_pubkeys, tag->>1);
+        pubkey := tag->>1;
+
+        IF pubkey = ANY(revoked_pubkeys) THEN
+            RETURN FALSE;
+        END IF;
+
+        IF parsed_action = 'revoked' THEN
+            revoked_pubkeys := revoked_pubkeys || pubkey;
         END IF;
     END LOOP;
 
     RETURN TRUE;
+
+EXCEPTION WHEN OTHERS THEN
+    RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql;
 --------
-CREATE OR REPLACE FUNCTION parse_attestation_string(s TEXT)
+CREATE OR REPLACE FUNCTION parse_attestation_string(input_str text)
 RETURNS TABLE (
-    action TEXT,
-    ts TIMESTAMP WITH TIME ZONE,
-    kinds INTEGER[]
+    action text,
+    ts timestamp,
+    kinds integer[]
 ) AS $$
 DECLARE
-    action_end INT;
-    ts_str TEXT;
-    kinds_tokens TEXT[];
+    parts              text[];
+    first_colon_pos    int;
+    ts_str             text;
+    ts_end_pos         int;
+    unix_time          bigint;
+    kinds_str          text;
+    kind_element       text;
+    temp_kinds         integer[];
 BEGIN
-    action_end := position(':' IN s);
-    IF action_end = 0 THEN
-        RAISE EXCEPTION 'Missing timestamp in attestation string: %', s;
+    first_colon_pos := position(':' in input_str);
+    IF first_colon_pos = 0 THEN
+        RETURN;
     END IF;
 
-    action := substr(s, 1, action_end - 1);
+    action := left(input_str, first_colon_pos - 1);
+    ts_str := substring(input_str from first_colon_pos + 1);
 
-    ts_str := substr(s, action_end + 1);
-    IF position(':' IN ts_str) > 0 THEN
-        ts := TO_TIMESTAMP(CAST(substr(ts_str, 1, position(':' IN ts_str) - 1) AS BIGINT));
-    ELSE
-        ts := TO_TIMESTAMP(CAST(ts_str AS BIGINT));
+    ts_end_pos := position(':' in ts_str);
+    IF ts_end_pos = 0 THEN
+        ts_end_pos := length(ts_str) + 1;
     END IF;
 
-    IF position(':' IN ts_str) > 0 THEN
-        kinds_tokens := string_to_array(substr(ts_str, position(':' IN ts_str) + 1), ',');
-        kinds := ARRAY(SELECT CAST(kind AS INTEGER) FROM unnest(kinds_tokens) AS kind);
+    BEGIN
+        unix_time := substring(ts_str from 1 for ts_end_pos - 1)::bigint;
+    EXCEPTION WHEN OTHERS THEN
+        RETURN;
+    END;
+    
+    ts := to_timestamp(unix_time);
+
+    IF ts_end_pos <= length(ts_str) THEN
+        kinds_str := substring(ts_str from ts_end_pos + 1);
+        
+        IF kinds_str = '' THEN
+            RETURN;
+        END IF;
+
+        BEGIN
+            temp_kinds := array(select unnest(string_to_array(kinds_str, ','))::integer);
+        EXCEPTION WHEN OTHERS THEN
+            RETURN;
+        END;
+        
+        kinds := temp_kinds;
     ELSE
-        kinds := '{}';
+        kinds := NULL;
     END IF;
 
     RETURN NEXT;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql;
 
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_tag_a_get_kind(tag TEXT)
@@ -928,7 +980,6 @@ BEGIN
     RETURN fields[2];
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_tag_a_get_dtag(tag TEXT)
 RETURNS TEXT AS $$
@@ -951,7 +1002,6 @@ BEGIN
     RETURN CASE WHEN condition THEN true_value ELSE false_value END;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_get_event_address(
     event_id TEXT,

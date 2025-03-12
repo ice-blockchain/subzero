@@ -80,9 +80,9 @@ func helperPreloadDataForFilter(
 		RANDOM()
 	LIMIT 1000;`
 
-	res, err := postgres.Select[model.DatabaseEvent](context.TODO(), db.dbPostgres, stmt)
+	res, err := postgres.Select[DatabaseEvent](context.TODO(), db.dbPostgres, stmt)
 	for _, ev := range res {
-		events = append(events, ev.ToEvent())
+		events = append(events, db.ToEvent(ev))
 	}
 	require.NoError(t, err)
 	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })

@@ -46,6 +46,19 @@ type (
 		ContentMetadata string
 		Deleted         bool
 	}
+	DatabaseEvent struct {
+		ID              string          `db:"id"`
+		PubKey          string          `db:"pubkey"`
+		MasterPubKey    string          `db:"master_pubkey"`
+		CreatedAt       model.Timestamp `db:"created_at"`
+		SystemCreatedAt model.Timestamp `db:"system_created_at"`
+		Kind            int             `db:"kind"`
+		Tags            *model.Tags     `db:"tags"`
+		DTag            string          `db:"d_tag"`
+		HTag            string          `db:"h_tag"`
+		Content         string          `db:"content"`
+		Sig             string          `db:"sig"`
+	}
 	databaseEventAddress struct {
 		Kind   int
 		Pubkey string
@@ -221,7 +234,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	e.tags
 `
 
-	deletedEvents, err := postgres.ExecMany[model.DatabaseEvent](ctx, db.dbPostgres, stmt, params...)
+	deletedEvents, err := postgres.ExecMany[DatabaseEvent](ctx, db.dbPostgres, stmt, params...)
 	if err != nil {
 		return 0, nil, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
 	}
@@ -233,14 +246,15 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		var f databaseFilterDelete
 
 		f.Author = ev.PubKey
+		event := db.ToEvent(ev)
 		switch {
-		case ev.ToEvent().IsReplaceable():
+		case event.IsReplaceable():
 			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
 
-		case ev.ToEvent().IsAddressable():
+		case event.IsAddressable():
 			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
 
-		case ev.ToEvent().IsRegular():
+		case event.IsRegular():
 			f.IDs = append(f.IDs, ev.ID)
 		}
 		dependencies = append(dependencies, f)
@@ -345,26 +359,17 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					sig_alg = $5,
 					key_alg = $6,
 					content = $7,
-					tags = $8,
+					tags = COALESCE($8, '[]'::jsonb),
 					d_tag = $9,
 					h_tag = $10,
 					content_metadata = $11,
 					deleted = $12
-		            WHERE master_pubkey = $13 AND kind = $14 AND id = $15`
+		            WHERE master_pubkey = $13 AND kind = $14`
 				params = []any{
 					ev.CreatedAt, ev.SystemCreatedAt, ev.PubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.GetHTag(), ev.ContentMetadata, ev.Deleted,
-					ev.MasterPubKey, ev.Kind, ev.ID,
+					ev.MasterPubKey, ev.Kind,
 				}
 			} else {
-				// TODO:
-				// stmt = fmt.Sprintf(`
-				// WITH cte AS (
-				// 	DELETE FROM events WHERE master_pubkey = $7 AND kind = $1
-				// )
-				// insert into events
-				// 	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
-				// values
-				// 	%v`, strings.Join(values, ",\n"))
 				stmt = fmt.Sprintf(`insert into events
 					(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
 				values
@@ -394,15 +399,6 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					ev.MasterPubKey, ev.Kind, ev.Dtag}
 			} else {
 
-				// TODO: stmt = fmt.Sprintf(`
-				// WITH cte AS (
-				// 	DELETE FROM events WHERE master_pubkey = $7 AND kind = $1 AND d_tag = $12
-				// )
-				// insert into events
-				// 	(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
-				// values
-				// 	%v`, strings.Join(values, ",\n"))
-
 				stmt = fmt.Sprintf(`insert into events
 					(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
 				values
@@ -417,21 +413,28 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 			`, strings.Join(values, ",\n"))
 		}
 
-		rowsAffected, err := postgres.Exec(ctx, db.dbPostgres, stmt, params...)
+		_, err := postgres.Exec(ctx, db.dbPostgres, stmt, params...)
 		if err != nil {
+			if errors.Is(err, postgres.ErrOnBehalfAccessDenied) {
+				return errors.Wrapf(model.ErrOnBehalfAccessDenied, "on behalf error")
+			}
+			if errors.Is(err, postgres.ErrAttestationUpdateRejected) {
+				return errors.Wrapf(ErrAttestationUpdateRejected, "attestation update rejectec")
+			}
+
 			return errors.Wrap(db.handleError(err), "failed to exec insert event sql") // TODO: handle error
-		} else if rowsAffected == 0 {
-			return errors.Wrapf(ErrUnexpectedRowsAffected, "expected 1 rows affected, got %d", rowsAffected)
-		} else if errors.Is(err, postgres.ErrDuplicate) {
-			return nil
 		}
+
+		// else if rowsAffected == 0 {
+		// return errors.Wrapf(ErrUnexpectedRowsAffected, "expected 1 rows affected, got %d", rowsAffected)
+
 	}
 
 	return nil
 }
 
 // TODO: remove after using WITH (DELETE) INSERT
-func (db *dbClient) getReplaceableEvent(ctx context.Context, masterPubkey string, kind int) (ev *model.DatabaseEvent, err error) {
+func (db *dbClient) getReplaceableEvent(ctx context.Context, masterPubkey string, kind int) (ev *DatabaseEvent, err error) {
 	stmt := `SELECT e.kind,
 				e.created_at,
 				e.system_created_at,
@@ -445,7 +448,7 @@ func (db *dbClient) getReplaceableEvent(ctx context.Context, masterPubkey string
 				events e
 			WHERE master_pubkey = $1 AND kind = $2`
 
-	res, err := postgres.Get[model.DatabaseEvent](ctx, db.dbPostgres, stmt, masterPubkey, kind)
+	res, err := postgres.Get[DatabaseEvent](ctx, db.dbPostgres, stmt, masterPubkey, kind)
 	if err != nil {
 		if errors.Is(err, postgres.ErrNotFound) {
 			return nil, nil
@@ -458,7 +461,7 @@ func (db *dbClient) getReplaceableEvent(ctx context.Context, masterPubkey string
 }
 
 // TODO: remove after using WITH (DELETE) INSERT
-func (db *dbClient) getParametrizedEvent(ctx context.Context, masterPubkey, dTag string, kind int) (ev *model.DatabaseEvent, err error) {
+func (db *dbClient) getParametrizedEvent(ctx context.Context, masterPubkey, dTag string, kind int) (ev *DatabaseEvent, err error) {
 	stmt := `SELECT e.kind,
 				e.created_at,
 				e.system_created_at,
@@ -472,7 +475,7 @@ func (db *dbClient) getParametrizedEvent(ctx context.Context, masterPubkey, dTag
 				events e
 			WHERE master_pubkey = $1 AND kind = $2 AND d_tag = $3`
 
-	res, err := postgres.Get[model.DatabaseEvent](ctx, db.dbPostgres, stmt, masterPubkey, kind, dTag)
+	res, err := postgres.Get[DatabaseEvent](ctx, db.dbPostgres, stmt, masterPubkey, kind, dTag)
 	if err != nil {
 		if errors.Is(err, postgres.ErrNotFound) {
 			return nil, nil
@@ -504,12 +507,12 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 	return err
 }
 
-func (db *dbClient) MustSignEvent(event *databaseEvent) {
+func (db *dbClient) MustSignEvent(event *model.Event) {
 	if event.PubKey != "" {
 		event.Tags = append(event.Tags, model.Tag{"p", event.PubKey})
 	}
-	if event.MasterPubKey != "" && event.MasterPubKey != event.PubKey {
-		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.MasterPubKey})
+	if event.GetMasterPublicKey() != "" && event.GetMasterPublicKey() != event.PubKey {
+		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.GetMasterPublicKey()})
 	} else if event.GetTag(model.CustomIONTagOnBehalfOf) == nil {
 		pubkey, _ := model.GetPublicKey(db.relayPrivateKey)
 		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pubkey})
@@ -521,79 +524,102 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 	}
 }
 
-func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
-	if event.Sig != "" {
-		return event
+func (db *dbClient) ToEvent(de *DatabaseEvent) *model.Event {
+	masterPubkey := de.MasterPubKey
+	if masterPubkey == "" {
+		masterPubkey = de.PubKey
+	}
+	var tags nostr.Tags
+	if de.Tags != nil {
+		tags = *de.Tags
 	}
 
-	switch event.Kind {
+	ev := &model.Event{
+		Event: nostr.Event{
+			ID:        de.ID,
+			PubKey:    masterPubkey,
+			CreatedAt: de.CreatedAt,
+			Kind:      de.Kind,
+			Tags:      tags,
+			Content:   de.Content,
+			Sig:       de.Sig,
+		},
+	}
+
+	if ev.Sig != "" {
+		return ev
+	}
+
+	switch ev.Kind {
 	case model.CustomIONKindRelayListMetadata:
-		db.MustSignEvent(event)
+		db.MustSignEvent(ev)
 
 	case model.KindDVMCountResponse:
-		var ev databaseEvent
+		var mev model.Event
 		pubkey, _ := model.GetPublicKey(db.relayPrivateKey)
-		ev.Kind = model.KindJobNostrEventCount
-		ev.CreatedAt = event.CreatedAt
-		ev.Content = event.Dtag
-		ev.Tags = append(event.Tags,
+		mev.Kind = model.KindJobNostrEventCount
+		mev.CreatedAt = de.CreatedAt
+		mev.Content = de.DTag
+		mev.Tags = append(tags,
 			model.Tag{"param", "relay", db.relayURL},
 			model.Tag{model.CustomIONTagOnBehalfOf, pubkey},
 		)
-		db.MustSignEvent(&ev)
+		db.MustSignEvent(&mev)
 
-		event.Tags = model.Tags{
-			{"request", ev.String()},
-			{"e", ev.ID, db.relayURL},
+		ev.Tags = model.Tags{
+			{"request", mev.String()},
+			{"e", mev.ID, db.relayURL},
 			{"expiration", strconv.FormatInt(time.Now().Add(model.DVMJobResultExpiration).Unix(), 10)},
 		}
-		db.MustSignEvent(event)
+		db.MustSignEvent(ev)
 	}
 
-	return event
+	return ev
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
-	limit := int64(selectDefaultBatchLimit)
+	batchSizeLimit := int64(selectDefaultBatchLimit)
 	hasLimitFilter := len(filters) > 0 && filters[0].Limit > 0
 	if hasLimitFilter {
-		limit = int64(filters[0].Limit)
+		batchSizeLimit = int64(filters[0].Limit)
 	}
 
 	return func(yield func(*model.Event, error) bool) {
-		for limit > 0 {
-			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters, 0, min(selectDefaultBatchLimit, limit))
+		offset := int64(0)
+		for {
+			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters, 0, batchSizeLimit, offset)
 			if err != nil {
-				yield(nil, errors.Wrap(err, "failed to generate select events SQL"))
+				if !yield(nil, errors.Wrap(err, "failed to generate select events SQL")) {
+					return
+				}
+				return
+			}
+
+			dbEvents, err := postgres.Select[DatabaseEvent](ctx, db.dbPostgres, sqlQuery, params...)
+			if err != nil {
+				if !yield(nil, errors.Wrap(err, "failed to query events")) {
+					return
+				}
 				return
 			}
 
 			var events []*model.Event
-			var dbEvents []*model.DatabaseEvent
-
-			dbEvents, err = postgres.Select[model.DatabaseEvent](ctx, db.dbPostgres, sqlQuery, params...)
-			if err != nil {
-				yield(nil, errors.Wrap(err, "failed to query events"))
-
-				return
-			}
-
 			for _, event := range dbEvents {
-				ev := event.ToEvent()
+				ev := db.ToEvent(event)
 				if !yield(ev, nil) {
 					return
 				}
 				events = append(events, ev)
 			}
-
-			batchSize := int64(len(events))
-			if batchSize < selectDefaultBatchLimit {
+			if hasLimitFilter && len(events) >= filters[0].Limit {
 				break
 			}
-			limit -= batchSize
-		}
-		if limit < 0 {
-			yield(nil, errors.New("exceeded event limit"))
+
+			batchSize := int64(len(events))
+			if batchSize < batchSizeLimit {
+				break
+			}
+			offset += batchSize
 		}
 	}
 }
@@ -674,7 +700,7 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 	return result, err
 }
 
-func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.Filters, systemCreatedAtPivot, limit int64) (sql string, params []any, err error) {
+func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.Filters, systemCreatedAtPivot, limit, offset int64) (sql string, params []any, err error) {
 	whereMain, depClause, whereSearch, params, err := db.generateEventsWhereClause(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
@@ -689,8 +715,8 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.F
 	var limitQuery string
 	if limit > 0 {
 		params = append(params, limit)
-		limitQuery = " limit $" + strconv.Itoa(len(params))
-
+		limitQuery = " limit $" + strconv.Itoa(len(params)) + " offset $" + strconv.Itoa(len(params)+1)
+		params = append(params, offset)
 	}
 
 	const discoverContentCreatorsToFollow = "discover content creators to follow"
@@ -774,7 +800,7 @@ func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []s
 		},
 	) {
 		if err != nil {
-			return nil, errors.Wrapf(db.handleError(err), "failed to fetch all keys of %v", pubkey)
+			return nil, errors.Wrapf(err, "failed to fetch all keys of %v", pubkey)
 		}
 
 		entries, err := model.ParseAttestationTags(ev.Tags)
@@ -901,12 +927,12 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) error {
 									content,
 									d_tag,
 									tags;`
-	dbEvents, err := postgres.ExecMany[model.DatabaseEvent](ctx, db.dbPostgres, sql, params...)
+	dbEvents, err := postgres.ExecMany[DatabaseEvent](ctx, db.dbPostgres, sql, params...)
 	if err != nil {
 		return errors.Wrap(err, "failed to exec delete expired events")
 	}
 	for _, ev := range dbEvents {
-		events = append(events, ev.ToEvent())
+		events = append(events, db.ToEvent(ev))
 	}
 	if notifyExpiredEvents != nil && len(events) > 0 {
 		err = errors.Wrapf(notifyExpiredEvents(ctx, events...), "failed to process notification of expired events")

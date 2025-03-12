@@ -458,18 +458,18 @@ func (w *whereBuilder) CountVotesOf(filterID, cteName string, filter *filterDepe
 union all
 select
 	6400,
-	EXTRACT(EPOCH FROM CURRENT_TIMESTAMP),
+	EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint,
 	0 as system_created_at,
 	'' as id,
 	t.pubkey,
 	t.master_pubkey,
 	'' as sig,
-	jsonb_object_agg(t.option, t.votes) AS content,
+	jsonb_object_agg(t.option, t.votes)::text AS content,
 	jsonb_build_array(jsonb_build_object(
 		'kinds', jsonb_build_array(1754),
-		iif((t.kind >= 10000 AND t.kind < 20000) OR t.kind = 0 OR t.kind = 3 OR (t.kind >= 30000 AND t.kind < 40000), '#a', '#e'),
-			subzero_nostr_get_event_address(t.poll_id::text, t.kind::integer, t.master_pubkey::text, t.d_tag::text))
-	) as d_tag,
+		iif((t.kind >= 10000 AND t.kind < 20000) OR t.kind = 0 OR t.kind = 3 OR (t.kind >= 30000 AND t.kind < 40000), '#a'::text, '#e'::text),
+			subzero_nostr_get_event_address(t.poll_id, t.kind, t.master_pubkey, t.d_tag))
+	)::text as d_tag,
 	t.h_tag,
 	jsonb_build_array(
 		jsonb_build_array('output', 'JSON'),
@@ -483,22 +483,21 @@ from (
 		mainev.kind,
 		mainev.h_tag,
 		mainev.d_tag,
-		j.value AS option,
+		j.value::text AS option,
 		COUNT(j.value) AS votes
 	from `)
 	w.WriteString(cteName)
 	w.WriteString(` mainev
-	left join event_tags et ON et.event_tag_value1 = subzero_nostr_get_event_address(mainev.id::text, mainev.kind::integer, mainev.master_pubkey::text, mainev.d_tag::text) AND et.event_tag_key in ('a', 'e')
-	left join events ve ON ve.id = et.event_id AND ve.kind = 1754 AND jsonb_typeof(ve.content) = 'object'
-	left join jsonb_each_text(ve.content) j on true
-	where
-		exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll') and mainev.kind = `)
+	left join event_tags et ON et.event_tag_value1 = subzero_nostr_get_event_address(mainev.id, mainev.kind, mainev.master_pubkey, mainev.d_tag) AND et.event_tag_key in ('a', 'e')
+	left join events ve ON ve.id = et.event_id AND ve.kind = 1754
+	left join jsonb_array_elements(ve.content::jsonb) j on true
+	where exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll') and mainev.kind = `)
 	w.WriteString(w.addParam(filter.Start.Kind))
 	w.WriteString(`
-	group by poll_id, option
+	group by poll_id, option, mainev.pubkey, mainev.master_pubkey, mainev.kind, mainev.h_tag, mainev.d_tag
 ) t
-left join jsonb_each_text(jsonb_build_object(cast(t.option AS text), t.votes)) AS json_each
-group by t.poll_id
+left join jsonb_each_text(jsonb_build_object(cast(t.option AS text), t.votes)) AS json_each ON true
+group by t.poll_id, t.pubkey, t.master_pubkey, t.kind, t.h_tag, t.d_tag
 `)
 }
 
@@ -509,11 +508,37 @@ func (w *whereBuilder) applyDepFilter(filterID, cteName string, filter *filterDe
 
 			return
 		}
+
+		var fTagNameIdx, fKindIdx, fContextIdx string
+		switch {
+		case strings.EqualFold(filter.Reduce.Tag, "q"):
+			fKindIdx = w.addParam(filter.Reduce.Kinds[1])
+			fTagNameIdx = w.addParam("#q")
+			fContextIdx = w.addParam(filter.Reduce.Tag)
+		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
+			fKindIdx = w.addParam(filter.Start.Kind)
+			fTagNameIdx = w.addParam("lookup")
+
+			fContextIdx = w.addParam(cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
+		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+			fKindIdx = w.addParam(filter.Reduce.Kinds[1])
+			fTagNameIdx = w.addParam("lookup")
+
+			fContextIdx = w.addParam(filter.Reduce.Context)
+		case filter.Reduce.Tag == "p":
+			fKindIdx = w.addParam(filter.Start.Kind)
+			fTagNameIdx = w.addParam("#p")
+			fContextIdx = w.addParam(filter.Reduce.Tag)
+		default:
+			fTagNameIdx = w.addParam("lookup")
+			fKindIdx = w.addParam(filter.Reduce.Kinds[1])
+		}
+
 		w.WriteString(`
 union all
 select
 	6400,
-	EXTRACT(EPOCH FROM CURRENT_TIMESTAMP),
+	EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint,
 	0,
 	case when f.kind = 3 then '' else f.reference_id end as id,
 	coalesce(evr.pubkey, ''),
@@ -521,40 +546,48 @@ select
 	'',
 `)
 		if filter.Reduce.Group && len(filter.Reduce.Kinds) > 1 && filter.Reduce.Kinds[1] == nostr.KindReaction {
-			w.WriteString(`jsonb_object_agg(coalesce(nullif(f.reference_type, ''), '+'), f.value) as content,`)
+			w.WriteString(`jsonb_object_agg(coalesce(nullif(f.reference_type, ''), '+'), f.value)::text as content,`)
 		} else {
 			w.WriteString(`cast(f.value as text) as content,`)
 		}
 		w.WriteString(`jsonb_build_array(jsonb_build_object(
-			'kinds', jsonb_build_array(` + w.addParam(filter.Reduce.Kinds[0]) + `),
-			iif(` + w.addParam(cmp.Or(filter.Reduce.Tag, "lookup")) + `= 'lookup',
-				iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000), '#a', '#e'), ` + w.addParam(cmp.Or(filter.Reduce.Tag, "lookup")) + `),
+			'kinds', jsonb_build_array(`)
+		if filter.Reduce.Tag == "p" {
+			w.WriteString(w.addParam(filter.Reduce.Kinds[1]))
+		} else {
+			w.WriteString(fKindIdx)
+		}
+
+		w.WriteString(`::integer),
+			iif(` + fTagNameIdx + `= 'lookup',
+				iif((evr.kind >= 10000 AND evr.kind < 20000) OR evr.kind = 0 OR evr.kind = 3 OR (evr.kind >= 30000 AND evr.kind < 40000), '#a'::text, '#e'::text), ` + fTagNameIdx + `),
 				jsonb_build_array(
 					jsonb_build_array(
-						iif(` + w.addParam(cmp.Or(filter.Reduce.Tag, "lookup")) + `= 'lookup',
-							subzero_nostr_get_event_address(evr.id::text, evr.kind::integer, evr.master_pubkey::text, evr.d_tag::text),
+						iif(` + fTagNameIdx + `= 'lookup',
+							subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag),
 							f.reference_id)`)
+
 		if filter.Reduce.Context == "root" || filter.Reduce.Context == "reply" {
-			w.WriteString(`, null, ` + w.addParam(filter.Reduce.Context))
+			w.WriteString(`, null, ` + fContextIdx)
 		}
-		w.WriteString(`)))) as d_tag,
+		w.WriteString(`::text))))::text as d_tag,
 	h_tag,
 	case when
 		f.kind = 7 then
 			jsonb_build_array(
 				jsonb_build_array('output', 'JSON'),
-				jsonb_build_array('param', 'group', ` + w.addParam(cmp.Or(filter.Reduce.Context, "")) + `
+				jsonb_build_array('param', 'group', ` + fContextIdx + `::text
 			))
 		else
 			jsonb_build_array()
 		end as jtags
 from
 	event_counters f
-inner join ` + cteName + ` evr on evr.kind = ` + w.addParam(filter.Start.Kind) + `
+inner join ` + cteName + ` evr on evr.kind = ` + fKindIdx + `
 	and (
 		(f.kind = 3 and f.reference_id in (evr.master_pubkey, evr.pubkey))
 		or
-		f.reference_id = subzero_nostr_get_event_address(evr.id::text, evr.kind::integer, evr.master_pubkey::text, evr.d_tag::text)
+		f.reference_id = subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag)
 	)
 where
 `)
@@ -592,7 +625,13 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 		w.WriteString("e.kind = ")
 		w.WriteString(w.addParam(filter.Reduce.Kinds[0]))
 		tag := filter.Reduce.Tag // Could be "q" or "e" or "p" or empty.
-		w.WriteString(" and e.id in (select event_id from event_tags mctx inner join events et ON mctx.event_id = et.id where mctx.event_tag_key ")
+		w.WriteString(" and e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id ")
+		if filter.Reduce.Author != "" {
+			w.WriteString(" and ")
+			w.WriteString(w.addParam(filter.Reduce.Author))
+			w.WriteString(" in (et.pubkey, et.master_pubkey)")
+		}
+		w.WriteString(" where mctx.event_tag_key ")
 		switch tag {
 		case "q":
 			w.WriteString(" in ('q', 'Q')")
@@ -602,14 +641,7 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 			w.WriteString(" = ")
 			w.WriteString(w.addParam(tag))
 		}
-		if filter.Reduce.Author != "" {
-			w.WriteString(" and ")
-			w.WriteString(w.addParam(filter.Reduce.Author))
-			w.WriteString(" in (et.pubkey, et.master_pubkey)")
-		}
-		w.WriteString(" and mctx.event_tag_value1 in (")
-		w.WriteString(w.createWhereForDepFilter(filterID, cteName, "subzero_nostr_get_event_address(id::text, kind::integer, master_pubkey::text, d_tag::text)", &filter.Start))
-		w.WriteRune(')')
+		w.WriteString(" and mctx.event_tag_value1 = subzero_nostr_get_event_address(em.id, em.kind, em.master_pubkey, em.d_tag)")
 		if filter.Reduce.Context != "" {
 			w.WriteString(" and mctx.event_tag_value3 = ")
 			w.WriteString(w.addParam(filter.Reduce.Context))
@@ -617,7 +649,7 @@ and exists (select true from event_tags where event_id = e.id and event_tag_key 
 				w.WriteString(` and NOT EXISTS (select true from event_tags rctx where rctx.event_id = et.id AND rctx.event_tag_key = mctx.event_tag_key and rctx.event_tag_value3 = 'reply')`)
 			}
 		}
-		w.WriteString(" group by event_tag_value1, mctx.event_id) AND e.hidden = FALSE")
+		w.WriteString(" LIMIT 1) FROM eventsmain em) AND e.hidden = FALSE")
 
 	case nostr.KindBadgeDefinition:
 		startFilter := w.createWhereForDepFilter(filterID, cteName, "id", &filter.Start)
@@ -705,25 +737,15 @@ group by e.master_pubkey, e.pubkey`)
 	case model.KindDVMCountResponse:
 		w.WriteString("f.kind = ")
 		w.WriteString(w.addParam(filter.Reduce.Kinds[1]))
-		w.addParam("lookup")
-		w.addParam(filter.Reduce.Kinds[1])
 		var refType string
 		switch {
 		case strings.EqualFold(filter.Reduce.Tag, "q"):
-			w.addParam("#q")
-			w.addParam(filter.Reduce.Tag)
 			refType = "quote"
 
-		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
-			w.addParam(cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
-
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
-			w.addParam(filter.Reduce.Context)
 			refType = filter.Reduce.Context
 
 		case filter.Reduce.Tag == "p":
-			w.addParam("#p")
-			w.addParam(filter.Reduce.Tag)
 			refType = "follower"
 		}
 		if refType != "" {
@@ -736,11 +758,11 @@ group by e.master_pubkey, e.pubkey`)
 			w.WriteString(" UNION ALL ")
 			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "master_pubkey", &filter.Start))
 		} else {
-			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "subzero_nostr_get_event_address(id::text, kind::integer, master_pubkey::text, d_tag::text)", &filter.Start))
+			w.WriteString(w.createWhereForDepFilter(filterID, cteName, "subzero_nostr_get_event_address(id, kind, master_pubkey, d_tag)", &filter.Start))
 		}
 		w.WriteString(")")
 		if filter.Reduce.Group && filter.Reduce.Kinds[1] == nostr.KindReaction {
-			w.WriteString(" GROUP BY reference_id")
+			w.WriteString(" GROUP BY reference_id, f.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag")
 		}
 	}
 }
@@ -845,7 +867,7 @@ func (w *whereBuilder) applyDeleteFilter(idx int, filter *databaseFilterDelete) 
 	w.WriteString(" AND hidden = FALSE) OR ((pubkey != master_pubkey AND ")
 	w.WriteString("subzero_nostr_onbehalf_is_allowed(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden = FALSE), '[]'::jsonb), ")
 	w.WriteString(owner)
-	w.WriteString(", kind, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP))))))")
+	w.WriteString(", kind, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint)))))")
 }
 
 func (w *whereBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params []any, err error) {

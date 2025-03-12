@@ -440,26 +440,25 @@ func TestCounterRootReply(t *testing.T) {
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.Set("e", &replyToReply.ID)})
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.Set("e", &replyToRoot.ID)})
 
-	// TODO: FIXME
-	// events := helperSelectEvents(t, db, model.Filter{
-	// 	Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
-	// 	Limit:  10,
-	// 	Search: "references:false expiration:false include:dependencies:kind1>kind6400+kind1+group+root !emarker:reply",
-	// })
-	// require.Len(t, events, 2) // Root + DVM.
-	// require.Equal(t, "rootid", events[0].ID)
-	// require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
-	// require.Equal(t, "1", events[1].Content)
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
+		Limit:  10,
+		Search: "references:false expiration:false include:dependencies:kind1>kind6400+kind1+group+root !emarker:reply",
+	})
+	require.Len(t, events, 2) // Root + DVM.
+	require.Equal(t, "rootid", events[0].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
+	require.Equal(t, "1", events[1].Content)
 
-	// t.Run("Delete", func(t *testing.T) {
-	// 	var deleteEv model.Event
+	t.Run("Delete", func(t *testing.T) {
+		var deleteEv model.Event
 
-	// 	deleteEv.Kind = nostr.KindDeletion
-	// 	deleteEv.PubKey = "replypub"
-	// 	deleteEv.Tags = model.Tags{{"e", replyToRoot.ID}}
-	// 	require.NoError(t, db.AcceptEvents(t.Context(), &deleteEv))
-	// 	helperMustBePrecalculatedCount(t, db, 0, model.Filter{Tags: model.TagMap{}.Set("e", &root.ID)})
-	// })
+		deleteEv.Kind = nostr.KindDeletion
+		deleteEv.PubKey = "replypub"
+		deleteEv.Tags = model.Tags{{"e", replyToRoot.ID}}
+		require.NoError(t, db.AcceptEvents(t.Context(), &deleteEv))
+		helperMustBePrecalculatedCount(t, db, 0, model.Filter{Tags: model.TagMap{}.Set("e", &root.ID)})
+	})
 }
 
 func TestCounterOpenCommunityMembers(t *testing.T) {
@@ -639,14 +638,13 @@ func TestCounterRootReplyAddressable(t *testing.T) {
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.SetLiterals("a", replyToReply.Address())})
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{Tags: model.TagMap{}.SetLiterals("a", replyToRoot.Address())})
 
-	// TODO: FIXME
-	// events := helperSelectEvents(t, db, model.Filter{
-	// 	Kinds:  []int{nostr.KindArticle, nostr.KindRepost},
-	// 	Limit:  10,
-	// 	Search: "references:false expiration:false include:dependencies:kind30023>kind6400+kind30023+group+root !amarker:reply",
-	// })
-	// require.Len(t, events, 2) // Root + DVM.
-	// require.Equal(t, "rootid", events[0].ID)
-	// require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
-	// require.Equal(t, "1", events[1].Content)
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindArticle, nostr.KindRepost},
+		Limit:  10,
+		Search: "references:false expiration:false include:dependencies:kind30023>kind6400+kind30023+group+root !amarker:reply",
+	})
+	require.Len(t, events, 2) // Root + DVM.
+	require.Equal(t, "rootid", events[0].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
+	require.Equal(t, "1", events[1].Content)
 }

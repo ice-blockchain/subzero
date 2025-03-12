@@ -205,7 +205,7 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
 			filter := helperNewFilterFromElements(t, set)
-			sql, params, err := db.generateSelectEventsSQL(context.TODO(), model.Filters{filter}, 0, 100)
+			sql, params, err := db.generateSelectEventsSQL(context.TODO(), model.Filters{filter}, 0, 100, 0)
 			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
 
 			sql = "EXPLAIN QUERY PLAN " + sql

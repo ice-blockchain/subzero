@@ -345,8 +345,8 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Len(t, events, 4) // Two original notes, two replies (only one single reply per note). t2id3 must be excluded.
 		require.Equal(t, "t2id1", events[0].ID)
 		require.Equal(t, "id2", events[1].ID)
-		require.Equal(t, "t2id2", events[2].ID)
-		require.Equal(t, "t2id6", events[3].ID)
+		require.Equal(t, "t2id6", events[2].ID)
+		require.Equal(t, "t2id2", events[3].ID)
 	})
 	t.Run("kind1>kind6400+kind7+group+content", func(t *testing.T) {
 		var ev model.Event
@@ -393,7 +393,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		for _, ev := range events[2:] {
 			t.Logf("dvm event: %+v", ev)
 			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
-			require.Equal(t, `{"*":1,"+":1}`, ev.Content)
+			require.Equal(t, `{"*": 1, "+": 1}`, ev.Content)
 			require.GreaterOrEqual(t, len(ev.Tags), 3)
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
@@ -1206,8 +1206,8 @@ func TestDVMVoteResults(t *testing.T) {
 			ID       string
 			Expected map[string]int
 		}{
-			{"poll1", expected1},
 			{"poll2", results2},
+			{"poll1", expected1},
 			{"poll3", results3},
 		}
 		for i := range events {
@@ -1219,9 +1219,9 @@ func TestDVMVoteResults(t *testing.T) {
 
 			switch cases[i].ID {
 			case "poll1", "poll2":
-				require.Contains(t, events[i].String(), `#e\\\":\\\"`+cases[i].ID+`\\\"`)
+				require.Contains(t, events[i].String(), `#e\\\": \\\"`+cases[i].ID+`\\\"`)
 			case "poll3":
-				require.Contains(t, events[i].String(), `#a\\\":\\\"30023:pk1:dtag3\\\"`)
+				require.Contains(t, events[i].String(), `#a\\\": \\\"30023:pk1:dtag3\\\"`)
 			}
 		}
 	})
