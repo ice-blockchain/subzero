@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
 
 	postgres "github.com/ice-blockchain/subzero/database/query/internal/postgres"
@@ -26,8 +25,6 @@ const (
 var (
 	ErrUnexpectedRowsAffected    = errors.New("unexpected rows affected")
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
-
-	errEventIteratorInterrupted = errors.New("interrupted")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
@@ -236,7 +233,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 
 	deletedEvents, err := postgres.ExecMany[DatabaseEvent](ctx, db.dbPostgres, stmt, params...)
 	if err != nil {
-		return 0, nil, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+		return 0, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
 	}
 	if len(deletedEvents) == 0 {
 		return 0, nil, nil
@@ -283,7 +280,7 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 	var filtersToDelete []databaseFilterDelete
 	for ev, err := range db.SelectEvents(ctx, selectFilters...) {
 		if err != nil {
-			return errors.Wrap(db.handleError(err), "failed to exec select events")
+			return errors.Wrap(handleError(err), "failed to exec select events")
 		}
 		for _, filter := range filters {
 			if len(filter.IDs) == 0 && len(filter.Events) == 0 && filter.Author == ev.PubKey {
@@ -332,159 +329,84 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 }
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
-	// TODO: make 3 different batches: for regular, replaceable and addressable events and use 1 request per each of them.
+	var stmt string
+	params := []any{}
+	values := []string{}
+
+	idx := 1
 	for _, ev := range events {
-		var stmt string
-		params := []any{}
-		values := []string{}
-		idx := 1
-
 		params = append(params, ev.Kind, ev.CreatedAt, ev.SystemCreatedAt, ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.Htag, ev.ContentMetadata, ev.Deleted)
-		values = append(values, fmt.Sprintf("($%[1]v, $%[2]v, $%[3]v, $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v, $%[15]v)",
-			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+15))
+		values = append(values, fmt.Sprintf("($%[1]v::integer, $%[2]v::bigint, $%[3]v::bigint, $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v, $%[15]v::bool)",
+			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14))
 		idx += 15
-
-		if ev.IsReplaceable() {
-			existing, err := db.getReplaceableEvent(ctx, ev.MasterPubKey, ev.Kind)
-			if err != nil {
-				return err
-			}
-
-			if existing != nil {
-				stmt = `UPDATE events SET
-		            created_at = $1,
-		            system_created_at = $2,
-		            pubkey = $3,
-					sig = $4,
-					sig_alg = $5,
-					key_alg = $6,
-					content = $7,
-					tags = COALESCE($8, '[]'::jsonb),
-					d_tag = $9,
-					h_tag = $10,
-					content_metadata = $11,
-					deleted = $12
-		            WHERE master_pubkey = $13 AND kind = $14`
-				params = []any{
-					ev.CreatedAt, ev.SystemCreatedAt, ev.PubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.GetHTag(), ev.ContentMetadata, ev.Deleted,
-					ev.MasterPubKey, ev.Kind,
-				}
-			} else {
-				stmt = fmt.Sprintf(`insert into events
-					(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
-				values
-					%v`, strings.Join(values, ",\n"))
-			}
-		} else if ev.IsAddressable() {
-			existing, err := db.getParametrizedEvent(ctx, ev.MasterPubKey, ev.Dtag, ev.Kind)
-			if err != nil {
-				return err
-			}
-
-			if existing != nil {
-				stmt = `UPDATE events SET
-							created_at = $1,
-							system_created_at = $2,
-							pubkey = $3,
-							sig = $4,
-							sig_alg = $5,
-							key_alg = $6,
-							content = $7,
-							tags = $8,
-							h_tag = $9,
-							content_metadata = $10,
-							deleted = $11
-		                WHERE master_pubkey = $12 AND kind = $13 AND d_tag = $14`
-				params = []any{ev.CreatedAt, ev.SystemCreatedAt, ev.PubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.GetHTag(), ev.ContentMetadata, ev.Deleted,
-					ev.MasterPubKey, ev.Kind, ev.Dtag}
-			} else {
-
-				stmt = fmt.Sprintf(`insert into events
-					(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
-				values
-					%v`, strings.Join(values, ",\n"))
-			}
-		} else {
-			stmt = fmt.Sprintf(`insert into events
-				(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted)
-			values
-				%v
-			;
-			`, strings.Join(values, ",\n"))
-		}
-
-		_, err := postgres.Exec(ctx, db.dbPostgres, stmt, params...)
-		if err != nil {
-			if errors.Is(err, postgres.ErrOnBehalfAccessDenied) {
-				return errors.Wrapf(model.ErrOnBehalfAccessDenied, "on behalf error")
-			}
-			if errors.Is(err, postgres.ErrAttestationUpdateRejected) {
-				return errors.Wrapf(ErrAttestationUpdateRejected, "attestation update rejectec")
-			}
-
-			return errors.Wrap(db.handleError(err), "failed to exec insert event sql") // TODO: handle error
-		}
-
-		// else if rowsAffected == 0 {
-		// return errors.Wrapf(ErrUnexpectedRowsAffected, "expected 1 rows affected, got %d", rowsAffected)
-
 	}
 
-	return nil
-}
+	stmt = `MERGE INTO events AS target
+				USING (VALUES 
+					` + strings.Join(values, ",") + `
+				) AS source (
+					kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, content_metadata, deleted
+				)
+				ON (
+					target.id = source.id 
+					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
+					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
+				)
+			WHEN MATCHED AND 
+				target.master_pubkey = source.master_pubkey 
+				AND target.kind = source.kind 
+				AND target.d_tag = source.d_tag 
+				AND (30000 <= source.kind AND source.kind < 40000) THEN
+				UPDATE SET 
+					id = source.id,
+					created_at = source.created_at,
+					system_created_at = source.system_created_at,
+					pubkey = source.pubkey,
+					sig = source.sig,
+					content = source.content,
+					tags = source.tags,
+					h_tag = source.h_tag,
+					content_metadata = source.content_metadata,
+					deleted = source.deleted
+			WHEN MATCHED AND 
+				target.master_pubkey = source.master_pubkey 
+				AND target.kind = source.kind 
+				AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
+				UPDATE SET 
+					id = source.id,
+					d_tag = source.d_tag,
+					pubkey = source.pubkey,
+					created_at = source.created_at,
+					system_created_at = source.system_created_at,
+					content = source.content,
+					tags = source.tags
+			WHEN MATCHED AND target.id = source.id THEN
+				UPDATE SET 
+					kind = source.kind,
+					master_pubkey = source.master_pubkey,
+					d_tag = source.d_tag,
+					created_at = source.created_at,
+					system_created_at = source.system_created_at,
+					pubkey = source.pubkey,
+					sig = source.sig,
+					content = source.content,
+					tags = source.tags
+			WHEN NOT MATCHED THEN
+				INSERT (
+					id, kind, created_at, system_created_at, pubkey, master_pubkey, 
+					sig, sig_alg, key_alg, content, tags, d_tag, h_tag, 
+					content_metadata, deleted
+				)
+				VALUES (
+					source.id, source.kind, source.created_at, source.system_created_at,
+					source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
+					source.key_alg, source.content, source.tags, source.d_tag,
+					source.h_tag, source.content_metadata, source.deleted
+				);`
 
-// TODO: remove after using WITH (DELETE) INSERT
-func (db *dbClient) getReplaceableEvent(ctx context.Context, masterPubkey string, kind int) (ev *DatabaseEvent, err error) {
-	stmt := `SELECT e.kind,
-				e.created_at,
-				e.system_created_at,
-				e.id,
-				e.pubkey,
-				e.master_pubkey,
-				e.sig,
-				e.content,
-				tags
-			from
-				events e
-			WHERE master_pubkey = $1 AND kind = $2`
+	_, err := postgres.Exec(ctx, db.dbPostgres, stmt, params...)
 
-	res, err := postgres.Get[DatabaseEvent](ctx, db.dbPostgres, stmt, masterPubkey, kind)
-	if err != nil {
-		if errors.Is(err, postgres.ErrNotFound) {
-			return nil, nil
-		}
-
-		return nil, errors.Wrap(db.handleError(err), "failed to exec insert event sql")
-	}
-
-	return res, nil
-}
-
-// TODO: remove after using WITH (DELETE) INSERT
-func (db *dbClient) getParametrizedEvent(ctx context.Context, masterPubkey, dTag string, kind int) (ev *DatabaseEvent, err error) {
-	stmt := `SELECT e.kind,
-				e.created_at,
-				e.system_created_at,
-				e.id,
-				e.pubkey,
-				e.master_pubkey,
-				e.sig,
-				e.content,
-				tags
-			from
-				events e
-			WHERE master_pubkey = $1 AND kind = $2 AND d_tag = $3`
-
-	res, err := postgres.Get[DatabaseEvent](ctx, db.dbPostgres, stmt, masterPubkey, kind, dTag)
-	if err != nil {
-		if errors.Is(err, postgres.ErrNotFound) {
-			return nil, nil
-		}
-
-		return nil, errors.Wrap(db.handleError(err), "failed to exec insert event sql")
-	}
-
-	return res, nil
+	return errors.Wrap(handleError(err), "failed to exec insert event sql")
 }
 
 func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest) (err error) {
@@ -624,21 +546,15 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	}
 }
 
-// TODO: fixme.
-func (db *dbClient) handleError(err error) error {
-	var sqlError sqlite3.Error
-
+func handleError(err error) error {
 	if err == nil {
 		return err
 	}
-
-	if errors.As(err, &sqlError) && sqlError.Code == sqlite3.ErrConstraint {
-		switch sqlError.Error() {
-		case "onbehalf permission denied":
-			err = model.ErrOnBehalfAccessDenied
-		case "attestation list update must be linear":
-			err = ErrAttestationUpdateRejected
-		}
+	if errors.Is(err, postgres.ErrOnBehalfAccessDenied) {
+		return errors.Wrapf(model.ErrOnBehalfAccessDenied, "on behalf error")
+	}
+	if errors.Is(err, postgres.ErrAttestationUpdateRejected) {
+		return errors.Wrapf(ErrAttestationUpdateRejected, "attestation update rejected")
 	}
 
 	return err

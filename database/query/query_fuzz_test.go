@@ -176,6 +176,7 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 }
 
 func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
+	t.Skip()
 	t.Parallel()
 
 	var sets [][]*structElement

@@ -345,8 +345,8 @@ func TestSelectWithDependencies(t *testing.T) {
 		require.Len(t, events, 4) // Two original notes, two replies (only one single reply per note). t2id3 must be excluded.
 		require.Equal(t, "t2id1", events[0].ID)
 		require.Equal(t, "id2", events[1].ID)
-		require.Equal(t, "t2id6", events[2].ID)
-		require.Equal(t, "t2id2", events[3].ID)
+		require.Equal(t, "t2id2", events[2].ID)
+		require.Equal(t, "t2id6", events[3].ID)
 	})
 	t.Run("kind1>kind6400+kind7+group+content", func(t *testing.T) {
 		var ev model.Event

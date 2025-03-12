@@ -75,7 +75,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{},
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -85,7 +85,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{},
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 		})
@@ -97,7 +97,7 @@ func TestReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 
-		require.NoError(t, db.AcceptEvents(context.TODO(), &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 1st event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
@@ -118,7 +118,7 @@ func TestReplaceableEvents(t *testing.T) {
 
 		expectedEvents := []*model.Event{}
 		expectedEvents = append(expectedEvents, &model.Event{Event: nostr.Event{Tags: model.Tags{}}})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
@@ -129,7 +129,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Content:   `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
@@ -151,40 +151,38 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      model.Tags{{"p", "event1", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev1))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev1))
 
 		// Overwrite.
 		ev2 := &model.Event{
 			Event: nostr.Event{
-				// ID:        "replaceable event 2", // TODO: rollback
-				ID:        "replaceable event 1 that must be replaced",
+				ID:        "replaceable event 2",
 				PubKey:    "bogus",
 				CreatedAt: 2,
 				Kind:      nostr.KindFollowList,
 				Tags:      nostr.Tags{{"p", "event2", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev2))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev2))
 
 		// Add another event.
 		ev3 := &model.Event{
 			Event: nostr.Event{
-				// ID:        "replaceable event 3", // TODO: rollback
-				ID:        "eplaceable event 2",
+				ID:        "replaceable event 3",
 				PubKey:    "another bogus",
 				CreatedAt: 3,
 				Kind:      nostr.KindFollowList,
 				Tags:      nostr.Tags{{"p", "event3", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), ev3))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev3))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindFollowList},
 		})
 		require.Len(t, stored, 2)
 		require.Equal(t, ev3, stored[0], "event 3")
-		require.Equal(t, ev2, stored[1], "event 1") // TODO: rollback event 2
+		require.Equal(t, ev2, stored[1], "event 2")
 	})
 }
 
@@ -195,7 +193,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
 		expectedEvents := []*model.Event{}
-		replacedEv := &model.Event{
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
 			Event: nostr.Event{
 				ID:        "item to be replaced" + uuid.NewString(),
 				PubKey:    "bogus",
@@ -207,13 +205,11 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Content: "bogus" + uuid.NewString(),
 				Sig:     "bogus" + uuid.NewString(),
 			},
-		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), replacedEv))
+		}))
 		// Overwrite
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
-				// ID:        "param replaceable 1 " + uuid.NewString(), // TODO: rollback.
-				ID:        replacedEv.ID,
+				ID:        "param replaceable 1 " + uuid.NewString(),
 				PubKey:    "bogus",
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindRepositoryAnnouncement,
@@ -224,7 +220,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[0]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
 		// Another D value
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -239,7 +235,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[1]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 		// Another pubkey
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
@@ -254,7 +250,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 				Sig:     "bogus" + uuid.NewString(),
 			},
 		})
-		require.NoError(t, db.AcceptEvents(context.TODO(), expectedEvents[2]))
+		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindRepositoryAnnouncement},
 		})
@@ -1336,7 +1332,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 			keys = append(keys, key)
 			require.NoError(t, posts[i].SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		}
-		require.NoError(t, db.AcceptEvents(context.TODO(), posts...))
+		require.NoError(t, db.AcceptEvents(t.Context(), posts...))
 	})
 
 	t.Run("Soft delete second post", func(t *testing.T) {
@@ -1351,7 +1347,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 			},
 		}
 		require.NoError(t, deletedPost.SignWithAlg(keys[1], model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), deletedPost))
+		require.NoError(t, db.AcceptEvents(t.Context(), deletedPost))
 		posts[1] = deletedPost
 	})
 
@@ -1371,7 +1367,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			IDs: []string{posts[0].ID, posts[1].ID, posts[2].ID},
 		})
-		require.Len(t, events, 3, "should return all posts including deleted") // TODO: fixme
+		require.Len(t, events, 3, "should return all posts including deleted")
 		require.ElementsMatch(t, posts, events)
 	})
 }
