@@ -10,8 +10,6 @@ import (
 )
 
 func TestSubZeroEventReorder(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -42,8 +40,6 @@ func TestSubZeroEventReorder(t *testing.T) {
 }
 
 func TestSubZeroGetEventAddress(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -61,8 +57,6 @@ func TestSubZeroGetEventAddress(t *testing.T) {
 }
 
 func TestParseAttestationString(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -84,8 +78,6 @@ func TestParseAttestationString(t *testing.T) {
 }
 
 func TestParseAttestationTags(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -139,8 +131,6 @@ func TestParseAttestationTags(t *testing.T) {
 }
 
 func TestSubZeroAttestationUpdateIsAllowed(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -195,8 +185,6 @@ func TestSubZeroAttestationUpdateIsAllowed(t *testing.T) {
 }
 
 func TestSubZeroOnBehalfAllowed(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -327,7 +315,6 @@ func TestSubZeroOnBehalfAllowed(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, *result)
 
-	// TODO: >=
 	result, err = postgres.Get[bool](t.Context(), db.dbPostgres, `SELECT subzero_nostr_onbehalf_is_allowed(
 		'[["p", "pubkey1", "", "active:1672531200"], ["p", "pubkey1", "", "inactive:1675209600"]]'::JSONB,
 		'pubkey1'::text,

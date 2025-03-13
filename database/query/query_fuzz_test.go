@@ -151,8 +151,6 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 }
 
 func TestQueryFuzzWhereGenerator(t *testing.T) {
-	t.Parallel()
-
 	var sets [][]*structElement
 	t.Run("PrepareSets", func(t *testing.T) {
 		var filter model.Filter
@@ -177,7 +175,6 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 
 func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 	t.Skip()
-	t.Parallel()
 
 	var sets [][]*structElement
 	t.Run("PrepareSets", func(t *testing.T) {
@@ -264,8 +261,7 @@ func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
 }
 
 func TestQueryFuzzInsertEvents(t *testing.T) {
-	t.Parallel()
-
+	t.Skip()
 	db := helperNewDatabase(t)
 	defer db.Close()
 

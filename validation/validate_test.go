@@ -4,8 +4,11 @@ package validation
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
@@ -14,18 +17,37 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/database/query"
+	dbFixture "github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 
-	query.MustInit(ctx)
-	code := m.Run()
+	container, port := dbFixture.RunPostgresContainer(ctx, "postgres:17.4-alpine", "subzero", "root", "pass", 30*time.Second)
+	query.MustInit(ctx, port)
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	var code int
+	go func() {
+		code = m.Run()
+		signalChan <- syscall.SIGTERM
+	}()
+	<-signalChan
+
+	if container != nil {
+		if err := container.Terminate(ctx); err != nil {
+			fmt.Printf("failed to terminate container: %s", err)
+		}
+	}
 	cancel()
 
-	if err := goleak.Find(); err != nil {
-		panic(err)
+	if code == 0 {
+		if err := goleak.Find(); err != nil {
+			log.Printf("goleak: %v", err)
+			code = 1
+		}
 	}
 
 	os.Exit(code)

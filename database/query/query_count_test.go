@@ -14,8 +14,6 @@ import (
 )
 
 func TestQueryEventsCount(t *testing.T) {
-	t.Parallel()
-
 	db, data := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
@@ -83,8 +81,6 @@ func helperMustBePrecalculatedCount(t *testing.T, db *dbClient, expectedCount in
 }
 
 func TestEventCounters(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -336,8 +332,6 @@ func TestEventCounters(t *testing.T) {
 }
 
 func TestEventMultiReactions(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -390,8 +384,6 @@ func TestEventMultiReactions(t *testing.T) {
 }
 
 func TestCounterRootReply(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -462,8 +454,6 @@ func TestCounterRootReply(t *testing.T) {
 }
 
 func TestCounterOpenCommunityMembers(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -510,8 +500,6 @@ func TestCounterOpenCommunityMembers(t *testing.T) {
 }
 
 func TestCounterClosedCommunityMembers(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -580,8 +568,6 @@ func TestCounterClosedCommunityMembers(t *testing.T) {
 }
 
 func TestCounterRootReplyAddressable(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 

@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -28,24 +29,28 @@ type (
 	}
 )
 
-func MustInit(ctx context.Context) {
+func MustInit(ctx context.Context, port string) {
+	// TODO: take from config.
+	var portValue string
+	if port != "" {
+		portValue = port
+	}
 	globalDB.Once.Do(func() {
 		globalConfig = cfg.MustGet[config]()
 
-		// TODO: make this from config.
 		cfg := Config{
 			Storage: StorageCfg{
 				Credentials: struct {
 					User     string `yaml:"user"`
 					Password string `yaml:"password"`
 				}{
-					User:     "TODO",
-					Password: "TODO",
+					User:     "root",
+					Password: "pass",
 				},
 				Timeout:    "30s",
-				PrimaryURL: "TODO:",
+				PrimaryURL: fmt.Sprintf("postgresql://root:pass@localhost:%v/subzero", portValue),
 				ReplicaURLs: []string{
-					"TODO:",
+					fmt.Sprintf("postgresql://root:pass@localhost:%v/subzero", portValue),
 				},
 				RunDDL:       true,
 				IgnoreGlobal: false,
@@ -57,7 +62,12 @@ func MustInit(ctx context.Context) {
 			WithRelayURL(globalConfig.RelayURL)
 
 		// TODO:
-		// globalDB.Client.db.Ping()
+		// if err := globalDB.Client.Ping(); err != nil {
+		// 	log.Printf("can't ping the database: %v", err)
+
+		// globalDB.Client.Close()
+		// globalDB.Once = sync.Once{}
+		// }
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go func() {

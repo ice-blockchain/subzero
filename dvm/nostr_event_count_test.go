@@ -4,8 +4,11 @@ package dvm
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 	"time"
 
@@ -14,16 +17,34 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/database/query"
+	dbFixture "github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
-	query.MustInit(ctx)
+
+	container, port := dbFixture.RunPostgresContainer(context.Background(), "postgres:17.4-alpine", "subzero", "root", "pass", 30*time.Second)
+
+	query.MustInit(ctx, port)
 	MustInit(ctx)
 
-	code := m.Run()
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	var code int
+	go func() {
+		code = m.Run()
+		signalChan <- syscall.SIGTERM
+	}()
+	<-signalChan
+
+	if container != nil {
+		if err := container.Terminate(ctx); err != nil {
+			fmt.Printf("failed to terminate container: %s", err)
+		}
+	}
 	cancel()
 
 	if code == 0 {
@@ -37,8 +58,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestCountBasedOnGroups(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name     string
 		evList   []*nostr.Event
@@ -578,8 +597,6 @@ func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 }
 
 func TestEventCountersConsistency(t *testing.T) {
-	t.Parallel()
-
 	pub, err := model.GetPublicKey(globalDVM.PrivateKey)
 	require.NoError(t, err)
 

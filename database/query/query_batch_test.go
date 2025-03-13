@@ -14,8 +14,6 @@ import (
 )
 
 func TestQueryBatchProcessor(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 

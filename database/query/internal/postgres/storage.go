@@ -1,4 +1,4 @@
-// // SPDX-License-Identifier: ice License 1.0
+// SPDX-License-Identifier: ice License 1.0
 
 package storage
 
@@ -107,7 +107,7 @@ func doAfterConnect(ctx context.Context, timeout string, conn *pgx.Conn) error {
 		"statement_timeout":                   actualTimeout,
 		"idle_in_transaction_session_timeout": actualTimeout,
 		"lock_timeout":                        actualTimeout,
-		// "tcp_user_timeout":                 actualTimeout,.
+		// "tcp_user_timeout":                 actualTimeout,
 		"enable_partitionwise_join":      "on",
 		"enable_partitionwise_aggregate": "on",
 	}
@@ -115,7 +115,7 @@ func doAfterConnect(ctx context.Context, timeout string, conn *pgx.Conn) error {
 	for name, setting := range customConnectionParameters {
 		values = append(values, fmt.Sprintf("'%v'", name))
 		if _, qErr := conn.Exec(ctx, fmt.Sprintf(`SET %v = '%v'`, name, setting)); qErr != nil {
-			return qErr //nolint:wrapcheck // Not needed.
+			return qErr
 		}
 	}
 	sql := fmt.Sprintf(`SELECT name, setting

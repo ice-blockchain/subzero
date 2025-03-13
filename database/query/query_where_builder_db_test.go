@@ -233,8 +233,6 @@ func helperFillDatabase(t *testing.T, db *dbClient, size int) {
 }
 
 func TestWhereBuilderByAuthor(t *testing.T) {
-	t.Parallel()
-
 	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	events := helperSelectEvents(t, db,
@@ -249,8 +247,6 @@ func TestWhereBuilderByAuthor(t *testing.T) {
 }
 
 func TestWhereBuilderByID(t *testing.T) {
-	t.Parallel()
-
 	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	events := helperSelectEvents(t, db,
@@ -265,8 +261,6 @@ func TestWhereBuilderByID(t *testing.T) {
 }
 
 func TestWhereBuilderByMany(t *testing.T) {
-	t.Parallel()
-
 	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	ev1 := ev.Random(t)
@@ -289,8 +283,6 @@ func TestWhereBuilderByMany(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
-	t.Parallel()
-
 	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	event := ev.Random(t)
@@ -313,8 +305,6 @@ func TestWhereBuilderByTagsNoValuesSingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsSingle(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -352,8 +342,6 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
-	t.Parallel()
-
 	db, ev := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 	event := ev.Random(t)
@@ -374,8 +362,6 @@ func TestWhereBuilderByTagsOnlySingle(t *testing.T) {
 }
 
 func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -414,8 +400,6 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 }
 
 func TestSelectEventNoTags(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -456,8 +440,6 @@ func TestGenerateDataForFile3M(t *testing.T) {
 }
 
 func TestSelectByMimeType(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -528,8 +510,6 @@ func TestSelectByMimeType(t *testing.T) {
 }
 
 func TestSelectQuotesReferences(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -626,8 +606,6 @@ func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
 }
 
 func TestSelectEventsExpiration(t *testing.T) {
-	t.Parallel()
-
 	db, events := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
@@ -727,8 +705,6 @@ func TestSelectEventsExpiration(t *testing.T) {
 }
 
 func TestSelectWithExtensions(t *testing.T) {
-	t.Parallel()
-
 	db, events := helperEnsureDatabaseWithData(t)
 	defer db.Close()
 
@@ -786,8 +762,6 @@ func TestSelectWithExtensions(t *testing.T) {
 }
 
 func TestSelectRepostWithReference(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -813,8 +787,6 @@ func TestSelectRepostWithReference(t *testing.T) {
 }
 
 func TestSelectFilterKind6AsKind1(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -870,8 +842,6 @@ func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...m
 }
 
 func TestWhereBuilderSyntaxForCounter(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -901,8 +871,6 @@ func TestWhereBuilderSyntaxForCounter(t *testing.T) {
 }
 
 func TestTagMarkerWithRepost(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -926,8 +894,6 @@ func TestTagMarkerWithRepost(t *testing.T) {
 }
 
 func TestFilterTagsNegative(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -980,8 +946,6 @@ func TestFilterTagsNegative(t *testing.T) {
 }
 
 func TestGetReplyTypeFromValues(t *testing.T) {
-	t.Parallel()
-
 	require.Empty(t, getReplyTypeFromValues(nil))
 	require.Empty(t, getReplyTypeFromValues([]model.TagValues{}))
 	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{}}))
@@ -991,8 +955,6 @@ func TestGetReplyTypeFromValues(t *testing.T) {
 }
 
 func TestCommunityEventsLookup(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 

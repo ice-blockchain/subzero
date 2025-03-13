@@ -257,7 +257,6 @@ func TestJobDeletion(t *testing.T) {
 		return nil
 	})
 
-	ctx := context.Background()
 	privkey, pubkey := model.GenerateKeyPair()
 	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
@@ -279,7 +278,7 @@ func TestJobDeletion(t *testing.T) {
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, jobReq, privkey)
-	require.NoError(t, relay.Publish(ctx, jobReq.Event))
+	require.NoError(t, relay.Publish(t.Context(), jobReq.Event))
 
 	time.Sleep(time.Microsecond)
 
@@ -295,7 +294,7 @@ func TestJobDeletion(t *testing.T) {
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, jobStop, privkey)
-	require.NoError(t, relay.Publish(ctx, jobStop.Event))
+	require.NoError(t, relay.Publish(t.Context(), jobStop.Event))
 
 	time.Sleep(time.Second)
 	resp := helperWaitFor(t, jobResults, time.Second)

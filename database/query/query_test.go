@@ -5,18 +5,27 @@ package query
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"slices"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
-	"go.uber.org/goleak"
-
 	"github.com/google/uuid"
+	fixture "github.com/ice-blockchain/subzero/database/query/fixture"
 	postgres "github.com/ice-blockchain/subzero/database/query/internal/postgres"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+	postgresModule "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"go.uber.org/goleak"
+)
+
+var (
+	testContainerPort string
+	container         *postgresModule.PostgresContainer
 )
 
 func helperNewDatabase(t interface{ Helper() }) *dbClient {
@@ -33,9 +42,9 @@ func helperNewDatabase(t interface{ Helper() }) *dbClient {
 				Password: "pass",
 			},
 			Timeout:    "30s",
-			PrimaryURL: "postgresql://root:pass@localhost:5433/subzero",
+			PrimaryURL: fmt.Sprintf("postgresql://root:pass@localhost:%v/subzero?sslmode=disable", testContainerPort),
 			ReplicaURLs: []string{
-				"postgresql://root:pass@localhost:5433/subzero",
+				fmt.Sprintf("postgresql://root:pass@localhost:%v/subzero?sslmode=disable", testContainerPort),
 			},
 			RunDDL:       true,
 			IgnoreGlobal: false,
@@ -46,7 +55,6 @@ func helperNewDatabase(t interface{ Helper() }) *dbClient {
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 
-	// TODO: remove after descent test postgres database usage.
 	if _, err := postgres.Exec(context.TODO(), dbClient.dbPostgres, "DELETE FROM events WHERE 1=1; DELETE FROM event_tags WHERE 1=1; DELETE FROM event_counters WHERE 1=1;"); err != nil {
 		panic(err)
 	}
@@ -55,12 +63,34 @@ func helperNewDatabase(t interface{ Helper() }) *dbClient {
 }
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	container, testContainerPort = fixture.RunPostgresContainer(context.TODO(), "postgres:17.4-alpine", "subzero", "root", "pass", 30*time.Second)
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	var code int
+	go func() {
+		code = m.Run()
+		signalChan <- syscall.SIGTERM
+	}()
+
+	<-signalChan
+
+	if container != nil {
+		if err := container.Terminate(context.TODO()); err != nil {
+			fmt.Printf("failed to terminate container: %s", err)
+		}
+	}
+	if code == 0 {
+		if err := goleak.Find(); err != nil {
+			fmt.Printf("goleak found issues: %v\n", err)
+			code = 1
+		}
+	}
+	os.Exit(code)
 }
 
 func TestReplaceableEvents(t *testing.T) {
-	t.Parallel()
-
 	t.Run("normal, non-replaceable event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
@@ -187,8 +217,6 @@ func TestReplaceableEvents(t *testing.T) {
 }
 
 func TestParametrizedReplaceableEvents(t *testing.T) {
-	t.Parallel()
-
 	t.Run("param replaceable event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
@@ -262,8 +290,6 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 }
 
 func TestEphemeralEvents(t *testing.T) {
-	t.Parallel()
-
 	t.Run("ephemeral event", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
@@ -284,8 +310,6 @@ func TestEphemeralEvents(t *testing.T) {
 }
 
 func TestNIP09DeleteEvents(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -425,8 +449,6 @@ func TestNIP09DeleteEvents(t *testing.T) {
 }
 
 func TestSaveEventWithRepost(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -517,8 +539,6 @@ func TestSaveEventWithRepost(t *testing.T) {
 }
 
 func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
-	t.Parallel()
-
 	pk := model.GeneratePrivateKey()
 	require.NotEmpty(t, pk)
 
@@ -617,8 +637,6 @@ func TestQueryEventWithTagsReorderAndSignature(t *testing.T) {
 }
 
 func TestQueryEventAttestation(t *testing.T) {
-	t.Parallel()
-
 	master, masterPk := model.GenerateKeyPair()
 	active, activePk := model.GenerateKeyPair()
 
@@ -722,8 +740,6 @@ func TestQueryEventAttestation(t *testing.T) {
 }
 
 func TestEventDeleteWithAttestation(t *testing.T) {
-	t.Parallel()
-
 	masterPrivate, masterPublic := model.GenerateKeyPair()
 	user1Private, user1Public := model.GenerateKeyPair()
 	user2Private, user2Public := model.GenerateKeyPair()
@@ -898,8 +914,6 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 }
 
 func TestQueryReply(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -933,8 +947,6 @@ func TestQueryReply(t *testing.T) {
 }
 
 func TestQueryDiscoverContentCreatorsToFollow(t *testing.T) {
-	t.Parallel()
-
 	db, _ := helperEnsureDatabaseWithData(t, 1000)
 	defer db.Close()
 
@@ -957,8 +969,6 @@ func TestQueryDiscoverContentCreatorsToFollow(t *testing.T) {
 }
 
 func TestSelectFilterATagWithAttestation(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -1006,8 +1016,6 @@ func TestSelectFilterATagWithAttestation(t *testing.T) {
 }
 
 func TestDeleteNestedEvents(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -1098,8 +1106,6 @@ func TestDeleteNestedEvents(t *testing.T) {
 }
 
 func TestEditablePostFlow(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -1239,8 +1245,6 @@ func TestEditablePostFlow(t *testing.T) {
 }
 
 func TestAccountDeleteWithSubAccounts(t *testing.T) {
-	t.Parallel()
-
 	const dummyAmount = 100
 	db, _ := helperEnsureDatabaseWithData(t, dummyAmount)
 	defer db.Close()
@@ -1285,8 +1289,6 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 }
 
 func TestSelectSoftDeletedPosts(t *testing.T) {
-	t.Parallel()
-
 	db := helperNewDatabase(t)
 	defer db.Close()
 

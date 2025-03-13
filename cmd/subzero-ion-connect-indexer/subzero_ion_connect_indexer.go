@@ -28,7 +28,7 @@ var (
 		Short: "subzero-ion-connect-indexer",
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
-			query.MustInit(cmd.Context())
+			query.MustInit(cmd.Context(), "")
 			dvm.MustInit(cmd.Context())
 			server.MustListenAndServe(cmd.Context())
 		},

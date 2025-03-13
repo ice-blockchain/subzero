@@ -4,9 +4,12 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
+	dbFixture "github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -44,7 +48,8 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 
-	query.MustInit(serverCtx)
+	container, port := dbFixture.RunPostgresContainer(context.Background(), "postgres:17.4-alpine", "subzero", "root", "pass", 30*time.Second)
+	query.MustInit(serverCtx, port)
 	dvm.MustInit(serverCtx)
 
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
@@ -88,7 +93,21 @@ func TestMain(m *testing.M) {
 		map[string]gin.HandlerFunc{},
 	))
 
-	code := m.Run()
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	var code int
+	go func() {
+		code = m.Run()
+		signalChan <- syscall.SIGTERM
+	}()
+	<-signalChan
+
+	if container != nil {
+		if err := container.Terminate(serverCtx); err != nil {
+			fmt.Printf("failed to terminate container: %s", err)
+		}
+	}
 	serverCancel()
 
 	if code == 0 {

@@ -32,7 +32,7 @@ var pubsubServer *fixture.MockService
 func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 
-	query.MustInit(serverCtx)
+	query.MustInit(serverCtx, "")
 	initServer(serverCtx, 9996)
 	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	code := m.Run()
