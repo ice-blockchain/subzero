@@ -4,10 +4,8 @@ package ws
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
-	"encoding/hex"
 	"log"
 	"math"
 	"math/rand/v2"
@@ -44,6 +42,9 @@ var (
 	errAttestationRecordExpired     = errors.New("attestation record is expired")
 	errAttestationRecordRevoked     = errors.New("attestation record is revoked")
 	errAttestationRecordIsNotActive = errors.New("attestation record is not active yet")
+
+	errEventInvalidID   = errors.New("event id is invalid")
+	errEventInvalidSign = errors.New("event signature is invalid")
 )
 
 func generateChallenge(hints ...string) string {
@@ -379,15 +380,15 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 }
 
 func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, cfg *Config) (err error) {
-	hash := sha256.Sum256(evt.Serialize())
-	if id := hex.EncodeToString(hash[:]); id != evt.ID {
-		return errors.New("event id is invalid")
+	if !evt.CheckID() {
+		return errEventInvalidID
 	}
+
 	var ok bool
 	if ok, err = evt.CheckSignature(); err != nil {
-		return errors.Wrap(err, "invalid event signature")
+		return errors.Wrap(err, "signature check failed")
 	} else if !ok {
-		return errors.New("invalid event signature")
+		return errEventInvalidSign
 	}
 	if vErr := validation.Validate(ctx, evt); vErr != nil {
 		return errors.Wrap(vErr, "wrong event parameters")
