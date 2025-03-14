@@ -434,7 +434,7 @@ func (db *dbClient) MustSignEvent(event *model.Event) {
 		event.Tags = append(event.Tags, model.Tag{"p", event.PubKey})
 	}
 	if event.GetMasterPublicKey() != "" && event.GetMasterPublicKey() != event.PubKey {
-		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, event.GetMasterPublicKey()})
+		event.Tags.AppendUnique(model.Tag{model.CustomIONTagOnBehalfOf, event.GetMasterPublicKey()})
 	} else if event.GetTag(model.CustomIONTagOnBehalfOf) == nil {
 		pubkey, _ := model.GetPublicKey(db.relayPrivateKey)
 		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pubkey})
