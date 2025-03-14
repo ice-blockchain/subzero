@@ -59,6 +59,7 @@ const (
 	CustomIONTagPoll         = "poll"
 	CustomIONTagAddressableQ = "Q"
 	CustomIONTagCommunity    = "h"
+	CustomIONTagRichText     = "rich_text"
 )
 
 const (

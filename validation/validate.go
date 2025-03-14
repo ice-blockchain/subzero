@@ -111,8 +111,8 @@ var (
 
 	KindSupportedTags = map[model.Kind]kindValidator{
 		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll),
+		nostr.KindTextNote:              tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
+		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
 		nostr.KindFollowList:            tagsTable("p"),
 		nostr.KindDeletion:              newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
 		nostr.KindRepost:                newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
@@ -147,8 +147,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
@@ -184,6 +184,7 @@ var (
 				model.CustomIONTagPoll,
 				model.CustomIONTagCommunity,
 				model.CustomIONTagAddressableQ,
+				model.CustomIONTagRichText,
 			).
 			Required("published_at").
 			Build(),
