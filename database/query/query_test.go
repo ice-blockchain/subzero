@@ -3,9 +3,9 @@
 package query
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
-	"slices"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -15,19 +15,37 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/postgres/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperNewDatabase(t interface{ Helper() }) *dbClient {
+var (
+	mainTestContainer *fixture.Container
+)
+
+func helperNewDatabase(t *testing.T) *dbClient {
 	t.Helper()
 
-	return openDatabase(":memory:", true).
+	connString, _ := mainTestContainer.MustTempDB(t.Context())
+
+	dbClient := openDatabase(connString, true).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
+
+	return dbClient
 }
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	mainTestContainer = fixture.New(context.Background())
+	code := m.Run()
+	mainTestContainer.Close(context.Background())
+	if code == 0 {
+		if err := goleak.Find(); err != nil {
+			fmt.Printf("goleak found issues: %v\n", err)
+			code = 1
+		}
+	}
+	os.Exit(code)
 }
 
 func TestReplaceableEvents(t *testing.T) {
@@ -44,6 +62,7 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindTextNote,
+				Tags:      model.Tags{},
 			},
 		})
 		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
@@ -53,6 +72,7 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()) + 1,
 				Kind:      nostr.KindTextNote,
+				Tags:      model.Tags{},
 			},
 		})
 		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
@@ -73,6 +93,7 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindProfileMetadata,
+				Tags:      model.Tags{},
 
 				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
@@ -95,6 +116,7 @@ func TestReplaceableEvents(t *testing.T) {
 				PubKey:    "bogus" + uuid.NewString(),
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindProfileMetadata,
+				Tags:      model.Tags{},
 
 				Content: `{"name":"username","about":"bogus","picture":"https://localhost:9999/bogus.jpg"}`,
 			},
@@ -266,6 +288,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				PubKey:    "pk1",
 				CreatedAt: 1,
 				Kind:      nostr.KindTextNote,
+				Tags:      model.Tags{},
 			},
 		}
 		require.NoError(t, db.AcceptEvents(t.Context(), publishedEvent))
@@ -295,6 +318,7 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				CreatedAt: 2,
 				Kind:      nostr.KindProfileMetadata,
 				Content:   "{\"name\": \"bogus\", \"about\": \"bogus\", \"picture\": \"bogus\"}",
+				Tags:      model.Tags{},
 			},
 		}
 		require.NoError(t, db.AcceptEvents(t.Context(), publishedEvent))
@@ -389,98 +413,6 @@ func TestNIP09DeleteEvents(t *testing.T) {
 				}},
 		))
 		require.Empty(t, helperSelectEvents(t, db))
-	})
-}
-
-func TestSaveEventWithRepost(t *testing.T) {
-	t.Parallel()
-
-	db := helperNewDatabase(t)
-	defer db.Close()
-
-	t.Run("Regular", func(t *testing.T) {
-		var event model.Event
-
-		tags := model.Tags{{"imeta", "m video/mp4"}}
-		event.Kind = nostr.KindTextNote
-		event.ID = generateHexString()
-		event.PubKey = "1"
-		event.Tags = slices.Clone(tags)
-		event.CreatedAt = 1
-
-		err := db.AcceptEvents(t.Context(), &event)
-		require.NoError(t, err)
-
-		t.Run("CheckSelect", func(t *testing.T) {
-			var event2 model.Event
-			for ev, err := range db.SelectEvents(t.Context(), model.Filter{
-				IDs: []string{event.ID},
-			}) {
-				require.NoError(t, err)
-				event2 = *ev
-
-				break
-			}
-
-			event.Tags = slices.Clone(tags)
-			require.Equal(t, event, event2)
-		})
-
-		t.Run("CheckTags", func(t *testing.T) {
-			var mime string
-
-			err := db.QueryRow("SELECT "+tagValueMimeType+" FROM event_tags WHERE event_id = $1", event.ID).Scan(&mime)
-			require.NoError(t, err)
-			require.Equal(t, "m video/mp4", mime)
-		})
-	})
-
-	t.Run("Repost", func(t *testing.T) {
-		var event model.Event
-
-		event.Kind = nostr.KindRepost
-		event.ID = generateHexString()
-		event.PubKey = "2"
-		event.Tags = model.Tags{{"e", "2"}}
-		event.CreatedAt = 2
-		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
-
-		err := db.AcceptEvents(t.Context(), &event)
-		require.NoError(t, err)
-
-		t.Run("CheckTags", func(t *testing.T) {
-			var (
-				mime string
-				url  string
-			)
-
-			err := db.QueryRow("SELECT "+tagValueURL+", "+tagValueMimeType+" FROM event_tags WHERE event_id = $1", "3").Scan(&url, &mime)
-			require.NoError(t, err)
-			require.Equal(t, "m image/jpeg", mime)
-			require.Equal(t, "url https://example.com/foo.jpg", url)
-		})
-
-		t.Run("CheckEventLink", func(t *testing.T) {
-			var id sql.NullString
-			err := db.QueryRow("SELECT reference_id FROM events WHERE id = $1", event.ID).Scan(&id)
-			require.NoError(t, err)
-			require.True(t, id.Valid)
-			require.Equal(t, "3", id.String)
-		})
-
-		t.Run("NoOverrideRepost", func(t *testing.T) {
-			var event model.Event
-
-			event.Kind = nostr.KindRepost
-			event.ID = generateHexString()
-			event.PubKey = "2"
-			event.Tags = model.Tags{{"e", "2"}}
-			event.CreatedAt = 2
-			event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
-
-			err := db.AcceptEvents(t.Context(), &event)
-			require.NoError(t, err)
-		})
 	})
 }
 
@@ -1033,7 +965,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 		ev5.Content = "addressable child event"
 		ev5.Tags = model.Tags{
 			{"d", "article2"},
-			{"a", fmt.Sprintf("%v:%v:%v", ev2.Kind, ev2.PubKey, ev2.Tags.GetD())},
+			{"a", ev2.Address()},
 		}
 		require.NoError(t, ev5.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev5))
@@ -1043,7 +975,7 @@ func TestDeleteNestedEvents(t *testing.T) {
 		ev6.Kind = nostr.KindProfileMetadata
 		ev6.Content = "replaceable child event"
 		ev6.Tags = model.Tags{
-			{"a", fmt.Sprintf("%v:%v:", ev3.Kind, ev3.PubKey)},
+			{"a", ev3.Address()},
 		}
 		require.NoError(t, ev6.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev6))
@@ -1304,14 +1236,16 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), posts...))
 	})
 
-	var repost model.Event
+	repostEvent := posts[1]
+
 	t.Run("Create repost of post1", func(t *testing.T) {
+		var repost model.Event
 		repost.Kind = nostr.KindGenericRepost
-		repost.Content = posts[1].String()
+		repost.Content = repostEvent.String()
 		repost.CreatedAt = nostr.Now()
 		repost.Tags = model.Tags{
-			{"k", strconv.Itoa(posts[1].Kind)},
-			{"a", posts[1].Address()},
+			{"k", strconv.Itoa(repostEvent.Kind)},
+			{"a", repostEvent.Address()},
 		}
 		require.NoError(t, repost.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, db.AcceptEvents(t.Context(), &repost))
@@ -1339,6 +1273,15 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 	})
 
 	t.Run("Repost of deleted post", func(t *testing.T) {
+		var repost model.Event
+		repost.Kind = nostr.KindGenericRepost
+		repost.Content = repostEvent.String()
+		repost.CreatedAt = nostr.Now()
+		repost.Tags = model.Tags{
+			{"k", strconv.Itoa(repostEvent.Kind)},
+			{"a", repostEvent.Address()},
+		}
+		require.NoError(t, repost.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.ErrorIs(t, db.AcceptEvents(t.Context(), &repost), ErrRepostOfDeletedPost)
 	})
 

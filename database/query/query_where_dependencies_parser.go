@@ -12,13 +12,13 @@ import (
 type (
 	token = tokenizer.TokenKey
 
-	filterDependenciesStart struct {
+	filterDependencyStart struct {
 		Kind          int
 		ProfileBadges bool
 		Tag           string
 	}
 
-	filterDependenciesReduce struct {
+	filterDependencyReduce struct {
 		Kinds   []int
 		Author  string
 		Group   bool
@@ -26,9 +26,9 @@ type (
 		Context string
 	}
 
-	filterDependencies struct {
-		Start      filterDependenciesStart
-		Reduce     filterDependenciesReduce
+	filterDependency struct {
+		Start      filterDependencyStart
+		Reduce     filterDependencyReduce
 		Expiration *bool
 	}
 
@@ -264,8 +264,8 @@ func init() {
 	}
 }
 
-func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependencies, error) {
-	var filter filterDependencies
+func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependency, error) {
+	var filter filterDependency
 
 	if s == nil {
 		return nil, errors.Wrap(errDepParserUnexpectedToken, "sequence not found")
@@ -337,7 +337,7 @@ func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependencies, e
 	return &filter, nil
 }
 
-func parseDepRequest(in string) (*filterDependencies, error) {
+func parseDepRequest(in string) (*filterDependency, error) {
 	stream := dependenciesParser.ParseString(in)
 	defer stream.Close()
 

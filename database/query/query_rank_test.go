@@ -16,7 +16,7 @@ import (
 func helperGetEventPointsAndScore(t *testing.T, db *dbClient, eventID string) (points int, score float64) {
 	t.Helper()
 
-	err := db.QueryRow("SELECT points, score FROM ranked_events WHERE event_rid = (select rid from events where id = $1)", eventID).Scan(&points, &score)
+	err := db.QueryRow("SELECT points, score FROM ranked_events WHERE event_id = $1", eventID).Scan(&points, &score)
 	require.NoError(t, err)
 
 	t.Logf("event %s: points=%d, score=%f", eventID, points, score)

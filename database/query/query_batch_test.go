@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -35,8 +34,8 @@ func TestQueryBatchProcessor(t *testing.T) {
 			require.NoError(t, req.Save(&ev))
 		}
 
-		require.NoError(t, db.executeBatch(context.Background(), &req))
-		count, err := db.CountEvents(context.Background())
+		require.NoError(t, db.executeBatch(t.Context(), &req))
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, num, count)
 	})
@@ -52,9 +51,9 @@ func TestQueryBatchProcessor(t *testing.T) {
 		require.NoError(t, req.Remove(&ev))
 
 		req.InsertOrReplace = nil
-		require.NoError(t, db.executeBatch(context.Background(), &req))
+		require.NoError(t, db.executeBatch(t.Context(), &req))
 
-		count, err := db.CountEvents(context.Background())
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
@@ -83,9 +82,9 @@ func TestQueryBatchProcessor(t *testing.T) {
 		require.NoError(t, del.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, req.Remove(&del))
 
-		require.NoError(t, db.executeBatch(context.Background(), &req))
+		require.NoError(t, db.executeBatch(t.Context(), &req))
 
-		count, err := db.CountEvents(context.Background())
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, num-3, count)
 	})

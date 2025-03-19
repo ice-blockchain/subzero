@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 func helperSelectEvents(t *testing.T, db *dbClient, filters ...model.Filter) (events []*model.Event) {
 	t.Helper()
 
-	for ev, err := range db.SelectEvents(context.Background(), filters...) {
+	for ev, err := range db.SelectEvents(t.Context(), filters...) {
 		require.NoError(t, err)
 		require.NotNil(t, ev)
 		events = append(events, ev)
@@ -29,7 +28,7 @@ func helperSelectEventsN(t *testing.T, db *dbClient, limit int) (events map[stri
 	t.Helper()
 
 	events = make(map[string]*model.Event, limit)
-	for ev, err := range db.SelectEvents(context.Background(), model.Filter{Limit: limit}) {
+	for ev, err := range db.SelectEvents(t.Context(), model.Filter{Limit: limit}) {
 		require.NoError(t, err)
 		events[ev.ID] = ev
 	}
@@ -44,7 +43,7 @@ func TestIteratorSelectEvents(t *testing.T) {
 	helperFillDatabase(t, db, 300)
 
 	t.Run("Limit", func(t *testing.T) {
-		for _, limit := range []int{1, 10, 15, 100, 125, selectDefaultBatchLimit + 1, 200, 222, 300} {
+		for _, limit := range []int{1, 10, 15, 100, 125, 200, 222, 300} {
 			t.Run(strconv.Itoa(limit), func(t *testing.T) {
 				events := helperSelectEventsN(t, db, limit)
 				t.Logf("fetched %d event(s)", len(events))
@@ -53,7 +52,7 @@ func TestIteratorSelectEvents(t *testing.T) {
 		}
 	})
 	t.Run("All", func(t *testing.T) {
-		events := helperSelectEventsN(t, db, 0)
+		events := helperSelectEventsN(t, db, -1)
 		t.Logf("fetched %d event(s)", len(events))
 		require.Len(t, events, 300)
 	})
@@ -78,7 +77,7 @@ func TestIteratorScanTagsWithGaps(t *testing.T) {
 		ev.Content = "content"
 		ev.Tags = tags
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.Background(), &ev))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 	})
 	t.Run("Select", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{Kinds: []int{nostr.KindTextNote}})

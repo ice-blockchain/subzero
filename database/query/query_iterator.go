@@ -16,9 +16,8 @@ type EventIterator iter.Seq2[*model.Event, error]
 
 type (
 	eventIterator struct {
-		Fetch   func(pivot int64) (*sqlx.Rows, error)
-		Map     func(*databaseEvent) *databaseEvent
-		OneShot bool
+		Fetch func() (*sqlx.Rows, error)
+		Map   func(*databaseEvent) *databaseEvent
 	}
 )
 
@@ -48,23 +47,19 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 	return &ev, nil
 }
 
-func (it *eventIterator) scanBatch(ctx context.Context, fn func(*model.Event) error, pivot int64) (int64, error) {
-	rows, err := it.Fetch(pivot)
+func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) error {
+	rows, err := it.Fetch()
 	if err != nil {
-		return -1, errors.Wrap(err, "failed to get events")
+		return errors.Wrap(err, "failed to get events")
 	} else if rows == nil {
-		return pivot, nil
+		return nil
 	}
 	defer rows.Close()
 
 	for rows.Next() && ctx.Err() == nil {
 		event, err := it.scanEvent(rows)
 		if err != nil {
-			return -1, errors.Wrap(err, "failed to scan event")
-		}
-
-		if pivot == 0 || event.SystemCreatedAt < pivot {
-			pivot = event.SystemCreatedAt
+			return errors.Wrap(err, "failed to scan event")
 		}
 
 		if it.Map != nil {
@@ -73,27 +68,12 @@ func (it *eventIterator) scanBatch(ctx context.Context, fn func(*model.Event) er
 
 		err = fn(&event.Event)
 		if err != nil {
-			return -1, errors.Wrap(err, "failed to process event")
+			return errors.Wrap(err, "failed to process event")
 		}
 	}
 
-	return pivot, nil
-}
-
-func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) error {
-	var pivot int64
-
-	for ctx.Err() == nil {
-		newPivot, err := it.scanBatch(ctx, fn, pivot)
-		if err != nil {
-			return err
-		}
-
-		if pivot == newPivot || it.OneShot {
-			return nil
-		}
-
-		pivot = newPivot
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "failed to iterate events")
 	}
 
 	return ctx.Err()
@@ -101,8 +81,7 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 
 func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
 	it := &eventIterator{
-		OneShot: true,
-		Fetch: func(int64) (*sqlx.Rows, error) {
+		Fetch: func() (*sqlx.Rows, error) {
 			stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)

@@ -32,6 +32,7 @@ func helperBenchEnsureDatabase(t interface {
 	Helper()
 	Skip(...any)
 	Logf(string, ...any)
+	Context() context.Context
 	require.TestingT
 }) *dbClient {
 	t.Helper()
@@ -67,10 +68,6 @@ func helperBenchRandomEvent(t interface{ Helper() }) *model.Event {
 
 func helperBenchSelectBy(t interface{ Helper() }, db *dbClient, meter *tachymeter.Tachymeter, filters []model.Filter) {
 	t.Helper()
-
-	if len(filters) > 0 {
-		filters[0].Limit = selectDefaultBatchLimit
-	}
 
 	start := time.Now()
 	for ev, err := range db.SelectEvents(context.TODO(), filters...) {

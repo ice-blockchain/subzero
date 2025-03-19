@@ -36,48 +36,48 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Empty", func(t *testing.T) {
-		q, params, err := newWhereBuilder().Build()
+		q, params, err := newQueryBuilder().Build()
 		require.NoError(t, err)
-		require.Empty(t, params)
+		require.Len(t, params, 1)
 		require.Contains(t, q, whereBuilderDefaultWhere)
 	})
 	t.Run("WithID", func(t *testing.T) {
-		q, params, err := newWhereBuilder().Build(model.Filter{
+		q, params, err := newQueryBuilder().Build(model.Filter{
 			IDs: []string{"123"},
-		})
-		require.NoError(t, err)
-		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 1)
-		helperEnsureParams(t, q, params)
-	})
-	t.Run("WithMoreIDs", func(t *testing.T) {
-		q, params, err := newWhereBuilder().Build(model.Filter{
-			IDs: []string{generateHexString(), "789"},
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 2)
 		helperEnsureParams(t, q, params)
 	})
-	t.Run("WithKind", func(t *testing.T) {
-		q, params, err := newWhereBuilder().Build(model.Filter{
-			IDs:   []string{generateHexString()},
-			Kinds: []int{1, 2},
+	t.Run("WithMoreIDs", func(t *testing.T) {
+		q, params, err := newQueryBuilder().Build(model.Filter{
+			IDs: []string{generateHexString(), "789"},
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.Len(t, params, 3)
 		helperEnsureParams(t, q, params)
 	})
+	t.Run("WithKind", func(t *testing.T) {
+		q, params, err := newQueryBuilder().Build(model.Filter{
+			IDs:   []string{generateHexString()},
+			Kinds: []int{1, 2},
+		})
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", q, params)
+		require.Len(t, params, 4)
+		helperEnsureParams(t, q, params)
+	})
 	t.Run("WithAuthors", func(t *testing.T) {
-		q, params, err := newWhereBuilder().Build(model.Filter{
+		q, params, err := newQueryBuilder().Build(model.Filter{
 			IDs:     []string{generateHexString()},
 			Kinds:   []int{1},
 			Authors: []string{"author1", "author2"},
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 4)
+		require.Len(t, params, 5)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("WithTimeRange", func(t *testing.T) {
@@ -88,27 +88,27 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 			Until: &ts2,
 		}
 		helperBenchEnsureValidRange(t, &filter)
-		q, params, err := newWhereBuilder().Build(filter)
+		q, params, err := newQueryBuilder().Build(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 2)
+		require.Len(t, params, 3)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("WithTimestamp", func(t *testing.T) {
 		ts1 := model.Timestamp(generateCreatedAt())
-		q, params, err := newWhereBuilder().Build(model.Filter{
+		q, params, err := newQueryBuilder().Build(model.Filter{
 			Since: &ts1,
 			Until: &ts1,
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 1)
+		require.Len(t, params, 2)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("WithInvalidTimeRange", func(t *testing.T) {
 		ts1 := model.Timestamp(1)
 		ts2 := model.Timestamp(2)
-		q, params, err := newWhereBuilder().Build(model.Filter{
+		q, params, err := newQueryBuilder().Build(model.Filter{
 			Since: &ts2,
 			Until: &ts1,
 		})
@@ -122,14 +122,14 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 	t.Parallel()
 
 	t.Run("OneTag", func(t *testing.T) {
-		q, params, err := newWhereBuilder().Build(model.Filter{
+		q, params, err := newQueryBuilder().Build(model.Filter{
 			IDs: []string{"123"},
 			Tags: model.TagMap{}.
 				SetLiterals("e", "value1", "value2", "value3", "value4"),
 		})
 		t.Logf("stmt: %s (%+v)", q, params)
 		require.NoError(t, err)
-		require.Len(t, params, 6)
+		require.Len(t, params, 7)
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("TwoTagsShink", func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 			valuesMax = append(valuesMax, generateRandomString(4))
 		}
 
-		q, params, err := newWhereBuilder().Build(model.Filter{
+		q, params, err := newQueryBuilder().Build(model.Filter{
 			IDs: []string{"123"},
 			Tags: model.TagMap{}.
 				SetLiterals("e", "value1", "value2", "value3", generateRandomString(4)).
@@ -147,7 +147,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 28)
+		require.Len(t, params, 29)
 		helperEnsureParams(t, q, params)
 	})
 }
@@ -175,11 +175,11 @@ func TestWhereBuilderMulti(t *testing.T) {
 		},
 	}
 
-	builder := newWhereBuilder()
+	builder := newQueryBuilder()
 	q, params, err := builder.Build(filters...)
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
-	require.Len(t, params, 16)
+	require.Len(t, params, 19)
 	helperEnsureParams(t, q, params)
 }
 
@@ -197,11 +197,11 @@ func TestWhereBuilderMultiTagsOnly(t *testing.T) {
 		},
 	}
 
-	builder := newWhereBuilder()
+	builder := newQueryBuilder()
 	q, params, err := builder.Build(filters...)
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
-	require.Len(t, params, 10)
+	require.Len(t, params, 12)
 	helperEnsureParams(t, q, params)
 }
 
@@ -213,26 +213,26 @@ func TestWhereBuilderSameElements(t *testing.T) {
 		Authors: []string{"111", "222", "222"},
 	}
 
-	builder := newWhereBuilder()
+	builder := newQueryBuilder()
 	q, params, err := builder.Build(filter)
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
 	t.Logf("params: %+v", params)
-	require.Len(t, params, 4)
+	require.Len(t, params, 5)
 	helperEnsureParams(t, q, params)
 }
 
 func TestWhereBuilderMimeType(t *testing.T) {
 	t.Parallel()
 
-	builder := newWhereBuilder()
+	builder := newQueryBuilder()
 	q, params, err := builder.Build(model.Filter{
 		Search: "images:true videos:false",
 	})
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
 	t.Logf("params: %+v", params)
-	require.Len(t, params, 0)
+	require.Len(t, params, 1)
 }
 
 func TestParseNostrFilter(t *testing.T) {
@@ -309,11 +309,11 @@ func TestParseNostrFilter(t *testing.T) {
 		require.NotNil(t, f.Images)
 		require.True(t, *f.Images)
 		require.Len(t, f.Dependencies, 1)
-		require.Equal(t, &filterDependencies{
-			Start: filterDependenciesStart{
+		require.Equal(t, &filterDependency{
+			Start: filterDependencyStart{
 				Kind: 1,
 			},
-			Reduce: filterDependenciesReduce{
+			Reduce: filterDependencyReduce{
 				Kinds: []int{2},
 			},
 		}, f.Dependencies[0])
@@ -328,11 +328,11 @@ func TestParseNostrFilter(t *testing.T) {
 		require.NotNil(t, f.Images)
 		require.False(t, *f.Images)
 		require.Len(t, f.Dependencies, 1)
-		require.Equal(t, &filterDependencies{
-			Start: filterDependenciesStart{
+		require.Equal(t, &filterDependency{
+			Start: filterDependencyStart{
 				Kind: 1,
 			},
-			Reduce: filterDependenciesReduce{
+			Reduce: filterDependencyReduce{
 				Kinds: []int{3},
 			},
 		}, f.Dependencies[0])
@@ -348,11 +348,11 @@ func TestParseNostrFilter(t *testing.T) {
 		require.Equal(t, "some text", f.SearchText)
 		require.False(t, *f.Images)
 		require.Len(t, f.Dependencies, 1)
-		require.Equal(t, &filterDependencies{
-			Start: filterDependenciesStart{
+		require.Equal(t, &filterDependency{
+			Start: filterDependencyStart{
 				Kind: 1,
 			},
-			Reduce: filterDependenciesReduce{
+			Reduce: filterDependencyReduce{
 				Kinds: []int{3},
 			},
 		}, f.Dependencies[0])
@@ -402,7 +402,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 			Author: "author1",
 			IDs:    []string{"123", "456"},
 		}
-		stmt, param, err := newWhereBuilder().BuildForDelete(filter)
+		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
 		require.Len(t, param, 3)
@@ -415,7 +415,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 				{Kind: 13, Pubkey: "author2", Dtag: "value1"},
 			},
 		}
-		stmt, param, err := newWhereBuilder().BuildForDelete(filter)
+		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
 		require.Len(t, param, 6)
@@ -426,7 +426,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 			{Author: "author2", IDs: []string{"789"}},
 		}
 
-		stmt, param, err := newWhereBuilder().BuildForDelete(filters...)
+		stmt, param, err := newQueryBuilder().BuildForDelete(filters...)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
 		require.Len(t, param, 5)
@@ -436,13 +436,13 @@ func TestApplyDeleteFilter(t *testing.T) {
 			Author: "author1",
 		}
 
-		stmt, param, err := newWhereBuilder().BuildForDelete(filter)
+		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
 		require.Len(t, param, 1)
 	})
 	t.Run("Empty", func(t *testing.T) {
-		_, _, err := newWhereBuilder().BuildForDelete()
+		_, _, err := newQueryBuilder().BuildForDelete()
 		require.ErrorIs(t, err, ErrEmptyFilter)
 	})
 }

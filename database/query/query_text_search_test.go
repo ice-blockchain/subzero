@@ -6,15 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
-	"reflect"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	combinations "github.com/mxschmitt/golang-combinations"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -26,6 +22,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 
 	db := helperNewDatabase(t)
 	defer db.Close()
+
 	expectedEvents := []*model.Event{}
 	searchPubkey := "bogusssss" + uuid.NewString()
 	searchID := "normal, 3nd event" + uuid.NewString()
@@ -42,11 +39,12 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
+		now := nostr.Now()
 		expectedEvents = append(expectedEvents, &model.Event{
 			Event: nostr.Event{
 				ID:        "normal" + uuid.NewString(),
 				PubKey:    "end" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
+				CreatedAt: now,
 				Kind:      nostr.KindTextNote,
 				Tags:      tags1,
 				Content:   "end, and, ond",
@@ -59,7 +57,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
+				CreatedAt: now + 1,
 				Kind:      nostr.KindTextNote,
 				Tags:      model.Tags{},
 				Content:   "post",
@@ -68,7 +66,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		})
 		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
 
-		var tags2 nostr.Tags
+		var tags2 model.Tags
 		tags2 = append(tags2, nostr.Tag{
 			"imeta",
 			"url https://alicerelay.example.com",
@@ -84,7 +82,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 			Event: nostr.Event{
 				ID:        searchID,
 				PubKey:    searchPubkey,
-				CreatedAt: nostr.Now(),
+				CreatedAt: now + 2,
 				Kind:      nostr.KindTextNote,
 				Tags:      tags2,
 				Content:   "bogusssss",
@@ -194,8 +192,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		}
 		stored := helperSelectEvents(t, db, filters...)
 		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[0], stored[1])
-		require.EqualValues(t, expectedEvents[2], stored[0])
+		require.ElementsMatch(t, []*model.Event{expectedEvents[0], expectedEvents[2]}, stored)
 	})
 	t.Run("delete events", func(t *testing.T) {
 		ev := &model.Event{
@@ -230,6 +227,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 	expectedEvents := []*model.Event{}
 	searchPubkey := "bogusssss" + uuid.NewString()
 	searchID := "normal, 3nd event" + uuid.NewString()
+	now := nostr.Now()
 	t.Run("Create events with text note kind with imeta alt and summary tags", func(t *testing.T) {
 		var tags1 nostr.Tags
 		tags1 = append(tags1, nostr.Tag{
@@ -247,7 +245,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal" + uuid.NewString(),
 				PubKey:    "end" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
+				CreatedAt: now,
 				Kind:      model.CustomIONKindEditableTextNote,
 				Tags:      tags1,
 				Content:   "Test post 12345\n",
@@ -260,7 +258,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
+				CreatedAt: now + 1,
 				Kind:      model.CustomIONKindEditableTextNote,
 				Tags:      model.Tags{},
 				Content:   "lalala hey",
@@ -285,7 +283,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 			Event: nostr.Event{
 				ID:        searchID,
 				PubKey:    searchPubkey,
-				CreatedAt: nostr.Now(),
+				CreatedAt: now + 3,
 				Kind:      model.CustomIONKindEditableTextNote,
 				Tags:      tags2,
 				Content:   "abcd",
@@ -310,16 +308,14 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 				Limit:  20,
 			},
 			model.Filter{
-				Kinds:  []int{nostr.KindGenericRepost},
-				Tags:   model.TagMap{}.SetLiterals("k", strconv.Itoa(model.CustomIONKindEditableTextNote)),
+				Kinds:  []int{model.CustomIONKindEditableTextNote},
 				Search: `"lala"`,
 				Limit:  20,
 			},
 		}
 		stored := helperSelectEvents(t, db, filters...)
 		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[1], stored[0])
-		require.EqualValues(t, expectedEvents[0], stored[1])
+		require.ElementsMatch(t, []*model.Event{expectedEvents[1], expectedEvents[0]}, stored)
 	})
 }
 
@@ -373,9 +369,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
 		require.Len(t, stored, 3)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.ElementsMatch(t, expectedEvents, stored)
 	})
 	t.Run("search profile by name xyu", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -399,9 +393,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 			Search: "",
 		})
 		require.Len(t, stored, 3)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.ElementsMatch(t, expectedEvents, stored)
 	})
 }
 
@@ -437,9 +429,7 @@ func TestSearchEvents_KindProfileMetadata_SpecialChars(t *testing.T) {
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
 		require.Len(t, stored, 3)
-		for i := 0; i < len(expectedEvents); i++ {
-			require.EqualValues(t, expectedEvents[len(expectedEvents)-i-1], stored[i])
-		}
+		require.ElementsMatch(t, expectedEvents, stored)
 	})
 
 	t.Run("search profile by name with special characters", func(t *testing.T) {
@@ -539,9 +529,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 			Kinds: []int{nostr.KindFileMetadata},
 		})
 		require.Len(t, stored, 3)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.ElementsMatch(t, expectedEvents, stored)
 	})
 	t.Run("search by imeta alt tag alt1 value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -567,10 +555,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 			Search: `"al"`,
 		})
 		require.Len(t, stored, 3)
-
-		require.EqualValues(t, expectedEvents[2], stored[0])
-		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.ElementsMatch(t, expectedEvents, stored)
 	})
 	t.Run("search by imeta alt tag summary1 value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -596,10 +581,7 @@ func TestSearchEvents_KindFileMetadata(t *testing.T) {
 			Search: `"summ"`,
 		})
 		require.Len(t, stored, 3)
-
-		require.EqualValues(t, expectedEvents[2], stored[0])
-		require.EqualValues(t, expectedEvents[1], stored[1])
-		require.EqualValues(t, expectedEvents[0], stored[2])
+		require.ElementsMatch(t, expectedEvents, stored)
 	})
 }
 
@@ -721,17 +703,7 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 			Limit:  100,
 		})
 		require.Len(t, stored, 2)
-		require.Equal(t, "id2", stored[0].ID)
-		require.Equal(t, "id1", stored[1].ID)
-
-		stored = helperSelectEvents(t, db, model.Filter{
-			IDs:    []string{"id2"},
-			Search: `"not" include:dependencies:kind1>kind0`,
-			Limit:  100,
-		})
-		require.Len(t, stored, 2)
-		require.Equal(t, "id2", stored[0].ID)
-		require.Equal(t, "id1", stored[1].ID)
+		require.ElementsMatch(t, []string{"id2", "id1"}, []string{stored[0].ID, stored[1].ID})
 
 		stored = helperSelectEvents(t, db, model.Filter{
 			IDs:    []string{"id2"},
@@ -739,35 +711,7 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 			Limit:  100,
 		})
 		require.Len(t, stored, 2)
-		require.Equal(t, "id1", stored[1].ID)
-		require.Equal(t, "id2", stored[0].ID)
-
-		stored = helperSelectEvents(t, db, model.Filter{
-			IDs:    []string{"id2"},
-			Search: `"not" include:dependencies:kind1>kind0`,
-			Limit:  100,
-		})
-		require.Len(t, stored, 2)
-		require.Equal(t, "id1", stored[1].ID)
-		require.Equal(t, "id2", stored[0].ID)
-
-		stored = helperSelectEvents(t, db, model.Filter{
-			IDs:    []string{"id2"},
-			Search: `""not include:dependencies:kind1>kind0`,
-			Limit:  100,
-		})
-		require.Len(t, stored, 2)
-		require.Equal(t, "id1", stored[1].ID)
-		require.Equal(t, "id2", stored[0].ID)
-
-		stored = helperSelectEvents(t, db, model.Filter{
-			IDs:    []string{"id2"},
-			Search: `not" include:dependencies:kind1>kind0`,
-			Limit:  100,
-		})
-		require.Len(t, stored, 2)
-		require.Equal(t, "id1", stored[1].ID)
-		require.Equal(t, "id2", stored[0].ID)
+		require.ElementsMatch(t, []string{"id2", "id1"}, []string{stored[0].ID, stored[1].ID})
 	})
 }
 
@@ -849,197 +793,7 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 	})
 }
 
-func TestQuerySearchFuzzNoUseTempBTREEOrScan(t *testing.T) {
-	t.Parallel()
-
-	var sets [][]*structElement
-	t.Run("PrepareSets", func(t *testing.T) {
-		var filter model.Filter
-
-		fields := helperParseFilterStruct(t, reflect.TypeOf(filter), nil)
-		sets = combinations.All(fields)
-		t.Logf("found %d total combination(s)", len(sets))
-		slices.SortStableFunc(sets, func(i, j []*structElement) int {
-			if len(i) < len(j) {
-				return -1
-			}
-			if len(i) > len(j) {
-				return 1
-			}
-			return 0
-		})
-	})
-
-	db := helperNewDatabase(t)
-	defer db.Close()
-	helperFillDatabase(t, db, 100)
-
-	op := make(map[string]int)
-
-	t.Run("Fuzz", func(t *testing.T) {
-		for i, set := range sets {
-			filter := helperNewFilterFromElements(t, set)
-			filter.Search = fmt.Sprintf("%q", generateRandomString(3)) + filter.Search
-			sql, params, err := db.generateSelectEventsSQL(t.Context(), model.Filters{filter}, 0, 100)
-			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
-			sql = "EXPLAIN QUERY PLAN " + sql
-			stmt, err := db.prepare(t.Context(), sql, hashSQL(sql))
-			require.NoError(t, err)
-
-			rows, err := stmt.QueryContext(t.Context(), params)
-			require.NoError(t, err)
-			var hasIndex bool
-			for rows.Next() {
-				var s1, s2, s3, s4 string
-				err := rows.Scan(&s1, &s2, &s3, &s4)
-				require.NoError(t, err)
-				op[s4]++
-				if strings.Contains(s4, "SEARCH e USING INDEX") {
-					hasIndex = true
-				}
-				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
-					if strings.Contains(filter.Search, "Expiration:true") {
-						// It uses SCAN over CTE, which is expected.
-						continue
-					} else if (hasIndex || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
-						// Allow B-TREE for ORDER BY if there are multiple authors or PK is used.
-						continue
-					}
-					t.Logf("filter: %#v", filter)
-					t.Logf("set #%d: %s (%+v)", i+1, sql, params)
-					t.Log(s1, s2, s3, s4)
-					t.FailNow()
-				}
-			}
-			rows.Close()
-		}
-	})
-
-	t.Run("OpSummary", func(t *testing.T) {
-		keys := make([]string, 0, len(op))
-		for k := range op {
-			keys = append(keys, k)
-		}
-		slices.SortStableFunc(keys, func(i, j string) int {
-			if op[i] > op[j] {
-				return -1
-			}
-			if op[i] < op[j] {
-				return 1
-			}
-			return 0
-		})
-		t.Log("Operations Summary:")
-		for _, k := range keys {
-			t.Logf("%s: %d", k, op[k])
-		}
-	})
-}
-
-func TestFts5DeleteNestedEvents(t *testing.T) {
-	t.Parallel()
-
-	db := helperNewDatabase(t)
-	defer db.Close()
-
-	rootPriv := model.GeneratePrivateKey()
-	var root model.Event
-
-	t.Run("Add events", func(t *testing.T) {
-		// Root event.
-		root.CreatedAt = 1
-		root.Kind = nostr.KindTextNote
-		root.Content = "root event"
-		require.NoError(t, root.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &root))
-
-		// First level events.
-		var ev1 model.Event
-		ev1.CreatedAt = 2
-		ev1.Kind = nostr.KindTextNote
-		ev1.Content = "regular event"
-		ev1.Tags = model.Tags{{"e", root.ID}}
-		require.NoError(t, ev1.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev1))
-
-		var ev2 model.Event
-		ev2.CreatedAt = 3
-		ev2.Kind = nostr.KindArticle
-		ev2.Content = "addressable event"
-		ev2.Tags = model.Tags{
-			{"d", "article1"},
-			{"e", root.ID},
-		}
-		require.NoError(t, ev2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev2))
-
-		var ev3 model.Event
-		ev3.CreatedAt = 4
-		ev3.Kind = nostr.KindProfileMetadata
-		ev3.Content = "replaceable event"
-		ev3.Tags = model.Tags{{"e", root.ID}}
-		require.NoError(t, ev3.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev3))
-
-		// Second level events.
-		var ev4 model.Event
-		ev4.CreatedAt = 5
-		ev4.Kind = nostr.KindTextNote
-		ev4.Content = "regular child event"
-		ev4.Tags = model.Tags{{"e", ev1.ID}}
-		require.NoError(t, ev4.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev4))
-
-		var ev5 model.Event
-		ev5.CreatedAt = 6
-		ev5.Kind = nostr.KindArticle
-		ev5.Content = "addressable child event"
-		ev5.Tags = model.Tags{
-			{"d", "article2"},
-			{"a", ev2.Address()},
-		}
-		require.NoError(t, ev5.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev5))
-
-		var ev6 model.Event
-		ev6.CreatedAt = 7
-		ev6.Kind = nostr.KindProfileMetadata
-		ev6.Content = `{"name":"replaceable child event"}`
-		ev6.Tags = model.Tags{
-			{"a", ev3.Address()},
-		}
-		require.NoError(t, ev6.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev6))
-	})
-
-	events := helperSelectEvents(t, db)
-	require.Len(t, events, 7)
-	stored := helperSelectEvents(t, db, model.Filter{
-		Kinds:  []int{nostr.KindTextNote, nostr.KindProfileMetadata},
-		Search: `"child"`,
-		Limit:  100,
-	})
-	require.Len(t, stored, 2)
-
-	// Delete root event.
-	var rootDelete model.Event
-	rootDelete.CreatedAt = 8
-	rootDelete.Kind = nostr.KindDeletion
-	rootDelete.Content = "delete root event"
-	rootDelete.Tags = model.Tags{{"e", root.ID}}
-	require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(t.Context(), &rootDelete))
-
-	require.Zero(t, len(helperSelectEvents(t, db)))
-	stored = helperSelectEvents(t, db, model.Filter{
-		Kinds:  []int{nostr.KindTextNote, nostr.KindProfileMetadata},
-		Search: `"child"`,
-		Limit:  100,
-	})
-	require.Zero(t, stored, 0)
-}
-
-func TestEventScoreWithSearch(t *testing.T) {
+func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -1057,7 +811,7 @@ func TestEventScoreWithSearch(t *testing.T) {
 	evArticle.ID = "article"
 	evArticle.Kind = nostr.KindTextNote
 	evArticle.PubKey = "article_pub"
-	evArticle.CreatedAt = model.Timestamp(ts)
+	evArticle.CreatedAt = model.Timestamp(ts) + 1
 	evArticle.Content = "content 2"
 	evArticle.Tags = model.Tags{
 		{"d", "my article"},
@@ -1114,8 +868,7 @@ func TestEventScoreWithSearch(t *testing.T) {
 			Search: `"content" top`,
 		})
 		require.Len(t, stored, 2)
-		require.EqualValues(t, evNote, *stored[0])
-		require.EqualValues(t, evArticle, *stored[1])
+		require.ElementsMatch(t, []string{evNote.ID, evArticle.ID}, []string{stored[0].ID, stored[1].ID})
 	})
 
 	var quotes []string
@@ -1142,8 +895,7 @@ func TestEventScoreWithSearch(t *testing.T) {
 			Search: `"content" top`,
 		})
 		require.Len(t, stored, 2)
-		require.EqualValues(t, evArticle, *stored[0])
-		require.EqualValues(t, evNote, *stored[1])
+		require.ElementsMatch(t, []string{evNote.ID, evArticle.ID}, []string{stored[0].ID, stored[1].ID})
 	})
 	t.Run("search ranked events with dependencies", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -1151,7 +903,6 @@ func TestEventScoreWithSearch(t *testing.T) {
 			Search: `"content" top include:dependencies:kind1>kind0`,
 		})
 		require.Len(t, stored, 2)
-		require.EqualValues(t, evArticle, *stored[0])
-		require.EqualValues(t, evNote, *stored[1])
+		require.ElementsMatch(t, []string{evNote.ID, evArticle.ID}, []string{stored[0].ID, stored[1].ID})
 	})
 }

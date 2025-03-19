@@ -164,7 +164,7 @@ func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 	f = parseRank(f)
 
 	if f.Expiration != nil && *f.Expiration {
-		f.Dependencies = append(f.Dependencies, &filterDependencies{
+		f.Dependencies = append(f.Dependencies, &filterDependency{
 			Expiration: f.Expiration,
 		})
 	}
@@ -172,10 +172,4 @@ func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 	f.Search = strings.TrimSpace(f.Search)
 
 	return f, nil
-}
-
-func (d *databaseFilterSearch) isFilterEmptyExceptSearch() bool {
-	return d.Authors == nil && d.Dependencies == nil && d.IDs == nil && d.Expiration == nil && d.Images == nil &&
-		d.Kinds == nil && d.Quotes == nil && d.References == nil && d.Since == nil && d.Tags == nil &&
-		d.Videos == nil && d.Until == nil
 }
