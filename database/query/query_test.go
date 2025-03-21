@@ -1466,3 +1466,71 @@ func TestExtendWhereFilters(t *testing.T) {
 	require.Len(t, out, 1)
 	require.Equal(t, in, out[0])
 }
+
+func TestSoftDeletedReplies(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := time.Now().Unix()
+
+	mainPost := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindEditableTextNote,
+			CreatedAt: nostr.Timestamp(now),
+			Content:   "This is the main editable post",
+			Tags: model.Tags{
+				{"published_at", strconv.FormatInt(now, 10)},
+			},
+		},
+	}
+	mainKey := model.GeneratePrivateKey()
+	require.NoError(t, mainPost.SignWithAlg(mainKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), mainPost))
+
+	// Create reply of the same kind.
+	replyPost := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindEditableTextNote,
+			CreatedAt: nostr.Timestamp(now),
+			Content:   "This is a reply to the main post",
+			Tags: model.Tags{
+				{"published_at", strconv.FormatInt(now, 10)},
+				{"a", mainPost.Address(), "", "reply"},
+			},
+		},
+	}
+	replyKey := model.GeneratePrivateKey()
+	require.NoError(t, replyPost.SignWithAlg(replyKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), replyPost))
+
+	// Check reply counter is 1
+	mainPostAddress := mainPost.Address()
+	helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+		Kinds: []int{model.CustomIONKindEditableTextNote},
+		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, model.PointerOf("reply")),
+	})
+
+	// Soft delete the reply.
+	softDeletedReply := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindEditableTextNote,
+			CreatedAt: nostr.Timestamp(now + 1), // Must be newer than original.
+			Content:   "",                       // Empty content for soft deletion.
+			Tags: model.Tags{
+				{"published_at", strconv.FormatInt(now, 10)},
+				{"a", mainPost.Address(), "", "reply"},
+			},
+		},
+	}
+	require.NoError(t, softDeletedReply.SignWithAlg(replyKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), softDeletedReply))
+
+	// Check that reply counter is now zero.
+	helperMustBePrecalculatedCount(t, db, 0, model.Filter{
+		Kinds: []int{model.CustomIONKindEditableTextNote},
+		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, model.PointerOf("reply")),
+	})
+
+}
