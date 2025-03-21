@@ -10,11 +10,12 @@ import (
 
 func TestMustGet(t *testing.T) {
 	t.Parallel()
+
 	type embeddedCfg1 struct {
-		C1 string
+		C1 string `yaml:"c1"`
 	}
 	type embeddedCfg2 struct {
-		C2 string
+		C2 string `yaml:"c2"`
 	}
 	type testCfg struct {
 		embeddedCfg1
@@ -22,6 +23,7 @@ func TestMustGet(t *testing.T) {
 		AA        string       `yaml:"a"`
 	}
 	result := MustGet[testCfg]()
+	t.Logf("result: %+v", result)
 	require.Equal(t, "b", result.AA)
 	require.Equal(t, "cc1", result.C1)
 	require.Equal(t, "cc2", result.Embedded2.C2)

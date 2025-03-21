@@ -417,6 +417,7 @@ begin
     left join is_community_closed c on c.h_tag = NEW.event_tag_value1
     where
             e.id = NEW.event_id
+        and e.deleted = 0
         and e.kind in (1, 3, 6, 7, 16, 1750, 30023, 30175)
         and (e.kind = 3 OR NEW.event_tag_key in ('a', 'Q', 'h') OR exists (select 1 from events where id = NEW.event_tag_value1))
         and (
