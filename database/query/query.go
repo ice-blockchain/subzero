@@ -29,6 +29,7 @@ const (
 	replyMarkerIndex = 3 // event_tag_value3.
 	patchMarkerIndex = 5 // event_tag_value5.
 
+	maxTagValues = 5
 )
 
 var (

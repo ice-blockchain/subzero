@@ -94,22 +94,6 @@ CREATE TABLE IF NOT EXISTS event_tags
     event_tag_value3  text not null DEFAULT '',
     event_tag_value4  text not null DEFAULT '',
     event_tag_value5  text not null DEFAULT '',
-    event_tag_value6  text not null DEFAULT '',
-    event_tag_value7  text not null DEFAULT '',
-    event_tag_value8  text not null DEFAULT '',
-    event_tag_value9  text not null DEFAULT '',
-    event_tag_value10 text not null DEFAULT '',
-    event_tag_value11 text not null DEFAULT '',
-    event_tag_value12 text not null DEFAULT '',
-    event_tag_value13 text not null DEFAULT '',
-    event_tag_value14 text not null DEFAULT '',
-    event_tag_value15 text not null DEFAULT '',
-    event_tag_value16 text not null DEFAULT '',
-    event_tag_value17 text not null DEFAULT '',
-    event_tag_value18 text not null DEFAULT '',
-    event_tag_value19 text not null DEFAULT '',
-    event_tag_value20 text not null DEFAULT '',
-    event_tag_value21 text not null DEFAULT '',
     primary key (event_id, event_tag_key, event_tag_value1)
 );
 --------
@@ -132,23 +116,7 @@ BEGIN
         event_tag_value2,
         event_tag_value3,
         event_tag_value4,
-        event_tag_value5,
-        event_tag_value6,
-        event_tag_value7,
-        event_tag_value8,
-        event_tag_value9,
-        event_tag_value10,
-        event_tag_value11,
-        event_tag_value12,
-        event_tag_value13,
-        event_tag_value14,
-        event_tag_value15,
-        event_tag_value16,
-        event_tag_value17,
-        event_tag_value18,
-        event_tag_value19,
-        event_tag_value20,
-        event_tag_value21
+        event_tag_value5
     )
     SELECT
         NEW.id,
@@ -157,23 +125,7 @@ BEGIN
         COALESCE(value->>2, ''),
         COALESCE(value->>3, ''),
         COALESCE(value->>4, ''),
-        COALESCE(value->>5, ''),
-        COALESCE(value->>6, ''),
-        COALESCE(value->>7, ''),
-        COALESCE(value->>8, ''),
-        COALESCE(value->>9, ''),
-        COALESCE(value->>10, ''),
-        COALESCE(value->>11, ''),
-        COALESCE(value->>12, ''),
-        COALESCE(value->>13, ''),
-        COALESCE(value->>14, ''),
-        COALESCE(value->>15, ''),
-        COALESCE(value->>16, ''),
-        COALESCE(value->>17, ''),
-        COALESCE(value->>18, ''),
-        COALESCE(value->>19, ''),
-        COALESCE(value->>20, ''),
-        COALESCE(value->>21, '')
+        COALESCE(value->>5, '')
     FROM jsonb_array_elements(subzero_nostr_tags_reorder(COALESCE(NEW.tags, '[]'::jsonb))) AS value
     WHERE value->>0 IS NOT NULL
     ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
@@ -211,23 +163,7 @@ BEGIN
         event_tag_value2,
         event_tag_value3,
         event_tag_value4,
-        event_tag_value5,
-        event_tag_value6,
-        event_tag_value7,
-        event_tag_value8,
-        event_tag_value9,
-        event_tag_value10,
-        event_tag_value11,
-        event_tag_value12,
-        event_tag_value13,
-        event_tag_value14,
-        event_tag_value15,
-        event_tag_value16,
-        event_tag_value17,
-        event_tag_value18,
-        event_tag_value19,
-        event_tag_value20,
-        event_tag_value21
+        event_tag_value5
     )
     SELECT
         NEW.id,
@@ -236,23 +172,7 @@ BEGIN
         COALESCE(value->>2, ''),
         COALESCE(value->>3, ''),
         COALESCE(value->>4, ''),
-        COALESCE(value->>5, ''),
-        COALESCE(value->>6, ''),
-        COALESCE(value->>7, ''),
-        COALESCE(value->>8, ''),
-        COALESCE(value->>9, ''),
-        COALESCE(value->>10, ''),
-        COALESCE(value->>11, ''),
-        COALESCE(value->>12, ''),
-        COALESCE(value->>13, ''),
-        COALESCE(value->>14, ''),
-        COALESCE(value->>15, ''),
-        COALESCE(value->>16, ''),
-        COALESCE(value->>17, ''),
-        COALESCE(value->>18, ''),
-        COALESCE(value->>19, ''),
-        COALESCE(value->>20, ''),
-        COALESCE(value->>21, '')
+        COALESCE(value->>5, '')
     FROM jsonb_array_elements(subzero_nostr_tags_reorder(COALESCE(NEW.tags, '[]'::jsonb))) AS value
     WHERE value->>0 IS NOT NULL
     ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;

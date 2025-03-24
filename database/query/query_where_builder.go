@@ -246,8 +246,6 @@ func (b *queryBuilder) ApplyFilterTagMarkers(filterID string, markers ...databas
 }
 
 func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
-	const valuesMax = 21
-
 	if len(tags) == 0 {
 		return
 	}
@@ -284,9 +282,9 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 				continue
 			}
 
-			if len(values) > valuesMax {
-				log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tagName, valuesMax)
-				values = values[:valuesMax]
+			if len(values) > maxTagValues {
+				log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tagName, maxTagValues)
+				values = values[:maxTagValues]
 			}
 
 			b.MaybeOR()

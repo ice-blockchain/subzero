@@ -135,7 +135,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 	t.Run("TwoTagsShink", func(t *testing.T) {
 		var valuesMax []string
 
-		for range 30 {
+		for range maxTagValues + 1 {
 			valuesMax = append(valuesMax, generateRandomString(4))
 		}
 
@@ -147,7 +147,7 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 		})
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", q, params)
-		require.Len(t, params, 29)
+		require.Len(t, params, 13)
 		helperEnsureParams(t, q, params)
 	})
 }
