@@ -408,7 +408,7 @@ func TestSearchEvents_KindProfileMetadata_SpecialChars(t *testing.T) {
 		for range 3 {
 			randomName := helperGenerateRandomStringWithSpecialChars(t, 10)
 			randomDisplayName := helperGenerateRandomStringWithSpecialChars(t, 10)
-			t.Logf("randomName: %s, randomDisplayName: %s", randomName, randomDisplayName)
+			t.Logf("random name: %q, random displayName: %q", randomName, randomDisplayName)
 
 			event := &model.Event{
 				Event: nostr.Event{
@@ -437,7 +437,7 @@ func TestSearchEvents_KindProfileMetadata_SpecialChars(t *testing.T) {
 		if len(name) > 1 {
 			name = name[0 : len(name)/2]
 		}
-		t.Logf("searchTerm: %s", name)
+		t.Logf("search term: %s", name)
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},
@@ -474,9 +474,9 @@ func helperExtractProfileMetadataFields(t *testing.T, content string) (string, s
 func helperGenerateRandomStringWithSpecialChars(t *testing.T, length int) string {
 	t.Helper()
 	specialChars := "!@#$%^&*()-_=+[]{}|;:,.<>?/~`"
-	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " + specialChars
+	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + specialChars
 	var result strings.Builder
-	for i := 0; i < length; i++ {
+	for range length {
 		idx := int(rand.IntN(len(allChars)))
 		result.WriteByte(allChars[idx])
 	}

@@ -223,14 +223,17 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 	return nil
 }
 
-func (c *client) startDownloadsFromQueue() {
+func (c *client) startDownloadsFromQueue(ctx context.Context) {
 outerLoop:
-	for {
+	for ctx.Err() == nil {
 		c.activeDownloadsMx.RLock()
 		l := len(c.activeDownloads)
 		c.activeDownloadsMx.RUnlock()
 		for l < ConcurrentBagsDownloading {
 			select {
+			case <-ctx.Done():
+				log.Printf("[STORAGE] INFO: download loop stopped")
+				return
 			case q := <-c.downloadQueue:
 				tor := q.tor
 				if downloading, _ := tor.IsActive(); downloading {

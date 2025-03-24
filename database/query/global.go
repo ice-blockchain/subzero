@@ -17,24 +17,46 @@ var (
 		Client *dbClient
 		Once   sync.Once
 	}
-	globalConfig *config
 )
 
 type (
-	config struct {
+	Config struct {
 		URL        string `yaml:"url"`
 		PrivateKey string `yaml:"private-key"`
 		RelayURL   string `yaml:"relay-url" validate:"required,url"`
 	}
+	Option func(*Config)
 )
 
-func MustInit(ctx context.Context) {
+func WithConfig(cfg *Config) Option {
+	return func(in *Config) {
+		if cfg == nil {
+			return
+		}
+		if cfg.URL != "" {
+			in.URL = cfg.URL
+		}
+		if cfg.PrivateKey != "" {
+			in.PrivateKey = cfg.PrivateKey
+		}
+		if cfg.RelayURL != "" {
+			in.RelayURL = cfg.RelayURL
+		}
+	}
+}
+
+func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
-		globalConfig = cfg.MustGet[config]()
-		globalDB.Client = openDatabase(globalConfig.URL, true).
-			WithPrivateKey(globalConfig.PrivateKey).
-			WithRelayURL(globalConfig.RelayURL)
+		conf := cfg.MustGet[Config]()
+		for _, opt := range opts {
+			opt(conf)
+		}
+		globalDB.Client = openDatabase(conf.URL, true).
+			WithPrivateKey(conf.PrivateKey).
+			WithRelayURL(conf.RelayURL)
+
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
+
 		go func() {
 			<-ctx.Done()
 			globalDB.Client.Close()
@@ -76,20 +98,32 @@ func CountGroupedEventReactions(ctx context.Context, subscription *model.Subscri
 }
 
 func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
+	ticks := make(chan struct{}, 1)
 
-	for {
-		select {
-		case <-ticker.C:
-			reqCtx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			if err := db.deleteExpiredEvents(reqCtx); err != nil {
-				log.Printf("failed to delete expired events: %v", err)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		defer close(ticks)
+
+		for {
+			select {
+			case <-ticker.C:
+				select {
+				case ticks <- struct{}{}:
+				default:
+					log.Println("skipping expired events cleanup, already in progress")
+				}
+			case <-ctx.Done():
+				return
 			}
-
-			cancel()
-		case <-ctx.Done():
-			return
 		}
+	}()
+
+	for range ticks {
+		deleteCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		if err := db.deleteExpiredEvents(deleteCtx); err != nil {
+			log.Printf("failed to delete expired events: %v", err)
+		}
+		cancel()
 	}
 }

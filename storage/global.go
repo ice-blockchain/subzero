@@ -297,7 +297,7 @@ func mustInit(ctx context.Context) *client {
 	cl.server.SetStorage(progressStorage)
 	cl.progressStorage.SetNotifier(nil)
 	close(loadMonitoringCh)
-	go cl.startDownloadsFromQueue()
+	go cl.startDownloadsFromQueue(ctx)
 	return cl
 }
 

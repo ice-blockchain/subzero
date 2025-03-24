@@ -283,7 +283,25 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 			}
 
 			if len(values) > maxTagValues {
-				log.Printf("%#v: too many values for tag %q, only the first %d will be used", values, tagName, maxTagValues)
+				log.Printf("filter %v: %q: too many values for tag %q, only the first %d will be used",
+					filterID,
+					func() string {
+						var b strings.Builder
+						for i, v := range values {
+							if v == nil {
+								b.WriteString("nil")
+							} else {
+								b.WriteString(*v)
+							}
+							if i < len(values)-1 {
+								b.WriteString(", ")
+							}
+						}
+						return b.String()
+					}(),
+					tagName,
+					maxTagValues,
+				)
 				values = values[:maxTagValues]
 			}
 
