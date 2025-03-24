@@ -71,7 +71,6 @@ func TestJobOnline(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
 	privkey := model.GeneratePrivateKey()
 	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
@@ -95,7 +94,7 @@ func TestJobOnline(t *testing.T) {
 	t.Run("Send articles", func(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, article1, privkey)
 		helperSignWithMinLeadingZeroBits(t, article2, privkey)
-		require.NoError(t, relay.PublishMany(ctx, &article1.Event, &article2.Event))
+		require.NoError(t, relay.PublishMany(t.Context(), &article1.Event, &article2.Event))
 	})
 
 	reaction1 := &model.Event{
@@ -125,7 +124,7 @@ func TestJobOnline(t *testing.T) {
 	t.Run("send reactions", func(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, reaction1, privkey)
 		helperSignWithMinLeadingZeroBits(t, reaction2, privkey)
-		require.NoError(t, relay.PublishMany(ctx, &reaction1.Event, &reaction2.Event))
+		require.NoError(t, relay.PublishMany(t.Context(), &reaction1.Event, &reaction2.Event))
 	})
 	responses := make([]*model.Event, 0)
 	commonUserForFirst2Reqs := model.GeneratePrivateKey()
@@ -143,7 +142,7 @@ func TestJobOnline(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
@@ -168,7 +167,7 @@ func TestJobOnline(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
@@ -194,7 +193,7 @@ func TestJobOnline(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
@@ -204,7 +203,7 @@ func TestJobOnline(t *testing.T) {
 	t.Run("request dvm result via subscription with #e", func(t *testing.T) {
 		eTag1 := responses[1].GetTag("e").Value()
 		eTag2 := responses[2].GetTag("e").Value()
-		dvmSearchResults := helperQueryEvents(t, ctx, relay,
+		dvmSearchResults := helperQueryEvents(t, t.Context(), relay,
 			model.Filter{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
 				Append("e", &eTag1).
 				Append("e", &eTag2),
@@ -215,7 +214,7 @@ func TestJobOnline(t *testing.T) {
 	})
 	t.Run("request dvm result via subscription with #p, first 2 requests came from same user", func(t *testing.T) {
 		pTag := responses[0].GetTag("p").Value()
-		dvmSearchResults := helperQueryEvents(t, ctx, relay,
+		dvmSearchResults := helperQueryEvents(t, t.Context(), relay,
 			model.Filter{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
 				Append("p", &pTag),
 			})
@@ -226,7 +225,7 @@ func TestJobOnline(t *testing.T) {
 	t.Run("request dvm result via subscription with #p and #e", func(t *testing.T) {
 		pTag := responses[1].GetTag("p").Value()
 		eTag1 := responses[1].GetTag("e").Value()
-		dvmSearchResults := helperQueryEvents(t, ctx, relay,
+		dvmSearchResults := helperQueryEvents(t, t.Context(), relay,
 			model.Filter{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
 				Append("p", &pTag).
 				Append("e", &eTag1),
@@ -241,7 +240,9 @@ func TestJobOnline(t *testing.T) {
 func TestJobDeletion(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
+	wake := make(chan struct{})
 	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		<-wake
 		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
@@ -257,7 +258,6 @@ func TestJobDeletion(t *testing.T) {
 		return nil
 	})
 
-	ctx := context.Background()
 	privkey, pubkey := model.GenerateKeyPair()
 	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
@@ -269,6 +269,7 @@ func TestJobDeletion(t *testing.T) {
 			Tags: model.Tags{
 				model.Tag{"p", servicePubkey},
 				model.Tag{"param", "group", "pubkey"},
+				model.Tag{"param", "relay", pubsubServers[1].Endpoint()},
 				model.Tag{"relays", pubsubServers[0].Endpoint()},
 			},
 			Content: helperNewFilter(t, model.Filter{
@@ -279,9 +280,7 @@ func TestJobDeletion(t *testing.T) {
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, jobReq, privkey)
-	require.NoError(t, relay.Publish(ctx, jobReq.Event))
-
-	time.Sleep(time.Microsecond)
+	require.NoError(t, relay.Publish(t.Context(), jobReq.Event))
 
 	jobStop := &model.Event{
 		Event: nostr.Event{
@@ -295,10 +294,10 @@ func TestJobDeletion(t *testing.T) {
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, jobStop, privkey)
-	require.NoError(t, relay.Publish(ctx, jobStop.Event))
+	require.NoError(t, relay.Publish(t.Context(), jobStop.Event))
 
-	time.Sleep(time.Second)
 	resp := helperWaitFor(t, jobResults, time.Second)
+	wake <- struct{}{}
 	t.Logf("received DVM response: %+v", resp)
 	require.Equal(t, resp.GetTag("status").Value(), model.JobFeedbackStatusError)
 	helperMustCloseRelay(t, relay)
@@ -326,7 +325,6 @@ func TestErrorFeedback(t *testing.T) {
 		return nil
 	})
 
-	ctx := context.Background()
 	privkey := model.GeneratePrivateKey()
 	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
@@ -350,7 +348,7 @@ func TestErrorFeedback(t *testing.T) {
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, jobReq, privkey)
-	require.NoError(t, relay.Publish(ctx, jobReq.Event))
+	require.NoError(t, relay.Publish(t.Context(), jobReq.Event))
 
 	time.Sleep(time.Second)
 	resp := helperWaitFor(t, jobResults, time.Second)
@@ -378,7 +376,6 @@ func TestJobOffline(t *testing.T) {
 		return nil
 	})
 
-	ctx := context.Background()
 	privkey := model.GeneratePrivateKey()
 	servicePubkey, err := dvm.PublicKey()
 	require.NoError(t, err)
@@ -405,7 +402,7 @@ func TestJobOffline(t *testing.T) {
 	t.Run("Send articles", func(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, article1, privkey)
 		helperSignWithMinLeadingZeroBits(t, article2, privkey)
-		require.NoError(t, relay.PublishMany(ctx, &article1.Event, &article2.Event))
+		require.NoError(t, relay.PublishMany(t.Context(), &article1.Event, &article2.Event))
 	})
 
 	reaction1 := &model.Event{
@@ -435,7 +432,7 @@ func TestJobOffline(t *testing.T) {
 	t.Run("send reactions", func(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, reaction1, privkey)
 		helperSignWithMinLeadingZeroBits(t, reaction2, privkey)
-		require.NoError(t, relay.PublishMany(ctx, &reaction1.Event, &reaction2.Event))
+		require.NoError(t, relay.PublishMany(t.Context(), &reaction1.Event, &reaction2.Event))
 	})
 	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
 		ev := &model.Event{
@@ -450,7 +447,7 @@ func TestJobOffline(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
@@ -473,7 +470,7 @@ func TestJobOffline(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
@@ -498,7 +495,7 @@ func TestJobOffline(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		resp := helperWaitFor(t, jobResults, time.Second)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
@@ -524,9 +521,8 @@ func TestJobMembersCount_OpenCommunity(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
 
+	relay := helperMustNewRelay(t, pubsubServers[0])
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	communityID := hVal.String()
@@ -548,7 +544,7 @@ func TestJobMembersCount_OpenCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := model.Event{
@@ -564,7 +560,7 @@ func TestJobMembersCount_OpenCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("join user1 to the community", func(t *testing.T) {
 		ev := model.Event{
@@ -580,9 +576,9 @@ func TestJobMembersCount_OpenCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
 
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
@@ -604,9 +600,8 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
 
+	relay := helperMustNewRelay(t, pubsubServers[0])
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	communityID := hVal.String()
@@ -628,7 +623,7 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := model.Event{
@@ -644,7 +639,7 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("invite user1 by owner", func(t *testing.T) {
 		ev := &model.Event{
@@ -658,7 +653,7 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("accept invitation by user1", func(t *testing.T) {
 		ownerAuthorizationEvent := &model.Event{
@@ -685,9 +680,9 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
 
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
@@ -709,9 +704,8 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 
 		return nil
 	})
-	ctx := context.Background()
-	relay := helperMustNewRelay(t, pubsubServers[0])
 
+	relay := helperMustNewRelay(t, pubsubServers[0])
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	communityID := hVal.String()
@@ -735,7 +729,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := model.Event{
@@ -751,7 +745,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	var joinUser1Event model.Event
 	t.Run("join user1 to the community", func(t *testing.T) {
@@ -768,10 +762,10 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &joinUser1Event, privkeyUser1)
-		require.NoError(t, relay.Publish(ctx, joinUser1Event.Event))
+		require.NoError(t, relay.Publish(t.Context(), joinUser1Event.Event))
 	})
 
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
 
 	t.Run("change community definition to closed", func(t *testing.T) {
 		ev := &model.Event{
@@ -787,7 +781,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 	t.Run("invite user2 to the closed community", func(t *testing.T) {
 		ev := model.Event{
@@ -803,10 +797,10 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
 
 	var joinUser2Event model.Event
 	t.Run("accept invitation by user2 after changed openess community option", func(t *testing.T) {
@@ -834,10 +828,10 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &joinUser2Event, privkeyUser2)
-		require.NoError(t, relay.Publish(ctx, joinUser2Event.Event))
+		require.NoError(t, relay.Publish(t.Context(), joinUser2Event.Event))
 	})
 
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 3)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 3)
 
 	t.Run("delete user2 from the community", func(t *testing.T) {
 		ev := model.Event{
@@ -854,10 +848,10 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser2)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 2)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
 
 	t.Run("delete user1 from the community", func(t *testing.T) {
 		ev := model.Event{
@@ -874,10 +868,10 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 1)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 1)
 
 	var inviteUser3Event model.Event
 	t.Run("invite user3 to the closed community", func(t *testing.T) {
@@ -893,9 +887,9 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &inviteUser3Event, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, inviteUser3Event.Event))
+		require.NoError(t, relay.Publish(t.Context(), inviteUser3Event.Event))
 	})
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 1)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 1)
 
 	t.Run("delete user3 invitation", func(t *testing.T) {
 		ev := model.Event{
@@ -911,9 +905,9 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 			},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
-	helperCountMembers(t, ctx, relay, jobResults, communityID, 1)
+	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 1)
 
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
@@ -938,7 +932,7 @@ func helperCountMembers(t *testing.T, ctx context.Context, relay *nostrRelay, jo
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
-	require.NoError(t, relay.Publish(ctx, ev.Event))
+	require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	resp := helperWaitFor(t, jobResults, time.Second)
 	responses = append(responses, resp)
 	t.Logf("received DVM response: %+v", resp)
