@@ -713,86 +713,6 @@ FOR EACH ROW
 WHEN (NEW.master_pubkey != NEW.pubkey)
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
 --------
-CREATE OR REPLACE FUNCTION event_tag_reorder(tag JSONB)
-RETURNS JSONB AS $$
-DECLARE
-    reordered_tag JSONB := '[]';
-    pair TEXT;
-    key TEXT;
-    value TEXT;
-    start_index INT := 1;
-    tag_length INT;
-    current_index INT := 1;
-	has_url BOOLEAN := FALSE;
-	has_m BOOLEAN := FALSE;
-	m_index TEXT := '1';
-BEGIN
-	IF jsonb_typeof(tag) != 'array' THEN
-        RETURN '[]'::JSONB;
-    END IF;
-
-	tag_length := jsonb_array_length(tag);
-    IF tag IS NULL OR tag_length = 0 THEN
-        RETURN '[]'::JSONB;
-    END IF;
-
-    reordered_tag := jsonb_build_array(tag->>0);
-
-	FOR i IN start_index .. tag_length - 1 LOOP
-        pair := tag->>i;
-		IF pair IS NULL THEN
-            CONTINUE;
-        END IF;
-
-        SELECT split_part(pair, ' ', 1), split_part(pair, ' ', 2) INTO key, value;
-		if LOWER(key) = 'url' THEN
-			has_url := TRUE;
-
-            CONTINUE;
-		END IF;
-		if LOWER(key) = 'm' THEN
-			has_m := TRUE;
-
-            CONTINUE;
-		END IF;
-
-        reordered_tag := jsonb_insert(reordered_tag, ARRAY[CAST(current_index AS TEXT)], to_jsonb(pair), TRUE);
-        current_index = current_index + 1;
-	END LOOP;
-
-    FOR i IN start_index .. tag_length - 1 LOOP
-        pair := tag->>i;
-		IF pair IS NULL THEN
-            CONTINUE;
-        END IF;
-
-        SELECT split_part(pair, ' ', 1), split_part(pair, ' ', 2) INTO key, value;
-
-        CASE
-            WHEN LOWER(key) = 'url' THEN
-                reordered_tag := jsonb_insert(reordered_tag, ARRAY['0'], to_jsonb(key || ' ' || value), TRUE);
-            WHEN LOWER(key) = 'm' THEN
-                IF current_index = 1 THEN
-					reordered_tag := jsonb_set(
-	                    tag,
-	                    ARRAY[CAST('1' AS TEXT)],
-	                    to_jsonb(CAST('' AS TEXT))
-	                );
-				END IF;
-	   			IF has_url = TRUE AND has_m = TRUE THEN
-					m_index := '1'; -- FIXME: can be wrong for some cases
-				END IF;
-
-                reordered_tag := jsonb_insert(reordered_tag, ARRAY[m_index], to_jsonb(key || ' ' || value), TRUE);
-            ELSE
-
-        END CASE;
-    END LOOP;
-
-    RETURN reordered_tag;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
 CREATE OR REPLACE FUNCTION subzero_nostr_tags_reorder(tags JSONB)
 RETURNS JSONB AS $$
 DECLARE
@@ -808,8 +728,6 @@ BEGIN
     END IF;
 
     FOR tag IN SELECT jsonb_array_elements(tags) LOOP
-        tag := event_tag_reorder(tag);
-
         IF (tag->>0)::TEXT IN ('e', 'a')
            AND jsonb_array_length(tag) > reply_marker_index
            AND LOWER((tag->>reply_marker_index)::TEXT) = 'reply' THEN
