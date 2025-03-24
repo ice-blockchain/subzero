@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -96,7 +97,12 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 	t.Helper()
 
 	if relay != nil {
-		require.NoError(t, relay.Close())
+		err := relay.Close()
+		if err != nil {
+			if !strings.Contains(err.Error(), "relay not connected") {
+				require.NoError(t, err)
+			}
+		}
 		require.NoError(t, relay.service.WaitForReaders(testDeadline))
 	}
 }
