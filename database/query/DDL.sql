@@ -1,5 +1,9 @@
 -- SPDX-License-Identifier: ice License 1.0
 
+-- systemKindQuote        = 1
+-- systemKindCommentRoot  = 2
+-- systemKindCommentReply = 3
+
 DO
 $$BEGIN
    CREATE TEXT SEARCH CONFIGURATION fts ( COPY = pg_catalog.english );
@@ -126,7 +130,7 @@ BEGIN
         COALESCE(value->>3, ''),
         COALESCE(value->>4, ''),
         COALESCE(value->>5, '')
-    FROM jsonb_array_elements(subzero_nostr_tags_reorder(COALESCE(NEW.tags, '[]'::jsonb))) AS value
+    FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE value->>0 IS NOT NULL
     ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
 
@@ -173,7 +177,7 @@ BEGIN
         COALESCE(value->>3, ''),
         COALESCE(value->>4, ''),
         COALESCE(value->>5, '')
-    FROM jsonb_array_elements(subzero_nostr_tags_reorder(COALESCE(NEW.tags, '[]'::jsonb))) AS value
+    FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE value->>0 IS NOT NULL
     ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
 
@@ -402,7 +406,7 @@ BEGIN
                             jsonb_array_elements(tags) AS tag
                     ) OR NEW.event_tag_key = 'a'
                 WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('a', 'e') AND NEW.event_tag_value3 != '' THEN
-                    ((NEW.event_tag_value3 = 'root' AND NEW.event_tag_value5 = '') OR (NEW.event_tag_value3 = 'reply'))
+                    ((NEW.event_tag_value3 = 'root' AND (e.system_kind is null or e.system_kind = 2)) OR (NEW.event_tag_value3 = 'reply'))
                 WHEN e.kind = 1750 AND NEW.event_tag_key = 'h' AND NEW.event_tag_value1 = community.h_tag THEN
                     (
                         c.closed_status = 1 AND
@@ -452,7 +456,7 @@ BEGIN
         AND event_counters.kind = e.kind
         AND event_counters.reference_type = CASE
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND OLD.event_tag_key IN ('a', 'e') AND
-                 ((OLD.event_tag_value3 = 'root' AND OLD.event_tag_value5 = '') OR (OLD.event_tag_value3 = 'reply')) THEN OLD.event_tag_value3
+                 ((OLD.event_tag_value3 = 'root' AND (e.system_kind is null or e.system_kind = 2)) OR (OLD.event_tag_value3 = 'reply')) THEN OLD.event_tag_value3
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND OLD.event_tag_key IN ('q', 'Q') THEN 'quote'
             WHEN e.kind = 3 AND OLD.event_tag_key = 'p' THEN 'follower'
             WHEN e.kind = 7 THEN e.content
@@ -632,57 +636,6 @@ BEFORE INSERT OR UPDATE ON events
 FOR EACH ROW
 WHEN (NEW.master_pubkey != NEW.pubkey)
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
---------
-CREATE OR REPLACE FUNCTION subzero_nostr_tags_reorder(tags JSONB)
-RETURNS JSONB AS $$
-DECLARE
-    reordered_tags JSONB := '[]';
-	res_tags JSONB := '[]';
-    tag JSONB;
-    has_reply BOOLEAN := FALSE;
-    reply_marker_index INT := 3;
-    patch_marker_index INT := 5;
-BEGIN
-    IF tags IS NULL OR tags = '[]' THEN
-        RETURN '[]'::JSONB;
-    END IF;
-
-    FOR tag IN SELECT jsonb_array_elements(tags) LOOP
-        IF (tag->>0)::TEXT IN ('e', 'a')
-           AND jsonb_array_length(tag) > reply_marker_index
-           AND LOWER((tag->>reply_marker_index)::TEXT) = 'reply' THEN
-            has_reply := TRUE;
-        END IF;
-
-		reordered_tags := jsonb_insert(reordered_tags, ARRAY['0'], tag, TRUE);
-    END LOOP;
-
-	FOR tag IN SELECT jsonb_array_elements(reordered_tags) LOOP
-        IF has_reply
-           AND (tag->>0)::TEXT IN ('e', 'a')
-           AND jsonb_array_length(tag) > reply_marker_index
-           AND LOWER((tag->>reply_marker_index)::TEXT) = 'root' THEN
-            WHILE jsonb_array_length(tag) < patch_marker_index LOOP
-                tag := jsonb_set(
-                    tag,
-                    ARRAY[CAST(jsonb_array_length(tag) AS TEXT)],
-                    to_jsonb(CAST('' AS TEXT))
-                );
-            END LOOP;
-
-           tag := jsonb_set(
-                    to_jsonb(tag),
-                    '{6}',
-					to_jsonb(CAST('reply_of_root' AS TEXT))
-               );
-        END IF;
-
-        res_tags := jsonb_insert(res_tags, ARRAY['0'], tag, TRUE);
-	END LOOP;
-
-    RETURN res_tags;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_attestation_update_is_allowed(
     old_tags JSONB,
