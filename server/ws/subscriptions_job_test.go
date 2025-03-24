@@ -242,7 +242,10 @@ func TestJobDeletion(t *testing.T) {
 
 	wake := make(chan struct{})
 	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		<-wake
+		select {
+		case <-wake:
+		case <-ctx.Done():
+		}
 		return query.GetStoredEvents(ctx, s)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
