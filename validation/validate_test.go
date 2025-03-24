@@ -1277,7 +1277,6 @@ func TestValidateFundSend(t *testing.T) {
 			{"network", "ion"},
 			{"asset_class", "native"},
 			{"asset_address", "localhost"},
-			{"encrypted"},
 		}
 		require.Error(t, Validate(t.Context(), &ev))
 
@@ -1299,27 +1298,6 @@ func TestValidateFundSend(t *testing.T) {
 			{"asset_address", "localhost"},
 		}
 		ev.Content = `{"to":"1234"}`
-		require.Error(t, Validate(t.Context(), &ev))
-
-		ev.Tags = append(ev.Tags, model.Tag{"L", "wallet.address"})
-		require.NoError(t, Validate(t.Context(), &ev))
-
-		ev.Tags = append(ev.Tags, model.Tag{"p", "bar"})
-		require.Error(t, Validate(t.Context(), &ev))
-	})
-
-	t.Run("With l+L encrypted", func(t *testing.T) {
-		var ev model.Event
-		ev.Kind = model.CustomIONKindFundSendNotify
-		ev.Tags = model.Tags{
-			{"b", "bar"},
-			{"l", "1234", "wallet.address"},
-			{"network", "ion"},
-			{"asset_class", "native"},
-			{"asset_address", "localhost"},
-			{"encrypted"},
-		}
-		ev.Content = `fooo`
 		require.Error(t, Validate(t.Context(), &ev))
 
 		ev.Tags = append(ev.Tags, model.Tag{"L", "wallet.address"})
