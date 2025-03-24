@@ -193,7 +193,7 @@ var (
 
 		model.CustomIONKindFundReceive: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional("encrypted", "asset_address").
+			Optional("asset_address").
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
@@ -207,8 +207,6 @@ var (
 				}
 				if label := e.GetTag("L").Value(); label != "wallet.address" {
 					return errors.Errorf("fund receive: invalid L tag value: %q", label)
-				} else if e.GetTag("encrypted") != nil {
-					return nil
 				}
 
 				if err := json.Unmarshal([]byte(e.Content), &address); err != nil {
@@ -227,7 +225,7 @@ var (
 
 		model.CustomIONKindFundSendNotify: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional("request", "encrypted", "asset_address").
+			Optional("request", "asset_address").
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
@@ -241,8 +239,6 @@ var (
 				}
 				if label := e.GetTag("L").Value(); label != "wallet.address" {
 					return errors.Errorf("fund send notify: invalid L tag value: %q", label)
-				} else if e.GetTag("encrypted") != nil {
-					return nil
 				}
 
 				if err := json.Unmarshal([]byte(e.Content), &address); err != nil {
