@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: ice License 1.0
+
+database/command:
+  debug: true
+  start-rpc-port: 12000
+  start-p2p-port: 14000
+  broadcast-port: 19998
+  nip13MinLeadingZeroBits: 0
+  absolute-node-private-key-path: "./../database/command/.testdata/node_key.json"
+  absolute-root-path: "../../.cometbft"
+
+database/query:
+  private-key: "eff8260efe5ffe4a73a757d794e673d7497a16621ab7efb387446c65ec8488a9"
+  url: ":memory:"
+  relay-url: wss://localhost

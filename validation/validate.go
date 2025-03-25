@@ -100,6 +100,8 @@ var (
 	ErrActionForbidden  = errors.New("forbidden")
 	ErrNotFound         = errors.New("not found")
 	ErrContentEmpty     = errors.New("content is empty")
+	ErrEventInvalidID   = errors.New("event id is invalid")
+	ErrEventInvalidSign = errors.New("event signature is invalid")
 
 	CommongTags = []string{
 		"t",
@@ -1708,4 +1710,25 @@ func (v *kindValidator) Execute(e *model.Event) (err error) {
 		err = errors.Join(err, v.Validate(e))
 	}
 	return err
+}
+
+func ValidateIncomingEvent(ctx context.Context, evt *model.Event, nip13ZeroBits int) (err error) {
+	if !evt.CheckID() {
+		return ErrEventInvalidID
+	}
+
+	var ok bool
+	if ok, err = evt.CheckSignature(); err != nil {
+		return errors.Wrap(err, "signature check failed")
+	} else if !ok {
+		return ErrEventInvalidSign
+	}
+	if vErr := Validate(ctx, evt); vErr != nil {
+		return errors.Wrap(vErr, "wrong event parameters")
+	}
+	if cErr := evt.CheckNIP13Difficulty(nip13ZeroBits); cErr != nil {
+		return errors.Wrap(cErr, "wrong event difficulty")
+	}
+
+	return nil
 }

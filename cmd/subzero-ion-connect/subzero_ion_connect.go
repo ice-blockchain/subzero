@@ -41,6 +41,7 @@ var (
 
 			cfg.MustInit(configPath)
 			validation.MustInit()
+			command.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
@@ -82,14 +83,16 @@ func printVersion() {
 func init() {
 	initFlags()
 	query.RegisterExpiredEventsProcessor(storage.DeleteExpiredFiles)
+	command.RegisterRollbackListener(query.RollbackEvents)
+	command.RegisterAcceptListener(query.AcceptEvents)
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
 		// Require authentication for all types/kinds of subscriptions.
-		return true
+		return false
 	})
 	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
 		for _, e := range events {
 			if _, exists := eventKindsNoAuth[e.Kind]; !exists {
-				return true
+				return false
 			}
 		}
 		return false
@@ -103,12 +106,11 @@ func init() {
 				}
 			}
 		}
-
-		if err := command.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
-		}
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
+		}
+		if err := command.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
 		}
 		if sErr := storage.AcceptEvents(ctx, events...); sErr != nil {
 			return errors.Wrapf(sErr, "failed to process NIP-94 events")

@@ -43,9 +43,6 @@ var (
 	errAttestationRecordExpired     = errors.New("attestation record is expired")
 	errAttestationRecordRevoked     = errors.New("attestation record is revoked")
 	errAttestationRecordIsNotActive = errors.New("attestation record is not active yet")
-
-	errEventInvalidID   = errors.New("event id is invalid")
-	errEventInvalidSign = errors.New("event signature is invalid")
 )
 
 func generateChallenge(hints ...string) string {
@@ -345,7 +342,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event, cfg *Config) error {
 	for i := range events {
-		if err := h.validateIncomingEvent(ctx, events[i], cfg); err != nil {
+		if err := validation.ValidateIncomingEvent(ctx, events[i], cfg.NIP13MinLeadingZeroBits); err != nil {
 			return errors.Wrapf(err, "event %v: invalid", events[i])
 		}
 	}
@@ -381,27 +378,6 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {
 		return errors.Wrap(ErrNotifyFailed, err.Error())
-	}
-
-	return nil
-}
-
-func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, cfg *Config) (err error) {
-	if !evt.CheckID() {
-		return errEventInvalidID
-	}
-
-	var ok bool
-	if ok, err = evt.CheckSignature(); err != nil {
-		return errors.Wrap(err, "signature check failed")
-	} else if !ok {
-		return errEventInvalidSign
-	}
-	if vErr := validation.Validate(ctx, evt); vErr != nil {
-		return errors.Wrap(vErr, "wrong event parameters")
-	}
-	if cErr := evt.CheckNIP13Difficulty(cfg.NIP13MinLeadingZeroBits); cErr != nil {
-		return errors.Wrap(cErr, "wrong event difficulty")
 	}
 
 	return nil
