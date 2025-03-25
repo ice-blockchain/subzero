@@ -4,13 +4,16 @@ package storage
 
 import (
 	"io"
+	"math"
 	"os"
+	"path/filepath"
 
+	"github.com/xssnick/tonutils-storage/db"
 	"github.com/xssnick/tonutils-storage/storage"
 )
 
 func init() {
-	storage.Fs = newFS()
+	db.CachedFDLimit = math.MaxInt64
 }
 
 type fs struct{}
@@ -29,14 +32,17 @@ func newFS() storage.FSController {
 	return &fs{}
 }
 
-func (f *fs) Acquire(path string) (storage.FDesc, error) {
+func (f *fs) AcquireRead(path string, p []byte, offset int64) (int, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
-	return &fd{file}, nil
+	return file.ReadAt(p, offset)
 }
 
-func (fs *fs) Free(f storage.FDesc) {
+func (fs *fs) Free(f *fd) {
 	f.Close()
+}
+func (fs *fs) RemoveFile(p string) error {
+	return os.Remove(filepath.Clean(p))
 }

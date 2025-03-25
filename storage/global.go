@@ -284,7 +284,7 @@ func mustInit(ctx context.Context) *client {
 			}
 		}
 	}()
-	progressStorage, err := db.NewStorage(progressDb, conn, true, loadMonitoringCh)
+	progressStorage, err := db.NewStorage(progressDb, conn, true, true, loadMonitoringCh)
 	if err != nil {
 		log.Panic(errors.Wrapf(err, "failed to open storage"))
 	}
