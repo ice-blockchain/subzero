@@ -17,3 +17,4 @@
 | ICIP-7000  | Addition     |                                                          |                                                                                    |
 | ICIP-51    | Modification |                                                          | an extension of [NIP-51](https://github.com/nostr-protocol/nips/blob/master/51.md) |
 | ICIP-01    | Modification |                                                          | an extension of [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) |
+| ICIP-17    | Modification |                                                          | an extension of [NIP-17](https://github.com/nostr-protocol/nips/blob/master/17.md) |
