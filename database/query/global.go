@@ -91,6 +91,10 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	return globalDB.Client.AcceptEvents(ctx, events...)
 }
 
+func RollbackEvents(ctx context.Context, events ...*model.Event) error {
+	return globalDB.Client.RollbackEvents(ctx, events...)
+}
+
 func GetStoredEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
 	var filters model.Filters
 	if subscription != nil {

@@ -155,7 +155,6 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{{"p", "event2", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(t.Context(), ev2))
 
 		// Add another event.
 		ev3 := &model.Event{
@@ -167,7 +166,7 @@ func TestReplaceableEvents(t *testing.T) {
 				Tags:      nostr.Tags{{"p", "event3", "wss://localhost:9999/"}},
 			},
 		}
-		require.NoError(t, db.AcceptEvents(t.Context(), ev3))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev2, ev3))
 
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindFollowList},
@@ -175,6 +174,14 @@ func TestReplaceableEvents(t *testing.T) {
 		require.Len(t, stored, 2)
 		require.Equal(t, ev3, stored[0], "event 3")
 		require.Equal(t, ev2, stored[1], "event 2")
+
+		// Rollback
+		require.NoError(t, db.RollbackEvents(t.Context(), ev2, ev3))
+		stored = helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindFollowList},
+		})
+		require.Len(t, stored, 1)
+		require.Equal(t, ev1, stored[0], "event 1")
 	})
 }
 
@@ -984,17 +991,23 @@ func TestDeleteNestedEvents(t *testing.T) {
 	events := helperSelectEvents(t, db)
 	require.Len(t, events, 7)
 
-	// Delete root event.
 	var rootDelete model.Event
-	rootDelete.CreatedAt = 8
-	rootDelete.Kind = nostr.KindDeletion
-	rootDelete.Content = "delete root event"
-	rootDelete.Tags = model.Tags{{"e", root.ID}}
-	require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(t.Context(), &rootDelete))
+	t.Run("Delete root event", func(t *testing.T) {
+		rootDelete.CreatedAt = 8
+		rootDelete.Kind = nostr.KindDeletion
+		rootDelete.Content = "delete root event"
+		rootDelete.Tags = model.Tags{{"e", root.ID}}
+		require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(context.TODO(), &rootDelete))
 
-	// Check if all events are deleted.
-	require.Zero(t, len(helperSelectEvents(t, db)))
+		// Check if all events are deleted.
+		require.Zero(t, len(helperSelectEvents(t, db)))
+	})
+	t.Run("Rollback", func(t *testing.T) {
+		require.NoError(t, db.RollbackEvents(context.TODO(), &rootDelete))
+		events := helperSelectEvents(t, db)
+		require.Len(t, events, 7)
+	})
 }
 
 func TestEditablePostFlow(t *testing.T) {

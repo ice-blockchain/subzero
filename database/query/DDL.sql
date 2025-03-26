@@ -360,6 +360,72 @@ BEFORE DELETE ON events
 FOR EACH ROW
 EXECUTE FUNCTION trigger_events_before_delete_remove_tags_explicit();
 --------
+CREATE TABLE IF NOT EXISTS replaceable_events_before_update
+AS TABLE events;
+ALTER TABLE replaceable_events_before_update
+    ADD COLUMN IF NOT EXISTS replaced_by_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_events_before_update(replaced_by_id);
+
+CREATE OR REPLACE FUNCTION events_store_replaceable_data_before_update()
+    RETURNS TRIGGER AS $$
+BEGIN
+    insert into replaceable_events_before_update (
+        created_at,
+        kind,
+        system_kind,
+        lookup,
+        key_alg,
+        content,
+        d_tag,
+        h_tag,
+        address,
+        id,
+        pubkey,
+        master_pubkey,
+        sig,
+        sig_alg,
+        reference_id,
+        tags,
+        has_images,
+        has_videos,
+        deleted,
+        hidden,
+        replaced_by_id
+    )
+    values (
+            old.created_at,
+            old.kind,
+            old.system_kind,
+            old.lookup,
+            old.key_alg,
+            old.content,
+            old.d_tag,
+            old.h_tag,
+            old.address,
+            old.id,
+            old.pubkey,
+            old.master_pubkey,
+            old.sig,
+            old.sig_alg,
+            old.reference_id,
+            old.tags,
+            old.has_images,
+            old.has_videos,
+            old.deleted,
+            old.hidden,
+            new.id
+           )
+    ON CONFLICT DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+--------
+CREATE OR REPLACE TRIGGER trigger_events_store_replaceable_data_before_update
+    AFTER UPDATE ON events
+    FOR EACH ROW
+    WHEN ((10000 <= old.kind AND old.kind < 20000 ) OR old.kind = 0 OR old.kind = 3 OR (30000 <= old.kind AND old.kind < 40000))
+EXECUTE FUNCTION events_store_replaceable_data_before_update();
+--------
 CREATE TABLE IF NOT EXISTS event_counters
 (
     kind           INTEGER NOT NULL,

@@ -47,7 +47,7 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 	return &ev, nil
 }
 
-func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) error {
+func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event, *databaseEvent) error) error {
 	rows, err := it.Fetch()
 	if err != nil {
 		return errors.Wrap(err, "failed to get events")
@@ -66,7 +66,7 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 			event = it.Map(event)
 		}
 
-		err = fn(&event.Event)
+		err = fn(&event.Event, event)
 		if err != nil {
 			return errors.Wrap(err, "failed to process event")
 		}
@@ -93,7 +93,7 @@ func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, p
 		}}
 
 	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *model.Event) error {
+		err := it.Each(ctx, func(event *model.Event, _ *databaseEvent) error {
 			if !yield(event, nil) {
 				return errEventIteratorInterrupted
 			}
