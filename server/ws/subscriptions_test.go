@@ -2230,8 +2230,7 @@ func TestCanForwardEvent(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Regular", func(t *testing.T) {
-		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}, nil))
-		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}, nil), "")
+		require.True(t, canForwardEvent(&model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}, nil, "", ""))
 	})
 	t.Run("Protected", func(t *testing.T) {
 		user1Priv, user1Pub := model.GenerateKeyPair()
@@ -2242,15 +2241,15 @@ func TestCanForwardEvent(t *testing.T) {
 		ev.Content = "content"
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 
-		require.False(t, canForwardEvent(&ev, nil, user1Pub)) // user1 cannot see it's own event.
-		require.False(t, canForwardEvent(&ev, nil, user2Pub)) // user2 is not included in the event yet.
-		require.False(t, canForwardEvent(&ev, nil))
+		require.False(t, canForwardEvent(&ev, nil, "", user1Pub)) // user1 cannot see it's own event.
+		require.False(t, canForwardEvent(&ev, nil, "", user2Pub)) // user2 is not included in the event yet.
+		require.False(t, canForwardEvent(&ev, nil, "", ""))
 
 		ev.Tags = append(ev.Tags,
 			model.Tag{"p", user2Pub},
 		)
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
-		require.True(t, canForwardEvent(&ev, nil, user2Pub))
+		require.True(t, canForwardEvent(&ev, nil, "", user2Pub))
 	})
 	t.Run("Not allowed", func(t *testing.T) {
 		user1Priv, user1Pub := model.GenerateKeyPair()
@@ -2260,13 +2259,13 @@ func TestCanForwardEvent(t *testing.T) {
 		ev.Content = "content"
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 
-		require.True(t, canForwardEvent(&ev, nil, user1Pub))
+		require.True(t, canForwardEvent(&ev, nil, "", user1Pub))
 		require.True(t, canForwardEvent(&ev, map[int]struct{}{
 			nostr.KindTextNote: {},
-		}, user1Pub))
+		}, "", user1Pub))
 		require.False(t, canForwardEvent(&ev, map[int]struct{}{
 			nostr.KindArticle: {},
-		}, user1Pub))
+		}, "", user1Pub))
 	})
 }
 
@@ -2821,4 +2820,95 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 		})
 	})
 	helperMustCloseRelay(t, relay)
+}
+
+func TestFiltersMatchWithMasterKey(t *testing.T) {
+	t.Parallel()
+
+	privkey, pubkey := model.GenerateKeyPair()
+	masterPriv, masterPubkey := model.GenerateKeyPair()
+
+	createEvent := func(kind int, tags model.Tags, pk string) *model.Event {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      kind,
+			Tags:      tags,
+			Content:   "test content",
+		}}
+		require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		return ev
+	}
+
+	t.Run("direct match - event kind", func(t *testing.T) {
+		ev := createEvent(nostr.KindTextNote, nil, privkey)
+		filters := model.Filters{{Kinds: []int{nostr.KindTextNote}}}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.True(t, result)
+	})
+
+	t.Run("direct match - event tag", func(t *testing.T) {
+		ev := createEvent(nostr.KindTextNote, model.Tags{{"t", "test"}}, privkey)
+		filters := model.Filters{{Tags: model.TagMap{}.Set("t", model.PointerOf("test"))}}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.True(t, result)
+	})
+
+	t.Run("master key match", func(t *testing.T) {
+		ev := createEvent(nostr.KindTextNote, model.Tags{{model.CustomIONTagOnBehalfOf, masterPubkey}}, masterPriv)
+
+		filters := model.Filters{{
+			Authors: []string{pubkey},
+			Kinds:   []int{nostr.KindTextNote},
+		}}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.True(t, result)
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		ev := createEvent(nostr.KindTextNote, nil, privkey)
+		filters := model.Filters{{Kinds: []int{nostr.KindArticle}}}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.False(t, result)
+	})
+
+	t.Run("device key not in authors", func(t *testing.T) {
+		ev := createEvent(nostr.KindTextNote, model.Tags{{model.CustomIONTagOnBehalfOf, masterPubkey}}, privkey)
+		filters := model.Filters{{
+			Authors: []string{"different_key"},
+			Kinds:   []int{nostr.KindTextNote},
+		}}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.False(t, result)
+	})
+
+	t.Run("master key substitution match", func(t *testing.T) {
+		// Create an event with the master key tag
+		ev := createEvent(nostr.KindTextNote, model.Tags{{model.CustomIONTagOnBehalfOf, masterPubkey}}, masterPriv)
+
+		// Create a filter with device key that should match after substitution
+		filters := model.Filters{{
+			Authors: []string{pubkey},
+		}}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.True(t, result)
+	})
+
+	t.Run("complex filters with both matches", func(t *testing.T) {
+		ev := createEvent(nostr.KindTextNote, model.Tags{{"t", "test"}, {model.CustomIONTagOnBehalfOf, masterPubkey}}, masterPriv)
+
+		filters := model.Filters{
+			{Kinds: []int{nostr.KindArticle}},                        // No match
+			{Tags: model.TagMap{}.Set("t", model.PointerOf("test"))}, // Direct match
+			{Authors: []string{pubkey}},                              // Master key match
+		}
+
+		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
+		require.True(t, result)
+	})
 }

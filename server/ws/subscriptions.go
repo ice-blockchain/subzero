@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,7 +26,7 @@ import (
 )
 
 var (
-	protectedEventKinds = map[int]struct{}{
+	protectedEventKindsE2E = map[int]struct{}{
 		nostr.KindGiftWrap: {},
 	}
 
@@ -66,22 +67,24 @@ func canForwardEventContext(ctx context.Context, in *model.Event) bool {
 	return canForwardCommunityEvent(ctx, in, master) && canForwardEvent(in, kinds, master, pk)
 }
 
-func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, currentKeys ...string) bool {
+func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
+	_ = masterPubkey
+
 	if len(currentkinds) > 0 {
 		if _, ok := currentkinds[in.Kind]; !ok {
 			return false
 		}
 	}
 
-	if _, ok := protectedEventKinds[in.Kind]; !ok {
+	if _, ok := protectedEventKindsE2E[in.Kind]; !ok {
 		return true
 	}
 
-	for _, key := range currentKeys {
-		for range in.Tags.All([]string{"p", key}) {
-			return true
-		}
+	// E2E encrypted events cannot be decrypted with master key, so do not forward them.
+	for range in.Tags.All([]string{"p", deviceKey}) {
+		return true
 	}
+
 	return false
 }
 
@@ -400,6 +403,30 @@ func (h *handler) validateIncomingEvent(ctx context.Context, evt *model.Event, c
 	return nil
 }
 
+func filtersMatchWithMasterKey(filters model.Filters, ev *model.Event, masterPubKey, deviceKey string) bool {
+	if filters.Match(&ev.Event) {
+		return true
+	}
+
+	for _, filter := range filters {
+		if !slices.Contains(filter.Authors, deviceKey) {
+			continue
+		}
+
+		n := filter.Clone()
+		n.Authors = nil
+		if n.Tags == nil {
+			n.Tags = model.TagMap{}
+		}
+		n.Tags.Set(model.CustomIONTagOnBehalfOf, &masterPubKey)
+		if n.Matches(&ev.Event) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
 	var broadcast = map[Writer][]nostr.EventEnvelope{}
 
@@ -409,7 +436,7 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
 			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
 			for _, event := range events {
-				if !sub.Filters.Match(&event.Event) {
+				if !filtersMatchWithMasterKey(sub.Filters, event, authData.MasterPublicKey, authData.PublicKey) {
 					continue
 				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) ||
 					!canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
