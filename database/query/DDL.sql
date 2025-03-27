@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS events (
                   ) STORED,
     kind           INTEGER NOT NULL,
     system_kind    INTEGER,
-    created_at     BIGINT  NOT NULL,
-    expiration     BIGINT,
+    created_at     TIMESTAMP NOT NULL,
+    expiration     TIMESTAMP,
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,
@@ -217,7 +217,7 @@ BEGIN
     )
     SELECT
         x.kind AS kind,
-        0 AS created_at,
+        to_timestamp(0) AS created_at,
         x.id AS id,
         '' AS pubkey,
         COALESCE((SELECT value->>1 FROM jsonb_array_elements(x.tags) AS value WHERE value->>0 = 'b' LIMIT 1), '') AS master_pubkey,
@@ -500,8 +500,7 @@ EXECUTE FUNCTION trigger_event_tags_after_delete_dec_counter();
 CREATE OR REPLACE FUNCTION subzero_nostr_onbehalf_is_allowed(
     master_tags jsonb,
     on_behalf_pubkey text,
-    kind integer,
-    now_unix bigint
+    kind integer
 ) RETURNS boolean AS $$
 DECLARE
     entries         jsonb;
@@ -527,7 +526,7 @@ BEGIN
         END IF;
     END IF;
 
-    now_ts := to_timestamp(now_unix);
+    now_ts := CURRENT_TIMESTAMP::timestamp;
     start_ts := (entry ->> 'start')::timestamp;
     end_ts := (entry ->> 'end')::timestamp;
 
@@ -617,8 +616,7 @@ BEGIN
                 WHERE kind = 10100 AND pubkey = NEW.master_pubkey AND hidden = FALSE
             ), '[]'::JSONB),
             NEW.pubkey::text,
-            NEW.kind,
-            EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint
+            NEW.kind
         ) THEN
             RAISE EXCEPTION 'onbehalf permission denied';
         END IF;
@@ -873,13 +871,6 @@ EXCEPTION
         RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
---------
-CREATE OR REPLACE FUNCTION unixepoch() RETURNS BIGINT AS $$
-BEGIN
-    RETURN CAST(EXTRACT(epoch FROM NOW()) AS BIGINT);
-END;
-$$ LANGUAGE plpgsql;
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_get_event_address_tag(int) RETURNS TEXT AS $$
 BEGIN
@@ -889,20 +880,20 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 --------
 CREATE TABLE IF NOT EXISTS ranked_events
 (
-    event_id          text    not null primary key REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    event_kind        integer not null,
-    points            integer not null,
-    event_created_at  bigint  not null,
-    score             real    not null
+    event_id          text      not null primary key REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    event_kind        integer   not null,
+    points            integer   not null,
+    event_created_at  timestamp not null,
+    score             real      not null
 );
 --------
 create index if not exists ranked_events_points_ix           on ranked_events(points) where points <= 0;
 create index if not exists ranked_events_score_ix            on ranked_events(score desc);
 create index if not exists ranked_events_created_at_score_ix on ranked_events(event_created_at desc, score desc);
 --------
-CREATE OR REPLACE FUNCTION event_calculate_score(p integer, created_at bigint) RETURNS REAL AS $$
+CREATE OR REPLACE FUNCTION event_calculate_score(p integer, created_at timestamp) RETURNS REAL AS $$
 BEGIN
-    RETURN (round((p / power((1 + (unixepoch() - least(unixepoch(), created_at))/3600.0), 0.9)), 4));
+    RETURN (round((p / power((1 + extract(EPOCH from (CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, created_at))) /3600.0), 0.9)), 4));
 END;
 $$ LANGUAGE plpgsql;
 --------
@@ -947,7 +938,7 @@ BEGIN
     where
         e.hidden = false
         and e.deleted = false
-        and e.created_at > 0
+        and e.created_at > to_timestamp(0)
         and e.kind in (1, 30023, 30175)
         and (NEW.system_kind is null or NEW.system_kind != 3)
     on conflict (event_id) do update
@@ -994,7 +985,7 @@ BEGIN
             where e.address = je->>1
             and e.hidden = false
             and e.deleted = false
-            and e.created_at > 0
+            and e.created_at > to_timestamp(0)
             and e.kind in (1, 30023, 30175)
             and (OLD.system_kind is null or OLD.system_kind != 3)
             and (OLD.system_kind is null or case
@@ -1044,7 +1035,7 @@ BEGIN
             from events e
             where e.address = je->>1
             and e.hidden = false
-            and e.created_at > 0
+            and e.created_at > to_timestamp(0)
             and e.kind in (1, 30023, 30175)
             and (OLD.system_kind is null or OLD.system_kind != 3)
             and (OLD.system_kind is null or case
@@ -1092,7 +1083,7 @@ BEGIN
     where
         e.hidden = false
         and e.deleted = false
-        and e.created_at > 0
+        and e.created_at > to_timestamp(0)
         and e.kind in (1, 30023, 30175)
         and NEW.deleted = false
         and (NEW.system_kind is null or NEW.system_kind != 3)

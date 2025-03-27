@@ -593,7 +593,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
 	t.Helper()
 	var count int
-	err := db.QueryRow("select count(*) from events WHERE expiration <= unixepoch()").Scan(&count)
+	err := db.QueryRow("select count(*) from events WHERE expiration <= CURRENT_TIMESTAMP").Scan(&count)
 	require.NoError(t, err)
 
 	return count

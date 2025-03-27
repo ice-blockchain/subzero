@@ -348,8 +348,9 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	if since != nil && until != nil {
 		if *since == *until {
 			b.MaybeAND()
-			b.WriteString("e.created_at = :")
+			b.WriteString("e.created_at = to_timestamp(:")
 			b.WriteValue(filterID, "timestamp", *since)
+			b.WriteRune(')')
 
 			return nil
 		} else if *since > *until {
@@ -360,15 +361,17 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	// If a filter includes the `since` property, events with `created_at` greater than or equal to since are considered to match the filter.
 	if since != nil && *since > 0 {
 		b.MaybeAND()
-		b.WriteString("e.created_at >= :")
+		b.WriteString("e.created_at >= to_timestamp(:")
 		b.WriteValue(filterID, "since", *since)
+		b.WriteRune(')')
 	}
 
 	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
 	if until != nil && *until > 0 {
 		b.MaybeAND()
-		b.WriteString("e.created_at <= :")
+		b.WriteString("e.created_at <= to_timestamp(:")
 		b.WriteValue(filterID, "until", *until)
+		b.WriteRune(')')
 	}
 
 	return nil
@@ -402,7 +405,7 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Expiration != nil {
 		b.MaybeAND()
 		if *filter.Expiration {
-			b.WriteString("(e.expiration > unixepoch())")
+			b.WriteString("(e.expiration > CURRENT_TIMESTAMP)")
 		} else {
 			b.WriteString("(e.expiration is null)")
 		}
@@ -524,7 +527,7 @@ func (b *queryBuilder) CountVotesOf(filterID, cteName string, filter *filterDepe
 union
 select
 	6400,
-	unixepoch(),
+	CURRENT_TIMESTAMP,
 	'' as id,
 	t.pubkey,
 	t.master_pubkey,
@@ -576,7 +579,7 @@ func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *filterD
 union all
 select
 	6400,
-	unixepoch(),
+	CURRENT_TIMESTAMP,
 	case when f.kind = 3 then '' else f.reference_id end as id,
 	coalesce(evr.pubkey, ''),
 	coalesce(evr.master_pubkey, ''),
@@ -681,7 +684,7 @@ AND `)
 		b.WriteString(`e.master_pubkey IN (select master_pubkey from ` + cteName + `)
 and e.hidden=false
 and e.kind in (1, 30023)
-and e.expiration > unixepoch()`)
+and e.expiration > CURRENT_TIMESTAMP`)
 
 		return
 	}
@@ -739,7 +742,7 @@ and e.expiration > unixepoch()`)
 union all
 select
 	20002,
-	0 as created_at,
+	CURRENT_TIMESTAMP,
 	'' as id,
 	e.pubkey,
 	e.master_pubkey,
@@ -948,7 +951,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cteBody string, e
 
 	case rankTrending:
 		// 24h trending.
-		joinString = ` inner join ranked_events r on e.id = r.event_id and ((unixepoch() - least(unixepoch(), e.created_at)) < 86400)`
+		joinString = ` inner join ranked_events r on e.id = r.event_id and ((CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, e.created_at)) < interval '24 hours')`
 		orderBy = `r.score desc, ` + orderBy
 	}
 
@@ -1031,7 +1034,7 @@ func (b *queryBuilder) ApplyDeleteFilter(idx int, filter *databaseFilterDelete) 
 	b.WriteString(" AND hidden=false) OR ((pubkey != master_pubkey AND ")
 	b.WriteString("subzero_nostr_onbehalf_is_allowed(jsonb(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden=false), '[]')), :")
 	b.WriteString(owner)
-	b.WriteString(", kind, unixepoch())))))")
+	b.WriteString(", kind)))))")
 }
 
 func (b *queryBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params map[string]any, err error) {

@@ -581,7 +581,7 @@ func TestJobMembersCount_OpenCommunity(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
+	helperCountMembers(t, relay, jobResults, communityID, 2)
 
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
@@ -685,7 +685,7 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
+	helperCountMembers(t, relay, jobResults, communityID, 2)
 
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
@@ -768,7 +768,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		require.NoError(t, relay.Publish(t.Context(), joinUser1Event.Event))
 	})
 
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
+	helperCountMembers(t, relay, jobResults, communityID, 2)
 
 	t.Run("change community definition to closed", func(t *testing.T) {
 		ev := &model.Event{
@@ -803,7 +803,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
+	helperCountMembers(t, relay, jobResults, communityID, 2)
 
 	var joinUser2Event model.Event
 	t.Run("accept invitation by user2 after changed openess community option", func(t *testing.T) {
@@ -834,7 +834,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		require.NoError(t, relay.Publish(t.Context(), joinUser2Event.Event))
 	})
 
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 3)
+	helperCountMembers(t, relay, jobResults, communityID, 3)
 
 	t.Run("delete user2 from the community", func(t *testing.T) {
 		ev := model.Event{
@@ -854,7 +854,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 2)
+	helperCountMembers(t, relay, jobResults, communityID, 2)
 
 	t.Run("delete user1 from the community", func(t *testing.T) {
 		ev := model.Event{
@@ -874,7 +874,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
 
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 1)
+	helperCountMembers(t, relay, jobResults, communityID, 1)
 
 	var inviteUser3Event model.Event
 	t.Run("invite user3 to the closed community", func(t *testing.T) {
@@ -892,7 +892,7 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &inviteUser3Event, privkeyOwner)
 		require.NoError(t, relay.Publish(t.Context(), inviteUser3Event.Event))
 	})
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 1)
+	helperCountMembers(t, relay, jobResults, communityID, 1)
 
 	t.Run("delete user3 invitation", func(t *testing.T) {
 		ev := model.Event{
@@ -910,13 +910,13 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyOwner)
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 	})
-	helperCountMembers(t, t.Context(), relay, jobResults, communityID, 1)
+	helperCountMembers(t, relay, jobResults, communityID, 1)
 
 	time.Sleep(time.Second)
 	helperMustCloseRelay(t, relay)
 }
 
-func helperCountMembers(t *testing.T, ctx context.Context, relay *nostrRelay, jobResults chan *model.Event, communityID string, expectedCount int64) {
+func helperCountMembers(t *testing.T, relay *nostrRelay, jobResults chan *model.Event, communityID string, expectedCount int64) {
 	t.Helper()
 	responses := make([]*model.Event, 0)
 	commonUserForFirst2Reqs := model.GeneratePrivateKey()

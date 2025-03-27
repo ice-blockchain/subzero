@@ -394,7 +394,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 	for _, ev := range events {
 		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt, ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.Expiration, ev.HasImages, ev.HasVideos)
 		values = append(values, fmt.Sprintf(
-			"($%[1]v::integer, $%[2]v::integer, $%[3]v::bigint, $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v::bool, $%[15]v::bigint, $%[16]v::bool, $%[17]v::bool)",
+			"($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint), $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v::bool, to_timestamp($%[15]v::bigint), $%[16]v::bool, $%[17]v::bool)",
 			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
 		))
 		idx += 17
@@ -764,7 +764,7 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 }
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
-	const stmt = `delete from events where expiration is not null and expiration <= unixepoch()
+	const stmt = `delete from events where expiration is not null and expiration <= CURRENT_TIMESTAMP
 	returning
 		kind,
 		created_at,
