@@ -11,46 +11,46 @@ EXCEPTION
    WHEN unique_violation THEN NULL;
 END;$$;
 
-CREATE TABLE IF NOT EXISTS events
-(
-    id                TEXT    PRIMARY KEY,
-    kind              INTEGER NOT NULL,
-    system_kind       INTEGER,
-    created_at        BIGINT  NOT NULL,
-    pubkey            TEXT    NOT NULL,
-    master_pubkey     TEXT    NOT NULL,
-    sig               TEXT    NOT NULL,
-    sig_alg           TEXT    NOT NULL DEFAULT '',
-    key_alg           TEXT    NOT NULL DEFAULT '',
-    content           TEXT    NOT NULL,
-    d_tag             TEXT    NOT NULL DEFAULT '',
-    h_tag             TEXT    NOT NULL DEFAULT '',
-    reference_id      TEXT             DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    tags              JSONB   NOT NULL DEFAULT '[]',
-    deleted           BOOLEAN NOT NULL DEFAULT FALSE,
-    hidden            BOOLEAN NOT NULL DEFAULT FALSE,
-    has_images        BOOLEAN NOT NULL DEFAULT FALSE,
-    has_videos        BOOLEAN NOT NULL DEFAULT FALSE,
-    expiration        BIGINT,
-
-    lookup tsvector NOT NULL GENERATED ALWAYS AS (
-        (case when (content is JSON)
-            then json_to_tsvector('fts', content::json, '"all"')
-            else to_tsvector('fts', content)
-        end)
-        ||
-        (case when kind in (0, 1, 1063, 30023, 30175)
-            then jsonb_to_tsvector('fts', tags, '"all"')
-            else to_tsvector('fts', '')
-        end)
-    ) STORED,
-
-    address TEXT NOT NULL GENERATED ALWAYS AS (
-        CASE
-            WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3 THEN coalesce(kind,0) || ':' || coalesce(master_pubkey,pubkey,'') || ':'
-            WHEN 30000 <= kind AND kind < 40000                           THEN coalesce(kind,0) || ':' || coalesce(master_pubkey,pubkey,'') || ':' || coalesce(d_tag,'')
-            ELSE id
-        END) STORED
+CREATE TABLE IF NOT EXISTS events (
+    id             TEXT    PRIMARY KEY,
+    pubkey         TEXT    NOT NULL,
+    master_pubkey  TEXT    NOT NULL,
+    sig            TEXT    NOT NULL,
+    sig_alg        TEXT    NOT NULL DEFAULT '',
+    key_alg        TEXT    NOT NULL DEFAULT '',
+    content        TEXT    NOT NULL,
+    d_tag          TEXT    NOT NULL DEFAULT '',
+    h_tag          TEXT    NOT NULL DEFAULT '',
+    reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    address        TEXT    NOT NULL GENERATED ALWAYS AS (
+                      CASE
+                        WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3
+                          THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':'
+                        WHEN 30000 <= kind AND kind < 40000
+                          THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':' || coalesce(d_tag, '')
+                        ELSE id
+                      END
+                  ) STORED,
+    tags           JSONB   NOT NULL DEFAULT '[]',
+    lookup         tsvector NOT NULL GENERATED ALWAYS AS (
+                      (CASE WHEN (content IS JSON)
+                        THEN json_to_tsvector('fts', content::json, '"all"')
+                        ELSE to_tsvector('fts', content)
+                      END)
+                      ||
+                      (CASE WHEN kind IN (0, 1, 1063, 30023, 30175)
+                        THEN jsonb_to_tsvector('fts', tags, '"all"')
+                        ELSE to_tsvector('fts', '')
+                      END)
+                  ) STORED,
+    kind           INTEGER NOT NULL,
+    system_kind    INTEGER,
+    created_at     BIGINT  NOT NULL,
+    expiration     BIGINT,
+    has_images     BOOLEAN NOT NULL DEFAULT FALSE,
+    has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted        BOOLEAN NOT NULL DEFAULT FALSE,
+    hidden         BOOLEAN NOT NULL DEFAULT FALSE
 );
 --------
 create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
@@ -891,8 +891,8 @@ CREATE TABLE IF NOT EXISTS ranked_events
 (
     event_id          text    not null primary key REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     event_kind        integer not null,
-    event_created_at  bigint  not null,
     points            integer not null,
+    event_created_at  bigint  not null,
     score             real    not null
 );
 --------
