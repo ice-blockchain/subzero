@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -54,6 +55,10 @@ type (
 var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
 const threadsPerBagForDownloading = 7
+
+func init() {
+	db.CachedFDLimit = math.MaxInt64
+}
 
 func Client() StorageClient {
 	return globalClient
@@ -302,7 +307,7 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 		if ev.Kind != nostr.KindFileMetadata {
 			continue
 		}
-		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String(), ev.String())
+		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String())
 		fileHash := ""
 		if xTag := ev.Tags.GetFirst([]string{"x"}); ev.Kind == nostr.KindFileMetadata && xTag != nil && len(*xTag) > 1 {
 			fileHash = xTag.Value()

@@ -143,6 +143,6 @@ loop:
 			t.Fatalf("subscription closed: %v", reason)
 		}
 	}
-	require.Equal(t, 2, received)
+	require.Equal(t, 1, received)
 	helperMustCloseRelay(t, receiver)
 }

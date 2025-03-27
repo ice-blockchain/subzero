@@ -100,10 +100,14 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 	if tor == nil {
 		tor = storage.NewTorrent(c.rootStoragePath, c.progressStorage, c.conn)
 		tor.BagID = bag
-		c.downloadQueue <- queueItem{
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.downloadQueue <- queueItem{
 			tor:       tor,
 			bootstrap: bootstrap,
 			user:      &user,
+		}:
 		}
 		if err = c.saveTorrent(tor, &user, bootstrap); err != nil {
 			return errors.Wrapf(err, "failed to store new torrent %v", bagID)
