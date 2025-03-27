@@ -2246,7 +2246,7 @@ func TestCanForwardEvent(t *testing.T) {
 		require.False(t, canForwardEvent(&ev, nil, "", ""))
 
 		ev.Tags = append(ev.Tags,
-			model.Tag{"p", user2Pub},
+			model.Tag{"p", "", "", user2Pub},
 		)
 		helperSignWithMinLeadingZeroBits(t, &ev, user1Priv)
 		require.True(t, canForwardEvent(&ev, nil, "", user2Pub))

@@ -103,7 +103,7 @@ loop:
 			evUser.CreatedAt = 2
 			evUser.Content = "test"
 			evUser.Tags = model.Tags{
-				{"p", pub},
+				{"p", masterPub, "", pub},
 				{"k", "1"},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10)},
 			}

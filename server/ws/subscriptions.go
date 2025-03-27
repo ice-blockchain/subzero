@@ -68,8 +68,6 @@ func canForwardEventContext(ctx context.Context, in *model.Event) bool {
 }
 
 func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
-	_ = masterPubkey
-
 	if len(currentkinds) > 0 {
 		if _, ok := currentkinds[in.Kind]; !ok {
 			return false
@@ -81,8 +79,14 @@ func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubke
 	}
 
 	// E2E encrypted events cannot be decrypted with master key, so do not forward them.
-	for range in.Tags.All([]string{"p", deviceKey}) {
-		return true
+	dest := [][]string{
+		{"p", deviceKey},
+		{"p", masterPubkey, "", deviceKey},
+	}
+	for _, pattern := range dest {
+		for range in.Tags.All(pattern) {
+			return true
+		}
 	}
 
 	return false
