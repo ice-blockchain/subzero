@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS events
     kind              INTEGER NOT NULL,
     system_kind       INTEGER,
     created_at        BIGINT  NOT NULL,
-    system_created_at BIGINT  NOT NULL,
     pubkey            TEXT    NOT NULL,
     master_pubkey     TEXT    NOT NULL,
     sig               TEXT    NOT NULL,
@@ -206,7 +205,6 @@ BEGIN
     INSERT INTO events (
         kind,
         created_at,
-        system_created_at,
         id,
         pubkey,
         master_pubkey,
@@ -220,7 +218,6 @@ BEGIN
     SELECT
         x.kind AS kind,
         0 AS created_at,
-        0 AS system_created_at,
         x.id AS id,
         '' AS pubkey,
         COALESCE((SELECT value->>1 FROM jsonb_array_elements(x.tags) AS value WHERE value->>0 = 'b' LIMIT 1), '') AS master_pubkey,

@@ -64,7 +64,6 @@ func helperPreloadDataForFilter(
 	const stmt = `select
 	e.kind,
 	e.created_at,
-	e.system_created_at,
 	e.id,
 	e.pubkey,
 	e.sig,
