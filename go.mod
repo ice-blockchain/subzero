@@ -16,7 +16,7 @@ require (
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gin-gonic/gin v1.10.0
-	github.com/go-playground/validator/v10 v10.25.0
+	github.com/go-playground/validator/v10 v10.26.0
 	github.com/go-viper/mapstructure/v2 v2.2.1
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
@@ -44,7 +44,7 @@ require (
 	github.com/xssnick/tonutils-go v1.11.1
 	github.com/xssnick/tonutils-storage v0.8.0
 	go.uber.org/goleak v1.3.0
-	golang.org/x/net v0.37.0
+	golang.org/x/net v0.38.0
 )
 
 require (

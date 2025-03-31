@@ -53,9 +53,10 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 			if err != nil {
 				if errors.Is(err, storage.ErrFileNotExist) {
 					existed = false
+				} else {
+					return "", "", false,
+						errors.Wrapf(err, "failed to build download url for already existing file %v/%v(%v)", masterPubKey, relativePathToFileForUrl, hash)
 				}
-				return "", "", false,
-					errors.Wrapf(err, "failed to build download url for already existing file %v/%v(%v)", masterPubKey, relativePathToFileForUrl, hash)
 			}
 			if existed {
 				bagID = hex.EncodeToString(existingBagForUser.BagID)

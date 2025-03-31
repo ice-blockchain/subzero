@@ -73,6 +73,9 @@ func TestNIP96(t *testing.T) {
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
 		var responses []*nip96.UploadResponse
 		responses = make([]*nip96.UploadResponse, 0)
+		upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {})
+		status := deleteFile(t, ctx, user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
+		require.Equal(t, http.StatusOK, status)
 		upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
 			responses = append(responses, resp)
 		})
