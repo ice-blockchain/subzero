@@ -27,7 +27,7 @@ func DeleteAllEvents(ctx context.Context) error {
 func NewTestDatabase(ctx context.Context) (string, func() error) {
 	container := fixture.New(ctx)
 
-	return container.ConnectionString(), func() error {
+	return container.ConnectionString(ctx, ""), func() error {
 		return container.Close(context.Background())
 	}
 }

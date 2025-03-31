@@ -15,7 +15,7 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	db := New(t.Context())
-	connStr := db.ConnectionString()
+	connStr := db.ConnectionString(t.Context(), pgDatabase)
 	require.NotEmpty(t, connStr)
 
 	t.Logf("Postgres container started at %s", connStr)

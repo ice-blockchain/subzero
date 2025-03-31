@@ -4,6 +4,9 @@ package fixture
 
 import (
 	"context"
+	"log"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,38 +21,85 @@ import (
 
 const (
 	pgImage    = "postgres:17-alpine"
-	pgUser     = "subzero-user"
-	pgPass     = "subzero-password"
-	pgDatabase = "subzerodb" // `-` is not allowed in database names.
+	pgPass     = "postgres"
+	pgDatabase = "postgres"
 )
 
-type Container struct {
-	address   string
-	container *postgres.PostgresContainer
-	seed      uint64
-	mu        sync.Mutex
+type (
+	Container struct {
+		container *postgres.PostgresContainer
+		seed      uint64
+		mu        sync.Mutex
+	}
+	Option = testcontainers.CustomizeRequestOption
+)
+
+func WithConfigFile(filePath string) Option {
+	return postgres.WithConfigFile(filePath)
 }
 
-func New(ctx context.Context) *Container {
-	container, err := postgres.Run(ctx, pgImage,
+func WithConfigData(cfgBody string) Option {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		cfgFile := testcontainers.ContainerFile{
+			Reader:            strings.NewReader(cfgBody),
+			ContainerFilePath: "/etc/postgresql.conf",
+			FileMode:          0o755,
+		}
+
+		req.Files = append(req.Files, cfgFile)
+		req.Cmd = append(req.Cmd, "-c", "config_file=/etc/postgresql.conf")
+
+		return nil
+	}
+}
+
+func New(ctx context.Context, opts ...Option) *Container {
+	var customizers []testcontainers.ContainerCustomizer
+
+	customizers = append(customizers,
 		postgres.WithDatabase(pgDatabase),
-		postgres.WithUsername(pgUser),
 		postgres.WithPassword(pgPass),
 		testcontainers.WithWaitStrategyAndDeadline(time.Minute, wait.ForExposedPort()),
 	)
+
+	for i := range opts {
+		customizers = append(customizers, opts[i])
+	}
+
+	container, err := postgres.Run(ctx, pgImage, customizers...)
 	if err != nil {
-		panic("failed to start postgres container: " + err.Error())
+		log.Panicf("failed to start postgres container: %v", err)
 	}
 
 	return &Container{
-		address:   container.MustConnectionString(ctx, "sslmode=disable"),
 		container: container,
 		seed:      uint64(time.Now().UnixMilli()),
 	}
 }
 
-func (c *Container) ConnectionString() string {
-	return c.address
+func (c *Container) ConnectionString(ctx context.Context, dbName string) string {
+	containerPort, err := c.container.MappedPort(ctx, "5432/tcp")
+	if err != nil {
+		log.Panicf("failed to get mapped port: %v", err)
+	}
+
+	if dbName == "" {
+		dbName = pgDatabase
+	}
+
+	host, err := c.container.Host(ctx)
+	if err != nil {
+		log.Panicf("failed to get container host: %v", err)
+	}
+
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword("postgres", pgPass),
+		Host:   net.JoinHostPort(host, containerPort.Port()),
+		Path:   dbName,
+	}
+
+	return u.String()
 }
 
 func (c *Container) Close(ctx context.Context) error {
@@ -60,7 +110,7 @@ func (c *Container) MustTempDB(ctx context.Context) (string, func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	conn, err := pgx.Connect(ctx, c.address)
+	conn, err := pgx.Connect(ctx, c.ConnectionString(ctx, pgDatabase))
 	if err != nil {
 		panic("failed to connect to postgres container: " + err.Error())
 	}
@@ -73,5 +123,5 @@ func (c *Container) MustTempDB(ctx context.Context) (string, func()) {
 	}
 	conn.Close(ctx)
 
-	return strings.ReplaceAll(c.address, pgDatabase, dbName), func() {}
+	return c.ConnectionString(ctx, dbName), func() {}
 }
