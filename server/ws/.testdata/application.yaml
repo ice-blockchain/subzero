@@ -75,3 +75,9 @@ database/query:
   url: "file::memory:?cache=shared"
   private-key: *pk
   relay-url: *self
+
+database/command:
+  debug: true
+  nip13MinLeadingZeroBits: 0
+  absolute-node-private-key-path: "./../database/command/.testdata/node_key.json"
+  absolute-root-path: "../../.cometbft"

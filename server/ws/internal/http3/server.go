@@ -32,7 +32,9 @@ func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 			Handler: s.router,
 			ConnContext: func(connCtx context.Context, c quic.Connection) context.Context {
 				wsserver := ctx.Value(adapters.CtxKeyServer)
-				return context.WithValue(connCtx, adapters.CtxKeyServer, wsserver)
+				ctx = context.WithValue(connCtx, adapters.CtxKeyServer, wsserver)
+				ctx = context.WithValue(ctx, "serverPort", s.cfg.Port)
+				return ctx
 			},
 			QUICConfig: &quic.Config{
 				HandshakeIdleTimeout:  acceptStreamTimeout,

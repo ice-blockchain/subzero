@@ -29,7 +29,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 		Addr:    fmt.Sprintf(":%v", s.cfg.Port),
 		Handler: s.router,
 		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
+			return context.WithValue(ctx, "serverPort", s.cfg.Port)
 		},
 		TLSConfig: s.cfg.TLSConfig,
 	}

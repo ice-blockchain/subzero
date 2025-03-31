@@ -4,6 +4,7 @@ package ws
 
 import (
 	"context"
+	"github.com/ice-blockchain/subzero/database/command"
 	"log"
 	"os"
 	"sync"
@@ -47,11 +48,16 @@ func TestMain(m *testing.M) {
 	defer serverCancel()
 
 	addr, release := query.NewTestDatabase(serverCtx)
-	query.MustInit(serverCtx, query.WithConfig(&query.Config{
-		URL: addr,
-	}))
+	log.Println(addr)
+	//query.MustInit(serverCtx, query.WithConfig(&query.Config{
+	//	URL: addr,
+	//}))
 	dvm.MustInit(serverCtx)
-
+	command.MustInit(serverCtx, command.WithConfig(&command.Config{
+		DiscoveryPort:    19988,
+		AbsoluteRootPath: "../../.cometbft",
+		NodePrivKey:      "./../database/command/.testdata/node_key.json",
+	}))
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
@@ -69,10 +75,10 @@ func TestMain(m *testing.M) {
 		map[string]gin.HandlerFunc{},
 	)
 
-	hdl := newHandler("wss://localhost:9998")
+	hdl := newHandler("wss://localhost:9988")
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{
-			Port:                    9998,
+			Port:                    9988,
 			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		},
@@ -80,11 +86,23 @@ func TestMain(m *testing.M) {
 		nil,
 		map[string]gin.HandlerFunc{},
 	))
+	pubsubServers[0].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
+		URL: addr,
+	}))
+	pubsubServers[0].Consenus = command.GetConsensus()
 
-	hdl2 := newHandler("wss://localhost:9997")
+	addr2, release2 := query.NewTestDatabase(serverCtx)
+	log.Println(addr2)
+	command.MustInit(serverCtx, command.WithConfig(&command.Config{
+		AbsoluteRootPath:        "../../.cometbft2",
+		NodePrivKey:             "./../database/command/.testdata/node_key2.json",
+		DiscoveryPort:           19977,
+		NIP13MinLeadingZeroBits: 0,
+	}))
+	hdl2 := newHandler("wss://localhost:9977")
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{
-			Port:                    9997,
+			Port:                    9977,
 			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		},
@@ -92,10 +110,22 @@ func TestMain(m *testing.M) {
 		nil,
 		map[string]gin.HandlerFunc{},
 	))
+	pubsubServers[1].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
+		URL: addr2,
+	}))
+
+	pubsubServers[1].Consenus = command.GetConsensus()
+	hdl3 := newHandler("wss://localhost:9966")
+	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
+		Port:                    9966,
+		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+	}, hdl3.Handle, nil, map[string]gin.HandlerFunc{}))
 
 	code := m.Run()
 	serverCancel()
 	release()
+	release2()
 
 	if code == 0 {
 		if err := goleak.Find(); err != nil {

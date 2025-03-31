@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/ice-blockchain/subzero/database/command"
 	"log"
 	"strconv"
 	"strings"
@@ -2913,4 +2914,185 @@ func TestFiltersMatchWithMasterKey(t *testing.T) {
 		result := filtersMatchWithMasterKey(filters, ev, masterPubkey, pubkey)
 		require.True(t, result)
 	})
+}
+
+func TestConsensusEvents(t *testing.T) {
+	privkey, pk := model.GenerateKeyPair()
+	mapPort := func(ctx context.Context) *fixture.MockService {
+		var port, consensusPort uint16
+		if portVal := ctx.Value("serverPort"); portVal != nil {
+			port = portVal.(uint16)
+		}
+		if portVal := ctx.Value("consensusPort"); portVal != nil {
+			consensusPort = portVal.(uint16)
+		}
+
+		for _, s := range pubsubServers {
+			if port != 0 && strings.HasSuffix(s.Endpoint(), strconv.FormatInt(int64(port), 10)) {
+				return s
+			}
+			if consensusPort != 0 && s.Consenus.DiscoveryPort() == consensusPort {
+				return s
+			}
+		}
+		return nil
+	}
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		t.Logf("received events: %v on %v", events, ctx.Value("serverPort"))
+		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
+			return qErr
+		}
+		if cErr := mapPort(ctx).Consenus.AcceptEvents(ctx, events...); cErr != nil {
+			return cErr
+		}
+		return nil
+	})
+	command.RegisterRollbackListener(query.RollbackEvents)
+	consensusDone := make(chan bool, 2)
+	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
+		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
+			return qErr
+		}
+		consensusDone <- true
+		return nil
+	})
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
+		var filters model.Filters
+		if subscription != nil {
+			filters = subscription.Filters
+		}
+		return mapPort(ctx).DB.SelectEvents(ctx, filters...)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+	var ev *model.Event
+	var attestationEvent *model.Event
+	masterPrivKey, masterPubkey := model.GenerateKeyPair()
+	t.Run("SaveEvent", func(t *testing.T) {
+		attestationEvent = &model.Event{Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: 1,
+			Tags: model.Tags{
+				{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+			},
+		}}
+		require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, attestationEvent.GenerateNIP13(context.Background(), NIP13MinLeadingZeroBits))
+		require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		relaysList := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"r", pubsubServers[0].Endpoint()},
+				[]string{"r", pubsubServers[1].Endpoint()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
+		require.NoError(t, relay.PublishMany(ctx, &attestationEvent.Event, &relaysList.Event))
+
+		ev = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				[]string{"d", "dummy"},
+			},
+			Content: "validEvent from relay1",
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkey)
+
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+		select {
+		case <-consensusDone:
+			break
+		case <-time.After(30 * time.Second):
+			t.Fatalf("timeout awaiting consensus")
+		}
+	})
+	secondRelay := helperMustNewRelay(t, pubsubServers[1])
+	t.Run("query events", func(t *testing.T) {
+		receivedEventsFromFirstRelay := helperQueryEvents(t, ctx, relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		require.Len(t, receivedEventsFromFirstRelay, 1)
+		require.Contains(t, receivedEventsFromFirstRelay, ev)
+		receivedEventsFromSecondRelay := helperQueryEvents(t, ctx, secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		require.Equal(t, receivedEventsFromFirstRelay, receivedEventsFromSecondRelay)
+		ev2 := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				[]string{"d", "dummy"},
+			},
+			Content: "validEvent from relay2",
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev2, privkey)
+
+		//require.NoError(t, secondRelay.Publish(ctx, ev2.Event))
+		//receivedEventsFromFirstRelay = helperQueryEvents(t, ctx, relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		//require.Len(t, receivedEventsFromFirstRelay, 2)
+		//require.Contains(t, receivedEventsFromFirstRelay, ev)
+		//require.Contains(t, receivedEventsFromFirstRelay, ev2)
+	})
+	//command.MustInit(t.Context(), command.WithConfig(&command.Config{
+	//	AbsoluteRootPath:        "../../.cometbft3",
+	//	NodePrivKey:             "./../database/command/.testdata/node_key3.json",
+	//	DiscoveryPort:           19966,
+	//	NIP13MinLeadingZeroBits: 0,
+	//}))
+	//t.Run("add relay", func(t *testing.T) {
+	//	relaysList := &model.Event{Event: nostr.Event{
+	//		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+	//		Kind:      nostr.KindRelayListMetadata,
+	//		Tags: nostr.Tags{
+	//			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+	//			[]string{"r", pubsubServers[0].Endpoint()},
+	//			[]string{"r", pubsubServers[1].Endpoint()},
+	//			[]string{"r", pubsubServers[2].Endpoint()},
+	//		},
+	//	}}
+	//	helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
+	//	require.NoError(t, relay.Publish(ctx, relaysList.Event))
+	//})
+	//var notAcceptedEvent *model.Event
+	//t.Run("failed consensus rolled back", func(t *testing.T) {
+	//	command.RegisterAcceptListener(func(ctx context.Context, event ...*model.Event) error {
+	//		require.NoError(t, query.AcceptEvents(ctx, event...))
+	//		return errors.New("rejected")
+	//	})
+	//	var rolledBack bool
+	//	command.RegisterRollbackListener(func(ctx context.Context, event ...*model.Event) error {
+	//		rolledBack = true
+	//		return query.RollbackEvents(ctx, event...)
+	//	})
+	//	notAcceptedEvent = &model.Event{Event: nostr.Event{
+	//		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+	//		Kind:      nostr.KindTextNote,
+	//		Tags: nostr.Tags{
+	//			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+	//		},
+	//		Content: "validEvent not gonna be accepted because of failed consensus",
+	//	}}
+	//	helperSignWithMinLeadingZeroBits(t, ev, privkey)
+	//	require.Error(t, relay.Publish(ctx, ev.Event))
+	//	require.True(t, rolledBack)
+	//})
+	//t.Run("query events", func(t *testing.T) {
+	//	events, err := relay.QuerySync(ctx, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
+	//	require.NoError(t, err)
+	//	var receivedEvents []*model.Event
+	//	for _, recEv := range events {
+	//		receivedEvents = append(receivedEvents, &model.Event{Event: *recEv})
+	//	}
+	//	require.Len(t, receivedEvents, 1)
+	//	require.Contains(t, receivedEvents, ev)
+	//	require.Contains(t, receivedEvents, attestationEvent)
+	//	require.NotContains(t, receivedEvents, notAcceptedEvent)
+	//})
+
+	helperMustCloseRelay(t, relay)
 }

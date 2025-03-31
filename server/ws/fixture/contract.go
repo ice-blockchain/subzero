@@ -5,6 +5,8 @@ package fixture
 import (
 	"context"
 	_ "embed"
+	"github.com/ice-blockchain/subzero/database/command"
+	"github.com/ice-blockchain/subzero/model"
 	"io"
 	"net"
 	"net/http"
@@ -12,8 +14,8 @@ import (
 	stdlibtime "time"
 
 	"github.com/gin-gonic/gin"
-
 	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -21,7 +23,12 @@ import (
 
 type (
 	MockCallback func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config)
-	MockService  struct {
+	TestDB       interface {
+		AcceptEvents(ctx context.Context, events ...*model.Event) error
+		RollbackEvents(ctx context.Context, events ...*model.Event) error
+		SelectEvents(ctx context.Context, filters ...model.Filter) query.EventIterator
+	}
+	MockService struct {
 		server            internal.Server
 		handlersMx        sync.Mutex
 		Handlers          map[adapters.WSWriter]struct{}
@@ -30,6 +37,8 @@ type (
 		extraHttpHandlers map[string]gin.HandlerFunc
 		readerWg          *sync.WaitGroup
 		port              int
+		DB                TestDB
+		Consenus          command.TestConsensus
 	}
 	Client interface {
 		Received
