@@ -122,7 +122,20 @@ func (c *client) detectFile(bag *storage.Torrent, fileHash string) (string, erro
 }
 
 func (c *client) detectFileFromMeta(bag *storage.Torrent, metadata *headerData, fileHash string) (string, error) {
-	name := metadata.FileHash[fileHash]
+	name, exists := metadata.FileHash[fileHash]
+	if !exists {
+		mdBytes, err := c.latestHeaderForBag(bag.BagID)
+		if err != nil {
+			return "", storage.ErrFileNotExist
+		}
+		if err := json.Unmarshal(mdBytes, metadata); err != nil {
+			return "", errors.Wrap(err, "failed to unmarshal bag header data")
+		}
+		name, exists = metadata.FileHash[fileHash]
+		if !exists {
+			return "", storage.ErrFileNotExist
+		}
+	}
 	f, err := bag.GetFileOffsets(name)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to locate file %v in bag %v", name, hex.EncodeToString(bag.BagID))
