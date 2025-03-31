@@ -59,6 +59,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "has_images"
 		case "hasvideos":
 			out = "has_videos"
+		case "addressvalue":
+			out = "address"
 		default:
 			out = n
 		}

@@ -53,6 +53,7 @@ type (
 		MasterPubKey string
 		Dtag         string
 		Htag         string
+		AddressValue string
 		Deleted      bool
 		Expiration   sql.NullInt64
 		HasImages    bool

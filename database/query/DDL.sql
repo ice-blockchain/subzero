@@ -73,6 +73,7 @@ where kind = 31750;
 -- Order by:
 --   created_at DESC
 CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
+CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration);
 CREATE INDEX IF NOT EXISTS idx_events_kind_created_at ON events(kind, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_created_at ON events(pubkey, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_master_pubkey_created_at ON events(master_pubkey, created_at DESC) WHERE hidden = FALSE;
@@ -190,7 +191,7 @@ FOR EACH ROW
 WHEN (NEW.tags != OLD.tags OR NEW.id != OLD.id)
 EXECUTE FUNCTION trigger_events_after_update_generate_tags();
 --------
-CREATE FUNCTION raise_repost_error() RETURNS integer
+CREATE OR REPLACE FUNCTION raise_repost_error() RETURNS integer
    LANGUAGE plpgsql AS
 $$BEGIN
    RAISE EXCEPTION 'repost of deleted post';
@@ -769,21 +770,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---------
-CREATE OR REPLACE FUNCTION subzero_nostr_tag_a_get_kind(tag TEXT)
-RETURNS TEXT AS $$
-DECLARE
-    fields TEXT[];
-BEGIN
-    fields := string_to_array(tag, ':');
-
-    IF array_length(fields, 1) <= 0 THEN
-        RETURN '';
-    END IF;
-
-    RETURN fields[1];
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_tag_a_get_pk(tag TEXT)
 RETURNS TEXT AS $$

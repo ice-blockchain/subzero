@@ -529,13 +529,14 @@ select
 	6400,
 	CURRENT_TIMESTAMP,
 	'' as id,
+	'' as address,
 	t.pubkey,
 	t.master_pubkey,
 	'' as sig,
 	cast(jsonb_object_agg(t.option, t.votes) as text) AS content,
 	cast(jsonb_build_array(jsonb_build_object(
 		'kinds', jsonb_build_array(1754),
-		subzero_nostr_get_event_address_tag(t.kind), jsonb_build_array(subzero_nostr_get_event_address(t.poll_id, t.kind, t.master_pubkey, t.d_tag)))
+		subzero_nostr_get_event_address_tag(t.kind), jsonb_build_array(t.address))
 	) as text) as d_tag,
 	t.h_tag,
 	jsonb_build_array(
@@ -548,6 +549,7 @@ from (
 		mainev.pubkey,
 		mainev.master_pubkey,
 		mainev.kind,
+		mainev.address,
 		mainev.h_tag,
 		mainev.d_tag,
 		cast(j.value as text) AS option,
@@ -555,16 +557,16 @@ from (
 	from `)
 	b.WriteString(cteName)
 	b.WriteString(` mainev
-	left join event_tags et ON et.event_tag_value1 = subzero_nostr_get_event_address(mainev.id, mainev.kind, mainev.master_pubkey, mainev.d_tag) AND et.event_tag_key in ('a', 'e')
+	left join event_tags et ON et.event_tag_value1 = mainev.address AND et.event_tag_key in ('a', 'e')
 	left join events ve ON ve.id = et.event_id AND ve.kind = 1754
 	left join jsonb_array_elements(cast(ve.content as jsonb)) j on true
 	where exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll') and mainev.kind = :`)
 	b.WriteValue(filterID, "kind", filter.Start.Kind)
 	b.WriteString(`
-	group by poll_id, option, mainev.pubkey, mainev.master_pubkey, mainev.kind, mainev.h_tag, mainev.d_tag
+	group by poll_id, option, mainev.pubkey, mainev.master_pubkey, mainev.kind, mainev.h_tag, mainev.d_tag, mainev.address
 ) t
 left join jsonb_each_text(jsonb_build_object(cast(t.option AS text), t.votes)) AS json_each ON true
-group by t.poll_id, t.pubkey, t.master_pubkey, t.kind, t.h_tag, t.d_tag
+group by t.poll_id, t.pubkey, t.master_pubkey, t.kind, t.h_tag, t.d_tag, t.address
 `)
 }
 
@@ -580,6 +582,7 @@ union all
 select
 	6400,
 	CURRENT_TIMESTAMP,
+	'' as address,
 	case when f.kind = 3 then '' else f.reference_id end as id,
 	coalesce(evr.pubkey, ''),
 	coalesce(evr.master_pubkey, ''),
@@ -600,7 +603,7 @@ select
 					:` + (filterID + "ftagname") + ` end,
 				jsonb_build_array(jsonb_build_array(
 						case when :` + (filterID + "ftagname") + ` = 'lookup' then
-							subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag)
+							evr.address
 						else
 							f.reference_id
 						end`)
@@ -624,7 +627,7 @@ inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
 	and (
 		(f.kind = 3 and f.reference_id in (evr.master_pubkey, evr.pubkey))
 		or
-		f.reference_id = subzero_nostr_get_event_address(evr.id, evr.kind, evr.master_pubkey, evr.d_tag)
+		f.reference_id = evr.address
 	)
 where
 	exists (select 1 FROM ` + cteName + ` ) AND
@@ -638,6 +641,7 @@ select
 	e.id,
 	e.pubkey,
 	e.master_pubkey,
+	e.address,
 	e.sig,
 	e.content,
 	e.d_tag,
@@ -710,7 +714,7 @@ and e.expiration > CURRENT_TIMESTAMP`)
 			b.WriteString(" = :")
 			b.WriteValue(filterID, "rtag", tag)
 		}
-		b.WriteString(" and mctx.event_tag_value1 = subzero_nostr_get_event_address(em.id, em.kind, em.master_pubkey, em.d_tag)")
+		b.WriteString(" and mctx.event_tag_value1 = em.address")
 		if filter.Reduce.Context != "" {
 			b.WriteString(" and mctx.event_tag_value3 = :")
 			b.WriteValue(filterID, "rcontext", filter.Reduce.Context)
@@ -744,6 +748,7 @@ select
 	20002,
 	CURRENT_TIMESTAMP,
 	'' as id,
+	'' as address,
 	e.pubkey,
 	e.master_pubkey,
 	'' as sig,
@@ -823,11 +828,11 @@ group by e.master_pubkey, e.pubkey`)
 			b.WriteString(" UNION ")
 			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &filter.Start))
 		} else {
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "subzero_nostr_get_event_address(id, kind, master_pubkey, d_tag)", &filter.Start))
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "address", &filter.Start))
 		}
 		b.WriteString(")")
 		if filter.Reduce.Group && filter.Reduce.Kinds[1] == nostr.KindReaction {
-			b.WriteString(" GROUP BY reference_id, f.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag")
+			b.WriteString(" GROUP BY reference_id, f.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
 		}
 	}
 }
@@ -961,6 +966,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cteBody string, e
 		e.kind,
 		e.created_at,
 		e.id,
+		e.address,
 		e.pubkey,
 		e.master_pubkey,
 		e.sig,
