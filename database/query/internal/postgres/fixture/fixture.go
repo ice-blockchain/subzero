@@ -17,6 +17,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	internal "github.com/ice-blockchain/subzero/database/query/internal/postgres"
 )
 
 const (
@@ -61,6 +63,10 @@ func New(ctx context.Context, opts ...Option) *Container {
 		postgres.WithPassword(pgPass),
 		testcontainers.WithWaitStrategyAndDeadline(time.Minute, wait.ForExposedPort()),
 	)
+
+	if internal.Config != "" {
+		customizers = append(customizers, WithConfigData(internal.Config))
+	}
 
 	for i := range opts {
 		customizers = append(customizers, opts[i])
