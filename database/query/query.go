@@ -402,7 +402,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 	}
 
 	stmt = `MERGE INTO events AS target
-				USING (VALUES 
+				USING (VALUES
 					` + strings.Join(values, ",") + `
 				) AS source (
 					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
@@ -411,16 +411,16 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					has_videos
 				)
 				ON (
-					target.id = source.id 
+					target.id = source.id
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
 				)
-			WHEN MATCHED AND 
-				target.master_pubkey = source.master_pubkey 
-				AND target.kind = source.kind 
-				AND target.d_tag = source.d_tag 
+			WHEN MATCHED AND
+				target.master_pubkey = source.master_pubkey
+				AND target.kind = source.kind
+				AND target.d_tag = source.d_tag
 				AND (30000 <= source.kind AND source.kind < 40000) THEN
-				UPDATE SET 
+				UPDATE SET
 					id = source.id,
 					system_kind = source.system_kind,
 					created_at = source.created_at,
@@ -433,11 +433,11 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					expiration = source.expiration,
 					has_images = source.has_images,
 					has_videos = source.has_videos
-			WHEN MATCHED AND 
-				target.master_pubkey = source.master_pubkey 
-				AND target.kind = source.kind 
+			WHEN MATCHED AND
+				target.master_pubkey = source.master_pubkey
+				AND target.kind = source.kind
 				AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
-				UPDATE SET 
+				UPDATE SET
 					id = source.id,
 					system_kind = source.system_kind,
 					d_tag = source.d_tag,
@@ -449,7 +449,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					has_images = source.has_images,
 					has_videos = source.has_videos
 			WHEN MATCHED AND target.id = source.id THEN
-				UPDATE SET 
+				UPDATE SET
 					kind = source.kind,
 					system_kind = source.system_kind,
 					master_pubkey = source.master_pubkey,
@@ -464,8 +464,8 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					has_videos = source.has_videos
 			WHEN NOT MATCHED THEN
 				INSERT (
-					id, kind, system_kind, created_at, pubkey, master_pubkey, 
-					sig, sig_alg, key_alg, content, tags, d_tag, h_tag, 
+					id, kind, system_kind, created_at, pubkey, master_pubkey,
+					sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
 					deleted,
 					expiration,
 					has_images,
@@ -765,30 +765,51 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 }
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
-	const stmt = `delete from events where expiration is not null and expiration <= CURRENT_TIMESTAMP
-	returning
+	const batchSize = 1000
+	const stmt = `
+	WITH expired_events AS (
+		SELECT id
+		FROM events
+		WHERE expiration IS NOT NULL AND expiration <= CURRENT_TIMESTAMP
+		ORDER BY expiration ASC
+		LIMIT :batch_size
+	)
+	DELETE FROM events
+	WHERE id IN (SELECT id FROM expired_events)
+	RETURNING
 		kind,
 		created_at,
 		id,
 		pubkey,
-		master_pubkey,
 		sig,
 		content,
-		d_tag,
 		tags as jtags`
+	params := map[string]any{"batch_size": batchSize}
 
-	it := db.newReadEventIterator(ctx, stmt, map[string]any{})
-	events := []*model.Event{}
-	for ev, err := range it {
-		if err != nil {
-			return errors.Wrap(err, "failed to exec delete expired events")
+	for ctx.Err() == nil {
+		var deleted int
+		it := db.newReadEventIterator(ctx, stmt, params)
+		for event, iterErr := range it {
+			if iterErr != nil {
+				return errors.Wrap(iterErr, "failed to exec delete expired events")
+			}
+
+			if notifyExpiredEvents != nil {
+				if notifyErr := notifyExpiredEvents(ctx, event); notifyErr != nil {
+					log.Printf("failed to process notification of expired events: %v", notifyErr)
+					// Continue to delete the events even if notification fails.
+				}
+			}
+
+			deleted++
 		}
-		events = append(events, ev)
+
+		if deleted < batchSize {
+			break
+		}
 	}
-	if notifyExpiredEvents != nil && len(events) > 0 {
-		err = errors.Wrapf(notifyExpiredEvents(ctx, events...), "failed to process notification of expired events")
-	}
-	return err
+
+	return nil
 }
 
 func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingEvent *model.Event) (filters []databaseFilterDelete, err error) {
