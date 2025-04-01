@@ -6,15 +6,16 @@
 
 ## protocol changes
 
-| ICIPs/NIPs | Change Type  | NOSTR NIPs Pull Request                                  | comments                                                                           |
-|------------|--------------|----------------------------------------------------------|------------------------------------------------------------------------------------|
-| ICIP-1000  | Addition     | [1522](https://github.com/nostr-protocol/nips/pull/1522) |                                                                                    |
-| ICIP-2000  | Addition     | [1482](https://github.com/nostr-protocol/nips/pull/1482) |                                                                                    |
-| ICIP-3000  | Addition     |                                                          | an extension of [NIP-72](https://github.com/nostr-protocol/nips/blob/master/72.md) |
-| ICIP-4000  | Addition     |                                                          |                                                                                    |
-| ICIP-5000  | Addition     | [148](https://github.com/nostr-protocol/nips/pull/148)   |                                                                                    |
-| ICIP-6000  | Addition     |                                                          |                                                                                    |
-| ICIP-7000  | Addition     |                                                          |                                                                                    |
-| ICIP-51    | Modification |                                                          | an extension of [NIP-51](https://github.com/nostr-protocol/nips/blob/master/51.md) |
-| ICIP-01    | Modification |                                                          | an extension of [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) |
-| ICIP-17    | Modification |                                                          | an extension of [NIP-17](https://github.com/nostr-protocol/nips/blob/master/17.md) |
+| ICIPs/NIPs | Change Type  | NOSTR NIPs Pull Request                                                | comments                                                                           |
+|------------|--------------|------------------------------------------------------------------------|------------------------------------------------------------------------------------|
+| ICIP-1000  | Addition     | [1522](https://github.com/nostr-protocol/nips/pull/1522)               |                                                                                    |
+| ICIP-2000  | Addition     | [1482](https://github.com/nostr-protocol/nips/pull/1482)               |                                                                                    |
+| ICIP-3000  | Addition     |                                                                        | an extension of [NIP-72](https://github.com/nostr-protocol/nips/blob/master/72.md) |
+| ICIP-4000  | Addition     |                                                                        |                                                                                    |
+| ICIP-5000  | Addition     | [148](https://github.com/nostr-protocol/nips/pull/148)                 |                                                                                    |
+| ICIP-6000  | Addition     |                                                                        |                                                                                    |
+| ICIP-7000  | Addition     |                                                                        |                                                                                    |
+| ICIP-8000  | Addition     | Inspired from [1528](https://github.com/nostr-protocol/nips/pull/1528) | Inspired from [NIP-97](https://github.com/nostr-protocol/nips/blob/master/97.md)   |
+| ICIP-51    | Modification |                                                                        | an extension of [NIP-51](https://github.com/nostr-protocol/nips/blob/master/51.md) |
+| ICIP-01    | Modification |                                                                        | an extension of [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) |
+| ICIP-17    | Modification |                                                                        | an extension of [NIP-17](https://github.com/nostr-protocol/nips/blob/master/17.md) |
