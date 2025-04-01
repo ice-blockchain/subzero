@@ -232,7 +232,7 @@ func TestWhereBuilderMimeType(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("stmt: %s (%+v)", q, params)
 	t.Logf("params: %+v", params)
-	require.Len(t, params, 1)
+	require.Len(t, params, 3)
 }
 
 func TestParseNostrFilter(t *testing.T) {

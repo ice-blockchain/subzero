@@ -59,7 +59,6 @@ where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
 create unique index if not exists parameterized_replaceable_event_uk on events(master_pubkey, kind, d_tag)
 where 30000 <= kind AND kind < 40000;
 --------
-drop index if exists uix_events_h_tag;
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
 where kind = 31750;
 --------
@@ -74,6 +73,8 @@ where kind = 31750;
 --   created_at DESC
 CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration);
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_id_created_at ON events(id, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_kind_created_at ON events(kind, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_created_at ON events(pubkey, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_master_pubkey_created_at ON events(master_pubkey, created_at DESC) WHERE hidden = FALSE;

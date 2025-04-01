@@ -557,7 +557,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	it := &eventIterator{
 		Map: db.eventTransform,
 		Fetch: func() (*sqlx.Rows, error) {
-			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters)
+			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
 			if err != nil {
 				return nil, err
 			}
@@ -679,8 +679,8 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 	return result, err
 }
 
-func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filters model.Filters) (sql string, params map[string]any, err error) {
-	filters = db.extendWhereFilters(ctx, filters...)
+func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
+	filters := db.extendWhereFilters(ctx, filter...)
 
 	return newQueryBuilder().Build(filters...)
 }

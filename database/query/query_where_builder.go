@@ -380,20 +380,15 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Videos != nil {
 		b.MaybeAND()
-		if *filter.Videos {
-			b.WriteString("e.has_videos ")
-		} else {
-			b.WriteString("not e.has_videos ")
-		}
+		b.WriteString("e.has_videos=:")
+		b.WriteValue(filter.ID, "videos", *filter.Videos)
 	}
 	if filter.Images != nil {
 		b.MaybeAND()
-		if *filter.Images {
-			b.WriteString("e.has_images ")
-		} else {
-			b.WriteString("not e.has_images ")
-		}
+		b.WriteString("e.has_images=:")
+		b.WriteValue(filter.ID, "images", *filter.Images)
 	}
+
 	if filter.Quotes != nil {
 		b.MaybeAND()
 		if !*filter.Quotes {
