@@ -132,7 +132,9 @@ BEGIN
         COALESCE(value->>4, ''),
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
-    WHERE value->>0 IS NOT NULL
+    WHERE
+        value->>0 IS NOT NULL
+        AND value->>0 not in ('request', 'rich_text')
     ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
 
     RETURN NEW;
@@ -179,7 +181,9 @@ BEGIN
         COALESCE(value->>4, ''),
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
-    WHERE value->>0 IS NOT NULL
+    WHERE
+        value->>0 IS NOT NULL
+        AND value->>0 not in ('request', 'rich_text')
     ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
 
     RETURN NEW;
