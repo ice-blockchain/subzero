@@ -12,10 +12,10 @@ EXCEPTION
 END;$$;
 
 CREATE TABLE IF NOT EXISTS events (
-    kind           INTEGER NOT NULL,
-    system_kind    INTEGER,
     created_at     TIMESTAMP NOT NULL,
     expiration     TIMESTAMP,
+    kind           INTEGER NOT NULL,
+    system_kind    INTEGER,
     lookup         tsvector NOT NULL GENERATED ALWAYS AS (
                       (CASE WHEN (content IS JSON)
                         THEN json_to_tsvector('fts', content::json, '"all"')
@@ -27,16 +27,10 @@ CREATE TABLE IF NOT EXISTS events (
                         ELSE to_tsvector('fts', '')
                       END)
                   ) STORED,
-    id             TEXT    PRIMARY KEY,
-    pubkey         TEXT    NOT NULL,
-    master_pubkey  TEXT    NOT NULL,
-    sig            TEXT    NOT NULL,
-    sig_alg        TEXT    NOT NULL DEFAULT '',
     key_alg        TEXT    NOT NULL DEFAULT '',
     content        TEXT    NOT NULL,
     d_tag          TEXT    NOT NULL DEFAULT '',
     h_tag          TEXT    NOT NULL DEFAULT '',
-    reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     address        TEXT    NOT NULL GENERATED ALWAYS AS (
                       CASE
                         WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3
@@ -46,6 +40,12 @@ CREATE TABLE IF NOT EXISTS events (
                         ELSE id
                       END
                   ) STORED,
+    id             TEXT    PRIMARY KEY,
+    pubkey         TEXT    NOT NULL,
+    master_pubkey  TEXT    NOT NULL,
+    sig            TEXT    NOT NULL,
+    sig_alg        TEXT    NOT NULL DEFAULT '',
+    reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags           JSONB   NOT NULL DEFAULT '[]',
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
