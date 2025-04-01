@@ -12,6 +12,21 @@ EXCEPTION
 END;$$;
 
 CREATE TABLE IF NOT EXISTS events (
+    kind           INTEGER NOT NULL,
+    system_kind    INTEGER,
+    created_at     TIMESTAMP NOT NULL,
+    expiration     TIMESTAMP,
+    lookup         tsvector NOT NULL GENERATED ALWAYS AS (
+                      (CASE WHEN (content IS JSON)
+                        THEN json_to_tsvector('fts', content::json, '"all"')
+                        ELSE to_tsvector('fts', content)
+                      END)
+                      ||
+                      (CASE WHEN kind IN (0, 1, 1063, 30023, 30175)
+                        THEN jsonb_to_tsvector('fts', tags, '"all"')
+                        ELSE to_tsvector('fts', '')
+                      END)
+                  ) STORED,
     id             TEXT    PRIMARY KEY,
     pubkey         TEXT    NOT NULL,
     master_pubkey  TEXT    NOT NULL,
@@ -32,21 +47,6 @@ CREATE TABLE IF NOT EXISTS events (
                       END
                   ) STORED,
     tags           JSONB   NOT NULL DEFAULT '[]',
-    lookup         tsvector NOT NULL GENERATED ALWAYS AS (
-                      (CASE WHEN (content IS JSON)
-                        THEN json_to_tsvector('fts', content::json, '"all"')
-                        ELSE to_tsvector('fts', content)
-                      END)
-                      ||
-                      (CASE WHEN kind IN (0, 1, 1063, 30023, 30175)
-                        THEN jsonb_to_tsvector('fts', tags, '"all"')
-                        ELSE to_tsvector('fts', '')
-                      END)
-                  ) STORED,
-    kind           INTEGER NOT NULL,
-    system_kind    INTEGER,
-    created_at     TIMESTAMP NOT NULL,
-    expiration     TIMESTAMP,
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,
@@ -336,10 +336,10 @@ EXECUTE FUNCTION trigger_events_before_delete_remove_tags_explicit();
 --------
 CREATE TABLE IF NOT EXISTS event_counters
 (
-    reference_id   TEXT NOT NULL,
-    reference_type TEXT NOT NULL DEFAULT '', -- for kind 7 events, it contains the actual reaction to the event, like `+` or `-`.
     kind           INTEGER NOT NULL,
     value          INTEGER NOT NULL DEFAULT 0,
+    reference_id   TEXT NOT NULL,
+    reference_type TEXT NOT NULL DEFAULT '', -- for kind 7 events, it contains the actual reaction to the event, like `+` or `-`.
     PRIMARY KEY (kind, reference_type, reference_id)
 );
 --------
