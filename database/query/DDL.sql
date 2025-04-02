@@ -225,7 +225,7 @@ BEGIN
         x.kind AS kind,
         to_timestamp(0) AS created_at,
         x.id AS id,
-        '' AS pubkey,
+        x.pubkey AS pubkey,
         COALESCE((SELECT value->>1 FROM jsonb_array_elements(x.tags) AS value WHERE value->>0 = 'b' LIMIT 1), '') AS master_pubkey,
         '' AS sig,
         x.content AS content,
@@ -239,9 +239,9 @@ BEGIN
                 WHEN NEW.content != '' AND jsonb_valid(NEW.content) THEN NEW.content::JSONB
                 ELSE '{}'::JSONB
             END
-        ) AS x(kind int, id TEXT, content TEXT, tags JSONB)
+        ) AS x(kind int, pubkey TEXT, id TEXT, content TEXT, tags JSONB)
     WHERE NEW.content != '' AND jsonb_valid(NEW.content) AND NEW.content::JSONB ? 'kind'
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT DO NOTHING;
 
     select
        raise_repost_error()
@@ -269,7 +269,9 @@ BEGIN
     IF NEW.kind IN (6, 16) AND NEW.content != '' AND jsonb_valid(NEW.content) AND NEW.content::jsonb ? 'id' THEN
         UPDATE events
         SET reference_id = NEW.content::jsonb ->> 'id'
-        WHERE id = NEW.id;
+        WHERE
+            id = NEW.id
+            AND EXISTS (select 1 from events ee where ee.id = NEW.content::jsonb ->> 'id');
     END IF;
 
     RETURN NEW;
@@ -635,7 +637,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER trigger_events_before_insert_check_onbehalf_permission
 BEFORE INSERT OR UPDATE ON events
 FOR EACH ROW
-WHEN (NEW.master_pubkey != NEW.pubkey)
+WHEN (NEW.master_pubkey != NEW.pubkey AND (NEW.pubkey != '' AND NEW.master_pubkey != ''))
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_attestation_update_is_allowed(

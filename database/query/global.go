@@ -47,9 +47,14 @@ func WithConfig(cfg *Config) Option {
 
 func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
-		conf := cfg.MustGet[Config]()
-		for _, opt := range opts {
-			opt(conf)
+		var conf *Config
+		if len(opts) == 0 {
+			conf = cfg.MustGet[Config]()
+		} else {
+			conf = &Config{}
+			for _, opt := range opts {
+				opt(conf)
+			}
 		}
 		globalDB.Client = openDatabase(conf.URL, true).
 			WithPrivateKey(conf.PrivateKey).

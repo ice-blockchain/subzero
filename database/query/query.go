@@ -36,6 +36,7 @@ var (
 	ErrAttestationUpdateRejected = errors.New("attestation update rejected")
 	ErrOnBehalfAccessDenied      = model.ErrOnBehalfAccessDenied
 	ErrRepostOfDeletedPost       = errors.New("repost of deleted post")
+	ErrInvalidEvent              = errors.New("invalid event")
 
 	errEventIteratorInterrupted = errors.New("interrupted")
 
@@ -598,15 +599,19 @@ func (db *dbClient) handleError(err error) error {
 		return err
 	}
 
-	if errors.As(err, &sqlError) && sqlError.SQLState() == "P0001" {
-		if sqlError.Message == "attestation list update must be linear" {
-			return ErrAttestationUpdateRejected
-		}
-		if sqlError.Message == "onbehalf permission denied" {
-			return ErrOnBehalfAccessDenied
-		}
-		if sqlError.Message == "repost of deleted post" {
-			return ErrRepostOfDeletedPost
+	if errors.As(err, &sqlError) {
+		if sqlError.SQLState() == "P0001" {
+			if sqlError.Message == "attestation list update must be linear" {
+				return ErrAttestationUpdateRejected
+			}
+			if sqlError.Message == "onbehalf permission denied" {
+				return ErrOnBehalfAccessDenied
+			}
+			if sqlError.Message == "repost of deleted post" {
+				return ErrRepostOfDeletedPost
+			}
+		} else if sqlError.SQLState() == "22021" {
+			return ErrInvalidEvent
 		}
 	}
 
