@@ -32,6 +32,7 @@ import (
 type (
 	StorageClient interface {
 		io.Closer
+		SaveFile(ctx context.Context, body io.Reader, master, uploadingPath string, newFile *FileMetaInput) (hash []byte, err error)
 		StartUpload(ctx context.Context, userPubKey, masterKey, relativePathToFileForUrl, fileHash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error)
 		BuildUserPath(masterKey, contentType string) (string, string)
 		DownloadUrl(masterKey, fileSha256 string) (string, error)

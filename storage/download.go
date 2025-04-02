@@ -128,6 +128,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 		}
 		switch event.Name {
 		case storage.EventDone:
+			tor.SetActiveFiles([]string{})
 			tor.Stop()
 			log.Printf("[STORAGE] INFO: bag %v for user %v downloaded (%v files, %v bytes), disabling download", hex.EncodeToString(tor.BagID), usr, tor.Header.FilesCount, tor.Info.FileSize)
 			if pErr := tor.Start(true, false, false); pErr != nil {
