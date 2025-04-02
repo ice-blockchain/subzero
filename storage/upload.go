@@ -5,12 +5,15 @@ package storage
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -105,19 +108,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 }
 
 func (c *client) upload(ctx context.Context, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
-	if fileMeta != nil {
-		c.newFilesMx.Lock()
-		if userNewFiles, hasNewFiles := c.newFiles[master]; !hasNewFiles || userNewFiles == nil {
-			c.newFiles[master] = make(map[string]*FileMetaInput)
-		}
-		c.newFiles[master][relativePath] = fileMeta
-		c.newFilesMx.Unlock()
-	}
 	rootUserPath, _ := c.BuildUserPath(master, "")
-	refs, err := c.progressStorage.GetAllFilesRefsInDir(rootUserPath)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to detect shareable files")
-	}
 	headerMD := &headerData{
 		Master:       master,
 		FileMetadata: headerMetadata.FileMetadata,
@@ -143,6 +134,14 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 		headerMD.FileHash[hex.EncodeToString(value.Hash)] = key
 	}
 	c.newFilesMx.RUnlock()
+	var refs []storage.FileRef
+	for relativeFilePath := range headerMD.FileMetadata {
+		ref, frefErr := c.progressStorage.GetSingleFileRef(filepath.Join(rootUserPath, relativeFilePath))
+		if frefErr != nil {
+			return nil, nil, errors.Wrapf(frefErr, "failed to detect shareable files: %v", relativeFilePath)
+		}
+		refs = append(refs, ref)
+	}
 	var headerMDSerialized []byte
 	headerMDSerialized, err = json.Marshal(headerMD)
 	if err != nil {
@@ -227,9 +226,38 @@ func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string) error
 	c.newFilesMx.Lock()
 	for k := range c.newFiles[userPubKey] {
 		if _, err := tr.GetFileOffsets(k); err == nil {
-			delete(c.newFiles[userPubKey], k)
+			meta, _ := c.fileMeta(tr)
+			if _, hasMeta := meta.FileMetadata[k]; hasMeta {
+				delete(c.newFiles[userPubKey], k)
+			}
 		}
 	}
 	c.newFilesMx.Unlock()
 	return nil
+}
+func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey, relativePath string, input *FileMetaInput) ([]byte, error) {
+	storagePath, _ := c.BuildUserPath(masterPubKey, "")
+	uploadingFilePath := filepath.Join(storagePath, relativePath)
+
+	fileUploadTo, err := os.Create(uploadingFilePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open temp file while processing upload")
+	}
+	defer fileUploadTo.Close()
+	hashCalc := sha256.New()
+	if _, err = io.Copy(fileUploadTo, io.TeeReader(body, hashCalc)); err != nil {
+		return nil, errors.Wrap(err, "failed to copy temp file while processing upload")
+	}
+	hash := hashCalc.Sum(nil)
+	input.Hash = hash
+	if err = fileUploadTo.Sync(); err != nil {
+		return nil, errors.Wrap(err, "failed to copy temp file while processing upload")
+	}
+	c.newFilesMx.Lock()
+	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {
+		c.newFiles[masterPubKey] = make(map[string]*FileMetaInput)
+	}
+	c.newFiles[masterPubKey][relativePath] = input
+	c.newFilesMx.Unlock()
+	return hash, nil
 }

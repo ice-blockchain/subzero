@@ -11,4 +11,4 @@ storage:
   relay-url: "-"
 database:
   query:
-    url: ":memory:"
+    url: "db.sqlite"

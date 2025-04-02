@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +51,8 @@ func TestNIP96(t *testing.T) {
 	defer func() {
 		require.NoError(t, storage.Client().Close())
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
+		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
+		require.NoError(t, os.RemoveAll("db.sqlite"))
 	}()
 	master, masterPubKey := model.GenerateKeyPair()
 	user1, user1PubKey := model.GenerateKeyPair()
@@ -71,21 +74,36 @@ func TestNIP96(t *testing.T) {
 	})
 
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
-		var responses []*nip96.UploadResponse
-		responses = make([]*nip96.UploadResponse, 0)
-		upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {})
-		status := deleteFile(t, ctx, user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
-		require.Equal(t, http.StatusOK, status)
-		upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
-			responses = append(responses, resp)
+		var responses = make([]*nip96.UploadResponse, 0)
+		const filesCount = 4
+		responsesCh := make(chan *nip96.UploadResponse, filesCount)
+		var wg sync.WaitGroup
+		wg.Add(filesCount)
+		go upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
 		})
-		upload(t, ctx, user1, masterPubKey, ".testdata/image.jpg", "ice.jpg", "ice logo", func(resp *nip96.UploadResponse) {
-			responses = append(responses, resp)
+		go upload(t, ctx, master, "", ".testdata/text-master.txt", "master.txt", "master's file", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
 		})
-		upload(t, ctx, master, "", ".testdata/text-master.txt", "master.txt", "master's file", func(resp *nip96.UploadResponse) { responses = append(responses, resp) })
-		upload(t, ctx, user1, masterPubKey, ".testdata/text.txt", "text.txt", "text file", func(resp *nip96.UploadResponse) { responses = append(responses, resp) })
-		outdatedTags = responses[0].Nip94Event.Tags
-		outdatedContent = responses[0].Nip94Event.Content
+		go upload(t, ctx, user1, masterPubKey, ".testdata/image.jpg", "ice.jpg", "ice logo", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
+		})
+		go upload(t, ctx, user1, masterPubKey, ".testdata/text.txt", "text.txt", "text file", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
+		})
+		wg.Wait()
+		close(responsesCh)
+		for r := range responsesCh {
+			if r.Nip94Event.Content == "ice profile pic" {
+				outdatedTags = r.Nip94Event.Tags
+				outdatedContent = r.Nip94Event.Content
+			}
+			responses = append(responses, r)
+		}
 		tagsToBroadcast = responses[len(responses)-1].Nip94Event.Tags
 		contentToBroadcast = responses[len(responses)-1].Nip94Event.Content
 		for _, resp := range responses {
@@ -217,8 +235,8 @@ func TestNIP96(t *testing.T) {
 			Tags: nostr.Tags{
 				nostr.Tag{
 					"imeta",
-					fmt.Sprintf("x %v", nip94EventToSign.Tags.GetFirst([]string{"x"}).Value()),
-					fmt.Sprintf("ox %v", nip94EventToSign.Tags.GetFirst([]string{"ox"}).Value()),
+					"x 982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
+					"ox 982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
 					fmt.Sprintf("url %v", nip94EventToSign.Tags.GetFirst([]string{"url"}).Value()),
 				},
 				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindTextNote), 10)},

@@ -4,11 +4,9 @@ package http
 
 import (
 	"context"
-	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -143,13 +141,6 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
 			return
 		}
-		fileUploadTo, err := os.Create(uploadingFilePath)
-		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open temp file while processing upload"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
-			return
-		}
-		defer fileUploadTo.Close()
 		mpFile, err := upload.File.Open()
 		if err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open upload file"))
@@ -157,18 +148,17 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			return
 		}
 		defer mpFile.Close()
-		hashCalc := sha256.New()
-		if _, err = io.Copy(fileUploadTo, io.TeeReader(mpFile, hashCalc)); err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to copy temp file while processing upload"))
+		input := storage.FileMetaInput{
+			Caption:   upload.Caption,
+			Alt:       upload.Alt,
+			CreatedAt: uint64(now.UnixNano()),
+		}
+		hash, err := s.storageClient.SaveFile(ctx, mpFile, token.MasterPubKey(), relativePath, &input)
+		if err != nil {
+			log.Printf("ERROR: %v", errors.Wrap(err, "failed to save temp file while processing upload"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
 			return
 		}
-		if err = fileUploadTo.Sync(); err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to copy temp file while processing upload"))
-			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
-			return
-		}
-		hash := hashCalc.Sum(nil)
 		hashHex := hex.EncodeToString(hash)
 		if hashHex != token.ExpectedHash() {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash()))
@@ -176,12 +166,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			os.Remove(uploadingFilePath)
 			return
 		}
-		bagID, url, existed, err := s.storageClient.StartUpload(ctx, token.PubKey(), token.MasterPubKey(), relativePath, hex.EncodeToString(hash), &storage.FileMetaInput{
-			Hash:      hash,
-			Caption:   upload.Caption,
-			Alt:       upload.Alt,
-			CreatedAt: uint64(now.UnixNano()),
-		})
+		bagID, url, existed, err := s.storageClient.StartUpload(ctx, token.PubKey(), token.MasterPubKey(), relativePath, hex.EncodeToString(hash), &input)
 
 		if err != nil {
 			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
