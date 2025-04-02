@@ -147,8 +147,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),

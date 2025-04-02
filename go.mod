@@ -30,10 +30,10 @@ require (
 	github.com/libdns/cloudflare v0.1.3
 	github.com/mattn/go-sqlite3 v1.14.26
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.51.7
+	github.com/nbd-wtf/go-nostr v0.51.8
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/quic-go/quic-go v0.50.1
-	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
+	github.com/quic-go/webtransport-go v0.8.1-0.20250328130601-2671ef85124d
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.9.1
