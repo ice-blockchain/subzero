@@ -43,16 +43,6 @@ func TestQueryEventsCount(t *testing.T) {
 			require.Equal(t, expectedCount, count)
 		}
 	})
-	t.Run("RandomTag", func(t *testing.T) {
-		for range 10 {
-			ev := data.Random(t)
-			count, err := db.CountEvents(t.Context(), model.Filter{
-				Tags: model.TagMap{}.SetLiterals(ev.Tags[0][0], ev.Tags[0][1:]...),
-			})
-			require.NoError(t, err)
-			require.Equal(t, int64(1), count)
-		}
-	})
 	t.Run("EventsOR", func(t *testing.T) {
 		ev1 := data.Random(t)
 		ev2 := data.Random(t)

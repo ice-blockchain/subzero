@@ -193,9 +193,8 @@ func helperGenerateEvent(
 
 	if withTags {
 		ev.Tags = []model.Tag{
-			{"#e", generateHexString(), generateRandomString(rand.IntN(20)), generateRandomString(rand.IntN(30))},
-			{"#p", generateHexString()},
-			{"#d", generateHexString(), generateRandomString(rand.IntN(10))},
+			{"o", generateHexString(), generateRandomString(rand.IntN(20)), generateRandomString(rand.IntN(30))},
+			{"p", generateHexString()},
 		}
 	}
 
