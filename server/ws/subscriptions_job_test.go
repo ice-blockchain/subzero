@@ -239,11 +239,12 @@ func TestJobOnline(t *testing.T) {
 
 func TestJobDeletion(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
+	wake := make(chan struct{}, 1)
 
-	wake := make(chan struct{})
 	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
 		select {
 		case <-wake:
+		case <-time.After(time.Second * 10):
 		case <-ctx.Done():
 		}
 		return query.GetStoredEvents(ctx, s)
