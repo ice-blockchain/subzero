@@ -13,8 +13,7 @@ END;$$;
 
 CREATE TABLE IF NOT EXISTS events (
     created_at     TIMESTAMP NOT NULL,
-    expiration     TIMESTAMP,
-    kind           INTEGER NOT NULL,
+    kind           INTEGER   NOT NULL,
     system_kind    INTEGER,
     lookup         tsvector NOT NULL GENERATED ALWAYS AS (
                       (CASE WHEN (content IS JSON)
@@ -72,7 +71,6 @@ where kind = 31750;
 -- Order by:
 --   created_at DESC
 CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
-CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_id_created_at ON events(id, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_kind_created_at ON events(kind, created_at DESC) WHERE hidden = FALSE;
@@ -110,6 +108,8 @@ create index if not exists idx_event_tags_id_key_value2               on event_t
 create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2);
 create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
 create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
+create index if not exists idx_event_tags_key_value1_expiration       on event_tags(event_tag_key, to_timestamp(cast(event_tag_value1 as bigint))) where
+    event_tag_key = 'expiration';
 --------
 CREATE OR REPLACE FUNCTION trigger_events_after_insert_generate_tags()
 RETURNS TRIGGER AS $$

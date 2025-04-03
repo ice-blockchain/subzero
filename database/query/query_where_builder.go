@@ -400,9 +400,13 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Expiration != nil {
 		b.MaybeAND()
 		if *filter.Expiration {
-			b.WriteString("(e.expiration > CURRENT_TIMESTAMP)")
+			b.WriteString(`exists
+(select true from event_tags where
+	event_id in (e.id, e.reference_id) 
+	AND event_tag_key = 'expiration'
+	AND to_timestamp(cast(event_tag_value1 as bigint)) > CURRENT_TIMESTAMP)`)
 		} else {
-			b.WriteString("(e.expiration is null)")
+			b.WriteString("NOT exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'expiration')")
 		}
 	}
 
@@ -683,7 +687,7 @@ AND `)
 		b.WriteString(`e.master_pubkey IN (select master_pubkey from ` + cteName + `)
 and e.hidden=false
 and e.kind in (1, 30023)
-and e.expiration > CURRENT_TIMESTAMP`)
+and exists (select true from event_tags where event_id = e.id and event_tag_key = 'expiration' and to_timestamp(cast(event_tag_value1 as bigint)) > CURRENT_TIMESTAMP)`)
 
 		return
 	}

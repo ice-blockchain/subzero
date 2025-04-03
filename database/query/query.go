@@ -56,7 +56,6 @@ type (
 		Htag         string
 		AddressValue string
 		Deleted      bool
-		Expiration   sql.NullInt64
 		HasImages    bool
 		HasVideos    bool
 	}
@@ -143,21 +142,13 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		}
 	}
 
-	var systemKind, expiration sql.NullInt64
+	var systemKind sql.NullInt64
 	systemKind.Int64, systemKind.Valid = detectSystemKind(e.Tags)
-
-	if val := e.GetTag("expiration").Value(); val != "" {
-		if expirationInt, err := strconv.ParseInt(val, 10, 64); err == nil {
-			expiration.Int64 = expirationInt
-			expiration.Valid = true
-		}
-	}
 
 	return &databaseEvent{
 		Event:        *e,
 		MasterPubKey: e.GetMasterPublicKey(),
 		SystemKind:   systemKind,
-		Expiration:   expiration,
 		Jtags:        string(jtags),
 		SigAlg:       sigAlg,
 		KeyAlg:       keyAlg,
@@ -394,12 +385,12 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 
 	idx := 1
 	for _, ev := range events {
-		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt, ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.Expiration, ev.HasImages, ev.HasVideos)
+		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt, ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos)
 		values = append(values, fmt.Sprintf(
-			"($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint), $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v::bool, to_timestamp($%[15]v::bigint), $%[16]v::bool, $%[17]v::bool)",
-			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
+			"($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint), $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v::bool, $%[15]v::bool, $%[16]v::bool)",
+			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15,
 		))
-		idx += 17
+		idx += 16
 	}
 
 	stmt = `MERGE INTO events AS target
@@ -407,7 +398,6 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					` + strings.Join(values, ",") + `
 				) AS source (
 					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-					expiration,
 					has_images,
 					has_videos
 				)
@@ -431,7 +421,6 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					tags = source.tags,
 					h_tag = source.h_tag,
 					deleted = source.deleted,
-					expiration = source.expiration,
 					has_images = source.has_images,
 					has_videos = source.has_videos
 			WHEN MATCHED AND
@@ -446,7 +435,6 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					created_at = source.created_at,
 					content = source.content,
 					tags = source.tags,
-					expiration = source.expiration,
 					has_images = source.has_images,
 					has_videos = source.has_videos
 			WHEN MATCHED AND target.id = source.id THEN
@@ -460,7 +448,6 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					sig = source.sig,
 					content = source.content,
 					tags = source.tags,
-					expiration = source.expiration,
 					has_images = source.has_images,
 					has_videos = source.has_videos
 			WHEN NOT MATCHED THEN
@@ -468,7 +455,6 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					id, kind, system_kind, created_at, pubkey, master_pubkey,
 					sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
 					deleted,
-					expiration,
 					has_images,
 					has_videos
 				)
@@ -477,7 +463,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
 					source.key_alg, source.content, source.tags, source.d_tag,
 					source.h_tag, source.deleted,
-					source.expiration, source.has_images, source.has_videos
+					source.has_images, source.has_videos
 				);`
 
 	_, err := db.ExecContext(ctx, stmt, params...)
@@ -775,8 +761,10 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	WITH expired_events AS (
 		SELECT id
 		FROM events
-		WHERE expiration IS NOT NULL AND expiration <= CURRENT_TIMESTAMP
-		ORDER BY expiration ASC
+		INNER JOIN event_tags et ON events.id = et.event_id AND et.event_tag_key = 'expiration'
+		WHERE
+			to_timestamp(cast(event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
+		ORDER BY created_at ASC
 		LIMIT :batch_size
 	)
 	DELETE FROM events
