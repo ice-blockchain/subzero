@@ -45,17 +45,30 @@ func WithConfig(cfg *Config) Option {
 	}
 }
 
+func mustLoadConfig(opts ...Option) *Config {
+	if len(opts) == 0 {
+		return cfg.MustGet[Config]()
+	}
+
+	conf, err := cfg.Get[Config]()
+	if err != nil {
+		conf = &Config{}
+	}
+
+	for _, opt := range opts {
+		opt(conf)
+	}
+
+	if err := cfg.Validate(conf); err != nil {
+		log.Panic(err)
+	}
+
+	return conf
+}
+
 func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
-		var conf *Config
-		if len(opts) == 0 {
-			conf = cfg.MustGet[Config]()
-		} else {
-			conf = &Config{}
-			for _, opt := range opts {
-				opt(conf)
-			}
-		}
+		conf := mustLoadConfig(opts...)
 		globalDB.Client = openDatabase(conf.URL, true).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
