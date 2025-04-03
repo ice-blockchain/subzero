@@ -32,8 +32,10 @@ const (
 	NIP13MinLeadingZeroBits = 5
 )
 
-var echoServer *fixture.MockService
-var pubsubServers []*fixture.MockService
+var (
+	echoServer    *fixture.MockService
+	pubsubServers []*fixture.MockService
+)
 
 func TestMain(m *testing.M) {
 	type globalCfg struct {
@@ -44,7 +46,10 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 
-	query.MustInit(serverCtx)
+	addr, release := query.NewTestDatabase(serverCtx)
+	query.MustInit(serverCtx, query.WithConfig(&query.Config{
+		URL: addr,
+	}))
 	dvm.MustInit(serverCtx)
 
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
@@ -90,6 +95,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 	serverCancel()
+	release()
 
 	if code == 0 {
 		if err := goleak.Find(); err != nil {

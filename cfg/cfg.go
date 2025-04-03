@@ -55,11 +55,25 @@ func mustInit(absoluteCfgPaths ...string) {
 }
 
 func MustGet[T any]() *T {
+	value, err := Get[T]()
+	if err != nil {
+		log.Panicf("failed to get config: %v", err)
+	}
+	return value
+}
+
+func Validate[T any](cfg *T) (err error) {
+	return globalValidator.Struct(cfg)
+}
+
+func Get[T any]() (*T, error) {
 	var t T
+
 	typeOf := reflect.TypeOf(t)
 	if typeOf.Kind() != reflect.Struct {
-		log.Panic("T must be struct")
+		return nil, errors.Errorf("type `%v` is not a struct", typeOf)
 	}
+
 	key := strings.Replace(typeOf.PkgPath(), "github.com/ice-blockchain/subzero/", "", 1)
 	if err := globalViper.UnmarshalKey(key, &t, func(decoderConfig *mapstructure.DecoderConfig) {
 		decoderConfig.ZeroFields = true
@@ -68,13 +82,13 @@ func MustGet[T any]() *T {
 		decoderConfig.IgnoreUntaggedFields = true
 		decoderConfig.TagName = "yaml"
 	}); err != nil {
-		log.Panic(errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t))
+		return nil, errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t)
 	}
 	log.Printf("info: [%v]config loaded: %+v", key, t)
 
-	if err := globalValidator.Struct(&t); err != nil {
-		log.Panic(errors.Wrapf(err, "could not validate `%v` yaml key `%v`: %v", yamlConfigurationFilePath, key, err))
+	if err := Validate(&t); err != nil {
+		return nil, errors.Wrapf(err, "could not validate `%v` yaml key `%v`: %v", yamlConfigurationFilePath, key, err)
 	}
 
-	return &t
+	return &t, nil
 }

@@ -9,14 +9,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand/v2"
-	"os"
 	"slices"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jmoiron/sqlx"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
@@ -58,6 +56,7 @@ func helperEnsureDatabaseWithData(t *testing.T, count ...int) (*dbClient, *testE
 func helperPreloadDataForFilter(
 	t interface {
 		Helper()
+		Context() context.Context
 		require.TestingT
 	},
 	db *dbClient,
@@ -65,36 +64,23 @@ func helperPreloadDataForFilter(
 	const stmt = `select
 	e.kind,
 	e.created_at,
-	e.system_created_at,
 	e.id,
 	e.pubkey,
 	e.sig,
 	e.content,
-	'[]' as tags,
-	(select json_group_array(json_array(event_tag_key, event_tag_value1,event_tag_value2,event_tag_value3,event_tag_value4)) from event_tags where event_id = e.id) as jtags
+	e.tags as jtags
 from
 	events e
 order by
 	random()
 limit 1000`
 
-	it := &eventIterator{
-		OneShot: true,
-		Fetch: func(int64) (*sqlx.Rows, error) {
-			stmt, err := db.prepare(context.TODO(), stmt, hashSQL(stmt))
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to prepare query sql: %v", stmt)
-			}
-
-			return stmt.QueryxContext(context.TODO(), map[string]any{})
-		}}
-
-	err := it.Each(context.TODO(), func(ev *model.Event) error {
+	it := db.newReadEventIterator(t.Context(), stmt, map[string]any{})
+	for ev, err := range it {
+		require.NoError(t, err)
 		events = append(events, ev)
+	}
 
-		return nil
-	})
-	require.NoError(t, err)
 	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })
 
 	return events
@@ -190,6 +176,7 @@ func helperGenerateEvent(
 	t interface {
 		require.TestingT
 		Helper()
+		Context() context.Context
 	},
 	db *dbClient,
 	withTags bool,
@@ -206,15 +193,14 @@ func helperGenerateEvent(
 
 	if withTags {
 		ev.Tags = []model.Tag{
-			{"#e", generateHexString(), generateRandomString(rand.IntN(20)), generateRandomString(rand.IntN(30))},
-			{"#p", generateHexString()},
-			{"#d", generateHexString(), generateRandomString(rand.IntN(10))},
+			{"o", generateHexString(), generateRandomString(rand.IntN(20)), generateRandomString(rand.IntN(30))},
+			{"p", generateHexString()},
 		}
 	}
 
 	var req databaseBatchRequest
 	require.NoError(t, req.Save(&ev))
-	require.NoError(t, db.executeBatch(context.Background(), &req))
+	require.NoError(t, db.executeBatch(t.Context(), &req))
 
 	return ev
 }
@@ -337,7 +323,7 @@ func TestWhereBuilderByTagsSingle(t *testing.T) {
 		event.Tags = model.Tags{{"e", "etag"}, {"p", "ptag"}, {"d", "dtag"}, {"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 
@@ -398,7 +384,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		event.Tags = model.Tags{{"e", "etag"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -407,7 +393,7 @@ func TestWhereBuilderByTagsOnlyMulti(t *testing.T) {
 		event.Tags = model.Tags{{"p", "ptag"}}
 		event.CreatedAt = 2
 
-		err = db.AcceptEvents(context.TODO(), &event)
+		err = db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 
@@ -430,7 +416,7 @@ func TestSelectEventNoTags(t *testing.T) {
 
 	id := helperGenerateEvent(t, db, false).ID
 	require.NotEmpty(t, id)
-	for ev, err := range db.SelectEvents(context.Background(), model.Filter{
+	for ev, err := range db.SelectEvents(t.Context(), model.Filter{
 		IDs: []string{id},
 	}) {
 		require.NoError(t, err)
@@ -441,27 +427,6 @@ func TestSelectEventNoTags(t *testing.T) {
 	}
 
 	require.NoError(t, db.Close())
-}
-
-func TestGenerateDataForFile3M(t *testing.T) {
-	const amount = 3_000_000
-
-	if os.Getenv("GENDB") != "yes" {
-		t.Skip("skipping test; to enable, set GENDB=yes")
-	}
-
-	dbPath := `.testdata/testdb_3M.sqlite3`
-	if n := os.Getenv("TESTDB"); n != "" {
-		t.Logf("using custom database path %q from env (TESTDB)", n)
-		dbPath = n
-	}
-
-	t.Logf("generating test database at %q with %d event(s)", dbPath, amount)
-	db := openDatabase(dbPath+"?_foreign_keys=on&_journal_mode=off&_synchronous=off", true)
-	require.NotNil(t, db)
-	defer db.Close()
-
-	helperFillDatabase(t, db, amount)
 }
 
 func TestSelectByMimeType(t *testing.T) {
@@ -480,7 +445,7 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Tags = model.Tags{{"imeta", "m video/mpeg4"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -489,18 +454,18 @@ func TestSelectByMimeType(t *testing.T) {
 		event.Tags = model.Tags{{"imeta", "m image/png"}}
 		event.CreatedAt = 2
 
-		err = db.AcceptEvents(context.TODO(), &event)
+		err = db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("QueryNoImeta", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "videos:false images:false",
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(100), count)
 	})
 	t.Run("Image", func(t *testing.T) {
-		for ev, err := range db.SelectEvents(context.TODO(), model.Filter{
+		for ev, err := range db.SelectEvents(t.Context(), model.Filter{
 			Search: "images:true",
 		}) {
 			require.NoError(t, err)
@@ -510,7 +475,7 @@ func TestSelectByMimeType(t *testing.T) {
 		}
 	})
 	t.Run("Video", func(t *testing.T) {
-		for ev, err := range db.SelectEvents(context.TODO(), model.Filter{
+		for ev, err := range db.SelectEvents(t.Context(), model.Filter{
 			Search: "videos:true",
 		}) {
 			require.NoError(t, err)
@@ -520,7 +485,7 @@ func TestSelectByMimeType(t *testing.T) {
 		}
 	})
 	t.Run("VideoByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "videos:true",
 			IDs:    []string{"1"},
 		})
@@ -528,7 +493,7 @@ func TestSelectByMimeType(t *testing.T) {
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("NoVideo", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "videos:false",
 		})
 		require.NoError(t, err)
@@ -552,7 +517,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		event.Tags = model.Tags{{"q", "fooo"}, {"bar", "foo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -561,25 +526,25 @@ func TestSelectQuotesReferences(t *testing.T) {
 		event.Tags = model.Tags{{"e", "fooo"}, {"foo", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.AcceptEvents(context.TODO(), &event)
+		err = db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectQuotes", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "quotes:true",
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("SelectReferences", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "references:true",
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("SelectReferencesAndQuotes", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "references:true quotes:true",
 			IDs:    []string{"1", "2"},
 		})
@@ -587,7 +552,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		require.Equal(t, int64(0), count)
 	})
 	t.Run("SelectReferencesAndQuotesUnknownID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "references:true quotes:true",
 			IDs:    []string{"5", "6"},
 		})
@@ -595,7 +560,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		require.Zero(t, count)
 	})
 	t.Run("SelectQuotesByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "quotes:true",
 			IDs:    []string{"1", "2"},
 		})
@@ -603,14 +568,14 @@ func TestSelectQuotesReferences(t *testing.T) {
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("SelectNonQuotes", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "quotes:false",
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(101), count)
 	})
 	t.Run("SelectNonQuoteByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "quotes:false",
 			IDs:    []string{"1"},
 		})
@@ -618,7 +583,7 @@ func TestSelectQuotesReferences(t *testing.T) {
 		require.Zero(t, count)
 	})
 	t.Run("SelectAll", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO())
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, int64(102), count)
 	})
@@ -627,7 +592,12 @@ func TestSelectQuotesReferences(t *testing.T) {
 func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
 	t.Helper()
 	var count int
-	err := db.QueryRow("select count(*) from events WHERE id in (select event_id from event_tags where (((event_tag_key = 'expiration') AND cast(event_tag_value1 as integer) <= unixepoch())))").Scan(&count)
+	err := db.QueryRow(`select count(*) from events WHERE exists (
+		select true from event_tags et where
+			et.event_id = events.id
+			and et.event_tag_key = 'expiration'
+			and to_timestamp(cast(et.event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
+	)`).Scan(&count)
 	require.NoError(t, err)
 
 	return count
@@ -647,7 +617,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-0xff, 10)}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -656,16 +626,16 @@ func TestSelectEventsExpiration(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()+0xff, 10)}, {"e", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.AcceptEvents(context.TODO(), &event)
+		err = db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("All", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO())
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, int64(102), count)
 	})
 	t.Run("WithoutExpiration", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "expiration:false",
 		})
 		require.NoError(t, err)
@@ -673,7 +643,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 	})
 	t.Run("WithoutExpirationByID", func(t *testing.T) {
 		ev := events.Random(t)
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search:  "expiration:false",
 			IDs:     []string{ev.ID},
 			Authors: []string{ev.PubKey},
@@ -682,7 +652,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("Expired", func(t *testing.T) {
-		for ev, er := range db.SelectEvents(context.TODO(), model.Filter{
+		for ev, er := range db.SelectEvents(t.Context(), model.Filter{
 			Search: "expiration:false",
 			IDs:    []string{"expired"},
 		}) {
@@ -690,7 +660,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 			t.Logf("expired event: %+v", ev)
 		}
 
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "expiration:false",
 			IDs:    []string{"expired"},
 		})
@@ -698,14 +668,14 @@ func TestSelectEventsExpiration(t *testing.T) {
 		require.Equal(t, int64(0), count)
 	})
 	t.Run("NotExpired", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "expiration:true",
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("NotExpiredByID", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
 			Search: "expiration:true",
 			IDs:    []string{"alive"},
@@ -722,13 +692,13 @@ func TestSelectEventsExpiration(t *testing.T) {
 			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-int64(i), 10)}, {"q", "fooo"}}
 			event.CreatedAt = 1
 
-			err := db.AcceptEvents(context.TODO(), &event)
+			err := db.AcceptEvents(t.Context(), &event)
 			require.NoError(t, err)
 		}
 	})
 	t.Run("Delete expired events", func(t *testing.T) {
 		require.Equal(t, 101, helperCountExpiredEvents(t, db))
-		err := db.deleteExpiredEvents(context.TODO())
+		err := db.deleteExpiredEvents(t.Context())
 		require.NoError(t, err)
 		require.Zero(t, helperCountExpiredEvents(t, db))
 	})
@@ -748,7 +718,7 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", "1"}, {"q", "fooo"}}
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 
 		event.Kind = nostr.KindTextNote
@@ -757,11 +727,11 @@ func TestSelectWithExtensions(t *testing.T) {
 		event.Tags = model.Tags{{"expiration", "2177366400"}, {"e", "bar"}}
 		event.CreatedAt = 1
 
-		err = db.AcceptEvents(context.TODO(), &event)
+		err = db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("AliveAndE", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			IDs:    []string{"alive"},
 			Search: "expiration:true references:true",
 		})
@@ -769,14 +739,14 @@ func TestSelectWithExtensions(t *testing.T) {
 		require.Equal(t, int64(1), count)
 	})
 	t.Run("ExpiredAndQ", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "expiration:off quotes:on",
 		})
 		require.NoError(t, err)
 		require.Zero(t, count)
 	})
 	t.Run("NoEAndNoQ", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "quotes:false references:false",
 		})
 		require.NoError(t, err)
@@ -784,7 +754,7 @@ func TestSelectWithExtensions(t *testing.T) {
 	})
 	t.Run("IdNoTags", func(t *testing.T) {
 		ev := events.Random(t)
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			IDs:    []string{ev.ID},
 			Search: "quotes:true",
 		})
@@ -808,11 +778,11 @@ func TestSelectRepostWithReference(t *testing.T) {
 		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("Reference extension must be ignored for reposts", func(t *testing.T) {
-		count, err := db.CountEvents(context.TODO(), model.Filter{
+		count, err := db.CountEvents(t.Context(), model.Filter{
 			Search: "references:false",
 		})
 		require.NoError(t, err)
@@ -837,7 +807,7 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 		event.CreatedAt = 2
 		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build","x f9c8b660532a6e8236779283950d875fbfbdc6f4dbc7c675bc589a7180299c30","m image/jpeg","dim 1066x1600","bh L78C~=$%0%ERjENbWX$g0jNI}:-S","blurhash L78C~=$%0%ERjENbWX$g0jNI}:-S"]],"content":"foo","sig":"sig"}`
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("SelectRepost", func(t *testing.T) {
@@ -845,12 +815,12 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 			Search: "images:yes",
 		}
 		t.Run("Count", func(t *testing.T) {
-			count, err := db.CountEvents(context.TODO(), filter)
+			count, err := db.CountEvents(t.Context(), filter)
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count)
 		})
 		t.Run("Select", func(t *testing.T) {
-			for ev, err := range db.SelectEvents(context.TODO(), filter) {
+			for ev, err := range db.SelectEvents(t.Context(), filter) {
 				require.NoError(t, err)
 				require.NotNil(t, ev)
 				t.Logf("event: %+v", ev)
@@ -863,7 +833,7 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...model.Filter) (counter int64) {
 	t.Helper()
 
-	where, params, err := newWhereBuilder().BuildForPrecalculatedCounters(filters...)
+	where, params, err := newQueryBuilder().BuildForPrecalculatedCounters(filters...)
 	require.NoError(t, err, filters)
 
 	stmt, err := db.PrepareNamed(`select coalesce(sum(value), 0) from event_counters where ` + where)
@@ -926,7 +896,7 @@ func TestTagMarkerWithRepost(t *testing.T) {
 		event.Content = `{"id":"3","pubkey":"4","created_at":1712594952,"kind":1,"tags":[["imeta","url https://example.com/foo.jpg","ox f63ccef25fcd9b9a181ad465ae40d282eeadd8a4f5c752434423cb0539f73e69 https://nostr.build"], ["e", "foo", "", "root"]],"content":"foo","sig":"sig"}`
 		event.CreatedAt = 1
 
-		err := db.AcceptEvents(context.TODO(), &event)
+		err := db.AcceptEvents(t.Context(), &event)
 		require.NoError(t, err)
 	})
 	t.Run("Select", func(t *testing.T) {
@@ -943,7 +913,7 @@ func TestFilterTagsNegative(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Insert", func(t *testing.T) {
-		err := db.AcceptEvents(context.TODO(),
+		err := db.AcceptEvents(t.Context(),
 			&model.Event{
 				Event: nostr.Event{
 					ID:        "1id",
@@ -961,7 +931,7 @@ func TestFilterTagsNegative(t *testing.T) {
 				Event: nostr.Event{
 					ID:        "2id",
 					Kind:      nostr.KindTextNote,
-					CreatedAt: 1,
+					CreatedAt: 2,
 					Content:   "bar",
 					PubKey:    "barkey",
 					Tags: model.Tags{
@@ -972,7 +942,7 @@ func TestFilterTagsNegative(t *testing.T) {
 			},
 		)
 		require.NoError(t, err)
-		count, err := db.CountEvents(context.Background())
+		count, err := db.CountEvents(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	})
@@ -1017,7 +987,7 @@ func TestCommunityEventsLookup(t *testing.T) {
 	event2.PubKey = "2"
 	event2.Tags = model.Tags{{model.CustomIONTagCommunity, "foo"}}
 
-	require.NoError(t, db.AcceptEvents(context.TODO(), &event, &event2))
+	require.NoError(t, db.AcceptEvents(t.Context(), &event, &event2))
 	eventsNoFilter := helperSelectEvents(t, db)
 	require.Len(t, eventsNoFilter, 1)
 

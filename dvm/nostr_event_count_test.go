@@ -4,37 +4,15 @@ package dvm
 
 import (
 	"context"
-	"log"
-	"os"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/validation"
 )
-
-func TestMain(m *testing.M) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	query.MustInit(ctx)
-	MustInit(ctx)
-
-	code := m.Run()
-	cancel()
-
-	if code == 0 {
-		if err := goleak.Find(); err != nil {
-			log.Printf("goleak: %v", err)
-			code = 1
-		}
-	}
-
-	os.Exit(code)
-}
 
 func TestCountBasedOnGroups(t *testing.T) {
 	t.Parallel()
@@ -583,12 +561,21 @@ func helperReadFromDB(t *testing.T, req model.Filter) *model.Event {
 func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 	t.Helper()
 
-	if dbResult.CreatedAt != dvmResult.CreatedAt {
-		dbResult.CreatedAt, dvmResult.CreatedAt = 0, 0
-		dbResult.Sig, dvmResult.Sig = "", ""
-	}
+	require.Equal(t, dbResult.Kind, dvmResult.Kind)
+	require.Equal(t, dbResult.PubKey, dvmResult.PubKey)
+	require.Equal(t, dbResult.Content, dvmResult.Content)
 
-	require.JSONEq(t, dbResult.String(), dvmResult.String())
+	dbRequest, dvmRequest := dbResult.GetTag("request").Value(), dvmResult.GetTag("request").Value()
+	require.NotEmpty(t, dbRequest)
+	require.NotEmpty(t, dvmRequest)
+
+	var dbRequestEvent, dvmRequestEvent model.Event
+	require.NoError(t, dbRequestEvent.UnmarshalJSON([]byte(dbRequest)))
+	require.NoError(t, dvmRequestEvent.UnmarshalJSON([]byte(dvmRequest)))
+
+	require.Equal(t, dbRequestEvent.Kind, dvmRequestEvent.Kind)
+	require.Equal(t, dbRequestEvent.PubKey, dvmRequestEvent.PubKey)
+	require.JSONEq(t, dbRequestEvent.Content, dvmRequestEvent.Content)
 }
 
 func TestEventCountersConsistency(t *testing.T) {
@@ -854,7 +841,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				resultDB := helperReadFromDB(t, c.RequestDB)
 				resultDVM := helperMustExecuteJob(t, t.Context(), &c.RequestDVM)
 				helperCompareResults(t, resultDB, resultDVM)
-				require.Equal(t, c.Count, resultDB.Content)
+				require.JSONEq(t, c.Count, resultDB.Content)
 			})
 		})
 	}

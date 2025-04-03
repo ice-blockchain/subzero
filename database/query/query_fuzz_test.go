@@ -4,14 +4,16 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"math/rand/v2"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	combinations "github.com/mxschmitt/golang-combinations"
-	"github.com/nbd-wtf/go-nostr"
+	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -72,7 +74,7 @@ func helperParseFilterStruct(t *testing.T, typ reflect.Type, parent *structEleme
 			}
 
 		case reflect.String:
-			for _, v := range []string{"Images", "Quotes", "References", "Videos", "Expiration"} {
+			for _, v := range []string{"Images", "Quotes", "References", "Videos", "Expiration", "Search"} {
 				el := parent.Clone()
 				el.Name = append(el.Name, v)
 				el.Addr = append(el.Addr, field.Index...)
@@ -132,6 +134,11 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 			ts := model.Timestamp(generateCreatedAt())
 			value.Set(reflect.ValueOf(&ts))
 
+		case "Search":
+			val := value.String()
+			val += ` "` + generateRandomString(rand.IntN(20)) + `"`
+			value.Set(reflect.ValueOf(val))
+
 		case "Expiration", "Videos", "Images", "Quotes", "References":
 			val := value.String()
 			if val != "" {
@@ -150,21 +157,36 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 	return f
 }
 
+func helperGenFilterCombinations(t *testing.T) [][]*structElement {
+	t.Helper()
+
+	var filter model.Filter
+
+	fields := helperParseFilterStruct(t, reflect.TypeOf(filter), nil)
+	sets := combinations.All(fields)
+	t.Logf("found %d total combination(s)", len(sets))
+
+	slices.SortStableFunc(sets, func(i, j []*structElement) int {
+		if len(i) < len(j) {
+			return -1
+		}
+		if len(i) > len(j) {
+			return 1
+		}
+		return 0
+	})
+
+	return sets
+}
+
 func TestQueryFuzzWhereGenerator(t *testing.T) {
 	t.Parallel()
-
-	var sets [][]*structElement
-	t.Run("PrepareSets", func(t *testing.T) {
-		var filter model.Filter
-
-		fields := helperParseFilterStruct(t, reflect.TypeOf(filter), nil)
-		sets = combinations.All(fields)
-		t.Logf("found %d total combination(s)", len(sets))
-	})
 
 	db := helperNewDatabase(t)
 	defer db.Close()
 	helperFillDatabase(t, db, 100)
+
+	sets := helperGenFilterCombinations(t)
 
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
@@ -175,155 +197,102 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 	})
 }
 
-func TestQueryFuzzNoUseTempBTREEOrScan(t *testing.T) {
-	t.Parallel()
-
-	var sets [][]*structElement
-	t.Run("PrepareSets", func(t *testing.T) {
-		var filter model.Filter
-
-		fields := helperParseFilterStruct(t, reflect.TypeOf(filter), nil)
-		sets = combinations.All(fields)
-		t.Logf("found %d total combination(s)", len(sets))
-		slices.SortStableFunc(sets, func(i, j []*structElement) int {
-			if len(i) < len(j) {
-				return -1
-			}
-			if len(i) > len(j) {
-				return 1
-			}
-			return 0
-		})
-	})
-
-	db := helperNewDatabase(t)
-	defer db.Close()
-	helperFillDatabase(t, db, 100)
-
-	op := make(map[string]int)
-
-	t.Run("Fuzz", func(t *testing.T) {
-		for i, set := range sets {
-			filter := helperNewFilterFromElements(t, set)
-			sql, params, err := db.generateSelectEventsSQL(context.TODO(), model.Filters{filter}, 0, 100)
-			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
-
-			sql = "EXPLAIN QUERY PLAN " + sql
-			stmt, err := db.prepare(context.Background(), sql, hashSQL(sql))
-			require.NoError(t, err)
-
-			rows, err := stmt.QueryContext(context.Background(), params)
-			require.NoError(t, err)
-			var hasIndex bool
-			for rows.Next() {
-				var s1, s2, s3, s4 string
-				err := rows.Scan(&s1, &s2, &s3, &s4)
-				require.NoError(t, err)
-				op[s4]++
-				if strings.Contains(s4, "SEARCH e USING INDEX sqlite_autoindex_events_1") || strings.Contains(s4, "SEARCH e USING INDEX") {
-					hasIndex = true
-				}
-				if s4 == "USE TEMP B-TREE FOR ORDER BY" || (strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX")) {
-					if strings.Contains(filter.Search, "Expiration:true") {
-						// It uses SCAN over CTE, which is expected.
-						continue
-					} else if (hasIndex || len(filter.Authors) > 0) && s4 == "USE TEMP B-TREE FOR ORDER BY" {
-						// Allow B-TREE for ORDER BY if there are multiple authors or PK is used.
-						continue
-					}
-					t.Logf("filter: %#v", filter)
-					t.Logf("set #%d: %s (%+v)", i+1, sql, params)
-					t.Log(s1, s2, s3, s4)
-					t.FailNow()
-				}
-			}
-			rows.Close()
-		}
-	})
-
-	t.Run("OpSummary", func(t *testing.T) {
-		keys := make([]string, 0, len(op))
-		for k := range op {
-			keys = append(keys, k)
-		}
-		slices.SortStableFunc(keys, func(i, j string) int {
-			if op[i] > op[j] {
-				return -1
-			}
-			if op[i] < op[j] {
-				return 1
-			}
-			return 0
-		})
-		t.Log("Operations Summary:")
-		for _, k := range keys {
-			t.Logf("%s: %d", k, op[k])
-		}
-	})
+type Plan struct {
+	Plans     []Plan   `json:"Plans"`
+	NodeType  string   `json:"Node Type"`
+	IndexName string   `json:"Index Name"`
+	IndexCond string   `json:"Index Cond"`
+	SortKey   []string `json:"Sort Key"`
+}
+type Query struct {
+	Plan     Plan    `json:"Plan"`
+	ExecTime float64 `json:"Execution Time"`
 }
 
-func TestQueryFuzzInsertEvents(t *testing.T) {
+func helperPlanConsume(t *testing.T, plan *Plan, ops map[string]int) {
+	t.Helper()
+
+	if plan.NodeType != "" {
+		ops[plan.NodeType]++
+	}
+	for _, p := range plan.Plans {
+		helperPlanConsume(t, &p, ops)
+	}
+}
+
+func helperPlanHas(t *testing.T, plan *Plan, op string) bool {
+	t.Helper()
+
+	if plan.NodeType == op {
+		return true
+	}
+	for _, p := range plan.Plans {
+		if helperPlanHas(t, &p, op) {
+			return true
+		}
+	}
+	return false
+}
+
+func helperQueryHas(t *testing.T, q []Query, op string) bool {
+	t.Helper()
+
+	for _, p := range q {
+		if helperPlanHas(t, &p.Plan, op) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestQueryFuzzIndexes(t *testing.T) {
 	t.Parallel()
+
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping test on CI")
+	}
 
 	db := helperNewDatabase(t)
 	defer db.Close()
+	helperFillDatabase(t, db, 3000)
 
 	op := make(map[string]int)
+	sets := helperGenFilterCombinations(t)
+	results := make([]Query, 0, len(sets))
 
-	t.Run("Explain", func(t *testing.T) {
-		const sql = `explain query plan insert into events
-			(kind, created_at, system_created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, reference_id, content_metadata)
-		values
-			(:kind, :created_at, :system_created_at, :id, :pubkey, :master_pubkey, :sig, :sig_alg, :key_alg, :content, :jtags, :d_tag, :h_tag, :reference_id, :content_metadata)
-		on conflict do update set
-			id                = excluded.id,
-			kind              = excluded.kind,
-			created_at        = excluded.created_at,
-			system_created_at = excluded.system_created_at,
-			pubkey            = excluded.pubkey,
-			master_pubkey     = excluded.master_pubkey,
-			sig               = excluded.sig,
-			sig_alg           = excluded.sig_alg,
-			key_alg           = excluded.key_alg,
-			content           = excluded.content,
-			tags              = excluded.tags,
-			d_tag             = excluded.d_tag,
-			h_tag             = excluded.h_tag,
-			reference_id      = excluded.reference_id,
-			content_metadata  = excluded.content_metadata,
-			hidden            = 0
-		`
-		stmt, err := db.prepare(context.Background(), sql, hashSQL(sql))
-		require.NoError(t, err)
+	t.Run("Fuzz", func(t *testing.T) {
+		bar := progressbar.Default(int64(len(sets)), "testing sets")
+		for i, set := range sets {
+			bar.Add(1)
+			var result string
+			filter := helperNewFilterFromElements(t, set)
+			sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
+			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
 
-		pk := generateHexString()
-		rows, err := stmt.QueryContext(context.Background(), &databaseEvent{
-			Event: model.Event{
-				Event: nostr.Event{
-					Kind:      nostr.KindTextNote,
-					ID:        generateHexString(),
-					PubKey:    pk,
-					CreatedAt: model.Timestamp(generateCreatedAt()),
-				},
-			},
-			MasterPubKey: pk,
-			Jtags:        "[]",
-		})
-		require.NoError(t, err)
-		for rows.Next() {
-			var s1, s2, s3, s4 string
-			err := rows.Scan(&s1, &s2, &s3, &s4)
+			sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
+			stmt, err := db.PrepareNamedContext(t.Context(), sql)
 			require.NoError(t, err)
-			if strings.HasPrefix(s4, "SCAN ") && !strings.Contains(s4, "INDEX") {
+
+			err = stmt.QueryRowxContext(t.Context(), params).Scan(&result)
+			require.NoError(t, err)
+
+			var q []Query
+			err = json.Unmarshal([]byte(result), &q)
+			require.NoError(t, err)
+
+			results = append(results, q...)
+			if helperQueryHas(t, q, "Seq Scan") {
 				t.Logf("sql: %s", sql)
 				t.Logf("------- found SCAN without INDEX -------")
-				t.Log(s1, s2, s3, s4)
+				t.Logf("params: %#v", params)
 				t.FailNow()
 			}
-			op[s4]++
 		}
-		rows.Close()
 	})
+
+	for _, q := range results {
+		helperPlanConsume(t, &q.Plan, op)
+	}
 
 	t.Run("OpSummary", func(t *testing.T) {
 		keys := make([]string, 0, len(op))

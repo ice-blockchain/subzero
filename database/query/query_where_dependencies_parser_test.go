@@ -20,62 +20,62 @@ func TestParseDepRequest(t *testing.T) {
 
 	cases := []struct {
 		Input    string
-		Expected filterDependencies
+		Expected filterDependency
 		Err      error
 	}{
 		{
 			Input: "kind30008+profile_badges>kind30009>kind8",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind:          30008,
 					ProfileBadges: true,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds: []int{30009, 8},
 				},
 			},
 		},
 		{
 			Input: "kind6>kind10002",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 6,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds: []int{10002},
 				},
 			},
 		},
 		{
 			Input: "kind3>kind0",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 3,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds: []int{0},
 				},
 			},
 		},
 		{
 			Input: "kind1+q>kind10002",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 					Tag:  "q",
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds: []int{10002},
 				},
 			},
 		},
 		{
 			Input: "kind1>e4f0cf865fd1b24845b694a9dbe5296f663b0c4d449308c3afbd9f319ecbbcd4@kind1+e+root",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:   []int{1},
 					Author:  "e4f0cf865fd1b24845b694a9dbe5296f663b0c4d449308c3afbd9f319ecbbcd4",
 					Tag:     "e",
@@ -85,11 +85,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+e+root",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:   []int{1},
 					Author:  "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 					Tag:     "e",
@@ -99,11 +99,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+e+reply",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:   []int{1},
 					Author:  "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 					Tag:     "e",
@@ -113,11 +113,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1+q",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:  []int{1},
 					Author: "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 					Tag:    "q",
@@ -126,11 +126,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind6",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:  []int{6},
 					Author: "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
 				},
@@ -138,11 +138,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>kind6400+kind1+group+root",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:   []int{6400, 1},
 					Group:   true,
 					Context: "root",
@@ -151,11 +151,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>kind6400+kind1+group+q",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds: []int{6400, 1},
 					Group: true,
 					Tag:   "q",
@@ -164,11 +164,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind0>kind6400+kind3+group+p",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 0,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds: []int{6400, 3},
 					Group: true,
 					Tag:   "p",
@@ -177,11 +177,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind1>kind6400+kind7+group+content",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 1,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:   []int{6400, 7},
 					Group:   true,
 					Context: "content",
@@ -190,11 +190,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind30023>kind6400+kind1754+group+content",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 30023,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:   []int{6400, 1754},
 					Group:   true,
 					Context: "content",
@@ -203,11 +203,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind3>kind0+p+|key1,key2,keyN|",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 3,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:  []int{0},
 					Author: "key1,key2,keyN",
 				},
@@ -215,11 +215,11 @@ func TestParseDepRequest(t *testing.T) {
 		},
 		{
 			Input: "kind3>kind0+p+|key1|",
-			Expected: filterDependencies{
-				Start: filterDependenciesStart{
+			Expected: filterDependency{
+				Start: filterDependencyStart{
 					Kind: 3,
 				},
-				Reduce: filterDependenciesReduce{
+				Reduce: filterDependencyReduce{
 					Kinds:  []int{0},
 					Author: "key1",
 				},
@@ -249,6 +249,7 @@ func TestParseDepRequest(t *testing.T) {
 
 func TestSelectWithDependencies(t *testing.T) {
 	t.Parallel()
+
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -275,8 +276,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			Search: "include:dependencies:kind1>kind0",
 		})
 		require.Len(t, events, 2)
-		require.Equal(t, "id2", events[0].ID)
-		require.Equal(t, "id1", events[1].ID)
+		require.ElementsMatch(t, []string{"id2", "id1"}, []string{events[0].ID, events[1].ID})
 	})
 	t.Run("kind1>$logged_in_user_pubkey@kind1+e+root", func(t *testing.T) {
 		var ev model.Event
@@ -342,10 +342,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			Search: "include:dependencies:kind1>t2pk2@kind1+e+root",
 		})
 		require.Len(t, events, 4) // Two original notes, two replies (only one single reply per note). t2id3 must be excluded.
-		require.Equal(t, "t2id1", events[0].ID)
-		require.Equal(t, "id2", events[1].ID)
-		require.Equal(t, "t2id2", events[2].ID)
-		require.Equal(t, "t2id6", events[3].ID)
+		require.ElementsMatch(t, []string{"t2id1", "id2", "t2id2", "t2id6"}, []string{events[0].ID, events[1].ID, events[2].ID, events[3].ID})
 	})
 	t.Run("kind1>kind6400+kind7+group+content", func(t *testing.T) {
 		var ev model.Event
@@ -392,7 +389,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		for _, ev := range events[2:] {
 			t.Logf("dvm event: %+v", ev)
 			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
-			require.Equal(t, `{"*":1,"+":1}`, ev.Content)
+			require.JSONEq(t, `{"*":1,"+":1}`, ev.Content)
 			require.GreaterOrEqual(t, len(ev.Tags), 3)
 			valid, err := ev.CheckSignature()
 			require.NoError(t, err)
@@ -452,11 +449,9 @@ func TestSelectWithDependencies(t *testing.T) {
 			Search:  "include:dependencies:kind30008+profile_badges>kind30009>kind8",
 		})
 		require.Len(t, events, 3)
-		require.Equal(t, nostr.KindProfileBadges, events[0].Kind)
-		require.Equal(t, nostr.KindBadgeDefinition, events[1].Kind)
-		require.Equal(t, nostr.KindBadgeAward, events[2].Kind)
+		require.ElementsMatch(t, []int{nostr.KindProfileBadges, nostr.KindBadgeDefinition, nostr.KindBadgeAward}, []int{events[0].Kind, events[1].Kind, events[2].Kind})
 	})
-	t.Run("Combined dependencies", func(t *testing.T) {
+	t.Run("Combined Dependency", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			Authors: []string{"t4pk3", "pk1"},
 			Search:  "include:dependencies:kind1>kind0 include:dependencies:kind30008+profile_badges>kind30009>kind8",
@@ -499,7 +494,7 @@ func TestSelectWithDependencies(t *testing.T) {
 				Search: "include:dependencies:kind6>kind10002",
 			})
 			require.Len(t, events, 5) // 2 reposts, 1 note, 2 relay metadata.
-			for i, k := range []int{nostr.KindRepost, nostr.KindRepost, nostr.KindTextNote, nostr.KindRelayListMetadata, model.CustomIONKindRelayListMetadata} {
+			for i, k := range []int{nostr.KindTextNote, nostr.KindRepost, nostr.KindRepost, nostr.KindRelayListMetadata, model.CustomIONKindRelayListMetadata} {
 				require.Equalf(t, k, events[i].Kind, "event %d: %v", i, events[i])
 				if events[i].Kind == model.CustomIONKindRelayListMetadata {
 					ok, err := events[i].CheckSignature()
@@ -570,8 +565,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			Search: "include:dependencies:kind30023>kind0",
 		})
 		require.Len(t, events, 2)
-		require.Equal(t, "t8id2", events[0].ID)
-		require.Equal(t, "t8id1", events[1].ID)
+		require.ElementsMatch(t, []string{"t8id2", "t8id1"}, []string{events[0].ID, events[1].ID})
 	})
 	t.Run("kind0>kind6400+kind3+group+p", func(t *testing.T) {
 		// Celebrity 1, and two fans.
@@ -754,7 +748,7 @@ func TestSelectWithDependencies(t *testing.T) {
 	})
 }
 
-func TestSelectExpirationWithDependencies(t *testing.T) {
+func TestSelectExpirationWithDependency(t *testing.T) {
 	t.Parallel()
 	db := helperNewDatabase(t)
 	defer db.Close()
@@ -825,7 +819,7 @@ func TestSelectExpirationWithDependencies(t *testing.T) {
 	}
 }
 
-func TestSelectDependenciesQuote(t *testing.T) {
+func TestSelectDependencyQuote(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -1200,33 +1194,45 @@ func TestDVMVoteResults(t *testing.T) {
 	require.Len(t, events, 6) // 3 polls, 3 dvm events.
 
 	t.Run("CheckResults", func(t *testing.T) {
-		events = events[3:]
-		var cases = []struct {
-			ID       string
-			Expected map[string]int
-		}{
-			{"poll1", expected1},
-			{"poll2", results2},
-			{"poll3", results3},
+		expected := map[string]map[string]int{
+			"poll1":           expected1,
+			"poll2":           results2,
+			"30023:pk1:dtag3": results3,
 		}
 		for i := range events {
-			require.Equal(t, model.KindDVMCountResponse, events[i].Kind)
+			if events[i].Kind != model.KindDVMCountResponse {
+				continue
+			}
 
 			var counters map[string]int
 			require.NoError(t, json.Unmarshal([]byte(events[i].Content), &counters))
-			require.Equal(t, cases[i].Expected, counters)
 
-			switch cases[i].ID {
-			case "poll1", "poll2":
-				require.Contains(t, events[i].String(), `#e\\\":\\\"`+cases[i].ID+`\\\"`)
-			case "poll3":
-				require.Contains(t, events[i].String(), `#a\\\":\\\"30023:pk1:dtag3\\\"`)
+			var request model.Event
+			require.NoError(t, json.Unmarshal([]byte(events[i].GetTag("request").Value()), &request))
+
+			var filters model.Filters
+			require.NoError(t, json.Unmarshal([]byte(request.Content), &filters))
+			require.Len(t, filters, 1)
+
+			if filters[0].Tags.HasValues("e") {
+				ids := filters[0].Tags.All("e")
+				require.Len(t, ids, 1)
+				require.Equal(t, expected[ids[0]], counters)
+				delete(expected, ids[0])
+			} else if filters[0].Tags.HasValues("a") {
+				ids := filters[0].Tags.All("a")
+				require.Len(t, ids, 1)
+				require.Equal(t, expected[ids[0]], counters)
+				delete(expected, ids[0])
+			} else {
+				t.Fatalf("unexpected filter: %s", filters[0].String())
 			}
 		}
+		require.Empty(t, expected)
 	})
 }
 
-func TestSelectDependenciesWithAddressableEvents(t *testing.T) {
+func TestSelectDependencyWithAddressableEvents(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -1277,7 +1283,7 @@ func TestSelectDependenciesWithAddressableEvents(t *testing.T) {
 	require.Equal(t, "2", events[len(events)-1].Content)
 }
 
-func TestSelectDependenciesReactionAddressable(t *testing.T) {
+func TestSelectDependencyReactionAddressable(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -1353,31 +1359,37 @@ func TestMostRelevantFollowers(t *testing.T) {
 		bobMeta.ID = "id1"
 		bobMeta.Kind = nostr.KindProfileMetadata
 		bobMeta.PubKey = "bob"
+		bobMeta.CreatedAt = 1
 		bobMeta.Content = "{\"name\":\"Bob\"}"
 
 		aliceMeta.ID = "id4"
 		aliceMeta.Kind = nostr.KindProfileMetadata
 		aliceMeta.PubKey = "alice"
+		aliceMeta.CreatedAt = 2
 		aliceMeta.Content = "{\"name\":\"Alice\"}"
 
 		alexMeta.ID = "id2"
 		alexMeta.Kind = nostr.KindProfileMetadata
 		alexMeta.PubKey = "alex"
+		alexMeta.CreatedAt = 3
 		alexMeta.Content = "{\"name\":\"Alex\"}"
 
 		annaMeta.ID = "id3"
 		annaMeta.Kind = nostr.KindProfileMetadata
 		annaMeta.PubKey = "anna"
+		annaMeta.CreatedAt = 4
 		annaMeta.Content = "{\"name\":\"Anna\"}"
 
 		johnMeta.ID = "id5"
 		johnMeta.Kind = nostr.KindProfileMetadata
 		johnMeta.PubKey = "john"
+		johnMeta.CreatedAt = 5
 		johnMeta.Content = "{\"name\":\"John\"}"
 
 		martinMeta.ID = "id6"
 		martinMeta.Kind = nostr.KindProfileMetadata
 		martinMeta.PubKey = "martin"
+		martinMeta.CreatedAt = 6
 		martinMeta.Content = "{\"name\":\"Martin\"}"
 
 		require.NoError(t, db.AcceptEvents(t.Context(), &bobMeta, &aliceMeta, &alexMeta, &annaMeta, &johnMeta, &martinMeta))
@@ -1387,6 +1399,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		bobList.Kind = nostr.KindFollowList
 		bobList.PubKey = "bob"
 		bobList.ID = "bob_id"
+		bobList.CreatedAt = 1
 		bobList.Tags = model.Tags{
 			{"p", "john"},
 			{"p", "alice"},
@@ -1396,6 +1409,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		aliceList.Kind = nostr.KindFollowList
 		aliceList.PubKey = "alice"
 		aliceList.ID = "alice_id"
+		aliceList.CreatedAt = 2
 		aliceList.Tags = model.Tags{
 			{"p", "john"},
 			{"p", "bob"},
@@ -1405,6 +1419,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		alexList.Kind = nostr.KindFollowList
 		alexList.PubKey = "alex"
 		alexList.ID = "alex_id"
+		alexList.CreatedAt = 3
 		alexList.Tags = model.Tags{
 			{"p", "anna"},
 			{"p", "john"},
@@ -1413,6 +1428,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		annaList.Kind = nostr.KindFollowList
 		annaList.PubKey = "anna"
 		annaList.ID = "anna_id"
+		annaList.CreatedAt = 4
 		annaList.Tags = model.Tags{
 			{"p", "alex"},
 			{"p", "alice"},
@@ -1421,6 +1437,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		martinList.Kind = nostr.KindFollowList
 		martinList.PubKey = "martin"
 		martinList.ID = "martin_id"
+		martinList.CreatedAt = 5
 		martinList.Tags = model.Tags{
 			{"p", "john"},
 			{"p", "bob"},
@@ -1429,6 +1446,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		johnList.Kind = nostr.KindFollowList
 		johnList.PubKey = "john"
 		johnList.ID = "john_id"
+		johnList.CreatedAt = 6
 		johnList.Tags = model.Tags{
 			{"p", "alex"},
 			{"p", "anna"},
@@ -1462,7 +1480,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		}
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 2) // 1 main event (follow list), 1 kind 0 of relevant followers.
-		require.Equal(t, "alice", events[1].PubKey)
+		require.Equal(t, "alice", events[0].PubKey)
 	})
 	t.Run("Find most relevant followers of john with alice", func(t *testing.T) {
 		f := model.Filter{
@@ -1474,6 +1492,6 @@ func TestMostRelevantFollowers(t *testing.T) {
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 3) // 1 main event (follow list), 2 kind 0 of relevant followers.
 		require.Equal(t, "anna", events[1].PubKey)
-		require.Equal(t, "bob", events[2].PubKey)
+		require.Equal(t, "bob", events[0].PubKey)
 	})
 }

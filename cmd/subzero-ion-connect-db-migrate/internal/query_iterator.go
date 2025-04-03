@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package query
+package internal
 
 import (
 	"context"
@@ -12,12 +12,13 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type EventIterator iter.Seq2[*model.Event, error]
+type EventIterator = iter.Seq2[*model.Event, error]
 
 type (
 	eventIterator struct {
-		Fetch func() (*sqlx.Rows, error)
-		Map   func(*databaseEvent) *databaseEvent
+		Fetch   func(pivot int64) (*sqlx.Rows, error)
+		Map     func(*databaseEvent) *databaseEvent
+		OneShot bool
 	}
 )
 
@@ -47,19 +48,23 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 	return &ev, nil
 }
 
-func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) error {
-	rows, err := it.Fetch()
+func (it *eventIterator) scanBatch(ctx context.Context, fn func(*model.Event) error, pivot int64) (int64, error) {
+	rows, err := it.Fetch(pivot)
 	if err != nil {
-		return errors.Wrap(err, "failed to get events")
+		return -1, errors.Wrap(err, "failed to get events")
 	} else if rows == nil {
-		return nil
+		return pivot, nil
 	}
 	defer rows.Close()
 
 	for rows.Next() && ctx.Err() == nil {
 		event, err := it.scanEvent(rows)
 		if err != nil {
-			return errors.Wrap(err, "failed to scan event")
+			return -1, errors.Wrap(err, "failed to scan event")
+		}
+
+		if pivot == 0 || event.SystemCreatedAt < pivot {
+			pivot = event.SystemCreatedAt
 		}
 
 		if it.Map != nil {
@@ -68,12 +73,27 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 
 		err = fn(&event.Event)
 		if err != nil {
-			return errors.Wrap(err, "failed to process event")
+			return -1, errors.Wrap(err, "failed to process event")
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "failed to iterate events")
+	return pivot, nil
+}
+
+func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) error {
+	var pivot int64
+
+	for ctx.Err() == nil {
+		newPivot, err := it.scanBatch(ctx, fn, pivot)
+		if err != nil {
+			return err
+		}
+
+		if pivot == newPivot || it.OneShot {
+			return nil
+		}
+
+		pivot = newPivot
 	}
 
 	return ctx.Err()
@@ -81,8 +101,9 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*model.Event) error) 
 
 func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
 	it := &eventIterator{
-		Fetch: func() (*sqlx.Rows, error) {
-			stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
+		OneShot: true,
+		Fetch: func(int64) (*sqlx.Rows, error) {
+			stmt, err := db.PrepareNamedContext(ctx, sqlQuery)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
 			}

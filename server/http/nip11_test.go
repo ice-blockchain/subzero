@@ -27,16 +27,23 @@ const (
 	storageRoot        = "../../.test-uploads"
 )
 
-var pubsubServer *fixture.MockService
+var (
+	pubsubServer *fixture.MockService
+)
 
 func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 
-	query.MustInit(serverCtx)
+	addr, release := query.NewTestDatabase(serverCtx)
+	query.MustInit(serverCtx, query.WithConfig(&query.Config{
+		URL: addr,
+	}))
+
 	initServer(serverCtx, 9996)
 	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	code := m.Run()
 	serverCancel()
+	release()
 	os.Exit(code)
 }
 
