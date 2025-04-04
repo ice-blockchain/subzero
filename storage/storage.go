@@ -290,6 +290,7 @@ func (c *client) report(ctx context.Context) {
 			activeUploading := 0
 			notResolvedHeader := 0
 			notResolvedInfo := 0
+			notCompleted := 0
 			all := c.progressStorage.GetAll()
 			for _, t := range all {
 				if t.IsDownloadAll() {
@@ -298,6 +299,9 @@ func (c *client) report(ctx context.Context) {
 				if _, upl := t.IsActive(); upl {
 					activeUploading++
 				}
+				if !t.IsCompleted() {
+					notCompleted++
+				}
 				if t.Info == nil {
 					notResolvedInfo++
 				}
@@ -305,7 +309,7 @@ func (c *client) report(ctx context.Context) {
 					notResolvedHeader++
 				}
 			}
-			log.Printf("[STORAGE STATS] DEBUG: Q TO DOWNLOAD %v, DOWNLOADING %v, UPLOADING %v, RESOLVING INFO %v, RESOLVING HEADER %v TOTAL %v", len(c.downloadQueue), activelyDownloading, activeUploading, notResolvedInfo, notResolvedHeader, len(all))
+			log.Printf("[STORAGE STATS] DEBUG: Q TO DOWNLOAD %v, DOWNLOADING %v NOT COMPLETED %v, UPLOADING %v, RESOLVING INFO %v, RESOLVING HEADER %v TOTAL %v", len(c.downloadQueue), activelyDownloading, notCompleted, activeUploading, notResolvedInfo, notResolvedHeader, len(all))
 		}
 	}
 }
