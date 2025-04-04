@@ -138,7 +138,7 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 	for relativeFilePath := range headerMD.FileMetadata {
 		ref, frefErr := c.progressStorage.GetSingleFileRef(filepath.Join(rootUserPath, relativeFilePath))
 		if frefErr != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(frefErr) || errors.Is(frefErr, os.ErrNotExist) {
 				delete(headerMD.FileMetadata, relativeFilePath)
 				continue
 			}
