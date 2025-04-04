@@ -113,8 +113,10 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 			return errors.Wrapf(err, "failed to store new torrent %v", bagID)
 		}
 	} else {
-		if err = tor.Start(true, true, false); err != nil {
-			return errors.Wrapf(err, "failed to start existing torrent %v", bagID)
+		if !tor.IsCompleted() {
+			if err = tor.Start(true, true, false); err != nil {
+				return errors.Wrapf(err, "failed to start existing torrent %v", bagID)
+			}
 		}
 	}
 	return nil
@@ -128,7 +130,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 		}
 		switch event.Name {
 		case storage.EventDone:
-			tor.SetActiveFiles([]string{})
+			c.progressStorage.SetActiveFiles(tor.BagID, []uint32{})
 			tor.Stop()
 			log.Printf("[STORAGE] INFO: bag %v for user %v downloaded (%v files, %v bytes), disabling download", hex.EncodeToString(tor.BagID), usr, tor.Header.FilesCount, tor.Info.FileSize)
 			if pErr := tor.Start(true, false, false); pErr != nil {
@@ -137,6 +139,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 			c.activeDownloadsMx.Lock()
 			delete(c.activeDownloads, hex.EncodeToString(tor.BagID))
 			c.activeDownloadsMx.Unlock()
+
 			if pErr := c.saveTorrent(tor, user, nil); pErr != nil {
 				log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
 			}
