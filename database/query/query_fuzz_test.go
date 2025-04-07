@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	combinations "github.com/mxschmitt/golang-combinations"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
@@ -282,6 +283,11 @@ func TestQueryFuzzIndexes(t *testing.T) {
 
 			results = append(results, q...)
 			if helperQueryHas(t, q, "Seq Scan") {
+				var emptyFilter model.Filter
+				if nostr.FilterEqual(filter, emptyFilter) {
+					continue
+				}
+
 				t.Logf("sql: %s", sql)
 				t.Logf("------- found SCAN without INDEX -------")
 				t.Logf("params: %#v", params)

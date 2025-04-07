@@ -19,6 +19,7 @@ const (
 	whereBuilderDefaultWhere    = "e.hidden=false"
 	whereBuilderCommunityFilter = "(case when e.kind in (1, 30023, 30175) then NOT EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = 'h') else true end)"
 	whereBuilderNoSoftDeleted   = "e.deleted=false"
+	whereBuilderDefaultOrderBy  = "created_at DESC"
 
 	whereBuilderDefaultLimit = 300
 )
@@ -71,6 +72,12 @@ type (
 		Tag     string
 		Marker  string
 		Exclude bool
+	}
+	databaseCTE struct {
+		Name         string
+		Body         string
+		OrderBy      string
+		Dependencies []*filterDependency
 	}
 )
 
@@ -878,114 +885,130 @@ func (b *queryBuilder) BuildSingleWhere(filters ...model.Filter) (whereClause st
 }
 
 func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
-	type item struct {
-		CTE    string
-		Name   string
-		Filter *databaseFilterSearch
-	}
-	var items []item
+	var ctes []*databaseCTE
 
 	databaseFilters, err := b.ParseFilters(filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to parse filters")
 	}
 
+	definedOrder := false
 	for _, filter := range databaseFilters {
-		body, err := b.BuildCTE(filter)
+		cte, err := b.BuildCTE(filter)
 		if err != nil {
 			return "", nil, errors.Wrap(err, "failed to build filter")
 		}
-		items = append(items, item{
-			CTE:    body,
-			Name:   filter.ID + "events_cte",
-			Filter: filter,
-		})
+		ctes = append(ctes, cte)
+		definedOrder = definedOrder || cte.OrderBy != ""
 	}
 
 	b.Reset()
 	b.WriteString("WITH ")
-	for i := range items {
-		if b.Len() > 10 { // Skip the first `WITH`.
+	for i := range ctes {
+		if i > 0 {
 			b.WriteString(",\n")
 		}
-		b.WriteString(items[i].Name)
+		b.WriteString(ctes[i].Name)
 		b.WriteString(" AS ")
-		b.WriteString(items[i].CTE)
+		b.WriteString(ctes[i].Body)
 	}
-	b.WriteRune('\n')
 
-	for i := range items {
+	b.WriteString(" (")
+	for i := range ctes {
 		if i > 0 {
 			b.WriteString(" UNION \n")
 		}
-		b.WriteString(" SELECT * FROM ")
-		b.WriteString(items[i].Name)
-		b.WriteRune('\n')
-		for j := range items[i].Filter.Dependencies {
-			b.BuildDependency(items[i].Filter.ID+"dep"+strconv.Itoa(j), items[i].Name, items[i].Filter.Dependencies[j])
+		b.WriteString(` (SELECT `)
+		for x, f := range []string{"kind", "created_at", "id", "address", "pubkey", "master_pubkey", "sig", "content", "d_tag", "h_tag", "jtags"} {
+			if x > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(ctes[i].Name)
+			b.WriteRune('.')
+			b.WriteString(f)
 		}
+		b.WriteString(` FROM `)
+		b.WriteString(ctes[i].Name)
+		if ctes[i].OrderBy != "" {
+			b.WriteString(" ORDER BY ")
+			b.WriteString(ctes[i].OrderBy)
+		}
+		b.WriteString(` ) `)
+		for j := range ctes[i].Dependencies {
+			b.BuildDependency(ctes[i].Name+"_dep"+strconv.Itoa(j), ctes[i].Name, ctes[i].Dependencies[j])
+		}
+	}
+	b.WriteString(" )")
+	if !definedOrder {
+		b.WriteString(" ORDER BY ")
+		b.WriteString(whereBuilderDefaultOrderBy)
 	}
 
 	return b.String(), b.Params, nil
 }
 
-func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cteBody string, err error) {
+func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE, err error) {
 	whereBuffer := queryBuilder{Params: b.Params}
 	where, _, err := whereBuffer.BuildWhere(filter)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if filter.Limit == 0 {
 		filter.Limit = whereBuilderDefaultLimit
 	}
 
-	orderBy := "e.created_at desc"
+	var orderBy string
 	const discoverContentCreatorsToFollow = "discover content creators to follow"
 	if strings.Contains(filter.Filter.Search, discoverContentCreatorsToFollow) {
 		orderBy = "random()"
 	}
 
+	fields := []string{"e.kind", "e.created_at", "e.id", "e.address", "e.pubkey", "e.master_pubkey", "e.sig", "e.content", "e.d_tag", "e.h_tag", "e.tags as jtags"}
 	var joinString string
 	switch filter.Rank {
 	case rankTOP:
 		// All time top.
 		joinString = ` inner join ranked_events r on e.id = r.event_id`
-		orderBy = `r.score desc, ` + orderBy
+		orderBy = `score desc`
+		fields = append(fields, "r.score")
 
 	case rankTrending:
 		// 24h trending.
 		joinString = ` inner join ranked_events r on e.id = r.event_id and ((CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, e.created_at)) < interval '24 hours')`
-		orderBy = `r.score desc, ` + orderBy
+		orderBy = `score desc`
+		fields = append(fields, "r.score")
 	}
 
 	var sb strings.Builder
-	sb.WriteString(`(
-	select
-		e.kind,
-		e.created_at,
-		e.id,
-		e.address,
-		e.pubkey,
-		e.master_pubkey,
-		e.sig,
-		e.content,
-		e.d_tag,
-		e.h_tag,
-		tags as jtags
-	from
-		events e ` + joinString + `
-	where `)
+	sb.WriteString(`( select `)
+	for i, f := range fields {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(f)
+	}
+
+	sb.WriteString(` from events e `)
+	if joinString != "" {
+		sb.WriteString(joinString)
+	}
+
+	sb.WriteString(` where `)
 	sb.WriteString(where)
-	sb.WriteString(` order by `)
-	sb.WriteString(orderBy)
+
 	if filter.Limit > 0 {
 		sb.WriteString(` limit :`)
 		sb.WriteString(b.PushValue(filter.ID, "limit", filter.Limit))
 	}
 	sb.WriteString(`)`)
 
-	return sb.String(), nil
+	return &databaseCTE{
+		Name:         filter.ID + "events_cte",
+		Body:         sb.String(),
+		OrderBy:      orderBy,
+		Dependencies: filter.Dependencies,
+	}, nil
 }
 
 func (b *queryBuilder) BuildWhere(filter *databaseFilterSearch) (sql string, params map[string]any, err error) {
