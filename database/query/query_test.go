@@ -1531,3 +1531,40 @@ func TestSelectEventsSortMultipleFilters(t *testing.T) {
 		require.Equal(t, notes[2-i], events[i+3])
 	}
 }
+
+func TestReplaceEventCheckSignature(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	pk := model.GeneratePrivateKey()
+
+	var ev model.Event
+	ev.Kind = nostr.KindProfileMetadata
+	ev.CreatedAt = nostr.Now()
+	ev.Content = "hello world"
+	ev.Tags = model.Tags{{"x", "y"}}
+	require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+
+	events := helperSelectEvents(t, db)
+	require.Len(t, events, 1)
+	require.Equal(t, &ev, events[0])
+	ok, err := events[0].CheckSignature()
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Do update.
+	ev.CreatedAt = nostr.Now() + 1
+	ev.Tags = model.Tags{{"x", "z"}}
+	require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+
+	events = helperSelectEvents(t, db)
+	require.Len(t, events, 1)
+	require.Equal(t, &ev, events[0])
+	ok, err = events[0].CheckSignature()
+	require.NoError(t, err)
+	require.True(t, ok)
+}
