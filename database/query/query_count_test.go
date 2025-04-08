@@ -436,9 +436,9 @@ func TestCounterRootReply(t *testing.T) {
 		Search: "references:false expiration:false include:dependencies:kind1>kind6400+kind1+group+root !emarker:reply",
 	})
 	require.Len(t, events, 2) // Root + DVM.
-	require.Equal(t, "rootid", events[0].ID)
-	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
-	require.Equal(t, "1", events[1].Content)
+	require.Equal(t, "rootid", events[1].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[0].Kind)
+	require.Equal(t, "1", events[0].Content)
 
 	t.Run("Delete", func(t *testing.T) {
 		var deleteEv model.Event
@@ -634,7 +634,7 @@ func TestCounterRootReplyAddressable(t *testing.T) {
 		Search: "references:false expiration:false include:dependencies:kind30023>kind6400+kind30023+group+root !amarker:reply",
 	})
 	require.Len(t, events, 2) // Root + DVM.
-	require.Equal(t, "rootid", events[0].ID)
-	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
-	require.Equal(t, "1", events[1].Content)
+	require.Equal(t, "rootid", events[1].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[0].Kind)
+	require.Equal(t, "1", events[0].Content)
 }

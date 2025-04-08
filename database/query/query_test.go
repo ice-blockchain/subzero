@@ -1475,5 +1475,59 @@ func TestSoftDeletedReplies(t *testing.T) {
 		Kinds: []int{model.CustomIONKindEditableTextNote},
 		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, model.PointerOf("reply")),
 	})
+}
 
+func TestSelectEventsSortMultipleFilters(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := nostr.Now()
+
+	notes := make([]*model.Event, 3)
+	for i := range notes {
+		notes[i] = &model.Event{
+			Event: nostr.Event{
+				ID:        "note" + strconv.Itoa(i+1),
+				PubKey:    "pub" + strconv.Itoa(i+1),
+				Kind:      nostr.KindTextNote,
+				CreatedAt: now.Add(time.Second + (time.Duration(i) * time.Second)),
+				Content:   "my text note " + strconv.Itoa(i+1),
+				Tags:      model.Tags{},
+			},
+		}
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), notes...))
+
+	articles := make([]*model.Event, 3)
+	for i := range articles {
+		articles[i] = &model.Event{
+			Event: nostr.Event{
+				ID:        "article" + strconv.Itoa(i+1),
+				PubKey:    "pub" + strconv.Itoa(i+1),
+				Kind:      nostr.KindArticle,
+				CreatedAt: now.Add(time.Minute + (time.Duration(i) * time.Second)),
+				Content:   "my article " + strconv.Itoa(i+1),
+				Tags:      model.Tags{},
+			},
+		}
+	}
+	require.NoError(t, db.AcceptEvents(t.Context(), articles...))
+
+	events := helperSelectEvents(t, db,
+		model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+		},
+		model.Filter{
+			Kinds: []int{nostr.KindArticle},
+		},
+	)
+	require.Len(t, events, 6)
+
+	// Expected order: acticle3, article2, article1, note3, note2, note1. The newest events should be first.
+	for i := range articles {
+		require.Equal(t, articles[2-i], events[i])
+		require.Equal(t, notes[2-i], events[i+3])
+	}
 }

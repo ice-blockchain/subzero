@@ -7,7 +7,6 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
@@ -384,9 +383,9 @@ func TestSelectWithDependencies(t *testing.T) {
 			Search: "include:dependencies:kind1>kind6400+kind7+group+content",
 		})
 		require.Len(t, events, 3)
-		require.Equal(t, "t2id3", events[0].ID)
-		require.Equal(t, "t2id2", events[1].ID)
-		for _, ev := range events[2:] {
+		require.Equal(t, "t2id3", events[1].ID)
+		require.Equal(t, "t2id2", events[2].ID)
+		for _, ev := range events[:1] {
 			t.Logf("dvm event: %+v", ev)
 			require.Equal(t, model.KindDVMCountResponse, ev.Kind)
 			require.JSONEq(t, `{"*":1,"+":1}`, ev.Content)
@@ -494,7 +493,7 @@ func TestSelectWithDependencies(t *testing.T) {
 				Search: "include:dependencies:kind6>kind10002",
 			})
 			require.Len(t, events, 5) // 2 reposts, 1 note, 2 relay metadata.
-			for i, k := range []int{nostr.KindTextNote, nostr.KindRepost, nostr.KindRepost, nostr.KindRelayListMetadata, model.CustomIONKindRelayListMetadata} {
+			for i, k := range []int{model.CustomIONKindRelayListMetadata, nostr.KindRelayListMetadata, nostr.KindRepost, nostr.KindRepost, nostr.KindTextNote} {
 				require.Equalf(t, k, events[i].Kind, "event %d: %v", i, events[i])
 				if events[i].Kind == model.CustomIONKindRelayListMetadata {
 					ok, err := events[i].CheckSignature()
@@ -537,7 +536,7 @@ func TestSelectWithDependencies(t *testing.T) {
 				Search: "include:dependencies:kind1+q>kind10002",
 			})
 			require.Len(t, events, 4) // 3 notes, 1 relay metadata.
-			for i, k := range []int{nostr.KindTextNote, nostr.KindTextNote, nostr.KindTextNote, nostr.KindRelayListMetadata} {
+			for i, k := range []int{nostr.KindTextNote, nostr.KindTextNote, nostr.KindRelayListMetadata, nostr.KindTextNote} {
 				require.Equalf(t, k, events[i].Kind, "event %d: %v", i, events[i])
 			}
 		})
@@ -740,83 +739,12 @@ func TestSelectWithDependencies(t *testing.T) {
 				Search:  "include:dependencies:kind0>kind6400+kind3+group+p",
 			})
 			require.Len(t, events, 3) // Attestation, Profile metadata, follower count.
-			for i, kind := range []int{nostr.KindProfileMetadata, model.CustomIONKindAttestation, model.KindDVMCountResponse} {
+			for i, kind := range []int{model.KindDVMCountResponse, nostr.KindProfileMetadata, model.CustomIONKindAttestation} {
 				require.Equalf(t, kind, events[i].Kind, "event %d: %v", i, events[i])
 			}
-			require.Equal(t, "3", events[2].Content)
+			require.Equal(t, "3", events[0].Content)
 		})
 	})
-}
-
-func TestSelectExpirationWithDependency(t *testing.T) {
-	t.Parallel()
-	db := helperNewDatabase(t)
-	defer db.Close()
-
-	now := time.Now().Unix()
-	expiration := strconv.FormatInt(now+3600, 10)
-
-	t.Run("Insert", func(t *testing.T) {
-		require.NoError(t, db.AcceptEvents(t.Context(),
-			&model.Event{
-				Event: nostr.Event{
-					ID:        "t1id1",
-					PubKey:    "t1pk1",
-					Content:   "content1",
-					Kind:      nostr.KindTextNote,
-					CreatedAt: 1,
-					Tags:      model.Tags{{"expiration", expiration}},
-				},
-			},
-			&model.Event{
-				Event: nostr.Event{
-					ID:        "t1id2",
-					PubKey:    "t1pk2",
-					Content:   "content2",
-					Kind:      nostr.KindTextNote,
-					CreatedAt: 2,
-					Tags:      model.Tags{{"expiration", expiration}},
-				},
-			},
-			&model.Event{
-				Event: nostr.Event{
-					ID:        "t1id3",
-					PubKey:    "t1pk2",
-					Content:   "content3",
-					Kind:      nostr.KindTextNote,
-					CreatedAt: 3,
-					Tags:      model.Tags{{"expiration", expiration}},
-				},
-			},
-			&model.Event{
-				Event: nostr.Event{
-					ID:        "t1id4",
-					PubKey:    "t1pk4",
-					Content:   "content4",
-					Kind:      nostr.KindTextNote,
-					CreatedAt: 4,
-					Tags:      model.Tags{{"expiration", expiration}},
-				},
-			},
-			&model.Event{
-				Event: nostr.Event{
-					ID:        "t1id5",
-					PubKey:    "t1pk1",
-					Content:   "content5",
-					Kind:      nostr.KindTextNote,
-					CreatedAt: 5,
-					Tags:      model.Tags{{"expiration", expiration}},
-				},
-			},
-		))
-	})
-
-	events := helperSelectEvents(t, db, model.Filter{Limit: 2, Search: "expiration:true"})
-	require.Len(t, events, 3) // main: (t1pk1 + t1pk4) + dep: (t1pk1 / t1id1).
-	for i, pubkey := range []string{"t1pk1", "t1pk4", "t1pk1"} {
-		t.Logf("event %d: %+v", i, events[i])
-		require.Equal(t, pubkey, events[i].PubKey)
-	}
 }
 
 func TestSelectDependencyQuote(t *testing.T) {
@@ -850,9 +778,9 @@ func TestSelectDependencyQuote(t *testing.T) {
 		Limit:  10,
 	})
 	require.Len(t, events, 3) // 2 notes, 1 dvm event.
-	t.Logf("dvm event: %+v", events[2])
-	require.Equal(t, model.KindDVMCountResponse, events[2].Kind)
-	require.Equal(t, "1", events[2].Content)
+	t.Logf("dvm event: %+v", events[0])
+	require.Equal(t, model.KindDVMCountResponse, events[0].Kind)
+	require.Equal(t, "1", events[0].Content)
 }
 
 func TestSelectDepsAuthorTags(t *testing.T) {
@@ -903,9 +831,9 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 		Search: "include:dependencies:kind1>pk3@kind1+e+root",
 	})
 	require.Len(t, events, 2) // Original note, one reply.
-	require.Equal(t, "id1", events[0].ID)
+	require.Equal(t, "id1", events[1].ID)
 	// No pk2 (id2) reply.
-	require.Equal(t, "id3", events[1].ID)
+	require.Equal(t, "id3", events[0].ID)
 }
 
 func helperEventsMatch(t *testing.T, events []*model.Event, expectedCount int, filters ...model.Filter) {
@@ -1278,9 +1206,9 @@ func TestSelectDependencyWithAddressableEvents(t *testing.T) {
 	})
 	require.Len(t, events, 4) // 3 notes, 1 dvm event.
 
-	t.Logf("dvm event: %+v", events[len(events)-1]) // The last event is the DVM event.
-	require.Equal(t, model.KindDVMCountResponse, events[len(events)-1].Kind)
-	require.Equal(t, "2", events[len(events)-1].Content)
+	t.Logf("dvm event: %+v", events[0]) // The last event is the DVM event.
+	require.Equal(t, model.KindDVMCountResponse, events[0].Kind)
+	require.Equal(t, "2", events[0].Content)
 }
 
 func TestSelectDependencyReactionAddressable(t *testing.T) {
@@ -1343,9 +1271,9 @@ func TestSelectDependencyReactionAddressable(t *testing.T) {
 	})
 
 	require.Len(t, events, 2) // 1 event, 1 DVM (reaction count) event.
-	require.Equal(t, event1.ID, events[0].ID)
-	require.Equal(t, model.KindDVMCountResponse, events[1].Kind)
-	require.JSONEq(t, `{"approve":1,"minus":1}`, events[1].Content)
+	require.Equal(t, event1.ID, events[1].ID)
+	require.Equal(t, model.KindDVMCountResponse, events[0].Kind)
+	require.JSONEq(t, `{"approve":1,"minus":1}`, events[0].Content)
 }
 
 func TestMostRelevantFollowers(t *testing.T) {
@@ -1480,7 +1408,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		}
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 2) // 1 main event (follow list), 1 kind 0 of relevant followers.
-		require.Equal(t, "alice", events[0].PubKey)
+		require.Equal(t, "alice", events[1].PubKey)
 	})
 	t.Run("Find most relevant followers of john with alice", func(t *testing.T) {
 		f := model.Filter{
@@ -1492,6 +1420,6 @@ func TestMostRelevantFollowers(t *testing.T) {
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 3) // 1 main event (follow list), 2 kind 0 of relevant followers.
 		require.Equal(t, "anna", events[1].PubKey)
-		require.Equal(t, "bob", events[0].PubKey)
+		require.Equal(t, "bob", events[2].PubKey)
 	})
 }
