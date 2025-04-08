@@ -3,10 +3,10 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	_ "embed"
-	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -139,11 +139,12 @@ func hashSQL(sql string) (hash string) {
 }
 
 func hashEvents(events ...*model.Event) (hash string) {
-	hashableString := ""
+	var buf bytes.Buffer
+
 	for _, e := range events {
-		hashableString += fmt.Sprintf("%v:%v", e.Kind, e.ID)
+		buf.WriteString(e.Address())
 	}
-	sum := sha256.Sum256([]byte(hashableString))
+	sum := sha256.Sum256(buf.Bytes())
 
 	return string(sum[:])
 }
