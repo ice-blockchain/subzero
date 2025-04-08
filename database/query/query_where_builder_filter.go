@@ -163,12 +163,6 @@ func parseNostrFilter(filter model.Filter) (*databaseFilterSearch, error) {
 	}
 	f = parseRank(f)
 
-	if f.Expiration != nil && *f.Expiration {
-		f.Dependencies = append(f.Dependencies, &filterDependency{
-			Expiration: f.Expiration,
-		})
-	}
-
 	f.Search = strings.TrimSpace(f.Search)
 
 	return f, nil
