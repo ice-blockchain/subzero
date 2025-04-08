@@ -44,6 +44,7 @@ updateAllDependencies:
 checkIfAllDependenciesAreUpToDate: updateAllDependencies
 	@if git status --porcelain | grep -q go.sum; then \
 		echo "Some dependencies are outdated. Please update all dependencies using 'make updateAllDependencies' and make sure everything works correctly and tests pass then commit the changes."; \
+		git --no-pager diff; \
 		exit 1; \
 	fi; \
 	true;
