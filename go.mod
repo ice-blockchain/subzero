@@ -12,7 +12,7 @@ replace (
 
 require (
 	github.com/bzick/tokenizer v1.4.10
-	github.com/caddyserver/certmagic v0.22.2
+	github.com/caddyserver/certmagic v0.22.3-0.20250407182622-b9399eadfbe7
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
