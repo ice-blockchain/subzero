@@ -690,15 +690,6 @@ AND `)
 		b.WriteString(`) AND `)
 	}
 
-	if filter.Expiration != nil && *filter.Expiration {
-		b.WriteString(`e.master_pubkey IN (select master_pubkey from ` + cteName + `)
-and e.hidden=false
-and e.kind in (1, 30023)
-and exists (select true from event_tags where event_id = e.id and event_tag_key = 'expiration' and to_timestamp(cast(event_tag_value1 as bigint)) > CURRENT_TIMESTAMP)`)
-
-		return
-	}
-
 	switch filter.Reduce.Kinds[0] {
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
 		b.WriteString("e.kind = :")

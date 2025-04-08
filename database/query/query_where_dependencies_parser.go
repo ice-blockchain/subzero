@@ -27,9 +27,8 @@ type (
 	}
 
 	filterDependency struct {
-		Start      filterDependencyStart
-		Reduce     filterDependencyReduce
-		Expiration *bool
+		Start  filterDependencyStart
+		Reduce filterDependencyReduce
 	}
 
 	filterSequence struct {
