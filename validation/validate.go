@@ -271,6 +271,7 @@ var (
 		"summary":  tagStateOptional,
 		"alt":      tagStateRequired,
 		"fallback": tagStateOptional,
+		"duration": tagStateOptional,
 	}
 
 	JobFeedbackStatusValues = map[string]struct{}{
