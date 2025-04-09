@@ -5,7 +5,7 @@ package ws
 import (
 	"errors"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
@@ -35,11 +35,11 @@ type (
 	}
 	connSubscriptions struct {
 		// SubscriptionID -> Subscription
-		Subscriptions *xsync.MapOf[string, *model.Subscription]
+		Subscriptions *xsync.Map[string, *model.Subscription]
 	}
 	handler struct {
-		connSubs *xsync.MapOf[Writer, connSubscriptions]
-		connAuth *xsync.MapOf[Writer, connAuthData]
+		connSubs *xsync.Map[Writer, connSubscriptions]
+		connAuth *xsync.Map[Writer, connAuthData]
 		relayURL string
 	}
 )

@@ -15,17 +15,7 @@ CREATE TABLE IF NOT EXISTS events (
     created_at     TIMESTAMP NOT NULL,
     kind           INTEGER   NOT NULL,
     system_kind    INTEGER,
-    lookup         tsvector NOT NULL GENERATED ALWAYS AS (
-                      (CASE WHEN (content IS JSON)
-                        THEN json_to_tsvector('fts', content::json, '"all"')
-                        ELSE to_tsvector('fts', content)
-                      END)
-                      ||
-                      (CASE WHEN kind IN (0, 1, 1063, 30023, 30175)
-                        THEN jsonb_to_tsvector('fts', tags, '"all"')
-                        ELSE to_tsvector('fts', '')
-                      END)
-                  ) STORED,
+    lookup         tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
     key_alg        TEXT    NOT NULL DEFAULT '',
     content        TEXT    NOT NULL,
     d_tag          TEXT    NOT NULL DEFAULT '',
@@ -51,6 +41,15 @@ CREATE TABLE IF NOT EXISTS events (
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,
     hidden         BOOLEAN NOT NULL DEFAULT FALSE
 );
+--------
+DO $$ BEGIN
+    IF EXISTS (select true from information_schema.columns where table_name = 'events' and column_name = 'lookup' and is_generated = 'ALWAYS') then
+        ALTER TABLE events ADD COLUMN lookup2 tsvector NOT NULL DEFAULT to_tsvector('fts', '');
+        UPDATE      events SET lookup2 = lookup;
+        ALTER TABLE events DROP COLUMN lookup;
+        ALTER TABLE events RENAME lookup2 TO lookup;
+    END IF;
+END $$;
 --------
 create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
 where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;

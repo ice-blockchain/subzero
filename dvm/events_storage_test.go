@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -25,7 +25,7 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 	defer cancel()
 	globalConfig = cfg.MustGet[config]()
 	d := dvm{
-		responseCache: ttlcache.New[string, *xsync.MapOf[string, *model.Event]](),
+		responseCache: ttlcache.New[string, *xsync.Map[string, *model.Event]](),
 	}
 	relayKey, err := model.GetPublicKey(globalConfig.PrivateKey)
 	require.NoError(t, err)

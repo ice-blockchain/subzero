@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
@@ -40,10 +40,10 @@ type (
 	}
 
 	dvm struct {
-		Jobs            *xsync.MapOf[string, *jobInfo]
+		Jobs            *xsync.Map[string, *jobInfo]
 		RelayConnectTLS *tls.Config
 		PrivateKey      string
-		responseCache   *ttlcache.Cache[string, *xsync.MapOf[string, *model.Event]]
+		responseCache   *ttlcache.Cache[string, *xsync.Map[string, *model.Event]]
 	}
 	config struct {
 		PrivateKey string `yaml:"private-key" validate:"required"`
@@ -62,9 +62,9 @@ var (
 func MustInit(ctx context.Context) {
 	globalConfig = cfg.MustGet[config]()
 	globalDVM = &dvm{
-		Jobs:          xsync.NewMapOf[string, *jobInfo](),
+		Jobs:          xsync.NewMap[string, *jobInfo](),
 		PrivateKey:    globalConfig.PrivateKey,
-		responseCache: ttlcache.New(ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration)),
+		responseCache: ttlcache.New(ttlcache.WithTTL[string, *xsync.Map[string, *model.Event]](model.DVMJobResultExpiration)),
 	}
 	go globalDVM.responseCache.Start()
 	if globalConfig.TLSKey != "-" && globalConfig.TLSCert != "-" {

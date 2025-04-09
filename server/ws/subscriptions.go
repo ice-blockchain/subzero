@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip42"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -135,10 +135,10 @@ func (h *handler) authRequiredReq(respWriter Writer, sub *model.Subscription, ch
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
-	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() connSubscriptions {
+	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
 		return connSubscriptions{
-			Subscriptions: xsync.NewMapOf[string, *model.Subscription](),
-		}
+			Subscriptions: xsync.NewMap[string, *model.Subscription](),
+		}, false
 	})
 	conn.Subscriptions.Store(sub.SubscriptionID, sub)
 }
@@ -290,10 +290,10 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() connAuthData {
+			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
 					Challenge: generateChallenge(sub.SubscriptionID),
-				}
+				}, false
 			})
 			if !status.Authenticated {
 				return h.authRequiredReq(respWriter, sub, status.Challenge)
@@ -356,10 +356,10 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if eventMustAuth != nil {
 		if authRequired := eventMustAuth(ctx, events...); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() connAuthData {
+			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
 					Challenge: generateChallenge(),
-				}
+				}, false
 			})
 			if !status.Authenticated {
 				err := h.writeResponse(respWriter, &nostr.AuthEnvelope{
