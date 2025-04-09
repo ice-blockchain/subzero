@@ -367,7 +367,7 @@ ALTER TABLE replaceable_events_before_update
 DO $$ BEGIN
     if NOT exists (select constraint_name from information_schema.table_constraints where table_name = 'replaceable_events_before_update' and constraint_type = 'PRIMARY KEY') then
         ALTER TABLE replaceable_events_before_update
-            ADD CONSTRAINT replaceable_events_before_update_pkey PRIMARY KEY(id);
+            ADD CONSTRAINT replaceable_events_before_update_pkey PRIMARY KEY(id, replaced_by_id);
     end if;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_events_before_update(replaced_by_id);
@@ -429,8 +429,8 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER trigger_events_store_replaceable_data_before_update
     AFTER UPDATE ON events
     FOR EACH ROW
-    WHEN ((10000 <= old.kind AND old.kind < 20000 ) OR old.kind = 0 OR old.kind = 3 OR (30000 <= old.kind AND old.kind < 40000))
-EXECUTE FUNCTION events_store_replaceable_data_before_update();
+    WHEN (((10000 <= old.kind AND old.kind < 20000 ) OR old.kind = 0 OR old.kind = 3 OR (30000 <= old.kind AND old.kind < 40000)) AND old.id != new.id)
+    EXECUTE FUNCTION events_store_replaceable_data_before_update();
 --------
 CREATE TABLE IF NOT EXISTS event_counters
 (
