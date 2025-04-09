@@ -12,7 +12,7 @@ replace (
 
 require (
 	github.com/bzick/tokenizer v1.4.10
-	github.com/caddyserver/certmagic v0.22.3-0.20250407182622-b9399eadfbe7
+	github.com/caddyserver/certmagic v0.22.3-0.20250409154907-2cc2fca63558
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
@@ -33,7 +33,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.27
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.51.10
-	github.com/puzpuzpuz/xsync/v3 v3.5.1
+	github.com/puzpuzpuz/xsync/v4 v4.0.0
 	github.com/quic-go/quic-go v0.50.1
 	github.com/quic-go/webtransport-go v0.8.1-0.20250328130601-2671ef85124d
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
@@ -141,6 +141,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/pterm/pterm v0.12.80 // indirect
+	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect

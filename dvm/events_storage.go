@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -31,7 +31,7 @@ func (d *dvm) searchDVMEvents(ctx context.Context, subscription *model.Subscript
 					}
 				}
 			} else {
-				d.responseCache.Range(func(item *ttlcache.Item[string, *xsync.MapOf[string, *model.Event]]) bool {
+				d.responseCache.Range(func(item *ttlcache.Item[string, *xsync.Map[string, *model.Event]]) bool {
 					if ctx.Err() != nil {
 						return yield(nil, ctx.Err())
 					}
@@ -75,8 +75,8 @@ func tagCacheKey(tag, value string) string {
 func (d *dvm) acceptDVMResponseEvent(event *model.Event) error {
 	if pTag := event.Tags.GetFirst([]string{"p"}); pTag != nil {
 		key := tagCacheKey("p", pTag.Value())
-		val, _ := d.responseCache.GetOrSet(key, xsync.NewMapOf[string, *model.Event](),
-			ttlcache.WithTTL[string, *xsync.MapOf[string, *model.Event]](model.DVMJobResultExpiration))
+		val, _ := d.responseCache.GetOrSet(key, xsync.NewMap[string, *model.Event](),
+			ttlcache.WithTTL[string, *xsync.Map[string, *model.Event]](model.DVMJobResultExpiration))
 		val.Value().LoadAndStore(event.ID, event)
 		d.responseCache.Set(key, val.Value(), model.DVMJobResultExpiration)
 	}

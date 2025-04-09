@@ -14,7 +14,7 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -63,8 +63,8 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 
 func newHandler(relayURL string) *handler {
 	return &handler{
-		connSubs: xsync.NewMapOf[Writer, connSubscriptions](),
-		connAuth: xsync.NewMapOf[Writer, connAuthData](),
+		connSubs: xsync.NewMap[Writer, connSubscriptions](),
+		connAuth: xsync.NewMap[Writer, connAuthData](),
 		relayURL: relayURL,
 	}
 }

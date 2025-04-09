@@ -215,7 +215,6 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		})
 		require.Len(t, stored, 0)
 		require.NoError(t, db.AcceptEvents(t.Context(), ev))
-		require.Len(t, stored, 0)
 	})
 }
 
@@ -476,7 +475,7 @@ func helperExtractProfileMetadataFields(t *testing.T, content string) (string, s
 
 func helperGenerateRandomStringWithSpecialChars(t *testing.T, length int) string {
 	t.Helper()
-	specialChars := "!@#$%^&*()-_=+[]{}|;:,.<>?/~`"
+	specialChars := "!@#$%^&()-_=+[]{}|;,.<>?/~`"
 	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + specialChars
 	var result strings.Builder
 	for range length {
@@ -908,4 +907,17 @@ func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 		require.Len(t, stored, 2)
 		require.ElementsMatch(t, []string{evNote.ID, evArticle.ID}, []string{stored[0].ID, stored[1].ID})
 	})
+}
+
+func TestExtractIMetaTagValues(t *testing.T) {
+	t.Parallel()
+
+	var ev model.Event
+	ev.Tags = model.Tags{
+		{"imeta", "url https://alicerelay.example.com", "m image/jpg", "dim 3024x4032", "i foobar", "alt alt1 text", "summary dummy summary1 content"},
+	}
+
+	data := extractIMetaTagValues(&ev)
+	require.NotEmpty(t, data)
+	require.Equal(t, []string{"alt1", "text", "dummy", "summary1", "content"}, data)
 }

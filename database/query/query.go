@@ -55,6 +55,7 @@ type (
 		Dtag         string
 		Htag         string
 		AddressValue string
+		Lookup       string
 		Deleted      bool
 		HasImages    bool
 		HasVideos    bool
@@ -135,11 +136,15 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	var images, videos bool
 	images, videos = detectImagesVideos(e.Tags)
 
+	var lookup string
 	if e.Kind == nostr.KindRepost || e.Kind == nostr.KindGenericRepost {
 		var original model.Event
 		if err := original.UnmarshalJSON([]byte(e.Content)); err == nil {
 			images, videos = detectImagesVideos(original.Tags)
 		}
+		lookup = prepareSearchContent(&original)
+	} else {
+		lookup = prepareSearchContent(e)
 	}
 
 	var systemKind sql.NullInt64
@@ -154,6 +159,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		KeyAlg:       keyAlg,
 		Dtag:         e.Tags.GetD(),
 		Htag:         e.GetHTag(),
+		Lookup:       lookup,
 		Deleted:      deleted,
 		HasImages:    images,
 		HasVideos:    videos,
@@ -385,12 +391,20 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 
 	idx := 1
 	for _, ev := range events {
-		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt, ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content, ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos)
+		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
+			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
+			ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos,
+			ev.Lookup,
+		)
 		values = append(values, fmt.Sprintf(
-			"($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint), $%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v, COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v, $%[14]v::bool, $%[15]v::bool, $%[16]v::bool)",
-			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15,
+			`($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint),
+			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
+			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
+			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text))`,
+			idx, idx+1, idx+2,
+			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
 		))
-		idx += 16
+		idx += 17
 	}
 
 	stmt = `MERGE INTO events AS target
@@ -399,7 +413,8 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 				) AS source (
 					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
 					has_images,
-					has_videos
+					has_videos,
+					lookup
 				)
 				ON (
 					target.id = source.id
@@ -422,6 +437,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					content = source.content,
 					tags = source.tags,
 					h_tag = source.h_tag,
+					lookup = source.lookup,
 					deleted = source.deleted,
 					has_images = source.has_images,
 					has_videos = source.has_videos
@@ -439,6 +455,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					pubkey = source.pubkey,
 					created_at = source.created_at,
 					content = source.content,
+					lookup = source.lookup,
 					tags = source.tags,
 					has_images = source.has_images,
 					has_videos = source.has_videos
@@ -453,6 +470,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					sig = source.sig,
 					sig_alg = source.sig_alg,
 					key_alg = source.key_alg,
+					lookup = source.lookup,
 					content = source.content,
 					tags = source.tags,
 					has_images = source.has_images,
@@ -463,14 +481,16 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
 					deleted,
 					has_images,
-					has_videos
+					has_videos,
+					lookup
 				)
 				VALUES (
 					source.id, source.kind, source.system_kind, source.created_at,
 					source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
 					source.key_alg, source.content, source.tags, source.d_tag,
 					source.h_tag, source.deleted,
-					source.has_images, source.has_videos
+					source.has_images, source.has_videos,
+					source.lookup
 				);`
 
 	_, err := db.ExecContext(ctx, stmt, params...)
