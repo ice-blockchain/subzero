@@ -32,7 +32,7 @@ require (
 	github.com/libdns/cloudflare v0.2.0
 	github.com/mattn/go-sqlite3 v1.14.27
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.51.8
+	github.com/nbd-wtf/go-nostr v0.51.10
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/quic-go/quic-go v0.50.1
 	github.com/quic-go/webtransport-go v0.8.1-0.20250328130601-2671ef85124d
@@ -177,7 +177,7 @@ require (
 	go.uber.org/zap/exp v0.3.0 // indirect
 	golang.org/x/arch v0.16.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
-	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
+	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.26.0 // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
