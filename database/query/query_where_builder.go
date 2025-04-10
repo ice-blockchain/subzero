@@ -692,10 +692,8 @@ AND `)
 
 	switch filter.Reduce.Kinds[0] {
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
-		b.WriteString("e.kind = :")
-		b.WriteValue(filterID, "rkind", filter.Reduce.Kinds[0])
 		tag := filter.Reduce.Tag // Could be "q" or "e" or "p" or empty.
-		b.WriteString(" and e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id ")
+		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id ")
 		if filter.Reduce.Author != "" {
 			b.WriteString(" and :")
 			b.WriteValue(filterID, "rauthor", filter.Reduce.Author)
@@ -711,6 +709,8 @@ AND `)
 			b.WriteString(" = :")
 			b.WriteValue(filterID, "rtag", tag)
 		}
+		b.WriteString(" and et.kind = :")
+		b.WriteValue(filterID, "rkind", filter.Reduce.Kinds[0])
 		b.WriteString(" and mctx.event_tag_value1 = em.address")
 		if filter.Reduce.Context != "" {
 			b.WriteString(" and mctx.event_tag_value3 = :")
