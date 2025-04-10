@@ -5,8 +5,6 @@ package fixture
 import (
 	"context"
 	_ "embed"
-	"github.com/ice-blockchain/subzero/database/command"
-	"github.com/ice-blockchain/subzero/model"
 	"io"
 	"net"
 	"net/http"
@@ -14,8 +12,11 @@ import (
 	stdlibtime "time"
 
 	"github.com/gin-gonic/gin"
+
 	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"

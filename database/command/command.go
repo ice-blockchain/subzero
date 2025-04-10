@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -48,7 +49,13 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, t
 	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
 	err := consensusEventListener(ctx, events...)
 	if err != nil {
-		return errors.Wrapf(err, "failed to accept broadcasted txs %+v", transactions)
+		return errors.Wrapf(err, "failed to accept broadcasted txs %v", func() string {
+			res := []string{}
+			for _, tx := range transactions {
+				res = append(res, string(tx.Data))
+			}
+			return "[" + strings.Join(res, ", ") + "]"
+		}())
 	}
 	return nil
 }
@@ -217,6 +224,7 @@ func mapEventKindToChainFingerprint(kind int) (fingerprint string) {
 		nostr.KindGenericRepost,
 		nostr.KindReactionToWebsite,
 		nostr.KindArticle,
+		model.CustomIONKindEditableTextNote,
 		nostr.KindDraftArticle:
 		fingerprint = client.GetFingerprint("posts")
 	case

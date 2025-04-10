@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"github.com/ice-blockchain/subzero/database/command"
 	"log"
 	"os"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
@@ -53,11 +53,6 @@ func TestMain(m *testing.M) {
 	//	URL: addr,
 	//}))
 	dvm.MustInit(serverCtx)
-	command.MustInit(serverCtx, command.WithConfig(&command.Config{
-		DiscoveryPort:    19988,
-		AbsoluteRootPath: "../../.cometbft",
-		NodePrivKey:      "./../database/command/.testdata/node_key.json",
-	}))
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
@@ -89,16 +84,14 @@ func TestMain(m *testing.M) {
 	pubsubServers[0].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
 		URL: addr,
 	}))
-	pubsubServers[0].Consenus = command.GetConsensus()
+	pubsubServers[0].Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
+		DiscoveryPort:    19988,
+		AbsoluteRootPath: "../../.cometbft",
+		NodePrivKey:      "./../database/command/.testdata/node_key.json",
+	}))
 
 	addr2, release2 := query.NewTestDatabase(serverCtx)
 	log.Println(addr2)
-	command.MustInit(serverCtx, command.WithConfig(&command.Config{
-		AbsoluteRootPath:        "../../.cometbft2",
-		NodePrivKey:             "./../database/command/.testdata/node_key2.json",
-		DiscoveryPort:           19977,
-		NIP13MinLeadingZeroBits: 0,
-	}))
 	hdl2 := newHandler("wss://localhost:9977")
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{
@@ -114,20 +107,40 @@ func TestMain(m *testing.M) {
 		URL: addr2,
 	}))
 
-	pubsubServers[1].Consenus = command.GetConsensus()
+	pubsubServers[1].Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
+		AbsoluteRootPath:        "../../.cometbft2",
+		NodePrivKey:             "./../database/command/.testdata/node_key2.json",
+		DiscoveryPort:           19977,
+		NIP13MinLeadingZeroBits: 0,
+	}))
+
+	addr3, release3 := query.NewTestDatabase(serverCtx)
+	log.Println(addr3)
 	hdl3 := newHandler("wss://localhost:9966")
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
 		Port:                    9966,
 		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
 		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, hdl3.Handle, nil, map[string]gin.HandlerFunc{}))
+	pubsubServers[2].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
+		URL: addr3,
+	}))
+
+	pubsubServers[2].Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
+		AbsoluteRootPath:        "../../.cometbft3",
+		NodePrivKey:             "./../database/command/.testdata/node_key3.json",
+		DiscoveryPort:           19966,
+		NIP13MinLeadingZeroBits: 0,
+	}))
 
 	code := m.Run()
 	serverCancel()
 	release()
 	release2()
+	release3()
 
 	if code == 0 {
+		time.Sleep(10 * time.Second)
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
 			code = 1

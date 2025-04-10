@@ -212,6 +212,9 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 	var req databaseBatchRequest
 	eventsHash := hashEvents(events...)
 	req.EventsHash = &eventsHash
+	if _, accepted := db.rollbackableEvents.Load(eventsHash); accepted {
+		return nil
+	}
 	for i := range events {
 		if events[i].IsEphemeral() {
 			continue

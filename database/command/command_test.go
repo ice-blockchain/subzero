@@ -4,7 +4,6 @@ package command
 
 import (
 	"context"
-	"github.com/ice-blockchain/subzero/cfg"
 	"log"
 	"os"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/cometbft/multiplex/client"
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command/fixture"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
