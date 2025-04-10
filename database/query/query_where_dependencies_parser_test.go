@@ -1423,3 +1423,110 @@ func TestMostRelevantFollowers(t *testing.T) {
 		require.Equal(t, "bob", events[2].PubKey)
 	})
 }
+
+func TestDependencyWithMasterAndAddress(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	userPriv, userPub := model.GenerateKeyPair()
+	masterPriv, masterPub := model.GenerateKeyPair()
+
+	t.Run("Create delegation", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.CustomIONKindAttestation
+		ev.CreatedAt = 1
+		ev.Tags = model.Tags{
+			{model.TagAttestationName, userPub, "", model.CustomIONAttestationKindActive + ":1"},
+		}
+		require.NoError(t, ev.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+	})
+
+	var root model.Event
+	t.Run("Create root post", func(t *testing.T) {
+		root.Kind = model.CustomIONKindEditableTextNote
+		root.CreatedAt = 2
+		root.Content = "root post"
+		root.Tags = model.Tags{
+			{"d", "rootpost"},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, root.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &root))
+	})
+
+	var repost model.Event
+	t.Run("Create report", func(t *testing.T) {
+		repost.Kind = nostr.KindGenericRepost
+		repost.CreatedAt = 3
+		repost.Content = root.String()
+		repost.Tags = model.Tags{
+			{"a", root.Address()},
+			{"p", userPub},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, repost.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &repost))
+	})
+
+	var like model.Event
+	t.Run("Create like", func(t *testing.T) {
+		like.Kind = nostr.KindReaction
+		like.CreatedAt = 4
+		like.Content = "+"
+		like.Tags = model.Tags{
+			{"a", root.Address()},
+			{"p", userPub},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, like.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &like))
+	})
+
+	var reply model.Event
+	t.Run("Create reply to root post", func(t *testing.T) {
+		reply.Kind = model.CustomIONKindEditableTextNote
+		reply.CreatedAt = 5
+		reply.Content = "reply to root post"
+		reply.Tags = model.Tags{
+			{"a", root.Address(), "", "root"},
+			{"p", userPub},
+			{"d", "replytoroot"},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, reply.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &reply))
+	})
+
+	var replyToReply model.Event
+	t.Run("Create reply to reply", func(t *testing.T) {
+		replyToReply.Kind = model.CustomIONKindEditableTextNote
+		replyToReply.CreatedAt = 6
+		replyToReply.Content = "reply to reply"
+		replyToReply.Tags = model.Tags{
+			{"a", root.Address(), "", "root"},
+			{"a", reply.Address(), "", "reply"},
+			{"p", userPub},
+			{"d", "replytoreply"},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, replyToReply.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &replyToReply))
+	})
+
+	f := model.Filter{
+		Authors: []string{masterPub},
+		Kinds:   []int{model.CustomIONKindEditableTextNote},
+		Search: `include:dependencies:kind30175>` + masterPub + `@kind7` +
+			` include:dependencies:kind30175>` + masterPub + `@kind16` +
+			` include:dependencies:kind30175>` + masterPub + `@kind30175+e+root`,
+		Tags: model.TagMap{}.SetLiterals("d", "rootpost"),
+	}
+	events := helperSelectEvents(t, db, f)
+	require.Len(t, events, 4)
+	for i, val := range []string{reply.ID, like.ID, repost.ID, root.ID} {
+		require.Equal(t, val, events[i].ID)
+	}
+}
