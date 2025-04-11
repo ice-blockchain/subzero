@@ -1528,5 +1528,8 @@ func TestDependencyWithMasterAndAddress(t *testing.T) {
 	require.Len(t, events, 4)
 	for i, val := range []string{reply.ID, like.ID, repost.ID, root.ID} {
 		require.Equal(t, val, events[i].ID)
+		ok, err := events[i].CheckSignature()
+		require.NoError(t, err)
+		require.True(t, ok)
 	}
 }

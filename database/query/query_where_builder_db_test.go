@@ -68,7 +68,7 @@ func helperPreloadDataForFilter(
 	e.pubkey,
 	e.sig,
 	e.content,
-	e.tags as jtags
+	e.tags
 from
 	events e
 order by

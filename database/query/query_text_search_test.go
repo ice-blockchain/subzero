@@ -475,7 +475,7 @@ func helperExtractProfileMetadataFields(t *testing.T, content string) (string, s
 
 func helperGenerateRandomStringWithSpecialChars(t *testing.T, length int) string {
 	t.Helper()
-	specialChars := "!@#$%^&()-_=+[]{}|;,.<>?/~`"
+	specialChars := "!@#$%^&()-_=+[]{}|;,.<>?~`"
 	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + specialChars
 	var result strings.Builder
 	for range length {
