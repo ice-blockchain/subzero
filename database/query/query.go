@@ -286,7 +286,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	content,
 	d_tag,
 	h_tag,
-	tags as jtags
+	tags
 `
 
 	var deletedEvents []*model.Event
@@ -803,7 +803,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 		pubkey,
 		sig,
 		content,
-		tags as jtags`
+		tags`
 	params := map[string]any{"batch_size": batchSize}
 
 	for ctx.Err() == nil {

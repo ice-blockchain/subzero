@@ -548,7 +548,7 @@ select
 	jsonb_build_array(
 		jsonb_build_array('output', 'JSON'),
 		jsonb_build_array('param', 'group', 'content')
-	) as jtags
+	) as tags
 from (
 	select
 		mainev.id AS poll_id,
@@ -626,7 +626,7 @@ select
 			))
 		else
 			jsonb_build_array()
-		end as jtags
+		end as tags
 from
 	event_counters f
 inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
@@ -639,23 +639,14 @@ where
 	exists (select 1 FROM ` + cteName + ` ) AND
 `)
 	} else {
-		b.WriteString(`
-union
-select
-	e.kind,
-	e.created_at,
-	e.id,
-	e.pubkey,
-	e.master_pubkey,
-	e.address,
-	e.sig,
-	e.content,
-	e.d_tag,
-	e.h_tag,
-	tags as jtags
-from
-	events e
-`)
+		b.WriteString(` union select `)
+		for i, f := range b.fieldsNames("e") {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(f)
+		}
+		b.WriteString(` from events e`)
 		if len(filter.Reduce.Kinds) > 0 && filter.Reduce.Kinds[0] == nostr.KindProfileMetadata && filter.Reduce.Author != "" {
 			authors := strings.Split(filter.Reduce.Author, ",")
 			// Most relevant follwers.
@@ -752,7 +743,7 @@ select
 	'' as content,
 	'' as d_tag,
 	'' as h_tag,
-	'[]' as jtags
+	'[]' as tags
 from
 	events e
 inner join `)
@@ -910,12 +901,10 @@ func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			b.WriteString(" UNION \n")
 		}
 		b.WriteString(` (SELECT `)
-		for x, f := range []string{"kind", "created_at", "id", "address", "pubkey", "master_pubkey", "sig", "content", "d_tag", "h_tag", "jtags"} {
+		for x, f := range b.fieldsNames(ctes[i].Name) {
 			if x > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(ctes[i].Name)
-			b.WriteRune('.')
 			b.WriteString(f)
 		}
 		b.WriteString(` FROM `)
@@ -938,6 +927,19 @@ func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[st
 	return b.String(), b.Params, nil
 }
 
+func (b *queryBuilder) fieldsNames(table string) []string {
+	fields := []string{"kind", "created_at", "id", "address", "pubkey", "master_pubkey", "sig", "content", "d_tag", "h_tag", "tags"}
+	if table == "" {
+		return fields
+	}
+
+	for i := range fields {
+		fields[i] = table + "." + fields[i]
+	}
+
+	return fields
+}
+
 func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE, err error) {
 	whereBuffer := queryBuilder{Params: b.Params}
 	where, _, err := whereBuffer.BuildWhere(filter)
@@ -955,7 +957,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 		orderBy = "random()"
 	}
 
-	fields := []string{"e.kind", "e.created_at", "e.id", "e.address", "e.pubkey", "e.master_pubkey", "e.sig", "e.content", "e.d_tag", "e.h_tag", "e.tags as jtags"}
+	fields := b.fieldsNames("e")
 	var joinString string
 	switch filter.Rank {
 	case rankTOP:
