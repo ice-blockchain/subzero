@@ -14,6 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -25,7 +26,7 @@ type (
 		relayURL           string
 		stmtCacheMx        *sync.RWMutex
 		stmtCache          map[string]*sqlx.NamedStmt
-		rollbackableEvents *sync.Map
+		rollbackableEvents *xsync.Map[string, *databaseRollbackRequest]
 	}
 )
 
@@ -39,7 +40,7 @@ func openDatabase(target string, runDDL bool) *dbClient {
 		DB:                 sqlx.MustConnect("pgx", target),
 		stmtCacheMx:        new(sync.RWMutex),
 		stmtCache:          make(map[string]*sqlx.NamedStmt),
-		rollbackableEvents: new(sync.Map),
+		rollbackableEvents: xsync.NewMap[string, *databaseRollbackRequest](),
 	}
 	client.Mapper = reflectx.NewMapperFunc("subzero", func(in string) (out string) {
 		n := strings.ToLower(in)

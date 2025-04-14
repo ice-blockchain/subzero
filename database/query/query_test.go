@@ -998,13 +998,13 @@ func TestDeleteNestedEvents(t *testing.T) {
 		rootDelete.Content = "delete root event"
 		rootDelete.Tags = model.Tags{{"e", root.ID}}
 		require.NoError(t, rootDelete.SignWithAlg(rootPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(context.TODO(), &rootDelete))
+		require.NoError(t, db.AcceptEvents(t.Context(), &rootDelete))
 
 		// Check if all events are deleted.
 		require.Zero(t, len(helperSelectEvents(t, db)))
 	})
 	t.Run("Rollback", func(t *testing.T) {
-		require.NoError(t, db.RollbackEvents(context.TODO(), &rootDelete))
+		require.NoError(t, db.RollbackEvents(t.Context(), &rootDelete))
 		events := helperSelectEvents(t, db)
 		require.Len(t, events, 7)
 	})

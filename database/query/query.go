@@ -55,7 +55,7 @@ type (
 		Dtag            string
 		Htag            string
 		AddressValue    string
-		Lookup       string
+		Lookup          string
 		Deleted         bool
 		HasImages       bool
 		HasVideos       bool
@@ -244,11 +244,9 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 
 func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) error {
 	eventsHash := hashEvents(events...)
-	if rbEvents, hasEventsToRollback := db.rollbackableEvents.Load(eventsHash); !hasEventsToRollback {
+	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.Load(eventsHash); !hasEventsToRollback {
 		return nil
 	} else {
-		eventsToRollback := rbEvents.(databaseRollbackRequest)
-
 		if err := db.executeBatch(ctx, &databaseBatchRequest{
 			InsertOrReplace: eventsToRollback.InsertOrReplace,
 			Delete:          eventsToRollback.Delete,
@@ -442,11 +440,11 @@ func (db *dbClient) rollbackReplaceableEvents(ctx context.Context, replacedEvent
 		WITH replaced AS (DELETE FROM replaceable_events_before_update
 						WHERE replaced_by_id = ANY($1)
 						RETURNING kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
-						    deleted, has_images, has_videos, replaced_by_id)
+						    deleted, has_images, has_videos, lookup ,replaced_by_id)
 		MERGE INTO events AS target
 				USING (SELECT * FROM replaced) AS source (
 					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-					has_images, has_videos
+					has_images, has_videos, lookup
 				)
 				ON (
 					target.id = source.replaced_by_id 
@@ -471,7 +469,8 @@ func (db *dbClient) rollbackReplaceableEvents(ctx context.Context, replacedEvent
 					h_tag = source.h_tag,
 					deleted = source.deleted,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+				    lookup = source.lookup
 			WHEN MATCHED AND
 				target.master_pubkey = source.master_pubkey
 				AND target.kind = source.kind
@@ -488,7 +487,8 @@ func (db *dbClient) rollbackReplaceableEvents(ctx context.Context, replacedEvent
 					content = source.content,
 					tags = source.tags,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+				    lookup = source.lookup
 			WHEN MATCHED AND target.id = source.id THEN
 				UPDATE SET
 					kind = source.kind,
@@ -503,7 +503,8 @@ func (db *dbClient) rollbackReplaceableEvents(ctx context.Context, replacedEvent
 					content = source.content,
 					tags = source.tags,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+				    lookup = source.lookup
 			WHEN MATCHED AND target.id = source.replaced_by_id THEN
 				UPDATE SET 
 					kind = source.kind,
@@ -518,7 +519,9 @@ func (db *dbClient) rollbackReplaceableEvents(ctx context.Context, replacedEvent
 					content = source.content,
 					tags = source.tags,
 					has_images = source.has_images,
-					has_videos = source.has_videos;`
+					has_videos = source.has_videos,
+					lookup = source.lookup
+				;`
 
 	result, err := db.ExecContext(ctx, stmt, eventIDs)
 	if err != nil {
@@ -649,8 +652,8 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eve
 					target.content,
 					target.d_tag,
 					target.h_tag,
-					target.tags as jtags,
-					target.lookup
+					target.lookup,
+					target.tags,
 					merge_action() as savemergeaction;`
 
 	it := &eventIterator{
@@ -673,11 +676,11 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace)
 	events := []*model.Event{}
 	replaceableEvents = map[string]bool{}
-	sErr := insertedEvents.Each(ctx, func(event *model.Event, dbEvent *databaseEvent) error {
-		if event.IsReplaceable() || nostr.IsAddressableKind(event.Kind) {
-			replaceableEvents[event.ID] = dbEvent.SaveMergeAction == "INSERT"
+	sErr := insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
+		if dbEvent.Event.IsReplaceable() || nostr.IsAddressableKind(dbEvent.Event.Kind) {
+			replaceableEvents[dbEvent.ID] = dbEvent.SaveMergeAction == "INSERT"
 		}
-		events = append(events, event)
+		events = append(events, &dbEvent.Event)
 
 		return nil
 	})
@@ -701,11 +704,22 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(req.InsertOrReplace), actual)
 	}
 	if sErr == nil && req.EventsHash != nil && len(events) > 0 {
-		del := databaseFilterDelete{Author: events[0].PubKey}
-		for _, e := range events {
-			del.IDs = append(del.IDs, e.ID)
+		for _, ev := range events {
+			var f databaseFilterDelete
+
+			f.Author = ev.PubKey
+			switch {
+			case ev.IsReplaceable():
+				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
+
+			case ev.IsAddressable():
+				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
+
+			case ev.IsRegular():
+				f.IDs = append(f.IDs, ev.ID)
+			}
+			inserted = append(inserted, f)
 		}
-		inserted = append(inserted, del)
 	}
 	return replaceableEvents, inserted, errors.Wrap(sErr, "failed to save events")
 }
@@ -731,8 +745,8 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
 		err = errors.Join(err, errors.Wrap(sErr, "failed to save events"))
 	}
-	if !eventsToRollback.Empty() || len(eventsToRollback.ReplaceableEvents) > 0 {
-		db.rollbackableEvents.Store(*req.EventsHash, eventsToRollback)
+	if err == nil && (!eventsToRollback.Empty() || len(eventsToRollback.ReplaceableEvents) > 0) {
+		db.rollbackableEvents.Store(*req.EventsHash, &eventsToRollback)
 	}
 	return err
 }
@@ -810,8 +824,8 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	}
 
 	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *model.Event, _ *databaseEvent) error {
-			if !yield(event, nil) {
+		err := it.Each(ctx, func(dbEvent *databaseEvent) error {
+			if !yield(&dbEvent.Event, nil) {
 				return errEventIteratorInterrupted
 			}
 
