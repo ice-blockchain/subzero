@@ -127,6 +127,7 @@ func TestEventScore(t *testing.T) {
 		}
 	})
 	t.Run("Comment", func(t *testing.T) {
+		var replies []*model.Event
 		t.Run("Root", func(t *testing.T) {
 			for _, target := range targetEvents {
 				var ev model.Event
@@ -140,13 +141,15 @@ func TestEventScore(t *testing.T) {
 				ev.CreatedAt = nostr.Now()
 				ev.Tags = model.Tags{
 					{target.Tag, target.Address, "", "root"},
+					{target.Tag, target.Address, "", "reply"},
 				}
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 				helperPointsScoreEqual(t, db, target.ID, 10, 10.0) // like (1) + repost (3) + quote (4) + root comment (2).
+				replies = append(replies, &ev)
 			}
 		})
 		t.Run("Reply", func(t *testing.T) {
-			for _, target := range targetEvents {
+			for i, target := range targetEvents {
 				var ev model.Event
 				ev.Content = "reply comment"
 				ev.ID = "comment_reply_" + target.ID
@@ -158,7 +161,7 @@ func TestEventScore(t *testing.T) {
 				ev.CreatedAt = nostr.Now()
 				ev.Tags = model.Tags{
 					{target.Tag, target.Address, "", "root"},
-					{target.Tag, target.Address, "", "reply"},
+					{target.Tag, replies[i].Address(), "", "reply"},
 				}
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 				// Should not affect the score of the target event.
@@ -190,6 +193,7 @@ func TestEventScore(t *testing.T) {
 			ev.CreatedAt = nostr.Now()
 			ev.Tags = model.Tags{
 				{"a", evArticle.Address(), "", "root"},
+				{"a", evArticle.Address(), "", "reply"},
 				{"published_at", strconv.FormatInt(int64(nostr.Now())-1, 10)},
 			}
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))

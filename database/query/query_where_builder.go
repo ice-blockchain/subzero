@@ -798,7 +798,7 @@ group by e.master_pubkey, e.pubkey`)
 			b.PushValue(filterID, "context", cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
 
 		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
-			b.PushValue(filterID, "context", filter.Reduce.Context)
+			b.PushValue(filterID, "context", "reply")
 			refType = filter.Reduce.Context
 
 		case filter.Reduce.Tag == "p":
