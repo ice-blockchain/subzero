@@ -87,7 +87,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 			break
 		}
 		if len(msgBytes) > 0 && ws.OpCode(t) == ws.OpText {
-			h.Handle(ctx, stream, msgBytes, cfg)
+			go h.Handle(ctx, stream, msgBytes, cfg)
 		}
 	}
 	h.unlinkSubscription(stream, nil)

@@ -99,7 +99,7 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 	if relay != nil {
 		err := relay.Close()
 		if err != nil {
-			if !strings.Contains(err.Error(), "relay not connected") {
+			if !(strings.Contains(err.Error(), "relay not connected") || strings.Contains(err.Error(), "relay already closed")) {
 				require.NoError(t, err)
 			}
 		}

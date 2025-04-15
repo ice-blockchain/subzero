@@ -4,10 +4,8 @@ package command
 
 import (
 	"context"
-	"os"
-	"time"
-
 	"github.com/cockroachdb/errors"
+	"os"
 
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
@@ -87,19 +85,13 @@ func mustInit(ctx context.Context, opts ...Option) Consensus {
 	serverCfg.P2P.MaxPacketMsgPayloadSize = 100 * 1024 * 1024
 	serverCfg.DBBackend = "goleveldb"
 	serverCfg.DiscoveryPort = globalCfg.DiscoveryPort
+	//serverCfg.P2P.Seeds = "edca2ee37726716daf90ba69272ee90c51a1f7a9@127.0.0.1:19911,778f8ec004cd98934e1de445cb67cbbc7239e008@127.0.0.1:19931"
 	logger := cmtlog.NewFilter(cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout)), cmtlog.AllowError())
 	if globalCfg.Debug {
 		serverCfg.P2P.AllowDuplicateIP = true
 		serverCfg.P2P.AddrBookStrict = false
-		serverCfg.P2P.DialTimeout = 15 * time.Second
-		serverCfg.P2P.HandshakeTimeout = 15 * time.Second
 		logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
 	}
-	//key, err := p2p.LoadNodeKey(serverCfg.NodeKeyFile())
-	//if err != nil {
-	//	panic(errors.Wrapf(err, "failed to load node key"))
-	//}
-	//serverCfg.Instrumentation.Namespace = fmt.Sprintf("%v_cometbft", key.ID())
 	cometbftServer, err := multiplex.NewServer(c, serverCfg, logger)
 	if err != nil {
 		panic(err)

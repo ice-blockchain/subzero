@@ -3,9 +3,15 @@
 package ws
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"crypto/sha256"
+	"github.com/cockroachdb/errors"
+	"github.com/google/uuid"
 	"math/rand/v2"
+	"os"
+
+	//"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,6 +51,13 @@ func TestConsensusEvents(t *testing.T) {
 		}
 		return nil
 	}
+
+	defer func() {
+		require.NoError(t, os.RemoveAll("../../.cometbft"))
+		require.NoError(t, os.RemoveAll("../../.cometbft2"))
+		require.NoError(t, os.RemoveAll("../../.cometbft3"))
+	}()
+
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		t.Logf("received events: %v on %v", events, ctx.Value("serverPort"))
 		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
@@ -60,11 +73,17 @@ func TestConsensusEvents(t *testing.T) {
 	for _, s := range pubsubServers {
 		consensusDone[s.Endpoint()] = make(chan bool, 1000)
 	}
+	accepted := make(map[string]bool)
 	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
 		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
 			return qErr
 		}
+		if _, ok := accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)]; ok {
+			return nil
+		}
 		consensusDone[mapPort(ctx).Endpoint()] <- true
+		accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)] = true
+		t.Log("ACCEPT", mapPort(ctx).Endpoint(), events[0].Kind, events[0].Content)
 		return nil
 	})
 	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
@@ -77,7 +96,7 @@ func TestConsensusEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	var ev *model.Event
+	var ev, ev2 *model.Event
 	var attestationEvent *model.Event
 	masterPrivKey, masterPubkey := model.GenerateKeyPair()
 	t.Run("SaveEvent", func(t *testing.T) {
@@ -104,21 +123,21 @@ func TestConsensusEvents(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
 		require.NoError(t, relay.PublishMany(ctx, &attestationEvent.Event, &relaysList.Event))
-		helperAwaitConsensus(t, consensusDone)
+		helperAwaitConsensus(t, relay, consensusDone)
 		ev = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      model.CustomIONKindEditableTextNote,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
 				[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
-				[]string{"d", "dummy"},
+				[]string{"d", uuid.NewString()},
 			},
 			Content: "validEvent from relay1",
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 
 		require.NoError(t, relay.Publish(ctx, ev.Event))
-		helperAwaitConsensus(t, consensusDone)
+		helperAwaitConsensus(t, relay, consensusDone)
 	})
 	secondRelay := helperMustNewRelay(t, pubsubServers[1])
 	t.Run("query events", func(t *testing.T) {
@@ -128,29 +147,99 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromSecondRelay := helperQueryEvents(t, ctx, secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Len(t, receivedEventsFromSecondRelay, 1)
 		require.Equal(t, receivedEventsFromFirstRelay, receivedEventsFromSecondRelay)
-		ev2 := &model.Event{Event: nostr.Event{
+		ev2 = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      model.CustomIONKindEditableTextNote,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
 				[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
-				[]string{"d", "dummy"},
+				[]string{"d", uuid.NewString()},
 			},
 			Content: "validEvent from relay2",
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev2, privkey)
 		require.NoError(t, secondRelay.Publish(ctx, ev2.Event))
-		helperAwaitConsensus(t, consensusDone)
+		helperAwaitConsensus(t, secondRelay, consensusDone)
 		receivedEventsFromFirstRelay = helperQueryEvents(t, ctx, relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Len(t, receivedEventsFromFirstRelay, 2)
 		require.Contains(t, receivedEventsFromFirstRelay, ev)
 		require.Contains(t, receivedEventsFromFirstRelay, ev2)
 	})
+
+	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
+		if ctx.Value("consensusPort").(uint16) == 19977 {
+			return errors.New("simulating remote relay did not accept tx - it should be rolled back")
+		}
+		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
+			return qErr
+		}
+		if _, ok := accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)]; ok {
+			return nil
+		}
+		consensusDone[mapPort(ctx).Endpoint()] <- true
+		accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)] = true
+		t.Log("ACCEPT", mapPort(ctx).Endpoint(), events[0].Kind, events[0].Content)
+
+		return nil
+	})
+
+	var notAcceptedEvent *model.Event
+	thirdRelay := helperMustNewRelay(t, pubsubServers[2])
+	t.Run("failed consensus rolled back", func(t *testing.T) {
+		rolledBack := map[string]chan bool{}
+		for _, s := range pubsubServers {
+			rolledBack[s.Endpoint()] = make(chan bool, 1000)
+		}
+		command.RegisterRollbackListener(func(ctx context.Context, event ...*model.Event) error {
+			err := mapPort(ctx).DB.RollbackEvents(ctx, event...)
+			rolledBack[mapPort(ctx).Endpoint()] <- true
+			t.Log("ROLLED BACK", mapPort(ctx).Endpoint(), event[0].Kind, event[0].Content)
+
+			return err
+		})
+		notAcceptedEvent = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				[]string{"d", uuid.NewString()},
+			},
+			Content: "validEvent not gonna be accepted because of failed consensus",
+		}}
+		helperSignWithMinLeadingZeroBits(t, notAcceptedEvent, privkey)
+		require.Error(t, relay.Publish(ctx, notAcceptedEvent.Event))
+		helperAwaitConsensus(t, relay, rolledBack)
+		receivedEventsFromFirstRelay := helperQueryEvents(t, ctx, relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		receivedEventsFromSecondRelay := helperQueryEvents(t, ctx, secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		receivedEventsFromThirdRelay := helperQueryEvents(t, ctx, thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+
+		require.Len(t, receivedEventsFromFirstRelay, 2)
+		require.Contains(t, receivedEventsFromFirstRelay, ev)
+		require.Contains(t, receivedEventsFromFirstRelay, ev2)
+		require.NotContains(t, receivedEventsFromFirstRelay, notAcceptedEvent)
+
+		require.Len(t, receivedEventsFromSecondRelay, 2)
+		require.Contains(t, receivedEventsFromSecondRelay, ev)
+		require.Contains(t, receivedEventsFromSecondRelay, ev2)
+		require.NotContains(t, receivedEventsFromSecondRelay, notAcceptedEvent)
+
+		require.Len(t, receivedEventsFromThirdRelay, 2)
+		require.Contains(t, receivedEventsFromThirdRelay, ev)
+		require.Contains(t, receivedEventsFromThirdRelay, ev2)
+		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
+
+	})
+
+	helperMustCloseRelay(t, relay)
+
 	//command.MustInit(t.Context(), command.WithConfig(&command.Config{
 	//	AbsoluteRootPath:        "../../.cometbft3",
 	//	NodePrivKey:             "./../database/command/.testdata/node_key3.json",
 	//	DiscoveryPort:           19966,
-	//	NIP13MinLeadingZeroBits: 0,
+	//	helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
+	//	require.NoError(t, relay.Publish(ctx, relaysList.Event))
+	//})	//	NIP13MinLeadingZeroBits: 0,
 	//}))
 	//t.Run("add relay", func(t *testing.T) {
 	//	relaysList := &model.Event{Event: nostr.Event{
@@ -163,9 +252,7 @@ func TestConsensusEvents(t *testing.T) {
 	//			[]string{"r", pubsubServers[2].Endpoint()},
 	//		},
 	//	}}
-	//	helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
-	//	require.NoError(t, relay.Publish(ctx, relaysList.Event))
-	//})
+
 	//var notAcceptedEvent *model.Event
 	//t.Run("failed consensus rolled back", func(t *testing.T) {
 	//	command.RegisterAcceptListener(func(ctx context.Context, event ...*model.Event) error {
@@ -209,7 +296,7 @@ func BenchmarkConcurrentConsensusEvents(b *testing.B) {
 	meter := tachymeter.New(&tachymeter.Config{Size: b.N})
 	b.ResetTimer()
 	b.ReportAllocs()
-	fmt.Println(b.N)
+	b.Log(b.N)
 	b.SetParallelism(50)
 	usersCount := b.N
 	mapPort := func(ctx context.Context) *fixture.MockService {
@@ -323,7 +410,7 @@ func BenchmarkConcurrentConsensusEvents(b *testing.B) {
 				Tags: nostr.Tags{
 					[]string{model.CustomIONTagOnBehalfOf, keys[usrIdx]},
 					[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
-					[]string{"d", "dummy"},
+					[]string{"d", uuid.NewString()},
 				},
 				Content: "validEvent from relay1",
 			}}
@@ -344,7 +431,7 @@ func helperPickRandomRelay(tb testing.TB) *nostrRelay {
 	return relay
 }
 
-func helperAwaitConsensus(t testing.TB, consensusDone map[string]chan bool) {
+func helperAwaitConsensus(t testing.TB, broadcastFrom *nostrRelay, consensusDone map[string]chan bool) {
 	t.Helper()
 	for endpoint, done := range consensusDone {
 		select {
@@ -370,4 +457,17 @@ func helperBenchReportMetrics(
 	t.ReportMetric(float64(metric.Time.StdDev.Milliseconds()), "stddev-ms/op")
 	t.ReportMetric(float64(metric.Time.P50.Milliseconds()), "p50-ms/op")
 	t.ReportMetric(float64(metric.Time.P95.Milliseconds()), "p95-ms/op")
+}
+
+func helperHashEvents(t testing.TB, events ...*model.Event) (hash string) {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	for _, e := range events {
+		buf.WriteString(e.Address())
+	}
+	sum := sha256.Sum256(buf.Bytes())
+
+	return string(sum[:])
 }
