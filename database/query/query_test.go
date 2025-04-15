@@ -1078,6 +1078,7 @@ func TestEditablePostFlow(t *testing.T) {
 		reply2.Content = "reply content2"
 		reply2.Tags = model.Tags{
 			{"a", post.Address(), "", "root"},
+			{"a", post.Address(), "", "reply"},
 			{"d", "reply2"},
 		}
 
@@ -1088,13 +1089,9 @@ func TestEditablePostFlow(t *testing.T) {
 			Kinds: []int{nostr.KindArticle},
 			Tags:  model.TagMap{}.SetLiterals("a", postAddress),
 		})
-		helperMustBePrecalculatedCount(t, db, 1, model.Filter{
+		helperMustBePrecalculatedCount(t, db, 2, model.Filter{
 			Kinds: []int{nostr.KindArticle},
 			Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("reply")),
-		})
-		helperMustBePrecalculatedCount(t, db, 1, model.Filter{
-			Kinds: []int{nostr.KindArticle},
-			Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("root")),
 		})
 
 		t.Run("Delete reply1", func(t *testing.T) {
@@ -1107,11 +1104,11 @@ func TestEditablePostFlow(t *testing.T) {
 			delete.Tags = model.Tags{{"e", reply1.ID}}
 			require.NoError(t, db.AcceptEvents(t.Context(), &delete))
 
-			helperMustBePrecalculatedCount(t, db, 2, model.Filter{ // 1 root, 1 quote.
+			helperMustBePrecalculatedCount(t, db, 2, model.Filter{ // 1 reply, 1 quote.
 				Kinds: []int{nostr.KindArticle},
 				Tags:  model.TagMap{}.SetLiterals("a", postAddress),
 			})
-			helperMustBePrecalculatedCount(t, db, 0, model.Filter{
+			helperMustBePrecalculatedCount(t, db, 1, model.Filter{
 				Kinds: []int{nostr.KindArticle},
 				Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("reply")),
 			})

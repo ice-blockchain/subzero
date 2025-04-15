@@ -93,20 +93,31 @@ func detectImagesVideos(tags model.Tags) (images, videos bool) {
 }
 
 func detectSystemKind(tags model.Tags) (int64, bool) {
-	var hasReply, hasRoot bool
+	// Syntax: "a|e", "<address>", "", "reply|root", "<master_pubkey>".
+	var rootOf, replyOf string
 	for i := range tags {
 		switch tags[i].Key() {
 		case "a", "e":
-			hasReply = hasReply || len(tags[i]) > replyMarkerIndex && strings.EqualFold(tags[i][replyMarkerIndex], "reply")
-			hasRoot = hasRoot || len(tags[i]) > replyMarkerIndex && strings.EqualFold(tags[i][replyMarkerIndex], "root")
+			if len(tags[i]) <= replyMarkerIndex {
+				continue
+			}
+			if strings.EqualFold(tags[i][replyMarkerIndex], "reply") && replyOf == "" {
+				replyOf = tags[i].Value()
+			} else if strings.EqualFold(tags[i][replyMarkerIndex], "root") && rootOf == "" {
+				rootOf = tags[i].Value()
+			}
 		case "q", "Q":
 			return systemKindQuote, true
 		}
 	}
-	if hasReply {
-		return systemKindCommentReply, true
-	} else if hasRoot {
+
+	// Cover:
+	// - has both reply and root tags that points to the same event.
+	// - has only root tag.
+	if rootOf != "" && (rootOf == replyOf || replyOf == "") {
 		return systemKindCommentRoot, true
+	} else if replyOf != "" && replyOf != rootOf { // Has reply tag, and optional root tag.
+		return systemKindCommentReply, true
 	}
 	return -1, false
 }

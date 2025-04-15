@@ -597,7 +597,7 @@ func TestEventCountersConsistency(t *testing.T) {
 			RequestDB: model.Filter{
 				Authors: []string{pub},
 				Tags:    model.TagMap{}.SetLiterals("x", "y"),
-				Search:  "include:dependencies:kind1>kind6400+kind1+group+root",
+				Search:  "include:dependencies:kind1>kind6400+kind1+group+reply",
 			},
 			RequestDVM: model.Event{
 				Event: nostr.Event{
@@ -611,7 +611,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{1},
-						Tags:  model.TagMap{}.Set("e", &events[0].ID, nil, model.PointerOf(model.TagMarkerRoot)),
+						Tags:  model.TagMap{}.Set("e", &events[0].ID, nil, model.PointerOf(model.TagMarkerReply)),
 					}}.String()
 			},
 			Events: func(t *testing.T) []*model.Event {

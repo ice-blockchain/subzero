@@ -280,14 +280,15 @@ func TestEventCounters(t *testing.T) {
 			ev.Kind = nostr.KindTextNote
 			ev.PubKey = "pubkeyrp3"
 			ev.CreatedAt = 2
-			ev.Tags = model.Tags{{"e", "1rp", "", "root", "pubkeyrp2"}, {"p", "pubkeyrp1"}}
+			ev.Tags = model.Tags{
+				{"e", "1rp", "", "root", "pubkeyrp2"},
+				{"e", "1rp", "", "reply", "pubkeyrp2"},
+				{"p", "pubkeyrp1"},
+			}
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			// Total: root + reply.
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("e", "1rp")})
-			// Only root.
-			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.Set("e", model.PointerOf("1rp"), nil, model.PointerOf("root"))})
-			// Only reply.
-			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.Set("e", model.PointerOf("1rp"), nil, model.PointerOf("reply"))})
+			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.Set("e", model.PointerOf("1rp"), nil, model.PointerOf("reply"))})
 		})
 		t.Run("Repost with multiple E tags", func(t *testing.T) {
 			var ev model.Event
@@ -399,7 +400,10 @@ func TestCounterRootReply(t *testing.T) {
 	replyToRoot.Content = "reply"
 	replyToRoot.PubKey = "replypub"
 	replyToRoot.CreatedAt = 2
-	replyToRoot.Tags = model.Tags{{"e", "rootid", "", "root"}}
+	replyToRoot.Tags = model.Tags{
+		{"e", root.ID, "", "root"},
+		{"e", root.ID, "", "reply"},
+	}
 	require.NoError(t, db.AcceptEvents(t.Context(), &replyToRoot))
 
 	var replyToReply model.Event
@@ -409,8 +413,8 @@ func TestCounterRootReply(t *testing.T) {
 	replyToReply.PubKey = "replypub"
 	replyToReply.CreatedAt = 3
 	replyToReply.Tags = model.Tags{
-		{"e", "replytorootid", "", "reply"},
-		{"e", "rootid", "", "root"},
+		{"e", replyToRoot.ID, "", "reply"},
+		{"e", root.ID, "", "root"},
 	}
 	require.NoError(t, db.AcceptEvents(t.Context(), &replyToReply))
 
@@ -421,8 +425,8 @@ func TestCounterRootReply(t *testing.T) {
 	replyToReplyToReply.PubKey = "replypub"
 	replyToReplyToReply.CreatedAt = 4
 	replyToReplyToReply.Tags = model.Tags{
-		{"e", "replytoreplyid", "", "reply"},
-		{"e", "rootid", "", "root"},
+		{"e", replyToReply.ID, "", "reply"},
+		{"e", root.ID, "", "root"},
 	}
 	require.NoError(t, db.AcceptEvents(t.Context(), &replyToReplyToReply))
 
@@ -433,10 +437,10 @@ func TestCounterRootReply(t *testing.T) {
 	events := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
 		Limit:  10,
-		Search: "references:false expiration:false include:dependencies:kind1>kind6400+kind1+group+root !emarker:reply",
+		Search: "references:false expiration:false include:dependencies:kind1>kind6400+kind1+group+reply",
 	})
 	require.Len(t, events, 2) // Root + DVM.
-	require.Equal(t, "rootid", events[1].ID)
+	require.Equal(t, root.ID, events[1].ID)
 	require.Equal(t, model.KindDVMCountResponse, events[0].Kind)
 	require.Equal(t, "1", events[0].Content)
 
@@ -595,6 +599,7 @@ func TestCounterRootReplyAddressable(t *testing.T) {
 	replyToRoot.Tags = model.Tags{
 		{"d", "reply_to_root"},
 		{"a", root.Address(), "", "root"},
+		{"a", root.Address(), "", "reply"},
 	}
 	require.NoError(t, db.AcceptEvents(t.Context(), &replyToRoot))
 
@@ -631,7 +636,7 @@ func TestCounterRootReplyAddressable(t *testing.T) {
 	events := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{nostr.KindArticle, nostr.KindRepost},
 		Limit:  10,
-		Search: "references:false expiration:false include:dependencies:kind30023>kind6400+kind30023+group+root !amarker:reply",
+		Search: "references:false expiration:false include:dependencies:kind30023>kind6400+kind30023+group+reply",
 	})
 	require.Len(t, events, 2) // Root + DVM.
 	require.Equal(t, "rootid", events[1].ID)

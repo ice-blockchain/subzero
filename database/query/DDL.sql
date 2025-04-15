@@ -376,7 +376,7 @@ BEGIN
         NEW.event_tag_value1,
         CASE
             WHEN e.kind = 1750 AND NEW.event_tag_key = 'h' THEN 'members'
-            WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('a', 'e') AND NEW.event_tag_value3 IN ('reply', 'root') THEN NEW.event_tag_value3
+            WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('a', 'e') AND NEW.event_tag_value3 IN ('reply', 'root') THEN 'reply'
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('q', 'Q') THEN 'quote'
             WHEN e.kind = 3 AND NEW.event_tag_key = 'p' THEN 'follower'
             WHEN e.kind = 7 THEN e.content -- reaction type
@@ -458,7 +458,7 @@ BEGIN
         AND event_counters.kind = e.kind
         AND event_counters.reference_type = CASE
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND OLD.event_tag_key IN ('a', 'e') AND
-                 ((OLD.event_tag_value3 = 'root' AND (e.system_kind is null or e.system_kind = 2)) OR (OLD.event_tag_value3 = 'reply')) THEN OLD.event_tag_value3
+                 ((OLD.event_tag_value3 = 'root' AND (e.system_kind is null or e.system_kind = 2)) OR (OLD.event_tag_value3 = 'reply')) THEN 'reply'
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND OLD.event_tag_key IN ('q', 'Q') THEN 'quote'
             WHEN e.kind = 3 AND OLD.event_tag_key = 'p' THEN 'follower'
             WHEN e.kind = 7 THEN e.content
