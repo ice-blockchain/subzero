@@ -1,0 +1,10 @@
+{
+    "en": {
+        "title": "{{pubkey}} has posted a new post",
+        "body": "{{post}}"
+    },
+    "fr": {
+        "title": "{{pubkey}} a publié un nouveau post",
+        "body": "{{post}}"
+    }
+}

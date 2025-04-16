@@ -1,0 +1,10 @@
+{
+    "en": {
+        "title": "You have requested {{amount}} ICE",
+        "body": "You have requested {{amount}} ICE from {{address}}"
+    },
+    "fr": {
+        "title": "Vous avez demandé {{amount}} ICE",
+        "body": "Vous avez demandé {{amount}} ICE de {{address}}"
+    }
+}

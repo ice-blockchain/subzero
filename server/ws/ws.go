@@ -18,6 +18,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/pushnotifications"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
@@ -58,6 +59,8 @@ func NewHandler(relayURL string) WSHandler {
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
+	pushNotificationManager = pushnotifications.NewPushNotificationManager(cfg.FCMCredentialsPath, "pushnotifications/translations")
+
 	return internal.NewWSServer(routes, cfg)
 }
 

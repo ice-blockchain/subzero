@@ -1,0 +1,10 @@
+{
+    "en": {
+        "title": "New reply",
+        "body": "{{pubkey}} replied to your post {{title}}"
+    },
+    "fr": {
+        "title": "Nouvelle réponse",
+        "body": "{{pubkey}} a répondu à votre post {{title}}"
+    }
+}

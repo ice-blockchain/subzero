@@ -4,6 +4,8 @@ package http
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"slices"
@@ -79,15 +81,38 @@ func TestNIP11(t *testing.T) {
 
 	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}}
 	expected := handler.info()
-	expected.URL = "wss://localhost:9996"
 
-	require.Zero(t, slices.CompareFunc(info.SupportedNIPs, expected.SupportedNIPs, func(a, b any) int {
+	require.Equal(t, "subzero", info.Name)
+	require.Equal(t, "subzero", info.Description)
+	require.Equal(t, "~", info.PubKey)
+	require.Equal(t, "~", info.Contact)
+	require.Equal(t, "subzero", info.Software)
+	require.Equal(t, minLeadingZeroBits, info.Limitation.MinPowDifficulty)
+	require.Equal(t, "wss://localhost:9996", info.URL)
+
+	require.Zero(t, slices.CompareFunc(info.SupportedNIPs, expected.RelayInformationDocument.SupportedNIPs, func(a, b any) int {
 		require.EqualValues(t, a, b)
 
 		return 0
 	}))
 
-	info.SupportedNIPs = nil
-	expected.SupportedNIPs = nil
-	require.Equal(t, expected, info)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://localhost:9996", nil)
+	require.NoError(t, err)
+	req.Header.Add("Accept", "application/nostr+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var fullResponse RelayInformationDocument
+	err = json.Unmarshal(body, &fullResponse)
+	require.NoError(t, err)
+
+	require.Equal(t, expected.FCMAndroidConfigs, fullResponse.FCMAndroidConfigs)
+	require.Equal(t, expected.FCMIOSConfigs, fullResponse.FCMIOSConfigs)
+	require.Equal(t, expected.FCMWebConfigs, fullResponse.FCMWebConfigs)
 }

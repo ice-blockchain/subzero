@@ -99,6 +99,18 @@ func GetStoredEvents(ctx context.Context, subscription *model.Subscription) Even
 	return globalDB.Client.SelectEvents(ctx, filters...)
 }
 
+func MarkTokenAsInvalid(ctx context.Context, deviceID, masterPubKey, token string) error {
+	return globalDB.Client.markTokenAsInvalid(ctx, deviceID, masterPubKey, token)
+}
+
+func GetInvalidTokens(ctx context.Context) ([]InvalidTokenInfo, error) {
+	return globalDB.Client.getInvalidTokens(ctx)
+}
+
+func CleanupOldInvalidTokens(ctx context.Context) error {
+	return globalDB.Client.cleanupOldInvalidTokens(ctx)
+}
+
 func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {
 	var filters model.Filters
 	if subscription != nil {

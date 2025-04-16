@@ -1,0 +1,10 @@
+{
+    "en": {
+        "title": "New Message from {{pubkey}}",
+        "body": "{{message}}"
+    },
+    "fr": {
+        "title": "Nouveau message de {{pubkey}}",
+        "body": "{{message}}"
+    } 
+}

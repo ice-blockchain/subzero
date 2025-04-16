@@ -1,0 +1,10 @@
+{
+    "en": {
+        "title": "You received a new message from {{channel_name}}",
+        "body": "{{message}}"
+    },
+    "fr": {
+        "title": "Vous avez reçu un nouveau message du canal {{channel_name}}",
+        "body": "{{message}}"
+    } 
+}

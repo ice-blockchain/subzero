@@ -22,6 +22,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/pushnotifications"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
@@ -46,6 +47,8 @@ var (
 
 	errEventInvalidID   = errors.New("event id is invalid")
 	errEventInvalidSign = errors.New("event signature is invalid")
+
+	pushNotificationManager *pushnotifications.PushNotificationManager
 )
 
 func generateChallenge(hints ...string) string {
@@ -381,6 +384,14 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {
 		return errors.Wrap(ErrNotifyFailed, err.Error())
+	}
+
+	if err := pushNotificationManager.ProcessDeletionEvents(ctx, events); err != nil {
+		log.Printf("error during batch processing of deletion events: %v", err)
+	}
+	// TODO: take the user's language from 30015? For now, it's hardcoded.
+	if err := pushNotificationManager.NotifyFCM(ctx, pushnotifications.Language("en"), events); err != nil {
+		log.Printf("failed to send push notifications: %v", err)
 	}
 
 	return nil

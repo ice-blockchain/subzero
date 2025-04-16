@@ -15,5 +15,6 @@ type (
 		WriteTimeout            time.Duration `yaml:"writeTimeout"`
 		ReadTimeout             time.Duration `yaml:"readTimeout"`
 		Debug                   bool          `yaml:"debug"`
+		FCMCredentialsPath      string        `yaml:"fcmCredentialsPath"`
 	}
 )

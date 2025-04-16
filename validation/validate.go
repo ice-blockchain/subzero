@@ -57,6 +57,10 @@ const (
 	tagStateOneOf
 
 	kindValidatorFlagContentRequired uint = 1 << 0
+
+	DeviceTokenOSAndroid = "android"
+	DeviceTokenOSIOS     = "ios"
+	DeviceTokenOSWeb     = "web"
 )
 
 type (
@@ -73,17 +77,12 @@ type (
 
 	tagState uint
 	tagData  struct {
-		// Tag state, one of: required, optional, forbidden, etc.
 		State tagState
-		// Additional tags.
-		Tags []string
+		Tags  []string
 	}
 	kindValidator struct {
-		// Tag map: tag key -> tag state.
-		Tags map[string]tagData
-		// Additional flags for given kind.
-		Flags uint
-		// Additional validation function.
+		Tags     map[string]tagData
+		Flags    uint
 		Validate func(e *model.Event) error
 	}
 )
@@ -249,6 +248,27 @@ var (
 					return errors.Errorf("fund send notify: address in content %q does not match tag l %q", address.To, addr.Value())
 				} else if len(addr) < 3 || addr[2] != "wallet.address" {
 					return errors.Errorf("fund send notify: invalid alias in tag l %q", addr.Value())
+				}
+
+				return nil
+			}).
+			Build(),
+
+		model.CustomIONKindDeviceRegistration: newKindValidatorBuilderEmpty().
+			ContentNotEmpty().
+			Required("d", "t", "relay", "token").
+			Validate(func(e *model.Event) error {
+				tTag := e.GetTag("t").Value()
+				if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {
+					return errors.Errorf("wrong t tag value: %v", tTag)
+				}
+				relayTag := e.GetTag("relay").Value()
+				if globalConfig != nil && globalConfig.RelayURL != relayTag {
+					return errors.Errorf("wrong relay value: %v", relayTag)
+				}
+				var filters model.Filters
+				if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {
+					return errors.Errorf("wrong content JSON value: %v", err)
 				}
 
 				return nil

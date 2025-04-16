@@ -44,14 +44,18 @@ var (
 )
 
 const (
-	CustomIONKindPollVote          = 1754
-	CustomIONKindFundReceive       = 1755
-	CustomIONKindFundSendNotify    = 1756
-	CustomIONKindAttestation       = 10_100
-	CustomIONKindRelayListMetadata = 20_002
-	CustomIONKindEditableTextNote  = 30_175
+	CustomIONKindPollVote           = 1754
+	CustomIONKindFundReceive        = 1755
+	CustomIONKindFundSendNotify     = 1756
+	CustomIONKindAttestation        = 10_100
+	CustomIONKindRelayListMetadata  = 20_002
+	CustomIONKindEditableTextNote   = 30_175
+	CustomIONKindDeviceRegistration = 31751
+	KindDVMCountResponse            = 6400
 
-	KindDVMCountResponse = 6400
+	// TODO: change to proper value.
+	CustomIONSystemMessage           = 999999
+	CustomIONKindRegisterDeviceToken = 31751
 )
 
 const (

@@ -27,6 +27,9 @@ type (
 		ACME               struct {
 			APIKey string `yaml:"api-key"`
 		} `yaml:"acme"`
+		FCMAndroidConfigs []string `yaml:"fcm-android-configs"`
+		FCMIOSConfigs     []string `yaml:"fcm-ios-configs"`
+		FCMWebConfigs     []string `yaml:"fcm-web-configs"`
 	}
 	router struct {
 	}
@@ -71,7 +74,12 @@ func MustListenAndServe(ctx context.Context) {
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	uploader := httpserver.NewUploadHandler(ctx, globalConfig.IONLibertyDisabled)
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(globalConfig.RelayURL), httpserver.NewNIP11Handler(&httpserver.Config{MinLeadingZeroBits: 1111}))).
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(globalConfig.RelayURL), httpserver.NewNIP11Handler(&httpserver.Config{
+		MinLeadingZeroBits: 1111,
+		FCMAndroidConfigs:  globalConfig.FCMAndroidConfigs,
+		FCMIOSConfigs:      globalConfig.FCMIOSConfigs,
+		FCMWebConfigs:      globalConfig.FCMWebConfigs,
+	}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).

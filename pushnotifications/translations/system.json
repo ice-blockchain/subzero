@@ -1,0 +1,10 @@
+{
+    "en": {
+        "title": "{{title}}",
+        "body": "{{message}}"
+    },
+    "fr": {
+        "title": "{{title}}",
+        "body": "{{message}}"
+   }
+}
