@@ -5,7 +5,9 @@ package command
 import (
 	"context"
 	"github.com/cockroachdb/errors"
+	"github.com/ice-blockchain/cometbft/p2p"
 	"os"
+	"sync"
 
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
@@ -28,7 +30,9 @@ type Consensus interface {
 }
 
 var globalConsensus *consensus
+var once sync.Once
 var globalCfg *Config
+
 var consensusEventListener func(context.Context, ...*model.Event) error
 var rollback func(context.Context, ...*model.Event) error
 
@@ -64,18 +68,21 @@ func WithConfig(cfg *Config) Option {
 }
 
 func MustInit(ctx context.Context, opts ...Option) {
-	globalConsensus = mustInit(ctx, opts...).(*consensus)
+	once.Do(func() {
+		globalConsensus = mustInit(ctx, config.DefaultConfig(), opts...).(*consensus)
+	})
+
 }
 
-func mustInit(ctx context.Context, opts ...Option) Consensus {
+func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Consensus {
 	globalCfg = cfg.MustGet[Config]()
 	for _, o := range opts {
 		o(globalCfg)
 	}
 	c := &consensus{
-		cfg: globalCfg,
+		cfg:        globalCfg,
+		shutdownCh: make(chan struct{}, 1),
 	}
-	serverCfg := config.DefaultConfig()
 	serverCfg.SetRoot(globalCfg.AbsoluteRootPath)
 	serverCfg.NodeKey = globalCfg.NodePrivKey
 	serverCfg.MultiplexConfig = config.MultiplexBaseConfig(
@@ -87,10 +94,16 @@ func mustInit(ctx context.Context, opts ...Option) Consensus {
 	serverCfg.DiscoveryPort = globalCfg.DiscoveryPort
 	//serverCfg.P2P.Seeds = "edca2ee37726716daf90ba69272ee90c51a1f7a9@127.0.0.1:19911,778f8ec004cd98934e1de445cb67cbbc7239e008@127.0.0.1:19931"
 	logger := cmtlog.NewFilter(cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout)), cmtlog.AllowError())
+
 	if globalCfg.Debug {
 		serverCfg.P2P.AllowDuplicateIP = true
 		serverCfg.P2P.AddrBookStrict = false
 		logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
+		nodeKey, err := p2p.LoadNodeKey(serverCfg.NodeKeyFile())
+		if err != nil {
+			panic(errors.Wrapf(err, "failed to load node key %v", serverCfg.NodeKeyFile()))
+		}
+		logger = logger.With("nodeID", nodeKey.ID(), "discoveryPort", globalCfg.DiscoveryPort)
 	}
 	cometbftServer, err := multiplex.NewServer(c, serverCfg, logger)
 	if err != nil {
@@ -100,7 +113,11 @@ func mustInit(ctx context.Context, opts ...Option) Consensus {
 	c.server.MustStart()
 	c.client = multiplex.NewClient(multiplex.WithBackend(cometbftServer))
 	go func() {
-		<-ctx.Done()
+		select {
+		case <-ctx.Done():
+		case <-c.shutdownCh:
+			break
+		}
 		c.server.Close()
 	}()
 	return c

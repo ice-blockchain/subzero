@@ -37,8 +37,8 @@ var (
 	ErrOnBehalfAccessDenied      = model.ErrOnBehalfAccessDenied
 	ErrRepostOfDeletedPost       = errors.New("repost of deleted post")
 	ErrInvalidEvent              = errors.New("invalid event")
-
-	errEventIteratorInterrupted = errors.New("interrupted")
+	ErrRaceCondition             = errors.New("race")
+	errEventIteratorInterrupted  = errors.New("interrupted")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
@@ -623,6 +623,12 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eve
 			result, err := db.QueryxContext(ctx, stmt, params...)
 			if err != nil {
 				err = errors.Wrap(handleError(err), "failed to exec insert event sql")
+				if errors.Is(err, ErrRaceCondition) {
+					result, err = db.QueryxContext(ctx, stmt, params...)
+					if err != nil {
+						err = errors.Wrap(handleError(err), "failed to exec insert event sql")
+					}
+				}
 			}
 			return result, err
 		}}
@@ -819,6 +825,8 @@ func handleError(err error) error {
 			}
 		} else if sqlError.SQLState() == "22021" {
 			return ErrInvalidEvent
+		} else if sqlError.SQLState() == "23505" && sqlError.ConstraintName == "events_pkey" {
+			return ErrRaceCondition
 		}
 	}
 

@@ -4,6 +4,7 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -38,11 +39,12 @@ var (
 	pubsubServers []*fixture.MockService
 )
 
+type globalCfg struct {
+	TLSCert string `yaml:"tls-cert"`
+	TLSKey  string `yaml:"tls-key"`
+}
+
 func TestMain(m *testing.M) {
-	type globalCfg struct {
-		TLSCert string `yaml:"tls-cert"`
-		TLSKey  string `yaml:"tls-key"`
-	}
 	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
@@ -69,75 +71,36 @@ func TestMain(m *testing.M) {
 		nil,
 		map[string]gin.HandlerFunc{},
 	)
+	cl := []func() error{}
+	server, release := helperCreateWsInstance(serverCtx, globalConfig,
+		9988, 19988,
+		"./../database/command/.testdata/node_key.json",
+		"../../.cometbft",
+	)
+	pubsubServers = append(pubsubServers, server)
+	cl = append(cl, release)
 
-	hdl := newHandler("wss://localhost:9988")
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
-		&Config{
-			Port:                    9988,
-			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-		},
-		hdl.Handle,
-		nil,
-		map[string]gin.HandlerFunc{},
-	))
-	pubsubServers[0].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
-		URL: addr,
-	}))
-	pubsubServers[0].Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
-		DiscoveryPort:    19988,
-		AbsoluteRootPath: "../../.cometbft",
-		NodePrivKey:      "./../database/command/.testdata/node_key.json",
-	}))
+	server2, release2 := helperCreateWsInstance(serverCtx, globalConfig,
+		9977, 19977,
+		"./../database/command/.testdata/node_key2.json",
+		"../../.cometbft2",
+	)
+	pubsubServers = append(pubsubServers, server2)
+	cl = append(cl, release2)
 
-	addr2, release2 := query.NewTestDatabase(serverCtx)
-	log.Println(addr2)
-	hdl2 := newHandler("wss://localhost:9977")
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
-		&Config{
-			Port:                    9977,
-			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-		},
-		hdl2.Handle,
-		nil,
-		map[string]gin.HandlerFunc{},
-	))
-	pubsubServers[1].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
-		URL: addr2,
-	}))
-
-	pubsubServers[1].Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
-		AbsoluteRootPath:        "../../.cometbft2",
-		NodePrivKey:             "./../database/command/.testdata/node_key2.json",
-		DiscoveryPort:           19977,
-		NIP13MinLeadingZeroBits: 0,
-	}))
-
-	addr3, release3 := query.NewTestDatabase(serverCtx)
-	log.Println(addr3)
-	hdl3 := newHandler("wss://localhost:9966")
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx, &Config{
-		Port:                    9966,
-		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-	}, hdl3.Handle, nil, map[string]gin.HandlerFunc{}))
-	pubsubServers[2].DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
-		URL: addr3,
-	}))
-
-	pubsubServers[2].Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
-		AbsoluteRootPath:        "../../.cometbft3",
-		NodePrivKey:             "./../database/command/.testdata/node_key3.json",
-		DiscoveryPort:           19966,
-		NIP13MinLeadingZeroBits: 0,
-	}))
+	server3, release3 := helperCreateWsInstance(serverCtx, globalConfig,
+		9966, 19966,
+		"./../database/command/.testdata/node_key3.json",
+		"../../.cometbft3",
+	)
+	pubsubServers = append(pubsubServers, server3)
+	cl = append(cl, release3)
 
 	code := m.Run()
 	serverCancel()
-	release()
-	release2()
-	release3()
+	for _, c := range cl {
+		c()
+	}
 
 	if code == 0 {
 		time.Sleep(10 * time.Second)
@@ -148,6 +111,28 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(code)
+}
+
+func helperCreateWsInstance(serverCtx context.Context, globalConfig *globalCfg, wsPort, consensusPort uint16, consensusKey, consensusStorage string) (*fixture.MockService, func() error) {
+	addr, release := query.NewTestDatabase(serverCtx)
+	log.Println(addr)
+	hdl := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort))
+	srv := fixture.NewTestServer(serverCtx, &Config{
+		Port:                    wsPort,
+		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+	}, hdl.Handle, nil, map[string]gin.HandlerFunc{})
+	srv.DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
+		URL: addr,
+	}))
+
+	srv.Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
+		AbsoluteRootPath:        consensusStorage,
+		NodePrivKey:             consensusKey,
+		DiscoveryPort:           consensusPort,
+		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+	}))
+	return srv, release
 }
 
 func TestSimpleEchoDifferentTransports(t *testing.T) {

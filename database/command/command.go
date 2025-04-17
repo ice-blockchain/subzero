@@ -24,9 +24,10 @@ import (
 
 type (
 	consensus struct {
-		server server.Server
-		client client.Client
-		cfg    *Config
+		server     server.Server
+		client     client.Client
+		cfg        *Config
+		shutdownCh chan struct{}
 	}
 )
 
@@ -39,14 +40,16 @@ var (
 func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
-		ev, err := mapTxToEvent(tx)
+		evs, err := mapTxToEvent(tx)
 		if err != nil {
-			return errors.Wrapf(err, "failed to transform tx into event: %x", tx.Data)
+			return errors.Wrapf(err, "failed to transform tx into event: %v", tx.Data)
 		}
-		if err = validation.ValidateIncomingEvent(ctx, ev, globalCfg.NIP13MinLeadingZeroBits); err != nil {
-			return errors.Wrapf(err, "failed to validate tx %x", tx.Data)
+		for _, ev := range evs {
+			if err = validation.ValidateIncomingEvent(ctx, ev, globalCfg.NIP13MinLeadingZeroBits); err != nil {
+				return errors.Wrapf(err, "failed to validate tx %x", tx.Data)
+			}
 		}
-		events = append(events, ev)
+		events = append(events, evs...)
 	}
 	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
 	if consensusEventListener != nil {
@@ -67,11 +70,11 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, t
 func (c *consensus) RollbackTx(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
-		ev, err := mapTxToEvent(tx)
+		evs, err := mapTxToEvent(tx)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transform tx into event")
 		}
-		events = append(events, ev)
+		events = append(events, evs...)
 	}
 	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
 	return errors.Wrapf(rollback(ctx, events...), "failed to rollback non-accepted txs")
@@ -79,12 +82,14 @@ func (c *consensus) RollbackTx(ctx context.Context, userAddress string, transact
 
 func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
 	for _, tx := range transactions {
-		ev, err := mapTxToEvent(tx)
+		evs, err := mapTxToEvent(tx)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transform removal tx into event")
 		}
-		if err = validation.Validate(ctx, ev); err != nil {
-			return errors.Wrapf(err, "failed to validate removal tx")
+		for _, ev := range evs {
+			if err = validation.Validate(ctx, ev); err != nil {
+				return errors.Wrapf(err, "failed to validate removal tx")
+			}
 		}
 	}
 	return nil
@@ -306,26 +311,33 @@ func mapLinkedEventToTx(ctx context.Context, event *model.Event) (linkedMasterKe
 	if linkedEvent == nil {
 		return "", nil, ErrUserIsNotPresentedOnRelay
 	}
-	jEvent, err := event.MarshalJSON()
+	var env nostr.EventEnvelope
+	env.Events = append(env.Events, &event.Event)
+	jBytes, err := env.MarshalJSON()
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to serialize event %v")
+		return "", nil, errors.Wrapf(err, "failed to serialize linked event")
 	}
 	return linkedEvent.GetMasterPublicKey(), &client.Transaction{
-		Data:        jEvent,
+		Data:        jBytes,
 		Fingerprint: mapEventKindToChainFingerprint(linkedEvent.Kind),
 	}, nil
 }
-func mapTxToEvent(tx client.Transaction) (*model.Event, error) {
-	var ev model.Event
-	if err := ev.UnmarshalJSON(tx.Data); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse transaction %v into event", hex.EncodeToString(tx.Data))
+func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
+	var env nostr.EventEnvelope
+	err := env.UnmarshalJSON(tx.Data)
+
+	var events []*model.Event
+	for i := range env.Events {
+		events = append(events, &model.Event{Event: *env.Events[i]})
 	}
-	return &ev, nil
+
+	return events, err
 }
 
 func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Transaction, otherUserTxs map[string][]client.Transaction, err error) {
 	txs = make([]client.Transaction, 0, len(events))
 	otherUserTxs = make(map[string][]client.Transaction)
+	encodedEvents := map[string]nostr.EventEnvelope{}
 	for _, ev := range events {
 		linkedMasterKey, otherUserTx, err := mapLinkedEventToTx(ctx, ev)
 		if err == nil {
@@ -333,15 +345,25 @@ func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Tr
 			continue
 		}
 		fingerprint := mapEventKindToChainFingerprint(ev.Kind)
-		jEvent, err := ev.MarshalJSON()
+		var env nostr.EventEnvelope
+		ok := false
+		if env, ok = encodedEvents[fingerprint]; !ok {
+			env = nostr.EventEnvelope{}
+		}
+		env.Events = append(env.Events, &ev.Event)
+		encodedEvents[fingerprint] = env
+	}
+	for f, e := range encodedEvents {
+		jBytes, err := e.MarshalJSON()
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to serialize event %v", ev)
+			return nil, nil, errors.Wrapf(err, "failed to serialize events json")
 		}
 		txs = append(txs, client.Transaction{
-			Data:        jEvent,
-			Fingerprint: fingerprint,
+			Data:        jBytes,
+			Fingerprint: f,
 		})
 	}
+
 	return txs, otherUserTxs, nil
 }
 
