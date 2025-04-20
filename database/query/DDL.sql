@@ -1118,14 +1118,3 @@ AFTER UPDATE ON events
 FOR EACH ROW
 WHEN (((NEW.kind in (1, 6, 7, 16, 30023, 30175)) and (NEW.hidden = false) and (NEW.tags != OLD.tags)) OR (OLD.deleted != NEW.deleted))
 EXECUTE FUNCTION trigger_events_after_update_score_add();
-
-CREATE TABLE IF NOT EXISTS invalid_device_tokens (
-    device_id TEXT NOT NULL,
-    master_pubkey TEXT NOT NULL,
-    token TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (device_id, master_pubkey)
-);
-
-CREATE INDEX IF NOT EXISTS idx_invalid_device_tokens_master_pubkey ON invalid_device_tokens(master_pubkey);
-CREATE INDEX IF NOT EXISTS idx_invalid_device_tokens_created_at ON invalid_device_tokens(created_at);

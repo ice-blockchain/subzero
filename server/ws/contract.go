@@ -8,6 +8,7 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/model"
+	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -38,9 +39,10 @@ type (
 		Subscriptions *xsync.Map[string, *model.Subscription]
 	}
 	handler struct {
-		connSubs *xsync.Map[Writer, connSubscriptions]
-		connAuth *xsync.Map[Writer, connAuthData]
-		relayURL string
+		connSubs                *xsync.Map[Writer, connSubscriptions]
+		connAuth                *xsync.Map[Writer, connAuthData]
+		relayURL                string
+		pushNotificationManager *pushnotifications.PushNotificationManager
 	}
 )
 

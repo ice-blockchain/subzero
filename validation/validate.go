@@ -77,12 +77,17 @@ type (
 
 	tagState uint
 	tagData  struct {
+		// Tag state, one of: required, optional, forbidden, etc.
 		State tagState
-		Tags  []string
+		// Additional tags.
+		Tags []string
 	}
 	kindValidator struct {
-		Tags     map[string]tagData
-		Flags    uint
+		// Tag map: tag key -> tag state.
+		Tags map[string]tagData
+		// Additional flags for given kind.
+		Flags uint
+		// Additional validation function.
 		Validate func(e *model.Event) error
 	}
 )
@@ -254,17 +259,13 @@ var (
 			}).
 			Build(),
 
-		model.CustomIONKindDeviceRegistration: newKindValidatorBuilderEmpty().
+		model.CustomIONKindDeviceRegistration: newKindValidatorBuilder().
 			ContentNotEmpty().
 			Required("d", "t", "relay", "token").
 			Validate(func(e *model.Event) error {
 				tTag := e.GetTag("t").Value()
 				if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {
 					return errors.Errorf("wrong t tag value: %v", tTag)
-				}
-				relayTag := e.GetTag("relay").Value()
-				if globalConfig != nil && globalConfig.RelayURL != relayTag {
-					return errors.Errorf("wrong relay value: %v", relayTag)
 				}
 				var filters model.Filters
 				if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {

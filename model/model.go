@@ -54,8 +54,7 @@ const (
 	KindDVMCountResponse            = 6400
 
 	// TODO: change to proper value.
-	CustomIONSystemMessage           = 999999
-	CustomIONKindRegisterDeviceToken = 31751
+	CustomIONSystemMessage = 999999
 )
 
 const (

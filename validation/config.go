@@ -11,7 +11,7 @@ import (
 type (
 	config struct {
 		MaxWrappedEventExpiration time.Duration `yaml:"max-wrapped-event-expiration"`
-		MaxContentSizes           map[int]int   `yaml:"max-content-sizes"`
+		MaxContentSizes           map[int]int   `yaml:"max-content-sizes"` // Kind -> size (bytes).
 		RelayURL                  string        `yaml:"relay-url"`
 	}
 )
