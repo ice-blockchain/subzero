@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
-	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -70,11 +69,7 @@ func TestMain(m *testing.M) {
 		map[string]gin.HandlerFunc{},
 	)
 
-	hdl := &handler{
-		connSubs: xsync.NewMap[Writer, connSubscriptions](),
-		connAuth: xsync.NewMap[Writer, connAuthData](),
-		relayURL: "wss://localhost:9998",
-	}
+	hdl := newHandler("wss://localhost:9998")
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{
 			Port:                    9998,
@@ -86,11 +81,7 @@ func TestMain(m *testing.M) {
 		map[string]gin.HandlerFunc{},
 	))
 
-	hdl2 := &handler{
-		connSubs: xsync.NewMap[Writer, connSubscriptions](),
-		connAuth: xsync.NewMap[Writer, connAuthData](),
-		relayURL: "wss://localhost:9997",
-	}
+	hdl2 := newHandler("wss://localhost:9997")
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{
 			Port:                    9997,
