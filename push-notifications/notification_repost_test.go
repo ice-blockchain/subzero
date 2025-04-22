@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func helperCreateRepostEvent(t *testing.T, id string, reposterPubKey string, originalEventID string, originalAuthorPubKey string, content string) *model.Event {

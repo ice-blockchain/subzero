@@ -5,10 +5,11 @@ package pushnotifications
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
+	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 func helperCreateSystemNotificationEvent(t *testing.T, id string, pubKey string, content string, notificationType string, targetPubKey string) *model.Event {

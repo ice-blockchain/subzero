@@ -5,9 +5,10 @@ package pushnotifications
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func (e *TestEvent) GetMasterPublicKey() string {

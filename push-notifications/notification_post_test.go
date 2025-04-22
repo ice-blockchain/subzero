@@ -5,10 +5,11 @@ package pushnotifications
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestPostTypeClassification(t *testing.T) {

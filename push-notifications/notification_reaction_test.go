@@ -5,9 +5,10 @@ package pushnotifications
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func helperCreateReactionEvent(t *testing.T, id string, pubKey string, content string, postID string, postAuthorPubKey string) *model.Event {

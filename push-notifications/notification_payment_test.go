@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func helperCreateGiftWrapPaymentEvent(t *testing.T, id string, senderPubKey string, recipientPubKey string, wrappedKind int, tags []string) *model.Event {

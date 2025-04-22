@@ -5,10 +5,11 @@ package pushnotifications
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/validation"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 func helperCreateDirectMessageEvent(t *testing.T, id string, senderPubKey string, recipientPubKey string, content string) *model.Event {

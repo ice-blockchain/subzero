@@ -6,10 +6,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
+
+	"github.com/ice-blockchain/subzero/model"
+	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 func (pm *PushNotificationManager) handlePostNotification(ctx context.Context, event *model.Event) []*pn.Notification[*model.Event] {
