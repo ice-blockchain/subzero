@@ -160,7 +160,7 @@ BEGIN
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
         length(value->>0) = 1 OR value->>0 in ('expiration', 'summary', 'name', 'description', 'title', 'poll')
-    ON CONFLICT DO NOTHING;
+    ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;
 END;
@@ -208,7 +208,7 @@ BEGIN
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
         length(value->>0) = 1 OR value->>0 in ('expiration', 'summary', 'name', 'description', 'title', 'poll')
-    ON CONFLICT DO NOTHING;
+    ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;
 END;
