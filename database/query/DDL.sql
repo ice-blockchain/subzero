@@ -99,6 +99,33 @@ CREATE TABLE IF NOT EXISTS event_tags
     primary key (event_id, event_tag_key, event_tag_value1)
 );
 --------
+-- Update primary key.
+DO $$ BEGIN
+    IF NOT EXISTS (
+        select
+            true
+        FROM
+            pg_index,
+            pg_class,
+            pg_attribute,
+            pg_namespace
+        WHERE
+            pg_class.oid = 'event_tags'::regclass
+            AND indrelid = pg_class.oid
+            AND nspname = 'public'
+            AND pg_class.relnamespace = pg_namespace.oid
+            AND pg_attribute.attrelid = pg_class.oid
+            AND pg_attribute.attnum = any(pg_index.indkey)
+            AND pg_attribute.attname = 'event_tag_value3'
+            AND indisprimary
+    ) THEN
+        ALTER TABLE event_tags RENAME CONSTRAINT event_tags_pkey TO event_tags_pkeyold;
+        CREATE UNIQUE INDEX event_tags_pkey ON event_tags (event_id, event_tag_key, event_tag_value1, event_tag_value3);
+        ALTER TABLE event_tags DROP CONSTRAINT event_tags_pkeyold;
+        ALTER TABLE event_tags ADD PRIMARY KEY USING INDEX event_tags_pkey;
+    END IF;
+END $$;
+--------
 --- TODO: optimize index size and usage.
 create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1);
 create index if not exists idx_event_tags_key_value2                  on event_tags(event_tag_key, event_tag_value2);
@@ -133,7 +160,7 @@ BEGIN
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
         length(value->>0) = 1 OR value->>0 in ('expiration', 'summary', 'name', 'description', 'title', 'poll')
-    ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
+    ON CONFLICT DO NOTHING;
 
     RETURN NEW;
 END;
@@ -181,7 +208,7 @@ BEGIN
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
         length(value->>0) = 1 OR value->>0 in ('expiration', 'summary', 'name', 'description', 'title', 'poll')
-    ON CONFLICT(event_id, event_tag_key, event_tag_value1) DO NOTHING;
+    ON CONFLICT DO NOTHING;
 
     RETURN NEW;
 END;
@@ -376,7 +403,7 @@ BEGIN
         NEW.event_tag_value1,
         CASE
             WHEN e.kind = 1750 AND NEW.event_tag_key = 'h' THEN 'members'
-            WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('a', 'e') AND NEW.event_tag_value3 IN ('reply', 'root') THEN 'reply'
+            WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('a', 'e') AND NEW.event_tag_value3 = 'reply' THEN NEW.event_tag_value3
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('q', 'Q') THEN 'quote'
             WHEN e.kind = 3 AND NEW.event_tag_key = 'p' THEN 'follower'
             WHEN e.kind = 7 THEN e.content -- reaction type
@@ -408,7 +435,7 @@ BEGIN
                             jsonb_array_elements(tags) AS tag
                     ) OR NEW.event_tag_key = 'a'
                 WHEN e.kind IN (1, 6, 16, 30023, 30175) AND NEW.event_tag_key IN ('a', 'e') AND NEW.event_tag_value3 != '' THEN
-                    ((NEW.event_tag_value3 = 'root' AND (e.system_kind is null or e.system_kind = 2)) OR (NEW.event_tag_value3 = 'reply'))
+                    (NEW.event_tag_value3 = 'reply')
                 WHEN e.kind = 1750 AND NEW.event_tag_key = 'h' AND NEW.event_tag_value1 = community.h_tag THEN
                     (
                         c.closed_status = 1 AND
@@ -458,7 +485,7 @@ BEGIN
         AND event_counters.kind = e.kind
         AND event_counters.reference_type = CASE
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND OLD.event_tag_key IN ('a', 'e') AND
-                 ((OLD.event_tag_value3 = 'root' AND (e.system_kind is null or e.system_kind = 2)) OR (OLD.event_tag_value3 = 'reply')) THEN 'reply'
+                 (OLD.event_tag_value3 = 'reply') THEN OLD.event_tag_value3
             WHEN e.kind IN (1, 6, 16, 30023, 30175) AND OLD.event_tag_key IN ('q', 'Q') THEN 'quote'
             WHEN e.kind = 3 AND OLD.event_tag_key = 'p' THEN 'follower'
             WHEN e.kind = 7 THEN e.content

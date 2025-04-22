@@ -625,7 +625,10 @@ func TestEventCountersConsistency(t *testing.T) {
 				var reply1 model.Event
 				reply1.CreatedAt = 1
 				reply1.Kind = nostr.KindTextNote
-				reply1.Tags = append(reply1.Tags, model.Tag{"e", ev1.ID, "", model.TagMarkerRoot})
+				reply1.Tags = model.Tags{
+					{"e", ev1.ID, "", model.TagMarkerRoot},
+					{"e", ev1.ID, "", model.TagMarkerReply},
+				}
 				require.NoError(t, reply1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reply2 model.Event
