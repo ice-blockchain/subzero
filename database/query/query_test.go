@@ -1565,3 +1565,42 @@ func TestReplaceEventCheckSignature(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 }
+
+func TestQueryDependencyWithReply(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	priv, pub := model.GenerateKeyPair()
+	var rootEvent, replyEvent model.Event
+
+	rootEvent.CreatedAt = nostr.Now()
+	rootEvent.Kind = model.CustomIONKindEditableTextNote
+	rootEvent.Content = "root post"
+	rootEvent.Tags = model.Tags{
+		{"d", "root1"},
+	}
+	require.NoError(t, rootEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	replyEvent.CreatedAt = nostr.Now()
+	replyEvent.Kind = model.CustomIONKindEditableTextNote
+	replyEvent.Content = "reply post"
+	replyEvent.Tags = model.Tags{
+		{"a", rootEvent.Address(), "", "root"},
+		{"a", rootEvent.Address(), "", "reply"},
+		{"d", "reply1"},
+	}
+	require.NoError(t, replyEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &rootEvent, &replyEvent))
+
+	f := model.Filter{
+		Authors: []string{pub},
+		Kinds:   []int{model.CustomIONKindEditableTextNote},
+		Limit:   10,
+		Search:  `include:dependencies:kind30175>` + pub + `@kind30175+e+reply references:false`,
+	}
+
+	events := helperSelectEvents(t, db, f)
+	require.ElementsMatch(t, events, []*model.Event{&replyEvent, &rootEvent}, "should return both events") // root post, and reply using the dependency.
+}
