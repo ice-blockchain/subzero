@@ -3,7 +3,8 @@
 package pushnotifications
 
 import (
-	"encoding/json"
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -11,315 +12,379 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandlePaymentRequestNotification(t *testing.T) {
-	t.Parallel()
-	pm := &PushNotificationManager{
-		devices:         make(map[DeviceID]DeviceInfo),
-		userDevices:     make(map[string][]DeviceID),
-		filterToDevices: make(map[NotificationType]map[DeviceID]bool),
+func helperCreateGiftWrapPaymentEvent(t *testing.T, id string, senderPubKey string, recipientPubKey string, wrappedKind int, tags []string) *model.Event {
+	t.Helper()
+
+	eventTags := nostr.Tags{}
+	if recipientPubKey != "" {
+		eventTags = append(eventTags, nostr.Tag{"p", recipientPubKey})
 	}
 
-	pm.filterToDevices[NotificationTypePaymentRequest] = make(map[DeviceID]bool)
+	eventTags = append(eventTags, nostr.Tag{"k", strconv.Itoa(wrappedKind)})
 
-	content := paymentRequestContent{
-		Amount:    "100",
-		AmountUSD: "100.00",
-		AssetID:   "ice",
-		From:      "sender_address",
-		To:        "recipient_address",
+	for i := 0; i < len(tags); i += 2 {
+		if i+1 < len(tags) {
+			eventTags = append(eventTags, nostr.Tag{tags[i], tags[i+1]})
+		}
 	}
 
-	contentBytes, err := json.Marshal(content)
-	require.NoError(t, err)
-
-	event := helperCreateTestEvent(
-		t,
-		"test_id",
-		"sender_pubkey",
-		model.CustomIONKindFundReceive,
-		string(contentBytes),
-		nostr.Tags{
-			{"p", "recipient_pubkey"},
-			{"network", "ion"},
-			{"asset_class", "ice"},
-			{"asset_address", "ice_address"},
-		},
-	)
-
-	pm.devices[DeviceID("device1")] = DeviceInfo{
-		DeviceID: "device1",
-		FCMToken: "test_token",
-		PubKey:   "recipient_pubkey",
-		Filters: nostr.Filters{
-			{
-				Kinds: []int{model.CustomIONKindFundReceive},
-			},
+	return &model.Event{
+		Event: nostr.Event{
+			ID:      id,
+			PubKey:  senderPubKey,
+			Kind:    nostr.KindGiftWrap,
+			Content: "",
+			Tags:    eventTags,
 		},
 	}
-
-	pm.userDevices["recipient_pubkey"] = []DeviceID{"device1"}
-	pm.filterToDevices[NotificationTypePaymentRequest]["device1"] = true
-
-	notifications := pm.handlePaymentRequestNotification(&event.Event)
-
-	require.NotNil(t, notifications)
-	require.Len(t, notifications, 1, "Should create one notification")
-
-	notification := notifications[0]
-	require.Equal(t, "test_token", notification.Target.Token, "Token should match")
-	require.Equal(t, DeviceID("device1"), notification.Target.DeviceID, "DeviceID should match")
-
-	require.Equal(t, "test_id", notification.Data["eventId"])
-	require.Equal(t, "sender_pubkey", notification.Data["authorPubKey"])
-	require.Equal(t, string(NotificationTypePaymentRequest), notification.Data["notificationType"])
-	require.Equal(t, "100", notification.Data["amount"])
-	require.Equal(t, "100.00", notification.Data["amountUsd"])
-	require.Equal(t, "ice", notification.Data["assetId"])
-	require.Equal(t, "sender_address", notification.Data["from"])
-	require.Equal(t, "recipient_address", notification.Data["to"])
-	require.Equal(t, "ion", notification.Data["network"])
-	require.Equal(t, "ice", notification.Data["assetClass"])
-	require.Equal(t, "ice_address", notification.Data["assetAddress"])
 }
 
 func TestHandlePaymentReceivedNotification(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{
-		devices:         make(map[DeviceID]DeviceInfo),
-		userDevices:     make(map[string][]DeviceID),
-		filterToDevices: make(map[NotificationType]map[DeviceID]bool),
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
 	}
 
-	pm.filterToDevices[NotificationTypePaymentReceived] = make(map[DeviceID]bool)
+	senderPubKey := "sender_pubkey"
+	recipientPubKey := "recipient_pubkey"
 
-	content := paymentReceivedContent{
-		Amount:    "100",
-		AmountUSD: "100.00",
-		AssetID:   "ice",
-		TxHash:    "tx_hash_123",
-		TxURL:     "https://example.com/tx/tx_hash_123",
-		From:      "sender_address",
-		To:        "recipient_address",
-	}
-
-	contentBytes, err := json.Marshal(content)
-	require.NoError(t, err)
-	event := helperCreateTestEvent(
+	paymentEvent := helperCreateGiftWrapPaymentEvent(
 		t,
-		"test_id",
-		"sender_pubkey",
-		model.CustomIONKindFundSendNotify,
-		string(contentBytes),
-		nostr.Tags{
-			{"p", "recipient_pubkey"},
-			{"network", "ion"},
-			{"asset_class", "ice"},
-			{"asset_address", "ice_address"},
-			{"request", "request_event_id"},
+		"payment_received_id",
+		senderPubKey,
+		recipientPubKey,
+		model.CustomIONKindFundReceive,
+		[]string{
+			"amount", "100.00",
+			"amount_usd", "5.00",
+			"asset_id", "btc",
+			"asset_class", "btc",
+			"network", "bitcoin",
 		},
 	)
 
-	pm.devices[DeviceID("device1")] = DeviceInfo{
-		DeviceID: "device1",
-		FCMToken: "test_token",
-		PubKey:   "recipient_pubkey",
-		Filters: nostr.Filters{
-			{
-				Kinds: []int{model.CustomIONKindFundSendNotify},
-			},
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindGiftWrap},
 		},
 	}
 
-	pm.userDevices["recipient_pubkey"] = []DeviceID{"device1"}
-	pm.filterToDevices[NotificationTypePaymentReceived]["device1"] = true
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		recipientPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
 
-	notifications := pm.handlePaymentReceivedNotification(&event.Event)
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	require.NotNil(t, notifications)
+	notifications := pm.processGiftWrapEvent(paymentEvent)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, "test_token", notification.Target.Token, "Token should match")
-	require.Equal(t, DeviceID("device1"), notification.Target.DeviceID, "DeviceID should match")
+	require.Equal(t, DefaultTranslations[NotificationTypePaymentReceived].Title, notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypePaymentReceived].Body, notification.Body, "Body should match")
+	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
-	require.Equal(t, "test_id", notification.Data["eventId"])
-	require.Equal(t, "sender_pubkey", notification.Data["authorPubKey"])
-	require.Equal(t, string(NotificationTypePaymentReceived), notification.Data["notificationType"])
-	require.Equal(t, "100", notification.Data["amount"])
-	require.Equal(t, "100.00", notification.Data["amountUsd"])
-	require.Equal(t, "ice", notification.Data["assetId"])
-	require.Equal(t, "sender_address", notification.Data["from"])
-	require.Equal(t, "recipient_address", notification.Data["to"])
-	require.Equal(t, "tx_hash_123", notification.Data["txHash"])
-	require.Equal(t, "https://example.com/tx/tx_hash_123", notification.Data["txUrl"])
-	require.Equal(t, "request_event_id", notification.Data["requestEvent"])
-	require.Equal(t, "ion", notification.Data["network"])
-	require.Equal(t, "ice", notification.Data["assetClass"])
-	require.Equal(t, "ice_address", notification.Data["assetAddress"])
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+	require.Equal(t, string(NotificationTypePaymentReceived), notification.Data["notificationType"], "NotificationType should match")
 }
 
-func TestExtractPaymentInfoFromEvent(t *testing.T) {
+func TestHandlePaymentRequestNotification(t *testing.T) {
 	t.Parallel()
-
-	content := paymentRequestContent{
-		Amount:    "100",
-		AmountUSD: "100.00",
-		AssetID:   "ice",
-		From:      "sender_address",
-		To:        "recipient_address",
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
 	}
 
-	contentBytes, err := json.Marshal(content)
-	require.NoError(t, err)
+	requesterPubKey := "requester_pubkey"
+	payerPubKey := "payer_pubkey"
 
-	requestEvent := helperCreateTestEvent(
+	paymentRequestEvent := helperCreateGiftWrapPaymentEvent(
 		t,
-		"test_id",
-		"sender_pubkey",
-		model.CustomIONKindFundReceive,
-		string(contentBytes),
-		nostr.Tags{
-			{"p", "recipient_pubkey"},
-			{"network", "ion"},
-			{"asset_class", "ice"},
-			{"asset_address", "ice_address"},
-		},
-	)
-
-	info, err := extractPaymentInfoFromEvent(&requestEvent.Event)
-	require.NoError(t, err)
-	require.NotNil(t, info)
-	require.Equal(t, "test_id", info.EventID)
-	require.Equal(t, model.CustomIONKindFundReceive, info.EventKind)
-	require.Equal(t, "sender_pubkey", info.AuthorPubKey)
-	require.Equal(t, "recipient_pubkey", info.RecipientKey)
-	require.Equal(t, "ion", info.Network)
-	require.Equal(t, "ice", info.AssetClass)
-	require.Equal(t, "ice_address", info.AssetAddress)
-	require.Equal(t, "100", info.Amount)
-	require.Equal(t, "100.00", info.AmountUSD)
-	require.Equal(t, "ice", info.AssetID)
-	require.Equal(t, "sender_address", info.From)
-	require.Equal(t, "recipient_address", info.To)
-	require.Empty(t, info.TxHash)
-	require.Empty(t, info.TxURL)
-
-	receiveContent := paymentReceivedContent{
-		Amount:    "100",
-		AmountUSD: "100.00",
-		AssetID:   "ice",
-		TxHash:    "tx_hash_123",
-		TxURL:     "https://example.com/tx/tx_hash_123",
-		From:      "sender_address",
-		To:        "recipient_address",
-	}
-
-	receiveContentBytes, _ := json.Marshal(receiveContent)
-
-	receiveEvent := helperCreateTestEvent(
-		t,
-		"test_id",
-		"sender_pubkey",
+		"payment_request_id",
+		requesterPubKey,
+		payerPubKey,
 		model.CustomIONKindFundSendNotify,
-		string(receiveContentBytes),
-		nostr.Tags{
-			{"p", "recipient_pubkey"},
-			{"network", "ion"},
-			{"asset_class", "ice"},
-			{"asset_address", "ice_address"},
-			{"request", "request_event_id"},
+		[]string{
+			"amount", "50.00",
+			"amount_usd", "2.50",
+			"asset_id", "eth",
+			"asset_class", "eth",
+			"network", "ethereum",
 		},
 	)
 
-	info, err = extractPaymentInfoFromEvent(&receiveEvent.Event)
-	require.NoError(t, err)
-	require.NotNil(t, info)
-	require.Equal(t, "test_id", info.EventID)
-	require.Equal(t, model.CustomIONKindFundSendNotify, info.EventKind)
-	require.Equal(t, "sender_pubkey", info.AuthorPubKey)
-	require.Equal(t, "recipient_pubkey", info.RecipientKey)
-	require.Equal(t, "ion", info.Network)
-	require.Equal(t, "ice", info.AssetClass)
-	require.Equal(t, "ice_address", info.AssetAddress)
-	require.Equal(t, "100", info.Amount)
-	require.Equal(t, "100.00", info.AmountUSD)
-	require.Equal(t, "ice", info.AssetID)
-	require.Equal(t, "sender_address", info.From)
-	require.Equal(t, "recipient_address", info.To)
-	require.Equal(t, "tx_hash_123", info.TxHash)
-	require.Equal(t, "https://example.com/tx/tx_hash_123", info.TxURL)
-	require.Equal(t, "request_event_id", info.RequestEvent)
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindGiftWrap},
+		},
+	}
+
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		payerPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	notifications := pm.processGiftWrapEvent(paymentRequestEvent)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+
+	require.Len(t, notifications, 1, "Should create one notification")
+
+	notification := notifications[0]
+	require.Equal(t, DefaultTranslations[NotificationTypePaymentRequest].Title, notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypePaymentRequest].Body, notification.Body, "Body should match")
+	require.Equal(t, deviceEvent, notification.Target, "Target should match")
+
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+	require.Equal(t, string(NotificationTypePaymentRequest), notification.Data["notificationType"], "NotificationType should match")
 }
 
-func TestPopulateNotificationDataFromPaymentInfo(t *testing.T) {
+func TestHandlePaymentNotificationSelfPayment(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	userPubKey := "user_pubkey"
+
+	selfPaymentEvent := helperCreateGiftWrapPaymentEvent(
+		t,
+		"self_payment_id",
+		userPubKey,
+		userPubKey,
+		model.CustomIONKindFundReceive,
+		[]string{
+			"amount", "100.00",
+			"asset_id", "btc",
+		},
+	)
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindGiftWrap},
+		},
+	}
+
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		userPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	notifications := pm.processGiftWrapEvent(selfPaymentEvent)
+
+	require.Empty(t, notifications, "Should not create notifications for self-payments")
+}
+
+func TestHandlePaymentNotificationNoRecipient(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	noRecipientEvent := helperCreateGiftWrapPaymentEvent(
+		t,
+		"payment_no_recipient_id",
+		"sender_pubkey",
+		"",
+		model.CustomIONKindFundReceive,
+		[]string{
+			"amount", "100.00",
+			"asset_id", "btc",
+		},
+	)
+
+	notifications := pm.processGiftWrapEvent(noRecipientEvent)
+
+	require.Nil(t, notifications, "Should not create notifications for payments without recipient")
+}
+
+func TestHandlePaymentNotificationDifferentAssetTypes(t *testing.T) {
 	t.Parallel()
 
-	paymentRequestInfo := &paymentInfo{
-		EventID:      "test_id",
-		EventKind:    model.CustomIONKindFundReceive,
-		AuthorPubKey: "sender_pubkey",
-		RecipientKey: "recipient_pubkey",
-		Network:      "ion",
-		AssetClass:   "ice",
-		AssetAddress: "ice_address",
-		Amount:       "100",
-		AmountUSD:    "100.00",
-		AssetID:      "ice",
-		From:         "sender_address",
-		To:           "recipient_address",
+	testCases := []struct {
+		name       string
+		amount     string
+		amountUSD  string
+		assetID    string
+		assetClass string
+		network    string
+	}{
+		{
+			name:       "Bitcoin payment",
+			amount:     "0.01",
+			amountUSD:  "300.00",
+			assetID:    "btc",
+			assetClass: "btc",
+			network:    "bitcoin",
+		},
+		{
+			name:       "Ethereum payment",
+			amount:     "1.5",
+			amountUSD:  "2500.00",
+			assetID:    "eth",
+			assetClass: "eth",
+			network:    "ethereum",
+		},
+		{
+			name:       "USDT payment",
+			amount:     "100.00",
+			amountUSD:  "100.00",
+			assetID:    "usdt",
+			assetClass: "usdt",
+			network:    "ethereum",
+		},
 	}
 
-	data := populateNotificationDataFromPaymentInfo(paymentRequestInfo, NotificationTypePaymentRequest)
-	require.NotNil(t, data)
-	require.Equal(t, "test_id", data["eventId"])
-	require.Equal(t, "sender_pubkey", data["authorPubKey"])
-	require.Equal(t, string(NotificationTypePaymentRequest), data["notificationType"])
-	require.Equal(t, "100", data["amount"])
-	require.Equal(t, "100.00", data["amountUsd"])
-	require.Equal(t, "ice", data["assetId"])
-	require.Equal(t, "sender_address", data["from"])
-	require.Equal(t, "recipient_address", data["to"])
-	require.Equal(t, "ion", data["network"])
-	require.Equal(t, "ice", data["assetClass"])
-	require.Equal(t, "ice_address", data["assetAddress"])
-	require.NotContains(t, data, "txHash")
-	require.NotContains(t, data, "txUrl")
-	require.NotContains(t, data, "requestEvent")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pm := &PushNotificationManager{
+				devices:     make(map[DeviceID]DeviceInfo),
+				userDevices: make(map[string][]DeviceID),
+			}
 
-	paymentReceivedInfo := &paymentInfo{
-		EventID:      "test_id",
-		EventKind:    model.CustomIONKindFundSendNotify,
-		AuthorPubKey: "sender_pubkey",
-		RecipientKey: "recipient_pubkey",
-		Network:      "ion",
-		AssetClass:   "ice",
-		AssetAddress: "ice_address",
-		Amount:       "100",
-		AmountUSD:    "100.00",
-		AssetID:      "ice",
-		From:         "sender_address",
-		To:           "recipient_address",
-		TxHash:       "tx_hash_123",
-		TxURL:        "https://example.com/tx/tx_hash_123",
-		RequestEvent: "request_event_id",
+			senderPubKey := "sender_" + tc.assetID
+			recipientPubKey := "recipient_" + tc.assetID
+
+			paymentEvent := helperCreateGiftWrapPaymentEvent(
+				t,
+				"payment_"+tc.assetID,
+				senderPubKey,
+				recipientPubKey,
+				model.CustomIONKindFundReceive,
+				[]string{
+					"amount", tc.amount,
+					"amount_usd", tc.amountUSD,
+					"asset_id", tc.assetID,
+					"asset_class", tc.assetClass,
+					"network", tc.network,
+				},
+			)
+
+			filters := nostr.Filters{
+				{
+					Kinds: []int{nostr.KindGiftWrap},
+				},
+			}
+
+			deviceEvent := helperCreateTestDeviceRegistrationEvent(
+				t,
+				recipientPubKey,
+				"device_"+tc.assetID,
+				[]string{"t", "ios", "token", "test_token_" + tc.assetID},
+				filters,
+			)
+
+			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+			notifications := pm.processGiftWrapEvent(paymentEvent)
+
+			require.NotNil(t, notifications, "Notifications should not be nil")
+
+			require.Len(t, notifications, 1, "Should create one notification")
+
+			notification := notifications[0]
+			require.Equal(t, DefaultTranslations[NotificationTypePaymentReceived].Title, notification.Title, "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypePaymentReceived].Body, notification.Body, "Body should match")
+			require.Equal(t, deviceEvent, notification.Target, "Target should match")
+
+			require.Contains(t, notification.Data, "event", "Data should contain event")
+			require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+			require.Equal(t, string(NotificationTypePaymentReceived), notification.Data["notificationType"], "NotificationType should match")
+		})
+	}
+}
+
+func TestHandlePaymentNotificationMultipleDevices(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
 	}
 
-	data = populateNotificationDataFromPaymentInfo(paymentReceivedInfo, NotificationTypePaymentReceived)
-	require.NotNil(t, data)
-	require.Equal(t, "test_id", data["eventId"])
-	require.Equal(t, "sender_pubkey", data["authorPubKey"])
-	require.Equal(t, string(NotificationTypePaymentReceived), data["notificationType"])
-	require.Equal(t, "100", data["amount"])
-	require.Equal(t, "100.00", data["amountUsd"])
-	require.Equal(t, "ice", data["assetId"])
-	require.Equal(t, "sender_address", data["from"])
-	require.Equal(t, "recipient_address", data["to"])
-	require.Equal(t, "ion", data["network"])
-	require.Equal(t, "ice", data["assetClass"])
-	require.Equal(t, "ice_address", data["assetAddress"])
-	require.Equal(t, "tx_hash_123", data["txHash"])
-	require.Equal(t, "https://example.com/tx/tx_hash_123", data["txUrl"])
-	require.Equal(t, "request_event_id", data["requestEvent"])
+	senderPubKey := "multi_sender_pubkey"
+	recipientPubKey := "multi_recipient_pubkey"
 
-	require.Nil(t, populateNotificationDataFromPaymentInfo(nil, NotificationTypePaymentReceived))
+	paymentEvent := helperCreateGiftWrapPaymentEvent(
+		t,
+		"multi_payment_id",
+		senderPubKey,
+		recipientPubKey,
+		model.CustomIONKindFundReceive,
+		[]string{
+			"amount", "250.00",
+			"amount_usd", "250.00",
+			"asset_id", "usdc",
+			"asset_class", "usdc",
+			"network", "polygon",
+		},
+	)
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindGiftWrap},
+		},
+	}
+
+	deviceCount := 3
+	deviceEvents := make([]*model.Event, deviceCount)
+	for i := 0; i < deviceCount; i++ {
+		deviceEvents[i] = helperCreateTestDeviceRegistrationEvent(
+			t,
+			recipientPubKey,
+			fmt.Sprintf("multi_device%d", i+1),
+			[]string{"t", "ios", "token", fmt.Sprintf("multi_token%d", i+1)},
+			filters,
+		)
+
+		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvents[i]))
+	}
+
+	notifications := pm.processGiftWrapEvent(paymentEvent)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+
+	require.Len(t, notifications, deviceCount, "Should create notifications for all devices")
+
+	targetDeviceIDs := make(map[string]bool)
+	for _, device := range deviceEvents {
+		targetDeviceIDs[device.Tags.GetD()] = false
+	}
+
+	for _, notification := range notifications {
+		deviceID := notification.Target.Tags.GetD()
+		_, exists := targetDeviceIDs[deviceID]
+		require.True(t, exists, "Notification should be for a registered device")
+		targetDeviceIDs[deviceID] = true
+
+		require.Equal(t, DefaultTranslations[NotificationTypePaymentReceived].Title, notification.Title, "Title should match")
+		require.Equal(t, DefaultTranslations[NotificationTypePaymentReceived].Body, notification.Body, "Body should match")
+		require.Contains(t, notification.Data, "event", "Data should contain event")
+		require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+		require.Equal(t, string(NotificationTypePaymentReceived), notification.Data["notificationType"], "NotificationType should match")
+	}
+
+	for deviceID, processed := range targetDeviceIDs {
+		require.True(t, processed, "Device %s should have received a notification", deviceID)
+	}
 }

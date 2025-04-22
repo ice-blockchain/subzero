@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package pushnotifications
 
 import (
@@ -7,8 +8,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -19,37 +22,29 @@ import (
 )
 
 type (
-	DeviceID         = pn.DeviceID
 	PublicKey        = string
 	NotificationType string
 	Language         string
 
 	NotificationKind struct {
-		Title       string
-		Description string
-		ImageURL    string
-	}
-	DeviceInfo struct {
-		DeviceID                  DeviceID
-		Platform                  string
-		RelayURL                  string
-		FCMToken                  string
-		Filters                   nostr.Filters
-		PubKey                    PublicKey
-		Invalid                   bool
-		DeviceRegistrationEventID string
+		Title    string
+		Body     string
+		ImageURL string
 	}
 
 	PushNotificationManager struct {
 		devices                map[DeviceID]DeviceInfo
 		userDevices            map[PublicKey][]DeviceID
-		filterToDevices        map[NotificationType]map[DeviceID]bool
 		deviceMutex            sync.RWMutex
 		pushNotificationClient *pn.Client
 	}
 
 	config struct {
 		FCMCredentialsPath string `yaml:"fcm-credentials-path" validate:"required"`
+	}
+	notificationCollections struct {
+		single []*pn.Notification[*model.Event]
+		topic  []*pn.Notification[pn.SubscriptionTopic]
 	}
 )
 
@@ -68,86 +63,75 @@ const (
 	NotificationTypeNewFollower      NotificationType = "new_follower"
 )
 
-var DefaultTranslations = map[NotificationType]NotificationKind{
-	NotificationTypePost: {
-		Title:       "New post",
-		Description: "You have a new post",
-		ImageURL:    "",
-	},
-	NotificationTypeReaction: {
-		Title:       "New reaction",
-		Description: "Someone reacted to your post",
-		ImageURL:    "",
-	},
-	NotificationTypeRepost: {
-		Title:       "New repost",
-		Description: "Someone reposted your post",
-		ImageURL:    "",
-	},
-	NotificationTypeMention: {
-		Title:       "New mention",
-		Description: "Someone mentioned you",
-		ImageURL:    "",
-	},
-	NotificationTypeReply: {
-		Title:       "New reply",
-		Description: "Someone replied to your post",
-		ImageURL:    "",
-	},
-	NotificationTypeDirectMessage: {
-		Title:       "New message",
-		Description: "You have a new message",
-		ImageURL:    "",
-	},
-	NotificationTypeGroupChatMessage: {
-		Title:       "New group message",
-		Description: "New message in group",
-		ImageURL:    "",
-	},
-	NotificationTypeChannelMessage: {
-		Title:       "New channel message",
-		Description: "New message in channel",
-		ImageURL:    "",
-	},
-	NotificationTypePaymentRequest: {
-		Title:       "Payment request",
-		Description: "Someone requested a payment",
-		ImageURL:    "",
-	},
-	NotificationTypePaymentReceived: {
-		Title:       "Payment received",
-		Description: "You received a payment",
-		ImageURL:    "",
-	},
-	NotificationTypeSystem: {
-		Title:       "System notification",
-		Description: "System notification",
-		ImageURL:    "",
-	},
-	NotificationTypeNewFollower: {
-		Title:       "New follower",
-		Description: "Someone is now following you",
-		ImageURL:    "",
-	},
-}
+var (
+	globalPushNotificationManager *PushNotificationManager
+	DefaultTranslations           = map[NotificationType]NotificationKind{
+		NotificationTypePost: {
+			Title:    "New post",
+			Body:     "You have a new post",
+			ImageURL: "",
+		},
+		NotificationTypeReaction: {
+			Title:    "New reaction",
+			Body:     "Someone reacted to your post",
+			ImageURL: "",
+		},
+		NotificationTypeRepost: {
+			Title:    "New repost",
+			Body:     "Someone reposted your post",
+			ImageURL: "",
+		},
+		NotificationTypeMention: {
+			Title:    "New mention",
+			Body:     "Someone mentioned you",
+			ImageURL: "",
+		},
+		NotificationTypeReply: {
+			Title:    "New reply",
+			Body:     "Someone replied to your post",
+			ImageURL: "",
+		},
+		NotificationTypeDirectMessage: {
+			Title:    "New message",
+			Body:     "You have a new message",
+			ImageURL: "",
+		},
+		NotificationTypeGroupChatMessage: {
+			Title:    "New group message",
+			Body:     "New message in group",
+			ImageURL: "",
+		},
+		NotificationTypeChannelMessage: {
+			Title:    "New channel message",
+			Body:     "New message in channel",
+			ImageURL: "",
+		},
+		NotificationTypePaymentRequest: {
+			Title:    "Payment request",
+			Body:     "Someone requested a payment",
+			ImageURL: "",
+		},
+		NotificationTypePaymentReceived: {
+			Title:    "Payment received",
+			Body:     "You received a payment",
+			ImageURL: "",
+		},
+		NotificationTypeSystem: {
+			Title:    "System notification",
+			Body:     "System notification",
+			ImageURL: "",
+		},
+		NotificationTypeNewFollower: {
+			Title:    "New follower",
+			Body:     "Someone is now following you",
+			ImageURL: "",
+		},
+	}
+)
 
-func NewPushNotificationManager() *PushNotificationManager {
+func MustInit() {
 	devices := make(map[DeviceID]DeviceInfo)
 	userDevices := make(map[PublicKey][]DeviceID)
-	filterToDevices := make(map[NotificationType]map[DeviceID]bool)
-
-	filterToDevices[NotificationTypePost] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeMention] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeReply] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeReaction] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeRepost] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeNewFollower] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeDirectMessage] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeGroupChatMessage] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeChannelMessage] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypePaymentRequest] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypePaymentReceived] = make(map[DeviceID]bool)
-	filterToDevices[NotificationTypeSystem] = make(map[DeviceID]bool)
 
 	var pnClient pn.Client
 	var err error
@@ -166,182 +150,133 @@ func NewPushNotificationManager() *PushNotificationManager {
 		panic("Failed to create push notification client")
 	}
 
-	pm := &PushNotificationManager{
+	globalPushNotificationManager = &PushNotificationManager{
 		devices:                devices,
 		userDevices:            userDevices,
-		filterToDevices:        filterToDevices,
 		pushNotificationClient: &pnClient,
 	}
 
-	if err := pm.fullSyncDevices(context.Background()); err != nil {
-		log.Printf("Error performing full device synchronization at startup: %v", err)
+	if err := globalPushNotificationManager.syncDevices(context.Background()); err != nil {
+		panic(errors.Wrap(err, "failed to perform full device synchronization at startup"))
 	}
-
-	return pm
 }
 
-func (pm *PushNotificationManager) Notify(ctx context.Context, events []*model.Event) error {
+func AcceptEvents(ctx context.Context, events []*model.Event) error {
+	if err := globalPushNotificationManager.ProcessDeviceRegistrationEvents(ctx, events); err != nil {
+		return err
+	}
+
+	return globalPushNotificationManager.AcceptEvents(ctx, events)
+}
+
+func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*model.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
 
-	singleNotifications := make([]*pn.Notification[pn.DeviceToken], 0)
-	topicNotifications := make([]*pn.Notification[pn.SubscriptionTopic], 0)
+	notifications := pm.collectNotifications(ctx, events)
 
-	eventsByKind := make(map[int][]*model.Event)
-	for _, event := range events {
-		eventsByKind[event.Kind] = append(eventsByKind[event.Kind], event)
+	return pm.sendNotifications(ctx, notifications.single, notifications.topic)
+}
+
+func (pm *PushNotificationManager) collectNotifications(ctx context.Context, events []*model.Event) notificationCollections {
+	result := notificationCollections{
+		single: make([]*pn.Notification[*model.Event], 0),
+		topic:  make([]*pn.Notification[pn.SubscriptionTopic], 0),
 	}
+
+	eventsByKind := groupEventsByKind(events)
 
 	for kind, kindEvents := range eventsByKind {
 		notifications := pm.processEventsByKind(ctx, kind, kindEvents)
-
-		for _, notification := range notifications {
-			switch n := notification.(type) {
-			case *pn.Notification[pn.DeviceToken]:
-				singleNotifications = append(singleNotifications, n)
-			case *pn.Notification[pn.SubscriptionTopic]:
-				topicNotifications = append(topicNotifications, n)
-			}
-		}
+		result.single = append(result.single, notifications.single...)
+		result.topic = append(result.topic, notifications.topic...)
 	}
 
-	return pm.sendNotifications(ctx, singleNotifications, topicNotifications)
+	return result
 }
 
-func (pm *PushNotificationManager) collectValidDevices(pubKey PublicKey, notificationType NotificationType, event *model.Event) (iosDevices, otherDevices []struct {
-	deviceID DeviceID
-	token    string
-}) {
-	pm.deviceMutex.RLock()
-	deviceIDs, ok := pm.userDevices[pubKey]
-	pm.deviceMutex.RUnlock()
-
-	if !ok || len(deviceIDs) == 0 {
-		return nil, nil
+func groupEventsByKind(events []*model.Event) map[int][]*model.Event {
+	result := make(map[int][]*model.Event)
+	for _, event := range events {
+		result[event.Kind] = append(result[event.Kind], event)
 	}
 
-	pm.deviceMutex.RLock()
-	defer pm.deviceMutex.RUnlock()
-
-	for _, deviceID := range deviceIDs {
-		deviceInfo, exists := pm.devices[deviceID]
-		if !exists {
-			continue
-		}
-		if deviceInfo.Invalid {
-			continue
-		}
-		if _, hasFilter := pm.filterToDevices[notificationType][deviceID]; !hasFilter {
-			continue
-		}
-
-		if deviceInfo.Filters.Match(&event.Event) {
-			if deviceInfo.Platform == validation.DeviceTokenOSIOS {
-				iosDevices = append(iosDevices, struct {
-					deviceID DeviceID
-					token    string
-				}{
-					deviceID: deviceID,
-					token:    deviceInfo.FCMToken,
-				})
-			} else {
-				otherDevices = append(otherDevices, struct {
-					deviceID DeviceID
-					token    string
-				}{
-					deviceID: deviceID,
-					token:    deviceInfo.FCMToken,
-				})
-			}
-		}
-	}
-
-	return iosDevices, otherDevices
+	return result
 }
 
-func (pm *PushNotificationManager) addNotificationsToDevices(devices []struct {
-	deviceID DeviceID
-	token    string
-}, title, body, imageURL string, data map[string]interface{}) []*pn.Notification[pn.DeviceToken] {
-	if len(devices) == 0 {
-		return nil
+func (pm *PushNotificationManager) processEventsByKind(ctx context.Context, kind int, events []*model.Event) notificationCollections {
+	result := notificationCollections{
+		single: make([]*pn.Notification[*model.Event], 0),
+		topic:  make([]*pn.Notification[pn.SubscriptionTopic], 0),
 	}
-	notifications := make([]*pn.Notification[pn.DeviceToken], 0)
-	for _, device := range devices {
-		pm.deviceMutex.RLock()
-		deviceInfo, exists := pm.devices[device.deviceID]
-		pm.deviceMutex.RUnlock()
-
-		var deviceRegistrationEventID string
-		if exists {
-			deviceRegistrationEventID = deviceInfo.DeviceRegistrationEventID
-		}
-
-		notifications = append(notifications, &pn.Notification[pn.DeviceToken]{
-			Title:    title,
-			Body:     body,
-			Data:     data,
-			ImageURL: imageURL,
-			Target: pn.DeviceToken{
-				Token:                     device.token,
-				DeviceID:                  device.deviceID,
-				DeviceRegistrationEventID: deviceRegistrationEventID,
-			},
-		})
-	}
-
-	return notifications
-}
-
-func (pm *PushNotificationManager) processEventsByKind(ctx context.Context, kind int, events []*model.Event) []interface{} {
-	var allNotifications []interface{}
 
 	for _, event := range events {
-		var notifications interface{}
-
-		switch kind {
-		case nostr.KindTextNote:
-			notifications = pm.handlePostNotification(ctx, event)
-		case nostr.KindReaction:
-			notifications = pm.handleReactionNotification(event)
-		case nostr.KindGiftWrap:
-			notifications = pm.handleDirectMessageNotification(event)
-		case nostr.KindRepost, nostr.KindGenericRepost:
-			notifications = pm.handleRepostNotification(event)
-		case model.CustomIONKindFundSendNotify:
-			notifications = pm.handlePaymentRequestNotification(event)
-		case model.CustomIONKindFundReceive:
-			notifications = pm.handlePaymentReceivedNotification(event)
-		case nostr.KindFollowList:
-			notifications = pm.handleNewFollowerNotification(event)
-		case nostr.KindChannelMessage:
-			notifications = pm.handleChannelMessageNotification(event)
-		case nostr.KindSimpleGroupChatMessage:
-			notifications = pm.handleGroupChatMessageNotification(event)
-		case model.CustomIONSystemMessage:
-			notifications = pm.handleSystemNotification(event)
-		}
-
-		if notifications != nil {
-			switch n := notifications.(type) {
-			case []*pn.Notification[pn.DeviceToken]:
-				for _, notification := range n {
-					allNotifications = append(allNotifications, notification)
-				}
-			case []*pn.Notification[pn.SubscriptionTopic]:
-				for _, notification := range n {
-					allNotifications = append(allNotifications, notification)
-				}
+		if event.Kind == model.CustomIONSystemMessage {
+			if notifications := pm.handleSystemNotification(event); notifications != nil {
+				result.topic = append(result.topic, notifications...)
 			}
+		}
+		if notifications := pm.processEvent(ctx, kind, event); notifications != nil {
+			result.single = append(result.single, notifications...)
 		}
 	}
 
-	return allNotifications
+	return result
+}
+
+func (pm *PushNotificationManager) processEvent(ctx context.Context, kind int, event *model.Event) []*pn.Notification[*model.Event] {
+	switch kind {
+	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindRepost, nostr.KindGenericRepost:
+		return pm.processTextOrRepostEvent(ctx, kind, event)
+	case nostr.KindGiftWrap:
+		return pm.processGiftWrapEvent(event)
+	case nostr.KindFollowList:
+		return pm.handleNewFollowerNotification(event)
+	}
+
+	return nil
+}
+
+func (pm *PushNotificationManager) processTextOrRepostEvent(ctx context.Context, kind int, event *model.Event) []*pn.Notification[*model.Event] {
+	hTag := event.GetHTag()
+	if hTag != "" && hTag != event.ID {
+		return pm.handleCommunityMessageNotification(event)
+	}
+
+	if kind == nostr.KindRepost || kind == nostr.KindGenericRepost {
+		return pm.handleRepostNotification(event)
+	}
+
+	return pm.handlePostNotification(ctx, event)
+}
+
+func (pm *PushNotificationManager) processGiftWrapEvent(event *model.Event) []*pn.Notification[*model.Event] {
+	kTag := event.GetTag("k")
+	if kTag == nil {
+		return nil
+	}
+
+	kind, err := strconv.Atoi(kTag.Value())
+	if err != nil {
+		log.Printf("failed to convert k tag to int: %v", err)
+		return nil
+	}
+
+	switch kind {
+	case model.CustomIONKindFundReceive, model.CustomIONKindFundSendNotify:
+		return pm.handlePaymentNotification(event)
+	case nostr.KindDirectMessage, model.CustomIONDirectMessage:
+		return pm.handleDirectMessageNotification(event)
+	case nostr.KindReaction:
+		return pm.handleReactionNotification(event)
+	default:
+		return nil
+	}
 }
 
 func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
-	singleNotifications []*pn.Notification[pn.DeviceToken],
+	singleNotifications []*pn.Notification[*model.Event],
 	topicNotifications []*pn.Notification[pn.SubscriptionTopic]) error {
 
 	totalCount := len(singleNotifications) + len(topicNotifications)
@@ -350,12 +285,28 @@ func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
 	}
 
 	errChan := make(chan error, totalCount)
+	invalidDevices := pm.sendNotificationsAsync(ctx, singleNotifications, topicNotifications, errChan)
+
+	return pm.collectErrorsAndProcessInvalidDevices(ctx, totalCount, errChan, invalidDevices)
+}
+
+func (pm *PushNotificationManager) sendNotificationsAsync(
+	ctx context.Context,
+	singleNotifications []*pn.Notification[*model.Event],
+	topicNotifications []*pn.Notification[pn.SubscriptionTopic],
+	errChan chan error) []*model.Event {
+
+	var invalidDevicesMutex sync.Mutex
+	invalidDevices := make([]*model.Event, 0)
 
 	for _, notification := range singleNotifications {
-		go func(n *pn.Notification[pn.DeviceToken]) {
+		go func(n *pn.Notification[*model.Event]) {
 			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
 			if err != nil && pn.IsInvalidDeviceToken(err) {
-				pm.handleInvalidDeviceToken(ctx, n.Target.DeviceID, errChan)
+				invalidDevicesMutex.Lock()
+				invalidDevices = append(invalidDevices, n.Target)
+				invalidDevicesMutex.Unlock()
+				errChan <- nil
 			} else {
 				errChan <- err
 			}
@@ -368,9 +319,19 @@ func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
 		}(notification)
 	}
 
+	return invalidDevices
+}
+
+func (pm *PushNotificationManager) collectErrorsAndProcessInvalidDevices(ctx context.Context, totalCount int, errChan chan error, invalidDevices []*model.Event) error {
 	var errors []error
 	for i := 0; i < totalCount; i++ {
 		if err := <-errChan; err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	if len(invalidDevices) > 0 {
+		if err := pm.handleInvalidDeviceTokens(ctx, invalidDevices); err != nil {
 			errors = append(errors, err)
 		}
 	}
@@ -382,72 +343,93 @@ func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
 	return nil
 }
 
-func (pm *PushNotificationManager) handleInvalidDeviceToken(ctx context.Context, deviceID pn.DeviceID, errChan chan<- error) {
-	pm.deviceMutex.RLock()
-	deviceInfo, exists := pm.devices[deviceID]
-	pm.deviceMutex.RUnlock()
+func (pm *PushNotificationManager) handleInvalidDeviceTokens(ctx context.Context, deviceEvents []*model.Event) error {
+	if len(deviceEvents) == 0 {
+		return nil
+	}
 
-	if exists {
-		deviceRegistrationEventID := deviceInfo.DeviceRegistrationEventID
+	if err := pm.markDevicesAsInvalidInCache(deviceEvents); err != nil {
+		return err
+	}
 
-		if deviceRegistrationEventID == "" {
-			errChan <- fmt.Errorf("cannot mark token as invalid: missing EventID for device %s", deviceID)
+	return query.MarkTokenAsInvalidInEvents(ctx, deviceEvents)
+}
 
-			return
-		}
-
-		if err := query.MarkTokenAsInvalid(ctx, deviceRegistrationEventID); err != nil {
-			errChan <- fmt.Errorf("error marking token as invalid: %w", err)
-
-			return
+func (pm *PushNotificationManager) markDevicesAsInvalidInCache(deviceEvents []*model.Event) error {
+	for _, deviceEvent := range deviceEvents {
+		deviceID := DeviceID(deviceEvent.Tags.GetD())
+		if deviceID == "" {
+			return errors.New("device ID not found in event tags")
 		}
 
 		pm.deviceMutex.Lock()
-		deviceInfo.Invalid = true
-		pm.devices[deviceID] = deviceInfo
+		deviceInfo, ok := pm.devices[deviceID]
+		if ok {
+			deviceInfo.HasInvalidToken = true
+			pm.devices[deviceID] = deviceInfo
+		}
 		pm.deviceMutex.Unlock()
 	}
 
-	errChan <- nil
+	return nil
 }
 
-func (pm *PushNotificationManager) createAndSendNotifications(
-	iosDevices, otherDevices []struct {
-		deviceID DeviceID
-		token    string
-	},
-	notificationType NotificationType,
-	data map[string]interface{},
-) []*pn.Notification[pn.DeviceToken] {
-	notifications := make([]*pn.Notification[pn.DeviceToken], 0)
-	if len(iosDevices) > 0 {
-		title := getDefaultTranslation(notificationType, "title")
-		body := getDefaultTranslation(notificationType, "body")
-		imageURL := DefaultTranslations[notificationType].ImageURL
-
-		notifications = append(notifications, pm.addNotificationsToDevices(iosDevices, title, body, imageURL, data)...)
+func (pm *PushNotificationManager) createNotifications(deviceEvents []*model.Event, notificationType NotificationType, data map[string]interface{}) []*pn.Notification[*model.Event] {
+	if len(deviceEvents) == 0 {
+		return nil
 	}
-	if len(otherDevices) > 0 {
-		notifications = append(notifications, pm.addNotificationsToDevices(otherDevices, "", "", "", data)...)
+	data["notificationType"] = string(notificationType)
+
+	notifications := make([]*pn.Notification[*model.Event], 0)
+	defaultTranslation := DefaultTranslations[notificationType]
+	for _, deviceEvent := range deviceEvents {
+		platform := deviceEvent.GetTag("t").Value()
+		if platform == validation.DeviceTokenOSAndroid {
+			data["title"] = defaultTranslation.Title
+			data["body"] = defaultTranslation.Body
+			data["imageURL"] = defaultTranslation.ImageURL
+			notifications = append(notifications, &pn.Notification[*model.Event]{
+				Target: deviceEvent,
+				Data:   data,
+			})
+		} else {
+			notifications = append(notifications, &pn.Notification[*model.Event]{
+				Target:   deviceEvent,
+				Title:    defaultTranslation.Title,
+				Body:     defaultTranslation.Body,
+				ImageURL: defaultTranslation.ImageURL,
+				Data:     data,
+			})
+		}
 	}
 
 	return notifications
 }
 
-func getDefaultTranslation(notificationType NotificationType, key string) string {
-	if defaultTranslation, exists := DefaultTranslations[notificationType]; exists {
-		var result string
-		switch key {
-		case "title":
-			result = defaultTranslation.Title
-		case "body":
-			result = defaultTranslation.Description
-		default:
-			return key
-		}
+func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, notificationType NotificationType, event *model.Event) (devices []*model.Event) {
+	pm.deviceMutex.RLock()
+	deviceIDs, ok := pm.userDevices[pubKey]
+	pm.deviceMutex.RUnlock()
 
-		return result
+	if !ok || len(deviceIDs) == 0 {
+		return nil
 	}
 
-	return key
+	pm.deviceMutex.RLock()
+	defer pm.deviceMutex.RUnlock()
+
+	for _, deviceID := range deviceIDs {
+		deviceInfo, exists := pm.devices[deviceID]
+		if !exists {
+			continue
+		}
+		if deviceInfo.HasInvalidToken {
+			continue
+		}
+		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {
+			devices = append(devices, deviceInfo.Event)
+		}
+	}
+
+	return devices
 }

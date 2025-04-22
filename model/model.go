@@ -49,12 +49,13 @@ const (
 	CustomIONKindFundSendNotify     = 1756
 	CustomIONKindAttestation        = 10_100
 	CustomIONKindRelayListMetadata  = 20_002
+	CustomIONDirectMessage          = 30_014
 	CustomIONKindEditableTextNote   = 30_175
-	CustomIONKindDeviceRegistration = 31751
+	CustomIONKindDeviceRegistration = 31_751
 	KindDVMCountResponse            = 6400
 
 	// TODO: change to proper value.
-	CustomIONSystemMessage = 999999
+	CustomIONSystemMessage = 999_999
 )
 
 const (

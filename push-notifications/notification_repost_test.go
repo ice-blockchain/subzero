@@ -7,125 +7,330 @@ import (
 	"testing"
 
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/validation"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 )
 
+func helperCreateRepostEvent(t *testing.T, id string, reposterPubKey string, originalEventID string, originalAuthorPubKey string, content string) *model.Event {
+	t.Helper()
+
+	tags := nostr.Tags{
+		{"e", originalEventID},
+	}
+
+	if originalAuthorPubKey != "" {
+		tags = append(tags, nostr.Tag{"p", originalAuthorPubKey})
+	}
+
+	return &model.Event{
+		Event: nostr.Event{
+			ID:      id,
+			PubKey:  reposterPubKey,
+			Kind:    nostr.KindRepost,
+			Content: content,
+			Tags:    tags,
+		},
+	}
+}
+
 func TestHandleRepostNotification(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{
-		devices:         make(map[DeviceID]DeviceInfo),
-		userDevices:     make(map[string][]DeviceID),
-		filterToDevices: make(map[NotificationType]map[DeviceID]bool),
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
 	}
 
-	pm.filterToDevices[NotificationTypeRepost] = make(map[DeviceID]bool)
+	originalAuthorPubKey := "original_pubkey"
+	reposterPubKey := "reposter_pubkey"
+	originalPostID := "original_id"
 
-	repostedEvent := model.Event{
+	originalEvent := &model.Event{
 		Event: nostr.Event{
-			ID:      "original_id",
-			PubKey:  "original_pubkey",
+			ID:      originalPostID,
+			PubKey:  originalAuthorPubKey,
 			Kind:    nostr.KindTextNote,
 			Content: "Original post content",
 		},
 	}
 
-	repostedEventJSON, _ := json.Marshal(repostedEvent)
+	originalEventJSON, err := json.Marshal(originalEvent)
+	require.NoError(t, err)
 
-	event := helperCreateTestEvent(
+	repostEvent := helperCreateRepostEvent(
 		t,
-		"test_id",
-		"reposter_pubkey",
-		nostr.KindRepost,
-		string(repostedEventJSON),
-		nostr.Tags{
-			{"e", "original_id"},
-			{"p", "original_pubkey"},
-		},
+		"repost_id",
+		reposterPubKey,
+		originalPostID,
+		originalAuthorPubKey,
+		string(originalEventJSON),
 	)
 
-	pm.devices[DeviceID("device1")] = DeviceInfo{
-		Platform: validation.DeviceTokenOSIOS,
-		DeviceID: "device1",
-		FCMToken: "test_token",
-		PubKey:   "original_pubkey",
-		Filters: nostr.Filters{
-			{
-				Kinds: []int{nostr.KindRepost},
-			},
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindRepost},
 		},
 	}
 
-	pm.userDevices["original_pubkey"] = []DeviceID{"device1"}
-	pm.filterToDevices[NotificationTypeRepost]["device1"] = true
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		originalAuthorPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
 
-	notifications := pm.handleRepostNotification(&event.Event)
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	require.NotNil(t, notifications)
+	notifications := pm.handleRepostNotification(repostEvent)
 
-	require.Len(t, notifications, 1, "There should be one single notification")
+	require.NotNil(t, notifications, "Notifications should not be nil")
+	require.Len(t, notifications, 1, "Should create one notification")
+
 	notification := notifications[0]
-	require.Equal(t, "New repost", notification.Title, "Title should match")
-	require.Equal(t, "Someone reposted your post", notification.Body, "Body should match")
-	require.Equal(t, "test_token", notification.Target.Token, "Token should match")
-	require.Equal(t, DeviceID("device1"), notification.Target.DeviceID, "DeviceID should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title, notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body, notification.Body, "Body should match")
+	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
-	require.NotNil(t, notification.Data, "Notification should have data")
-	require.Equal(t, "test_id", notification.Data["eventId"], "EventId should match")
-	require.Equal(t, "reposter_pubkey", notification.Data["authorPubKey"], "AuthorPubKey should match")
+	require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+
+	require.Equal(t, repostEvent.String(), notification.Data["event"], "Event should match")
 	require.Equal(t, string(NotificationTypeRepost), notification.Data["notificationType"], "NotificationType should match")
-	require.Equal(t, "original_id", notification.Data["repostedEventId"], "RepostedEventId should match")
 }
 
 func TestHandleSelfRepostNotification(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{
-		devices:         make(map[DeviceID]DeviceInfo),
-		userDevices:     make(map[string][]DeviceID),
-		filterToDevices: make(map[NotificationType]map[DeviceID]bool),
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
 	}
 
-	pm.filterToDevices[NotificationTypeRepost] = make(map[DeviceID]bool)
+	userPubKey := "self_pubkey"
+	originalPostID := "original_id"
 
-	repostedEvent := model.Event{
+	originalEvent := &model.Event{
 		Event: nostr.Event{
-			ID:      "original_id",
-			PubKey:  "self_pubkey",
+			ID:      originalPostID,
+			PubKey:  userPubKey,
 			Kind:    nostr.KindTextNote,
 			Content: "Original post content",
 		},
 	}
 
-	repostedEventJSON, _ := json.Marshal(repostedEvent)
+	originalEventJSON, err := json.Marshal(originalEvent)
+	require.NoError(t, err)
 
-	event := helperCreateTestEvent(
+	repostEvent := helperCreateRepostEvent(
 		t,
-		"test_id_self_repost",
-		"self_pubkey",
-		nostr.KindRepost,
-		string(repostedEventJSON),
-		nostr.Tags{
-			{"e", "original_id"},
-			{"p", "self_pubkey"},
-		},
+		"self_repost_id",
+		userPubKey,
+		originalPostID,
+		userPubKey,
+		string(originalEventJSON),
 	)
 
-	pm.devices[DeviceID("device1")] = DeviceInfo{
-		DeviceID: "device1",
-		FCMToken: "test_token",
-		PubKey:   "self_pubkey",
-		Filters: nostr.Filters{
-			{
-				Kinds: []int{nostr.KindRepost},
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindRepost},
+		},
+	}
+
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		userPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	notifications := pm.handleRepostNotification(repostEvent)
+
+	require.Empty(t, notifications, "Should not create notifications for self-reposts")
+}
+
+func TestHandleRepostNotificationNoAuthor(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	repostEvent := helperCreateRepostEvent(
+		t,
+		"repost_without_author_id",
+		"reposter_pubkey",
+		"original_post_id",
+		"",
+		"",
+	)
+
+	notifications := pm.handleRepostNotification(repostEvent)
+
+	require.Nil(t, notifications, "Should not create notifications when there's no post author tag")
+}
+
+func TestHandleRepostNotificationGenericRepost(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	event := &model.Event{
+		Event: nostr.Event{
+			ID:      "generic_repost_id",
+			PubKey:  "reposter_pubkey",
+			Kind:    nostr.KindGenericRepost,
+			Content: "",
+			Tags: nostr.Tags{
+				{"e", "original_post_id"},
+				{"p", "post_author_pubkey"},
+				{"k", "1"},
 			},
 		},
 	}
 
-	pm.userDevices["self_pubkey"] = []DeviceID{"device1"}
-	pm.filterToDevices[NotificationTypeRepost]["device1"] = true
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindGenericRepost},
+		},
+	}
 
-	notifications := pm.handleRepostNotification(&event.Event)
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		"post_author_pubkey",
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
 
-	require.Nil(t, notifications, "Self-reposts should not generate notifications")
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	notifications := pm.handleRepostNotification(event)
+
+	require.Len(t, notifications, 1, "Should not create notifications for generic reposts with current implementation")
+	require.Equal(t, string(NotificationTypeRepost), notifications[0].Data["notificationType"], "NotificationType should match")
+	require.Equal(t, event.String(), notifications[0].Data["event"], "Event should match")
+}
+
+func TestHandleRepostNotificationNoValidDevices(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	repostEvent := helperCreateRepostEvent(
+		t,
+		"repost_id",
+		"reposter_pubkey",
+		"original_post_id",
+		"author_without_devices",
+		"",
+	)
+
+	notifications := pm.handleRepostNotification(repostEvent)
+
+	require.Empty(t, notifications, "Should not create notifications when original author has no valid devices")
+}
+
+func TestHandleRepostNotificationMultipleDevices(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	originalAuthorPubKey := "multi_device_author"
+	reposterPubKey := "reposter_pubkey"
+	originalPostID := "original_post_id"
+
+	repostEvent := helperCreateRepostEvent(
+		t,
+		"repost_id",
+		reposterPubKey,
+		originalPostID,
+		originalAuthorPubKey,
+		"",
+	)
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindRepost},
+		},
+	}
+
+	var devices []*model.Event
+	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		originalAuthorPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "token1"},
+		filters,
+	)
+	devices = append(devices, deviceEvent1)
+
+	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		originalAuthorPubKey,
+		"device2",
+		[]string{"t", "android", "token", "token2"},
+		filters,
+	)
+	devices = append(devices, deviceEvent2)
+	deviceEvent3 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		originalAuthorPubKey,
+		"device3",
+		[]string{"t", "web", "token", "token3"},
+		filters,
+	)
+	devices = append(devices, deviceEvent3)
+
+	deviceEvent4 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		originalAuthorPubKey,
+		"device4",
+		[]string{"t", "web", "token", "token4", "invalid_token", "true"},
+		filters,
+	)
+	devices = append(devices, deviceEvent4)
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent4))
+
+	deviceInfo := pm.devices[DeviceID("device4")]
+	deviceInfo.HasInvalidToken = true
+	pm.devices[DeviceID("device4")] = deviceInfo
+
+	notifications := pm.handleRepostNotification(repostEvent)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+	require.Len(t, notifications, 3, "Should create three notifications for valid devices")
+
+	for ix, notification := range notifications {
+		platform := devices[ix].GetTag("t").Value()
+		if platform == "ios" || platform == "web" {
+			require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title, notification.Title, "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body, notification.Body, "Body should match")
+		} else {
+			require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title, notification.Data["title"], "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body, notification.Data["body"], "Body should match")
+			require.Equal(t, "", notification.Title, "Title should match")
+			require.Equal(t, "", notification.Body, "Body should match")
+		}
+
+		require.Contains(t, repostEvent.String(), notification.Data["event"], "Data should contain event")
+		require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+		require.Equal(t, string(NotificationTypeRepost), notification.Data["notificationType"], "NotificationType should match")
+	}
+
+	for _, notification := range notifications {
+		require.NotEqual(t, "device4", notification.Target.GetTag("d").Value(), "Device with invalid token should not receive notification")
+	}
 }

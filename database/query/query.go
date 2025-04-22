@@ -48,6 +48,7 @@ type (
 		model.Event
 		SystemKind   sql.NullInt64
 		ReferenceID  sql.NullString
+		InvalidToken sql.NullBool
 		Jtags        string
 		SigAlg       string
 		KeyAlg       string
@@ -547,6 +548,10 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 }
 
 func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
+	if event.InvalidToken.Valid && event.InvalidToken.Bool {
+		event.Tags = append(event.Tags, model.Tag{"invalid_token"})
+	}
+
 	if event.Sig != "" {
 		return event
 	}

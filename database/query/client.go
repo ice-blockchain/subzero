@@ -63,6 +63,8 @@ func openDatabase(target string, runDDL bool) *dbClient {
 			out = "address"
 		case "jtags":
 			out = "tags"
+		case "invalid_token":
+			out = "invalid_token"
 		default:
 			out = n
 		}

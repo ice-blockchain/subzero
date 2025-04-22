@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS events (
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,
-    hidden         BOOLEAN NOT NULL DEFAULT FALSE
+    hidden         BOOLEAN NOT NULL DEFAULT FALSE,
+    invalid_token  BOOLEAN DEFAULT NULL
 );
 --------
 DO $$ BEGIN

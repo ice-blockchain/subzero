@@ -71,10 +71,9 @@ func TestMain(m *testing.M) {
 	)
 
 	hdl := &handler{
-		connSubs:                xsync.NewMap[Writer, connSubscriptions](),
-		connAuth:                xsync.NewMap[Writer, connAuthData](),
-		relayURL:                "wss://localhost:9998",
-		pushNotificationManager: nil,
+		connSubs: xsync.NewMap[Writer, connSubscriptions](),
+		connAuth: xsync.NewMap[Writer, connAuthData](),
+		relayURL: "wss://localhost:9998",
 	}
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{
@@ -88,10 +87,9 @@ func TestMain(m *testing.M) {
 	))
 
 	hdl2 := &handler{
-		connSubs:                xsync.NewMap[Writer, connSubscriptions](),
-		connAuth:                xsync.NewMap[Writer, connAuthData](),
-		relayURL:                "wss://localhost:9997",
-		pushNotificationManager: nil,
+		connSubs: xsync.NewMap[Writer, connSubscriptions](),
+		connAuth: xsync.NewMap[Writer, connAuthData](),
+		relayURL: "wss://localhost:9997",
 	}
 	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
 		&Config{

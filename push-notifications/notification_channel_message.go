@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package pushnotifications
 
 import (
@@ -7,33 +8,29 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-// TODO: specify the parameters of the event.
-func (pm *PushNotificationManager) handleChannelMessageNotification(event *model.Event) []*pn.Notification[pn.DeviceToken] {
-	channelID := ""
-	replyToId := ""
+func (pm *PushNotificationManager) handleCommunityMessageNotification(event *model.Event) []*pn.Notification[*model.Event] {
+	communityID := event.GetHTag()
+	if communityID == "" {
+		return nil
+	}
+	allDevices := make([]*model.Event, 0)
 	for _, tag := range event.GetTags("e") {
 		if len(tag) < 4 {
 			continue
 		}
-		if tag[3] == "root" {
-			channelID = tag.Value()
-		} else if tag[3] == "reply" {
-			replyToId = tag.Value()
+
+		recipientPubKey := tag.Value()
+		if recipientPubKey == event.GetMasterPublicKey() {
+			continue
+		}
+
+		if tag[3] == "root" || tag[3] == "reply" {
+			allDevices = append(allDevices, pm.collectUserValidDevices(recipientPubKey, NotificationTypeChannelMessage, event)...)
 		}
 	}
-	if channelID == "" {
-		return nil
-	}
-
 	data := map[string]interface{}{
-		"eventId":          event.ID,
-		"authorPubKey":     event.GetMasterPublicKey(),
-		"notificationType": string(NotificationTypeChannelMessage),
-		"channelId":        channelID,
-		"replyToId":        replyToId,
-		"content":          event.Content,
+		"event": event.String(),
 	}
-	iosDevices, otherDevices := pm.collectValidDevices(channelID, NotificationTypeChannelMessage, event)
 
-	return pm.createAndSendNotifications(iosDevices, otherDevices, NotificationTypeChannelMessage, data)
+	return pm.createNotifications(allDevices, NotificationTypeChannelMessage, data)
 }

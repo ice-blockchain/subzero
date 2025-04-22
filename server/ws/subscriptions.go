@@ -383,19 +383,6 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrap(ErrNotifyFailed, err.Error())
 	}
 
-	if h.pushNotificationManager != nil {
-		go func() {
-			if err := h.pushNotificationManager.ProcessDeviceRegistrationEvents(ctx, events); err != nil {
-				log.Printf("error during processing of device registration events: %v", err)
-			}
-		}()
-		go func() {
-			if err := h.pushNotificationManager.Notify(ctx, events); err != nil {
-				log.Printf("failed to send push notifications: %v", err)
-			}
-		}()
-	}
-
 	return nil
 }
 

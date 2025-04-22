@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package pushnotifications
 
 import (
@@ -12,8 +13,8 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
-func (pm *PushNotificationManager) handlePostNotification(ctx context.Context, event *model.Event) []*pn.Notification[pn.DeviceToken] {
-	notifications := make([]*pn.Notification[pn.DeviceToken], 0)
+func (pm *PushNotificationManager) handlePostNotification(ctx context.Context, event *model.Event) []*pn.Notification[*model.Event] {
+	notifications := make([]*pn.Notification[*model.Event], 0)
 	isReply, isMention, replyToPubkey, mentionedPubkeys := pm.classifyPostType(event)
 
 	if isReply && replyToPubkey != "" && replyToPubkey != event.GetMasterPublicKey() {
@@ -71,23 +72,16 @@ func (pm *PushNotificationManager) classifyPostType(event *model.Event) (isReply
 
 	return
 }
+func (pm *PushNotificationManager) handleReplyPost(event *model.Event, replyToPubkey string) []*pn.Notification[*model.Event] {
+	devices := pm.collectUserValidDevices(replyToPubkey, NotificationTypeReply, event)
 
-func (pm *PushNotificationManager) handleReplyPost(event *model.Event, replyToPubkey string) []*pn.Notification[pn.DeviceToken] {
-	iosDevices, otherDevices := pm.collectValidDevices(replyToPubkey, NotificationTypeReply, event)
-
-	data := map[string]interface{}{
-		"eventID":          event.ID,
-		"authorPubKey":     event.GetMasterPublicKey(),
-		"notificationType": string(NotificationTypeReply),
-		"content":          event.Content,
-	}
-
-	return pm.createAndSendNotifications(iosDevices, otherDevices, NotificationTypeReply, data)
+	return pm.createNotifications(devices, NotificationTypeReply, map[string]interface{}{
+		"event": event.String(),
+	})
 }
 
-func (pm *PushNotificationManager) handleMentionPost(event *model.Event, mentionedPubkeys []string) []*pn.Notification[pn.DeviceToken] {
-	notifications := make([]*pn.Notification[pn.DeviceToken], 0)
-
+func (pm *PushNotificationManager) handleMentionPost(event *model.Event, mentionedPubkeys []string) []*pn.Notification[*model.Event] {
+	notifications := make([]*pn.Notification[*model.Event], 0)
 	if len(mentionedPubkeys) == 0 {
 		return nil
 	}
@@ -96,17 +90,11 @@ func (pm *PushNotificationManager) handleMentionPost(event *model.Event, mention
 		if pubkey == event.GetMasterPublicKey() {
 			continue
 		}
+		devices := pm.collectUserValidDevices(pubkey, NotificationTypeMention, event)
 
-		iosDevices, otherDevices := pm.collectValidDevices(pubkey, NotificationTypeMention, event)
-
-		data := map[string]interface{}{
-			"eventId":          event.ID,
-			"authorPubKey":     event.GetMasterPublicKey(),
-			"notificationType": string(NotificationTypeMention),
-			"content":          event.Content,
-		}
-
-		mentions := pm.createAndSendNotifications(iosDevices, otherDevices, NotificationTypeMention, data)
+		mentions := pm.createNotifications(devices, NotificationTypeMention, map[string]interface{}{
+			"event": event.String(),
+		})
 		notifications = append(notifications, mentions...)
 	}
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package internal
 
 import (
@@ -10,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 const (
@@ -23,8 +26,9 @@ type mockClient struct {
 	dryRun bool
 }
 
-func (m *mockClient) SendSingle(ctx context.Context, notification *Notification[DeviceToken]) error {
-	if notification.Target.Token == "" || !isValidToken(notification.Target.Token) {
+func (m *mockClient) SendSingle(ctx context.Context, notification *Notification[*model.Event]) error {
+	tokenTag := notification.Target.GetTag("token")
+	if tokenTag == nil || tokenTag.Value() == "" || !isValidToken(tokenTag.Value()) {
 		return ErrInvalidDeviceToken
 	}
 	return nil
@@ -50,12 +54,13 @@ func TestSendSingle(t *testing.T) {
 
 	client := newTestClient()
 
-	n1 := &Notification[DeviceToken]{
-		Data: map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
-		Target: DeviceToken{
-			Token:    testToken,
-			DeviceID: DeviceID(uuid.NewString()),
-		},
+	event1 := &model.Event{}
+	event1.Tags = append(event1.Tags, model.Tag{"token", testToken})
+	event1.Tags = append(event1.Tags, model.Tag{"deviceId", uuid.NewString()})
+
+	n1 := &Notification[*model.Event]{
+		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Target:   event1,
 		Title:    testTitle,
 		Body:     testBody + uuid.NewString(),
 		ImageURL: "https://example.com/image.jpg",
@@ -64,12 +69,13 @@ func TestSendSingle(t *testing.T) {
 	err := client.SendSingle(t.Context(), n1)
 	require.ErrorIs(t, err, ErrInvalidDeviceToken)
 
-	n2 := &Notification[DeviceToken]{
-		Data: map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
-		Target: DeviceToken{
-			Token:    testToken + "_valid",
-			DeviceID: DeviceID(uuid.NewString()),
-		},
+	event2 := &model.Event{}
+	event2.Tags = append(event2.Tags, model.Tag{"token", testToken + "_valid"})
+	event2.Tags = append(event2.Tags, model.Tag{"deviceId", uuid.NewString()})
+
+	n2 := &Notification[*model.Event]{
+		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Target:   event2,
 		Title:    testTitle,
 		Body:     testBody + uuid.NewString(),
 		ImageURL: "https://example.com/image.jpg",
@@ -113,12 +119,13 @@ func TestSendSingle_Stability(t *testing.T) {
 
 	client := newTestClient()
 
-	n1 := &Notification[DeviceToken]{
-		Data: map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
-		Target: DeviceToken{
-			Token:    testToken + "_valid",
-			DeviceID: DeviceID(uuid.NewString()),
-		},
+	event := &model.Event{}
+	event.Tags = append(event.Tags, model.Tag{"token", testToken + "_valid"})
+	event.Tags = append(event.Tags, model.Tag{"deviceId", uuid.NewString()})
+
+	n1 := &Notification[*model.Event]{
+		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Target:   event,
 		Title:    testTitle,
 		Body:     testBody + uuid.NewString(),
 		ImageURL: "https://example.com/image.jpg",
@@ -131,7 +138,7 @@ func TestSendSingle_Stability(t *testing.T) {
 	results := make(chan error, concurrency)
 
 	for i := 0; i < concurrency; i++ {
-		go func(wg *sync.WaitGroup, n *Notification[DeviceToken]) {
+		go func(wg *sync.WaitGroup, n *Notification[*model.Event]) {
 			defer wg.Done()
 
 			err := client.SendSingle(context.Background(), n)

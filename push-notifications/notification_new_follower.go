@@ -5,13 +5,14 @@ package pushnotifications
 import (
 	"context"
 
+	"github.com/nbd-wtf/go-nostr"
+
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
-	"github.com/nbd-wtf/go-nostr"
 )
 
-func (pm *PushNotificationManager) handleNewFollowerNotification(event *model.Event) []*pn.Notification[pn.DeviceToken] {
+func (pm *PushNotificationManager) handleNewFollowerNotification(event *model.Event) []*pn.Notification[*model.Event] {
 	oldEvent := pm.getOldFollowListEvent(context.Background(), event.GetMasterPublicKey())
 
 	shouldSend, recipientPubKey := pm.shouldSendNewFollowerNotification(event, oldEvent)
@@ -65,15 +66,10 @@ func (pm *PushNotificationManager) shouldSendNewFollowerNotification(event *mode
 	return true, lastFollowedPubKey
 }
 
-func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[pn.DeviceToken] {
-	iosDevices, otherDevices := pm.collectValidDevices(recipientPubKey, NotificationTypeNewFollower, event)
+func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[*model.Event] {
+	devices := pm.collectUserValidDevices(recipientPubKey, NotificationTypeNewFollower, event)
 
-	data := map[string]interface{}{
-		"eventId":          event.ID,
-		"authorPubKey":     event.GetMasterPublicKey(),
-		"notificationType": string(NotificationTypeNewFollower),
-		"content":          event.Content,
-	}
-
-	return pm.createAndSendNotifications(iosDevices, otherDevices, NotificationTypeNewFollower, data)
+	return pm.createNotifications(devices, NotificationTypeNewFollower, map[string]interface{}{
+		"event": event.String(),
+	})
 }

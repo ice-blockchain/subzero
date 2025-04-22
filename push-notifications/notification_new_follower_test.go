@@ -6,239 +6,226 @@ import (
 	"testing"
 
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
+	"github.com/ice-blockchain/subzero/validation"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 )
 
-type followerNotifier interface {
-	getOldFollowListEvent(event *model.Event) *model.Event
-	shouldSendNewFollowerNotification(event, oldEvent *model.Event) (bool, string)
-	createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[pn.DeviceToken]
-}
+func helperCreateFollowListEvent(t *testing.T, id string, pubKey string, followedPubKeys []string) *model.Event {
+	t.Helper()
 
-type mockFollowerNotifier struct {
-	shouldSendResult bool
-	recipientPubKey  string
-	validDevices     bool
-}
-
-func (m *mockFollowerNotifier) getOldFollowListEvent(event *model.Event) *model.Event {
-	return nil
-}
-
-func (m *mockFollowerNotifier) shouldSendNewFollowerNotification(event, oldEvent *model.Event) (bool, string) {
-	return m.shouldSendResult, m.recipientPubKey
-}
-
-func (m *mockFollowerNotifier) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[pn.DeviceToken] {
-	if !m.validDevices {
-		return nil
+	tags := nostr.Tags{}
+	for _, followedPubKey := range followedPubKeys {
+		tags = append(tags, nostr.Tag{"p", followedPubKey})
 	}
 
-	data := map[string]interface{}{
-		"eventId":          event.ID,
-		"authorPubKey":     event.GetMasterPublicKey(),
-		"notificationType": string(NotificationTypeNewFollower),
-		"content":          event.Content,
-	}
-
-	return []*pn.Notification[pn.DeviceToken]{
-		{
-			Title: "New follower",
-			Body:  "Someone is now following you",
-			Data:  data,
-			Target: pn.DeviceToken{
-				Token:    "test_token",
-				DeviceID: "device1",
-			},
+	return &model.Event{
+		Event: nostr.Event{
+			ID:      id,
+			PubKey:  pubKey,
+			Kind:    nostr.KindFollowList,
+			Content: "Follow list",
+			Tags:    tags,
 		},
 	}
-}
-
-func createTestHandleNewFollowerNotification(mock *mockFollowerNotifier) func(*model.Event) []*pn.Notification[pn.DeviceToken] {
-	return func(event *model.Event) []*pn.Notification[pn.DeviceToken] {
-		oldEvent := mock.getOldFollowListEvent(event)
-		shouldSend, recipientPubKey := mock.shouldSendNewFollowerNotification(event, oldEvent)
-		if !shouldSend {
-			return nil
-		}
-
-		return mock.createNewFollowerNotification(event, recipientPubKey)
-	}
-}
-
-func TestHandleNewFollowerNotification(t *testing.T) {
-	t.Parallel()
-
-	event := helperCreateTestEvent(
-		t,
-		"test_id",
-		"follower_pubkey",
-		nostr.KindFollowList,
-		"Follow list",
-		nostr.Tags{
-			{"p", "pubkey1"},
-			{"p", "pubkey2"},
-			{"p", "target_pubkey"},
-		},
-	)
-
-	mock := &mockFollowerNotifier{
-		shouldSendResult: true,
-		recipientPubKey:  "target_pubkey",
-		validDevices:     true,
-	}
-
-	handleNotification := createTestHandleNewFollowerNotification(mock)
-	notifications := handleNotification(&event.Event)
-
-	require.NotNil(t, notifications)
-	require.Len(t, notifications, 1, "Should create one single notification")
-
-	notification := notifications[0]
-	require.Equal(t, "New follower", notification.Title, "Title should match")
-	require.Equal(t, "Someone is now following you", notification.Body, "Body should match")
-	require.Equal(t, "test_token", notification.Target.Token, "Token should match")
-	require.Equal(t, DeviceID("device1"), notification.Target.DeviceID, "DeviceID should match")
-
-	require.Equal(t, "test_id", notification.Data["eventId"], "EventID should match")
-	require.Equal(t, "follower_pubkey", notification.Data["authorPubKey"], "Author pubkey should match")
-	require.Equal(t, string(NotificationTypeNewFollower), notification.Data["notificationType"], "Notification type should match")
-	require.Equal(t, "Follow list", notification.Data["content"], "Content should match")
-}
-
-func TestHandleNewFollowerNotificationShouldNotSend(t *testing.T) {
-	t.Parallel()
-
-	event := helperCreateTestEvent(
-		t,
-		"test_id",
-		"follower_pubkey",
-		nostr.KindFollowList,
-		"Follow list",
-		nostr.Tags{
-			{"p", "pubkey1"},
-			{"p", "pubkey2"},
-			{"p", "target_pubkey"},
-		},
-	)
-
-	mock := &mockFollowerNotifier{
-		shouldSendResult: false,
-		recipientPubKey:  "",
-	}
-
-	handleNotification := createTestHandleNewFollowerNotification(mock)
-	notifications := handleNotification(&event.Event)
-
-	require.Nil(t, notifications, "Should not create notifications when shouldSendNewFollowerNotification returns false")
 }
 
 func TestShouldSendNewFollowerNotification(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{}
 
-	emptyTagsEvent := helperCreateTestEvent(
+	emptyTagsEvent := helperCreateFollowListEvent(
 		t,
 		"test_id",
 		"follower_pubkey",
-		nostr.KindFollowList,
-		"Follow list",
-		nostr.Tags{},
+		[]string{},
 	)
 
-	shouldSend, recipient := pm.shouldSendNewFollowerNotification(&emptyTagsEvent.Event, nil)
+	shouldSend, recipient := pm.shouldSendNewFollowerNotification(emptyTagsEvent, nil)
 	require.False(t, shouldSend, "Should not send notification when no p-tags")
 	require.Empty(t, recipient, "Recipient should be empty when no p-tags")
 
-	selfFollowEvent := helperCreateTestEvent(
+	selfFollowEvent := helperCreateFollowListEvent(
 		t,
 		"test_id",
 		"follower_pubkey",
-		nostr.KindFollowList,
-		"Follow list",
-		nostr.Tags{
-			{"p", "follower_pubkey"},
-		},
+		[]string{"follower_pubkey"},
 	)
 
-	shouldSend, recipient = pm.shouldSendNewFollowerNotification(&selfFollowEvent.Event, nil)
+	shouldSend, recipient = pm.shouldSendNewFollowerNotification(selfFollowEvent, nil)
 	require.False(t, shouldSend, "Should not send notification when author follows self")
 	require.Empty(t, recipient, "Recipient should be empty when author follows self")
 
-	oldEvent := helperCreateTestEvent(
+	oldEvent := helperCreateFollowListEvent(
 		t,
 		"old_id",
 		"follower_pubkey",
-		nostr.KindFollowList,
-		"Old follow list",
-		nostr.Tags{
-			{"p", "pubkey1"},
-			{"p", "pubkey2"},
-			{"p", "pubkey3"},
-		},
+		[]string{"pubkey1", "pubkey2", "pubkey3"},
 	)
 
-	newEvent := helperCreateTestEvent(
+	newReducedEvent := helperCreateFollowListEvent(
 		t,
 		"new_id",
 		"follower_pubkey",
-		nostr.KindFollowList,
-		"New follow list",
-		nostr.Tags{
-			{"p", "pubkey1"},
-			{"p", "pubkey2"},
-		},
+		[]string{"pubkey1", "pubkey2"},
 	)
 
-	shouldSend, recipient = pm.shouldSendNewFollowerNotification(&newEvent.Event, &oldEvent.Event)
+	shouldSend, recipient = pm.shouldSendNewFollowerNotification(newReducedEvent, oldEvent)
 	require.False(t, shouldSend, "Should not send notification when follow list reduced")
 	require.Empty(t, recipient, "Recipient should be empty when follow list reduced")
 
-	validEvent := helperCreateTestEvent(
+	newExtendedEvent := helperCreateFollowListEvent(
 		t,
 		"new_id",
 		"follower_pubkey",
-		nostr.KindFollowList,
-		"New follow list",
-		nostr.Tags{
-			{"p", "pubkey1"},
-			{"p", "pubkey2"},
-			{"p", "pubkey3"},
-			{"p", "new_pubkey"},
-		},
+		[]string{"pubkey1", "pubkey2", "pubkey3", "new_pubkey"},
 	)
 
-	shouldSend, recipient = pm.shouldSendNewFollowerNotification(&validEvent.Event, &oldEvent.Event)
+	shouldSend, recipient = pm.shouldSendNewFollowerNotification(newExtendedEvent, oldEvent)
 	require.True(t, shouldSend, "Should send notification when new follower added")
 	require.Equal(t, "new_pubkey", recipient, "Recipient should be the last p-tag")
 }
 
-func TestHandleNewFollowerNotificationNoValidDevices(t *testing.T) {
+func TestCreateNewFollowerNotification(t *testing.T) {
 	t.Parallel()
-
-	event := helperCreateTestEvent(
-		t,
-		"test_id",
-		"follower_pubkey",
-		nostr.KindFollowList,
-		"Follow list",
-		nostr.Tags{
-			{"p", "pubkey1"},
-			{"p", "pubkey2"},
-			{"p", "target_pubkey"},
-		},
-	)
-
-	mock := &mockFollowerNotifier{
-		shouldSendResult: true,
-		recipientPubKey:  "target_pubkey",
-		validDevices:     false,
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
 	}
 
-	handleNotification := createTestHandleNewFollowerNotification(mock)
-	notifications := handleNotification(&event.Event)
+	followerPubKey := "follower_pubkey"
+	targetPubKey := "target_pubkey"
 
-	require.Empty(t, notifications, "Should not create notifications when no valid devices are found")
+	followListEvent := helperCreateFollowListEvent(
+		t,
+		"test_id",
+		followerPubKey,
+		[]string{"pubkey1", "pubkey2", targetPubKey},
+	)
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindFollowList},
+		},
+	}
+
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		targetPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "test_token"},
+		filters,
+	)
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+	require.Len(t, notifications, 1, "Should create one notification")
+
+	notification := notifications[0]
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
+	require.Equal(t, deviceEvent, notification.Target, "Target should match")
+
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+	require.Equal(t, string(NotificationTypeNewFollower), notification.Data["notificationType"], "NotificationType should match")
+}
+
+func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	followerPubKey := "follower_pubkey"
+	targetPubKey := "multi_device_target"
+
+	followListEvent := helperCreateFollowListEvent(
+		t,
+		"test_id",
+		followerPubKey,
+		[]string{"pubkey1", "pubkey2", targetPubKey},
+	)
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindFollowList},
+		},
+	}
+
+	var deviceEvents []*model.Event
+	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		targetPubKey,
+		"device1",
+		[]string{"t", "ios", "token", "token1"},
+		filters,
+	)
+	deviceEvents = append(deviceEvents, deviceEvent1)
+	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		targetPubKey,
+		"device2",
+		[]string{"t", "android", "token", "token2"},
+		filters,
+	)
+	deviceEvents = append(deviceEvents, deviceEvent2)
+	deviceEvent3 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		targetPubKey,
+		"device3",
+		[]string{"t", "web", "token", "token3"},
+		filters,
+	)
+	deviceEvents = append(deviceEvents, deviceEvent3)
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
+
+	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+	require.Len(t, notifications, 3, "Should create three notifications")
+
+	for ix, notification := range notifications {
+		platform := deviceEvents[ix].GetTag("t").Value()
+		require.Contains(t, notification.Data, "event", "Data should contain event")
+		require.Contains(t, notification.Data, "notificationType", "Data should contain notificationType")
+		require.Equal(t, string(NotificationTypeNewFollower), notification.Data["notificationType"], "NotificationType should match")
+		require.Equal(t, followListEvent.String(), notification.Data["event"], "Event should match")
+
+		if platform == validation.DeviceTokenOSIOS || platform == validation.DeviceTokenOSWeb {
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
+		} else if platform == validation.DeviceTokenOSAndroid {
+			require.Equal(t, "", notification.Title, "Title should match")
+			require.Equal(t, "", notification.Body, "Body should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Data["title"], "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Data["body"], "Body should match")
+		}
+	}
+}
+
+func TestCreateNewFollowerNotificationNoDevices(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		devices:     make(map[DeviceID]DeviceInfo),
+		userDevices: make(map[string][]DeviceID),
+	}
+
+	followerPubKey := "follower_pubkey"
+	targetPubKey := "target_without_devices"
+
+	followListEvent := helperCreateFollowListEvent(
+		t,
+		"test_id",
+		followerPubKey,
+		[]string{"pubkey1", "pubkey2", targetPubKey},
+	)
+	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	require.Empty(t, notifications, "Should not create notifications when user has no devices")
 }

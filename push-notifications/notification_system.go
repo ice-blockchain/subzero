@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package pushnotifications
 
 import (
@@ -13,6 +14,10 @@ func (pm *PushNotificationManager) handleSystemNotification(event *model.Event) 
 	for _, language := range getAvailableLanguages() {
 		notification := &pn.Notification[pn.SubscriptionTopic]{
 			Target: pn.SubscriptionTopic("system_" + language),
+			Data: map[string]interface{}{
+				"notificationType": string(NotificationTypeSystem),
+				"event":            event.String(),
+			},
 		}
 		notifications = append(notifications, notification)
 	}

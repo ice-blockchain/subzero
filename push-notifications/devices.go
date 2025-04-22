@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package pushnotifications
 
 import (
@@ -7,8 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
-	"slices"
 	"strconv"
 
 	"github.com/cockroachdb/errors"
@@ -16,12 +15,23 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-type deviceToRemove struct {
-	deviceID     DeviceID
-	masterPubKey PublicKey
-}
+type (
+	DeviceID   = pn.DeviceID
+	DeviceInfo struct {
+		Filters         nostr.Filters
+		Event           *model.Event
+		DeviceID        DeviceID
+		HasInvalidToken bool
+	}
+
+	deviceToRemove struct {
+		deviceID     DeviceID
+		masterPubKey PublicKey
+	}
+)
 
 func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
@@ -29,192 +39,60 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 			Kinds: []int{model.CustomIONKindDeviceRegistration},
 		}},
 	})
-
-	pm.deviceMutex.RLock()
-
-	newDevices := maps.Clone(pm.devices)
-
-	newUserDevices := make(map[string][]DeviceID)
-	for k, v := range pm.userDevices {
-		newUserDevices[k] = make([]DeviceID, len(v))
-		copy(newUserDevices[k], v)
-	}
-
-	newFilterToDevices := make(map[NotificationType]map[DeviceID]bool)
-	for filterType, deviceMap := range pm.filterToDevices {
-		newFilterToDevices[filterType] = maps.Clone(deviceMap)
-	}
-	pm.deviceMutex.RUnlock()
-
 	for event, err := range eventIterator {
 		if err != nil {
 			return fmt.Errorf("error getting device registration events: %w", err)
 		}
-
 		if err := pm.processDeviceRegistrationEvent(event); err != nil {
 			log.Printf("Error processing device registration event %s: %v", event.ID, err)
 
 			continue
 		}
 	}
-
-	pm.deviceMutex.Lock()
-	pm.devices = newDevices
-	pm.userDevices = newUserDevices
-	pm.filterToDevices = newFilterToDevices
-	pm.deviceMutex.Unlock()
+	log.Printf("Device synchronization completed: %d devices", len(pm.devices))
 
 	return nil
 }
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
-	if event.Kind != model.CustomIONKindDeviceRegistration {
-		return nil
-	}
-	var deviceID DeviceID
-	var platform, relayURL, encryptedToken string
-	var invalid bool
-
-	for _, tag := range event.Tags {
-		switch tag.Key() {
-		case "d":
-			deviceID = DeviceID(tag.Value())
-		case "t":
-			platform = tag.Value()
-		case "relay":
-			relayURL = tag.Value()
-		case "token":
-			encryptedToken = tag.Value()
-			if len(tag) > 2 && tag[2] == "invalid" {
-				invalid = true
-			}
-		}
-	}
-	if deviceID == "" || encryptedToken == "" {
-		return nil
+	deviceID := DeviceID(event.Tags.GetD())
+	var hasInvalidToken bool
+	if invalidToken := event.GetTag("invalid_token"); invalidToken != nil {
+		hasInvalidToken = true
 	}
 
 	var filters nostr.Filters
-	err := json.Unmarshal([]byte(event.Content), &filters)
-	if err != nil {
-		return err
+	if err := json.Unmarshal([]byte(event.Content), &filters); err != nil {
+		return errors.Wrap(err, "failed to unmarshal device filters")
+	}
+
+	deviceInfo := DeviceInfo{
+		DeviceID:        deviceID,
+		Filters:         filters,
+		Event:           event,
+		HasInvalidToken: hasInvalidToken,
 	}
 
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
-	deviceInfo := DeviceInfo{
-		DeviceID:                  deviceID,
-		Platform:                  platform,
-		RelayURL:                  relayURL,
-		Filters:                   filters,
-		FCMToken:                  encryptedToken,
-		PubKey:                    event.GetMasterPublicKey(),
-		Invalid:                   invalid,
-		DeviceRegistrationEventID: event.ID,
+	pm.devices[deviceID] = deviceInfo
+
+	masterPubKey := event.GetMasterPublicKey()
+	if _, ok := pm.userDevices[masterPubKey]; !ok {
+		pm.userDevices[masterPubKey] = []DeviceID{}
 	}
-
-	pm.devices[DeviceID(deviceID)] = deviceInfo
-
-	if _, ok := pm.userDevices[event.GetMasterPublicKey()]; !ok {
-		pm.userDevices[event.GetMasterPublicKey()] = []DeviceID{}
-	}
-
 	deviceExists := false
-	for _, id := range pm.userDevices[event.GetMasterPublicKey()] {
-		if id == DeviceID(deviceID) {
+	for _, id := range pm.userDevices[masterPubKey] {
+		if id == deviceID {
 			deviceExists = true
 
 			break
 		}
 	}
-
 	if !deviceExists {
-		pm.userDevices[event.GetMasterPublicKey()] = append(pm.userDevices[event.GetMasterPublicKey()], DeviceID(deviceID))
+		pm.userDevices[masterPubKey] = append(pm.userDevices[masterPubKey], deviceID)
 	}
-
-	pm.categorizeDeviceByFilters(deviceID, filters)
-
-	return nil
-}
-
-func (pm *PushNotificationManager) categorizeDeviceByFilters(deviceID DeviceID, filters nostr.Filters) {
-	for _, deviceMap := range pm.filterToDevices {
-		delete(deviceMap, DeviceID(deviceID))
-	}
-	for _, filter := range filters {
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote }) {
-			pm.filterToDevices[NotificationTypePost][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindChannelMessage }) {
-			pm.filterToDevices[NotificationTypeChannelMessage][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindReaction }) {
-			pm.filterToDevices[NotificationTypeReaction][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindRepost || kind == nostr.KindGenericRepost }) {
-			pm.filterToDevices[NotificationTypeRepost][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindGiftWrap }) {
-			pm.filterToDevices[NotificationTypeDirectMessage][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == model.CustomIONKindFundSendNotify }) {
-			pm.filterToDevices[NotificationTypePaymentRequest][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == model.CustomIONKindFundReceive }) {
-			pm.filterToDevices[NotificationTypePaymentReceived][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == model.CustomIONSystemMessage }) {
-			pm.filterToDevices[NotificationTypeSystem][DeviceID(deviceID)] = true
-		}
-		if slices.ContainsFunc(filter.Kinds, func(kind int) bool {
-			return kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote
-		}) && filter.Tags.HasValues("p") {
-			pm.filterToDevices[NotificationTypeMention][DeviceID(deviceID)] = true
-		}
-		if (slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote }) && filter.Tags.HasValues("e") || filter.Tags.HasValues("a")) ||
-			(slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == model.CustomIONKindEditableTextNote }) && filter.Tags.HasValues("q") && filter.Tags.HasValues("Q")) {
-			pm.filterToDevices[NotificationTypeReply][DeviceID(deviceID)] = true
-		}
-		if len(filter.Authors) > 0 && slices.ContainsFunc(filter.Kinds, func(kind int) bool { return kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote }) {
-			pm.filterToDevices[NotificationTypePost][DeviceID(deviceID)] = true
-		}
-	}
-}
-
-func (pm *PushNotificationManager) fullSyncDevices(ctx context.Context) error {
-	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: []model.Filter{{
-			Kinds: []int{model.CustomIONKindDeviceRegistration},
-		}},
-	})
-
-	newDevices := make(map[DeviceID]DeviceInfo)
-	newUserDevices := make(map[string][]DeviceID)
-	newFilterToDevices := make(map[NotificationType]map[DeviceID]bool)
-
-	for filterType := range pm.filterToDevices {
-		newFilterToDevices[filterType] = make(map[DeviceID]bool)
-	}
-	for event, err := range eventIterator {
-		if err != nil {
-			return fmt.Errorf("error getting device registration events: %w", err)
-		}
-
-		if err = pm.processDeviceRegistrationEvent(event); err != nil {
-			log.Printf("Error processing device registration event: %v", err)
-
-			continue
-		}
-	}
-
-	pm.deviceMutex.Lock()
-	pm.devices = newDevices
-	pm.userDevices = newUserDevices
-	pm.filterToDevices = newFilterToDevices
-	pm.deviceMutex.Unlock()
-
-	log.Printf("Full device synchronization completed: %d devices", len(newDevices))
 
 	return nil
 }
@@ -227,15 +105,9 @@ func (pm *PushNotificationManager) RemoveDevice(ctx context.Context, deviceID De
 	if !exists {
 		return nil
 	}
-
-	if deviceInfo.PubKey != masterPubKey {
+	if deviceInfo.Event.GetMasterPublicKey() != masterPubKey {
 		return fmt.Errorf("device belongs to another user")
 	}
-
-	for _, deviceMap := range pm.filterToDevices {
-		delete(deviceMap, deviceID)
-	}
-
 	if devices, ok := pm.userDevices[masterPubKey]; ok {
 		updatedDevices := make([]DeviceID, 0, len(devices))
 		for _, id := range devices {

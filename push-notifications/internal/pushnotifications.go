@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
+
 package internal
 
 import (
@@ -11,25 +12,22 @@ import (
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
 	"google.golang.org/api/option"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
 	DeviceID          string
 	SubscriptionTopic string
-	DeviceToken       struct {
-		Token                     string
-		DeviceID                  DeviceID
-		DeviceRegistrationEventID string
-	}
-	Client interface {
-		SendSingle(ctx context.Context, notification *Notification[DeviceToken]) error
+	Client            interface {
+		SendSingle(ctx context.Context, notification *Notification[*model.Event]) error
 		SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error
 	}
 	Service struct {
 		client *messaging.Client
 		dryRun bool
 	}
-	Notification[TARGET SubscriptionTopic | DeviceToken] struct {
+	Notification[TARGET SubscriptionTopic | *model.Event] struct {
 		Data     map[string]interface{} `json:"data,omitempty"`
 		Target   TARGET
 		Title    string `json:"title,omitempty"`
@@ -73,7 +71,7 @@ func New(ctx context.Context, credentialsFile string, opts ...ServiceOption) (Cl
 	return s, nil
 }
 
-func (s *Service) SendSingle(ctx context.Context, notification *Notification[DeviceToken]) error {
+func (s *Service) SendSingle(ctx context.Context, notification *Notification[*model.Event]) error {
 	data := make(map[string]string)
 	for k, v := range notification.Data {
 		if str, ok := v.(string); ok {
@@ -82,9 +80,13 @@ func (s *Service) SendSingle(ctx context.Context, notification *Notification[Dev
 			data[k] = fmt.Sprintf("%v", v)
 		}
 	}
+	token := notification.Target.GetTag("token")
+	if token == nil || token.Value() == "" {
+		return nil
+	}
 
 	message := &messaging.Message{
-		Token: notification.Target.Token,
+		Token: token.Value(),
 		Notification: &messaging.Notification{
 			Title:    notification.Title,
 			Body:     notification.Body,

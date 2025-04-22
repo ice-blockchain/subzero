@@ -99,8 +99,8 @@ func GetStoredEvents(ctx context.Context, subscription *model.Subscription) Even
 	return globalDB.Client.SelectEvents(ctx, filters...)
 }
 
-func MarkTokenAsInvalid(ctx context.Context, deviceRegistrationEventID string) error {
-	return globalDB.Client.markTokenAsInvalid(ctx, deviceRegistrationEventID)
+func MarkTokenAsInvalidInEvents(ctx context.Context, events []*model.Event) error {
+	return globalDB.Client.markTokenAsInvalidInEvents(ctx, events)
 }
 
 func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {

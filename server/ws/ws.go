@@ -18,7 +18,6 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
@@ -64,10 +63,9 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 
 func newHandler(relayURL string) *handler {
 	return &handler{
-		connSubs:                xsync.NewMap[Writer, connSubscriptions](),
-		connAuth:                xsync.NewMap[Writer, connAuthData](),
-		relayURL:                relayURL,
-		pushNotificationManager: pushnotifications.NewPushNotificationManager(),
+		connSubs: xsync.NewMap[Writer, connSubscriptions](),
+		connAuth: xsync.NewMap[Writer, connAuthData](),
+		relayURL: relayURL,
 	}
 }
 
