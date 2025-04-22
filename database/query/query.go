@@ -46,20 +46,20 @@ var (
 type (
 	databaseEvent struct {
 		model.Event
-		SystemKind   sql.NullInt64
-		ReferenceID  sql.NullString
-		InvalidToken sql.NullBool
-		Jtags        string
-		SigAlg       string
-		KeyAlg       string
-		MasterPubKey string
-		Dtag         string
-		Htag         string
-		AddressValue string
-		Lookup       string
-		Deleted      bool
-		HasImages    bool
-		HasVideos    bool
+		SystemKind               sql.NullInt64
+		ReferenceID              sql.NullString
+		NotificationTokenInvalid sql.NullBool
+		Jtags                    string
+		SigAlg                   string
+		KeyAlg                   string
+		MasterPubKey             string
+		Dtag                     string
+		Htag                     string
+		AddressValue             string
+		Lookup                   string
+		Deleted                  bool
+		HasImages                bool
+		HasVideos                bool
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -548,10 +548,6 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 }
 
 func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
-	if event.InvalidToken.Valid && event.InvalidToken.Bool {
-		event.Tags = append(event.Tags, model.Tag{"invalid_token"})
-	}
-
 	if event.Sig != "" {
 		return event
 	}

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -25,7 +24,7 @@ func (pm *PushNotificationManager) handleCommunityMessageNotification(event *mod
 		}
 
 		if tag[3] == "root" || tag[3] == "reply" {
-			allDevices = append(allDevices, pm.collectUserValidDevices(recipientPubKey, NotificationTypeChannelMessage, event)...)
+			allDevices = append(allDevices, pm.collectUserValidDevices(recipientPubKey, event)...)
 		}
 	}
 	data := map[string]interface{}{

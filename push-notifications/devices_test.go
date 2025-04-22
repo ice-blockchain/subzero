@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -183,16 +182,17 @@ func TestProcessDeviceRegistrationEventWithInvalidToken(t *testing.T) {
 		t,
 		"test_pubkey",
 		"device1",
-		[]string{"invalid_token", "true"},
+		[]string{"invalid_token"},
 		filters,
 	)
+	event.NotificationTokenInvalid = true
 
 	require.NoError(t, pm.processDeviceRegistrationEvent(event))
 
 	deviceInfo, exists := pm.devices["device1"]
 	require.True(t, exists, "Device should be added to devices map")
 	require.Equal(t, DeviceID("device1"), deviceInfo.DeviceID, "DeviceID should be equal to device1")
-	require.True(t, deviceInfo.HasInvalidToken, "Device should have invalid token flag")
+	require.True(t, deviceInfo.Event.NotificationTokenInvalid, "Device event should have NotificationTokenInvalid set to true")
 }
 
 func TestCollectDevicesToRemove(t *testing.T) {
@@ -287,7 +287,7 @@ func TestUpdateDevice(t *testing.T) {
 	require.Equal(t, 2, len(updatedDeviceInfo.Filters), "Filters should have 2 elements after update")
 	require.Equal(t, "ios", updatedDeviceInfo.Event.GetTag("t").Value(), "Device type should be updated to ios")
 	require.Equal(t, "encrypted_token2", updatedDeviceInfo.Event.GetTag("token").Value(), "Token should be updated")
-	require.False(t, updatedDeviceInfo.HasInvalidToken, "Device should not have invalid token flag")
+	require.False(t, updatedDeviceInfo.Event.NotificationTokenInvalid, "Device event should not have NotificationTokenInvalid set to true")
 }
 
 func TestMultipleDevicesPerUser(t *testing.T) {

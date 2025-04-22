@@ -67,7 +67,7 @@ func (pm *PushNotificationManager) shouldSendNewFollowerNotification(event *mode
 }
 
 func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[*model.Event] {
-	devices := pm.collectUserValidDevices(recipientPubKey, NotificationTypeNewFollower, event)
+	devices := pm.collectUserValidDevices(recipientPubKey, event)
 
 	return pm.createNotifications(devices, NotificationTypeNewFollower, map[string]interface{}{
 		"event": event.String(),

@@ -35,10 +35,9 @@ func TestMarkTokenAsInvalid(t *testing.T) {
 
 		t.Logf("Before update - Event: %+v, Tags: %+v", events[0], events[0].Tags)
 
-		var initialInvalidToken *bool
-		err := db.DB.QueryRowContext(t.Context(), "SELECT invalid_token FROM events WHERE id = $1", deviceEvent.ID).Scan(&initialInvalidToken)
+		initialInvalidToken, err := helperGetNotificationTokenInvalid(t, db, deviceEvent.ID)
 		require.NoError(t, err)
-		require.Nil(t, initialInvalidToken, "invalid_token should be NULL initially")
+		require.Nil(t, initialInvalidToken, "notification_token_invalid should be NULL initially")
 
 		require.NoError(t, db.markTokenAsInvalidInEvents(t.Context(), []*model.Event{events[0]}))
 
@@ -50,10 +49,10 @@ func TestMarkTokenAsInvalid(t *testing.T) {
 
 		t.Logf("After update - Event: %+v, Tags: %+v", eventsAfterUpdate[0], eventsAfterUpdate[0].Tags)
 
-		var updatedInvalidToken bool
-		err = db.DB.QueryRowContext(t.Context(), "SELECT invalid_token FROM events WHERE id = $1", deviceEvent.ID).Scan(&updatedInvalidToken)
+		updatedInvalidToken, err := helperGetNotificationTokenInvalid(t, db, deviceEvent.ID)
 		require.NoError(t, err)
-		require.True(t, updatedInvalidToken, "invalid_token should be TRUE after update")
+		require.NotNil(t, updatedInvalidToken, "notification_token_invalid should not be NULL after update")
+		require.True(t, *updatedInvalidToken, "notification_token_invalid should be TRUE after update")
 	})
 
 	t.Run("mark token as invalid for non-existing device", func(t *testing.T) {
@@ -98,15 +97,14 @@ func TestMarkTokenAsInvalid(t *testing.T) {
 
 		require.NoError(t, db.markTokenAsInvalidInEvents(t.Context(), []*model.Event{events1[0]}))
 
-		var invalid1 bool
-		err := db.DB.QueryRowContext(t.Context(), "SELECT invalid_token FROM events WHERE id = $1", deviceEvent1.ID).Scan(&invalid1)
+		invalid1, err := helperGetNotificationTokenInvalid(t, db, deviceEvent1.ID)
 		require.NoError(t, err)
-		require.True(t, invalid1, "invalid_token should be TRUE for device1")
+		require.NotNil(t, invalid1, "notification_token_invalid should not be NULL for device1")
+		require.True(t, *invalid1, "notification_token_invalid should be TRUE for device1")
 
-		var invalid2 *bool
-		err = db.DB.QueryRowContext(t.Context(), "SELECT invalid_token FROM events WHERE id = $1", deviceEvent2.ID).Scan(&invalid2)
+		invalid2, err := helperGetNotificationTokenInvalid(t, db, deviceEvent2.ID)
 		require.NoError(t, err)
-		require.Nil(t, invalid2, "invalid_token should remain NULL for device2")
+		require.Nil(t, invalid2, "notification_token_invalid should remain NULL for device2")
 	})
 }
 
@@ -125,10 +123,10 @@ func TestMarkTokenAsInvalidInEvents(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), deviceEvent))
 		require.NoError(t, db.markTokenAsInvalidInEvents(t.Context(), []*model.Event{deviceEvent}), "Should not return error when updating token in events")
 
-		var invalid bool
-		err := db.DB.QueryRowContext(t.Context(), "SELECT invalid_token FROM events WHERE id = $1", deviceEvent.ID).Scan(&invalid)
+		invalid, err := helperGetNotificationTokenInvalid(t, db, deviceEvent.ID)
 		require.NoError(t, err)
-		require.True(t, invalid, "invalid_token should be TRUE after update")
+		require.NotNil(t, invalid, "notification_token_invalid should not be NULL after update")
+		require.True(t, *invalid, "notification_token_invalid should be TRUE after update")
 	})
 
 	t.Run("mark token for non-device event should fail", func(t *testing.T) {
@@ -169,10 +167,10 @@ func TestMarkTokenAsInvalidInEvents(t *testing.T) {
 			"Should not return error when updating multiple tokens")
 
 		for _, event := range deviceEvents {
-			var invalid bool
-			err := db.DB.QueryRowContext(t.Context(), "SELECT invalid_token FROM events WHERE id = $1", event.ID).Scan(&invalid)
+			invalid, err := helperGetNotificationTokenInvalid(t, db, event.ID)
 			require.NoError(t, err)
-			require.True(t, invalid, "invalid_token should be TRUE after batch update for event %s", event.ID)
+			require.NotNil(t, invalid, "notification_token_invalid should not be NULL after batch update")
+			require.True(t, *invalid, "notification_token_invalid should be TRUE after batch update for event %s", event.ID)
 		}
 	})
 
@@ -183,6 +181,40 @@ func TestMarkTokenAsInvalidInEvents(t *testing.T) {
 		require.NoError(t, db.markTokenAsInvalidInEvents(t.Context(), []*model.Event{}),
 			"Should not return error when updating with empty array")
 	})
+}
+
+func TestGetStoredEventsWithNotificationTokenInvalid(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	deviceID := "test-device-token-" + uuid.NewString()
+	pubKey := "test-pubkey-token-" + uuid.NewString()
+	token := "fcm-token-test-" + uuid.NewString()
+
+	deviceEvent := helperCreateDeviceRegistrationEvent(deviceID, pubKey, token)
+
+	require.NoError(t, db.AcceptEvents(t.Context(), deviceEvent))
+	require.NoError(t, db.markTokenAsInvalidInEvents(t.Context(), []*model.Event{deviceEvent}))
+
+	subscription := &model.Subscription{
+		Filters: model.Filters{
+			model.Filter{
+				IDs: []string{deviceEvent.ID},
+			},
+		},
+	}
+
+	var foundEvents []*model.Event
+	for event, err := range db.SelectEvents(t.Context(), subscription.Filters...) {
+		require.NoError(t, err, "Unexpected error from SelectEvents")
+		foundEvents = append(foundEvents, event)
+	}
+
+	require.Len(t, foundEvents, 1, "Should find exactly one event")
+	require.Equal(t, deviceEvent.ID, foundEvents[0].ID, "Should find our device event")
+	require.True(t, foundEvents[0].NotificationTokenInvalid, "NotificationTokenInvalid field should be true in the Event struct")
 }
 
 func helperCreateDeviceRegistrationEvent(deviceID, pubKey, token string) *model.Event {
@@ -198,4 +230,12 @@ func helperCreateDeviceRegistrationEvent(deviceID, pubKey, token string) *model.
 			},
 		},
 	}
+}
+
+func helperGetNotificationTokenInvalid(t *testing.T, db *dbClient, eventID string) (*bool, error) {
+	t.Helper()
+	var invalidToken *bool
+	err := db.DB.QueryRowContext(t.Context(), "SELECT notification_token_invalid FROM events WHERE id = $1", eventID).Scan(&invalidToken)
+
+	return invalidToken, err
 }

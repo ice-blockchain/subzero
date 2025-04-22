@@ -12,35 +12,35 @@ EXCEPTION
 END;$$;
 
 CREATE TABLE IF NOT EXISTS events (
-    created_at     TIMESTAMP NOT NULL,
-    kind           INTEGER   NOT NULL,
-    system_kind    INTEGER,
-    lookup         tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
-    key_alg        TEXT    NOT NULL DEFAULT '',
-    content        TEXT    NOT NULL,
-    d_tag          TEXT    NOT NULL DEFAULT '',
-    h_tag          TEXT    NOT NULL DEFAULT '',
-    address        TEXT    NOT NULL GENERATED ALWAYS AS (
-                      CASE
-                        WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3
-                          THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':'
-                        WHEN 30000 <= kind AND kind < 40000
-                          THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':' || coalesce(d_tag, '')
-                        ELSE id
-                      END
-                  ) STORED,
-    id             TEXT    PRIMARY KEY,
-    pubkey         TEXT    NOT NULL,
-    master_pubkey  TEXT    NOT NULL,
-    sig            TEXT    NOT NULL,
-    sig_alg        TEXT    NOT NULL DEFAULT '',
-    reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    tags           JSONB   NOT NULL DEFAULT '[]',
-    has_images     BOOLEAN NOT NULL DEFAULT FALSE,
-    has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted        BOOLEAN NOT NULL DEFAULT FALSE,
-    hidden         BOOLEAN NOT NULL DEFAULT FALSE,
-    invalid_token  BOOLEAN DEFAULT NULL
+    created_at                  TIMESTAMP NOT NULL,
+    kind                        INTEGER   NOT NULL,
+    system_kind                 INTEGER,
+    lookup                      tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
+    key_alg                     TEXT    NOT NULL DEFAULT '',
+    content                     TEXT    NOT NULL,
+    d_tag                       TEXT    NOT NULL DEFAULT '',
+    h_tag                       TEXT    NOT NULL DEFAULT '',
+    address                     TEXT    NOT NULL GENERATED ALWAYS AS (
+                                CASE
+                                    WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3
+                                        THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':'
+                                    WHEN 30000 <= kind AND kind < 40000
+                                        THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':' || coalesce(d_tag, '')
+                                    ELSE id
+                                    END
+                                ) STORED,
+    id                          TEXT    PRIMARY KEY,
+    pubkey                      TEXT    NOT NULL,
+    master_pubkey               TEXT    NOT NULL,
+    sig                         TEXT    NOT NULL,
+    sig_alg                     TEXT    NOT NULL DEFAULT '',
+    reference_id                TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    tags                        JSONB   NOT NULL DEFAULT '[]',
+    has_images                  BOOLEAN NOT NULL DEFAULT FALSE,
+    has_videos                  BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted                     BOOLEAN NOT NULL DEFAULT FALSE,
+    hidden                      BOOLEAN NOT NULL DEFAULT FALSE,
+    notification_token_invalid  BOOLEAN DEFAULT NULL
 );
 --------
 DO $$ BEGIN

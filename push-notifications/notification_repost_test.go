@@ -301,11 +301,10 @@ func TestHandleRepostNotificationMultipleDevices(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
-
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent4))
 
 	deviceInfo := pm.devices[DeviceID("device4")]
-	deviceInfo.HasInvalidToken = true
+	deviceInfo.Event.NotificationTokenInvalid = true
 	pm.devices[DeviceID("device4")] = deviceInfo
 
 	notifications := pm.handleRepostNotification(repostEvent)

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -21,10 +20,9 @@ import (
 type (
 	DeviceID   = pn.DeviceID
 	DeviceInfo struct {
-		Filters         nostr.Filters
-		Event           *model.Event
-		DeviceID        DeviceID
-		HasInvalidToken bool
+		Filters  nostr.Filters
+		Event    *model.Event
+		DeviceID DeviceID
 	}
 
 	deviceToRemove struct {
@@ -56,10 +54,6 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
 	deviceID := DeviceID(event.Tags.GetD())
-	var hasInvalidToken bool
-	if invalidToken := event.GetTag("invalid_token"); invalidToken != nil {
-		hasInvalidToken = true
-	}
 
 	var filters nostr.Filters
 	if err := json.Unmarshal([]byte(event.Content), &filters); err != nil {
@@ -67,10 +61,9 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	}
 
 	deviceInfo := DeviceInfo{
-		DeviceID:        deviceID,
-		Filters:         filters,
-		Event:           event,
-		HasInvalidToken: hasInvalidToken,
+		DeviceID: deviceID,
+		Filters:  filters,
+		Event:    event,
 	}
 
 	pm.deviceMutex.Lock()

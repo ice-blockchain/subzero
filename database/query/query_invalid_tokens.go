@@ -23,12 +23,12 @@ func (db *dbClient) markTokenAsInvalidInEvents(ctx context.Context, events []*mo
 
 	res, err := db.DB.ExecContext(ctx, `
 		UPDATE events
-			SET invalid_token = TRUE
+			SET notification_token_invalid = TRUE
 		WHERE id = ANY($1) AND kind = 31751
 	`, eventIDs)
 
 	if err != nil {
-		return errors.Wrapf(err, "failed to update invalid_token in events table for events %s", strings.Join(eventIDs, ", "))
+		return errors.Wrapf(err, "failed to update notification_token_invalid in events table for events %s", strings.Join(eventIDs, ", "))
 	}
 
 	rowsAffected, err := res.RowsAffected()
@@ -37,7 +37,7 @@ func (db *dbClient) markTokenAsInvalidInEvents(ctx context.Context, events []*mo
 	}
 
 	if rowsAffected == 0 {
-		return errors.New("failed to update invalid_token in events table: no events were updated")
+		return errors.New("failed to update notification_token_invalid in events table: no events were updated")
 	}
 
 	return nil

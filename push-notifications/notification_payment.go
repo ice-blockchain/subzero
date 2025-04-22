@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -37,7 +36,7 @@ func (pm *PushNotificationManager) handlePaymentNotification(event *model.Event)
 		tpe = NotificationTypePaymentReceived
 	}
 
-	deviceEvents := pm.collectUserValidDevices(recipientPubKey, tpe, event)
+	deviceEvents := pm.collectUserValidDevices(recipientPubKey, event)
 
 	return pm.createNotifications(deviceEvents, tpe, map[string]interface{}{
 		"event": event.String(),

@@ -564,7 +564,8 @@ select
 	jsonb_build_array(
 		jsonb_build_array('output', 'JSON'),
 		jsonb_build_array('param', 'group', 'content')
-	) as tags
+	) as tags,
+	FALSE as notification_token_invalid
 from (
 	select
 		mainev.id AS poll_id,
@@ -642,7 +643,8 @@ select
 			))
 		else
 			jsonb_build_array()
-		end as tags
+		end as tags,
+	FALSE as notification_token_invalid
 from
 	event_counters f
 inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
@@ -759,7 +761,8 @@ select
 	'' as content,
 	'' as d_tag,
 	'' as h_tag,
-	'[]' as tags
+	'[]' as tags,
+	FALSE as notification_token_invalid
 from
 	events e
 inner join `)
@@ -949,7 +952,7 @@ func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[st
 }
 
 func (b *queryBuilder) fieldsNames(table string) []string {
-	fields := []string{"kind", "created_at", "id", "address", "pubkey", "master_pubkey", "sig", "content", "d_tag", "h_tag", "tags"}
+	fields := []string{"kind", "created_at", "id", "address", "pubkey", "master_pubkey", "sig", "content", "d_tag", "h_tag", "tags", "notification_token_invalid"}
 	if table == "" {
 		return fields
 	}

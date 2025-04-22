@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -365,7 +364,7 @@ func (pm *PushNotificationManager) markDevicesAsInvalidInCache(deviceEvents []*m
 		pm.deviceMutex.Lock()
 		deviceInfo, ok := pm.devices[deviceID]
 		if ok {
-			deviceInfo.HasInvalidToken = true
+			deviceInfo.Event.NotificationTokenInvalid = true
 			pm.devices[deviceID] = deviceInfo
 		}
 		pm.deviceMutex.Unlock()
@@ -406,7 +405,7 @@ func (pm *PushNotificationManager) createNotifications(deviceEvents []*model.Eve
 	return notifications
 }
 
-func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, notificationType NotificationType, event *model.Event) (devices []*model.Event) {
+func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, event *model.Event) (devices []*model.Event) {
 	pm.deviceMutex.RLock()
 	deviceIDs, ok := pm.userDevices[pubKey]
 	pm.deviceMutex.RUnlock()
@@ -423,7 +422,7 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, not
 		if !exists {
 			continue
 		}
-		if deviceInfo.HasInvalidToken {
+		if deviceInfo.Event.NotificationTokenInvalid {
 			continue
 		}
 		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {

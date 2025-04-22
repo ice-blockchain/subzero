@@ -43,6 +43,9 @@ func (it *eventIterator) scanEvent(rows *sqlx.Rows) (_ *databaseEvent, err error
 	if ev.Tags, err = it.decodeTags(ev.Jtags); err != nil {
 		return nil, errors.Wrap(err, "failed to decode tags")
 	}
+	if ev.NotificationTokenInvalid.Valid {
+		ev.Event.NotificationTokenInvalid = ev.NotificationTokenInvalid.Bool
+	}
 
 	return &ev, nil
 }

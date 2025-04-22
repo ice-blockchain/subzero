@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -17,7 +16,7 @@ func (pm *PushNotificationManager) handleDirectMessageNotification(event *model.
 	if recipientPubKey == "" || recipientPubKey == event.GetMasterPublicKey() {
 		return nil
 	}
-	deviceEvents := pm.collectUserValidDevices(recipientPubKey, NotificationTypeDirectMessage, event)
+	deviceEvents := pm.collectUserValidDevices(recipientPubKey, event)
 
 	return pm.createNotifications(deviceEvents, NotificationTypeDirectMessage, map[string]interface{}{
 		"event": event.String(),

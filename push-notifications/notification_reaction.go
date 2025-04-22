@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: ice License 1.0
 
-
 package pushnotifications
 
 import (
@@ -13,7 +12,7 @@ func (pm *PushNotificationManager) handleReactionNotification(event *model.Event
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil
 	}
-	deviceEvents := pm.collectUserValidDevices(referencePubkey, NotificationTypeReaction, event)
+	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
 	return pm.createNotifications(deviceEvents, NotificationTypeReaction, map[string]interface{}{
 		"event": event.String(),

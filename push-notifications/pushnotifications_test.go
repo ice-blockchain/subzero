@@ -103,7 +103,7 @@ func TestCollectValidDevices(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(device5))
 
 	device4Info := pm.devices[DeviceID("device4")]
-	device4Info.HasInvalidToken = true
+	device4Info.Event.NotificationTokenInvalid = true
 	pm.devices[DeviceID("device4")] = device4Info
 
 	event := &model.Event{
@@ -113,7 +113,7 @@ func TestCollectValidDevices(t *testing.T) {
 		},
 	}
 
-	validDevices := pm.collectUserValidDevices("pubkey1", NotificationTypePost, event)
+	validDevices := pm.collectUserValidDevices("pubkey1", event)
 
 	require.Len(t, validDevices, 2, "There should be two valid devices")
 
@@ -131,7 +131,7 @@ func TestCollectValidDevices(t *testing.T) {
 	require.False(t, deviceIDs["device2"], "device2 should not be included due to an incompatible filter")
 	require.False(t, deviceIDs["device4"], "device4 should not be included due to an invalid token")
 
-	validDevices = pm.collectUserValidDevices("nonexistent", NotificationTypePost, event)
+	validDevices = pm.collectUserValidDevices("nonexistent", event)
 	require.Empty(t, validDevices, "For nonexistent user, there should be no devices")
 }
 
@@ -298,14 +298,14 @@ func TestHandleInvalidDeviceTokens(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 
-	require.False(t, pm.devices[DeviceID(deviceID1)].HasInvalidToken, "Device 1 should have valid token")
-	require.False(t, pm.devices[DeviceID(deviceID2)].HasInvalidToken, "Device 2 should have valid token")
+	require.False(t, pm.devices[DeviceID(deviceID1)].Event.NotificationTokenInvalid, "Device 1 should have valid token")
+	require.False(t, pm.devices[DeviceID(deviceID2)].Event.NotificationTokenInvalid, "Device 2 should have valid token")
 
 	invalidDevices := []*model.Event{deviceEvent1}
 	require.NoError(t, pm.markDevicesAsInvalidInCache(invalidDevices))
 
-	require.True(t, pm.devices[DeviceID(deviceID1)].HasInvalidToken, "Device 1 should have invalid token")
-	require.False(t, pm.devices[DeviceID(deviceID2)].HasInvalidToken, "Device 2 should still have valid token")
+	require.True(t, pm.devices[DeviceID(deviceID1)].Event.NotificationTokenInvalid, "Device 1 should have invalid token")
+	require.False(t, pm.devices[DeviceID(deviceID2)].Event.NotificationTokenInvalid, "Device 2 should still have valid token")
 
 	require.NoError(t, pm.handleInvalidDeviceTokens(t.Context(), []*model.Event{}))
 
@@ -381,6 +381,11 @@ func TestCollectUserValidDevices(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(device1))
 	require.NoError(t, pm.processDeviceRegistrationEvent(device2))
 	require.NoError(t, pm.processDeviceRegistrationEvent(device3))
+
+	deviceInfo := pm.devices[DeviceID("device3")]
+	deviceInfo.Event.NotificationTokenInvalid = true
+	pm.devices[DeviceID("device3")] = deviceInfo
+
 	require.Len(t, pm.devices, 3, "Should have 3 devices")
 
 	textEvent := &model.Event{
@@ -395,17 +400,17 @@ func TestCollectUserValidDevices(t *testing.T) {
 		},
 	}
 
-	textDevices := pm.collectUserValidDevices(userPubKey, NotificationTypePost, textEvent)
+	textDevices := pm.collectUserValidDevices(userPubKey, textEvent)
 	require.Len(t, textDevices, 1, "Should collect 1 device for text note")
 	require.Equal(t, device1.ID, textDevices[0].ID, "Should collect device1 for text note")
 
-	reactionDevices := pm.collectUserValidDevices(userPubKey, NotificationTypeReaction, reactionEvent)
+	reactionDevices := pm.collectUserValidDevices(userPubKey, reactionEvent)
 	require.Len(t, reactionDevices, 1, "Should collect 1 device for reaction")
 	require.Equal(t, device2.ID, reactionDevices[0].ID, "Should collect device2 for reaction")
 
 	require.NotContains(t, textDevices, device3, "Should not collect device with invalid token")
 	require.NotContains(t, reactionDevices, device3, "Should not collect device with invalid token")
 
-	nonExistentDevices := pm.collectUserValidDevices("nonexistent_pubkey", NotificationTypePost, textEvent)
+	nonExistentDevices := pm.collectUserValidDevices("nonexistent_pubkey", textEvent)
 	require.Empty(t, nonExistentDevices, "Should collect no devices for non-existent user")
 }

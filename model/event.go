@@ -20,6 +20,7 @@ import (
 type (
 	Event struct {
 		nostr.Event
+		NotificationTokenInvalid bool
 	}
 	EventSignAlg string
 	EventKeyAlg  string
