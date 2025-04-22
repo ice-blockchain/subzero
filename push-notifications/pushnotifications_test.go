@@ -3,13 +3,27 @@
 package pushnotifications
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/model"
 )
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if code == 0 {
+		if err := goleak.Find(); err != nil {
+			fmt.Printf("goleak found issues: %v\n", err)
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
 
 func (e *TestEvent) GetMasterPublicKey() string {
 	return e.PubKey

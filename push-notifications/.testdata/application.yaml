@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: ice License 1.0
+
+push-notifications:
+  fcm-credentials-path: /dev/null
