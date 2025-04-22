@@ -111,7 +111,6 @@ func TestMarkTokenAsInvalid(t *testing.T) {
 
 func TestMarkTokenAsInvalidInEvents(t *testing.T) {
 	t.Parallel()
-
 	t.Run("mark token in events table", func(t *testing.T) {
 		db := helperNewDatabase(t)
 		defer db.Close()
