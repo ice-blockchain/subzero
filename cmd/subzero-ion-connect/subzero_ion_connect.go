@@ -43,6 +43,7 @@ var (
 			validation.MustInit()
 			command.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
+			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
 			pushnotifications.MustInit()

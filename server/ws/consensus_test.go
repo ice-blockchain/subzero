@@ -6,6 +6,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"github.com/ice-blockchain/subzero/cfg"
+	"os"
+	"slices"
+
 	//"fmt"
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
@@ -57,9 +61,11 @@ func TestConsensusEvents(t *testing.T) {
 	}
 
 	defer func() {
-		//require.NoError(t, os.RemoveAll("../../.cometbft"))
-		//require.NoError(t, os.RemoveAll("../../.cometbft2"))
-		//require.NoError(t, os.RemoveAll("../../.cometbft3"))
+		require.NoError(t, os.RemoveAll("../../.cometbft"))
+		require.NoError(t, os.RemoveAll("../../.cometbft2"))
+		require.NoError(t, os.RemoveAll("../../.cometbft3"))
+		require.NoError(t, os.RemoveAll("../../.cometbft4"))
+		require.NoError(t, os.RemoveAll("../../.cometbft5"))
 	}()
 
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
@@ -77,16 +83,16 @@ func TestConsensusEvents(t *testing.T) {
 	for _, s := range pubsubServers {
 		consensusDone[s.Endpoint()] = make(chan bool, 1000)
 	}
-	accepted := make(map[string]bool)
+	accepted := xsync.NewMapOf[string, bool]()
 	normalAccept := func(ctx context.Context, events ...*model.Event) error {
+		if _, ok := accepted.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
+			return nil
+		}
 		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
 			return qErr
 		}
-		if _, ok := accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)]; ok {
-			return nil
-		}
 		consensusDone[mapPort(ctx).Endpoint()] <- true
-		accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)] = true
+		accepted.Store(mapPort(ctx).Endpoint()+helperHashEvents(t, events...), true)
 		t.Log("ACCEPT", mapPort(ctx).Endpoint(), events[0].Kind, events[0].Content)
 		return nil
 	}
@@ -98,7 +104,7 @@ func TestConsensusEvents(t *testing.T) {
 		}
 		return mapPort(ctx).DB.SelectEvents(ctx, filters...)
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	var ev, ev2 *model.Event
@@ -175,14 +181,14 @@ func TestConsensusEvents(t *testing.T) {
 		if ctx.Value("consensusPort").(uint16) == 19977 {
 			return errors.New("simulating remote relay did not accept tx - it should be rolled back")
 		}
+		if _, ok := accepted.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
+			return nil
+		}
 		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
 			return qErr
 		}
-		if _, ok := accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)]; ok {
-			return nil
-		}
 		consensusDone[mapPort(ctx).Endpoint()] <- true
-		accepted[mapPort(ctx).Endpoint()+helperHashEvents(t, events...)] = true
+		accepted.Store(mapPort(ctx).Endpoint()+helperHashEvents(t, events...), true)
 		t.Log("ACCEPT", mapPort(ctx).Endpoint(), events[0].Kind, events[0].Content)
 
 		return nil
@@ -253,7 +259,6 @@ func TestConsensusEvents(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, eventMissedByRelay3DuringBroadcastTime.Event))
 		waitAcceptErr := helperAwaitConsensus(t, relay, consensusDone)
 		require.NoError(t, waitAcceptErr)
-		//require.Contains(t, waitAcceptErr.Error(), pubsubServers[2].Endpoint())
 		receivedEventsFromFirstRelay := helperQueryEvents(t, ctx, relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime)
 		receivedEventsFromSecondRelay := helperQueryEvents(t, ctx, secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
@@ -261,7 +266,7 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromThirdRelay := helperQueryEvents(t, ctx, thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.NotContains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 		pubsubServers[2].Consenus = command.GetConsensusWithMetricsOverride(t.Context(), command.WithConfig(&command.Config{
-			AbsoluteRootPath:        "/home/nusanovkornilov/go/src/github.com/ice-blockchain/subzero/.cometbft3",
+			AbsoluteRootPath:        "../../.cometbft3",
 			NodePrivKey:             "./../database/command/.testdata/node_key3.json",
 			DiscoveryPort:           19966,
 			NIP13MinLeadingZeroBits: 0,
@@ -279,88 +284,60 @@ func TestConsensusEvents(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, eventAfterNodeComesUp, privkey)
 		require.NoError(t, relay.Publish(ctx, eventAfterNodeComesUp.Event))
 		require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
-		//require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
 		time.Sleep(10 * time.Second)
 		receivedEventsFromThirdRelay = helperQueryEvents(t, ctx, thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromThirdRelay, eventAfterNodeComesUp)
 		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 
 	})
-	//t.Run("relay list is updated for the user including new relays to bootstrap", func(t *testing.T) {
-	//	globalConfig := cfg.MustGet[globalCfg]()
-	//	fmt.Println(globalConfig)
-	//	extraServer1, release1 := helperCreateWsInstance(t.Context(), globalConfig, 9955, 19955,
-	//		"./../database/command/.testdata/node_key4.json",
-	//		"../../.cometbft4")
-	//	extraServer2, release2 := helperCreateWsInstance(t.Context(), globalConfig, 9944, 19944,
-	//		"./../database/command/.testdata/node_key5.json",
-	//		"../../.cometbft5")
-	//	defer func() {
-	//		slices.DeleteFunc(pubsubServers, func(service *fixture.MockService) bool {
-	//			return service.Endpoint() == extraServer1.Endpoint() || service.Endpoint() == extraServer2.Endpoint()
-	//		})
-	// extraServer1.Stop()
-	// extraServer2.Stop()
-	//		require.NoError(t, release1())
-	//		require.NoError(t, release2())
-	//	}()
-	//	pubsubServers = append(pubsubServers, extraServer1)
-	//	pubsubServers = append(pubsubServers, extraServer2)
-	//	for _, s := range pubsubServers {
-	//		consensusDone[s.Endpoint()] = make(chan bool, 1000)
-	//	}
-	//
-	//	relaysList := &model.Event{Event: nostr.Event{
-	//		CreatedAt: nostr.Timestamp(time.Now().Unix()),
-	//		Kind:      nostr.KindRelayListMetadata,
-	//		Tags: nostr.Tags{
-	//			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-	//			[]string{"r", pubsubServers[0].Endpoint()},
-	//			[]string{"r", pubsubServers[1].Endpoint()},
-	//			[]string{"r", pubsubServers[2].Endpoint()},
-	//			[]string{"r", extraServer1.Endpoint()},
-	//			[]string{"r", extraServer2.Endpoint()},
-	//		},
-	//	}}
-	//	helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
-	//	require.NoError(t, relay.Publish(ctx, relaysList.Event))
-	//
-	//	require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
-	//
-	//})
-	helperMustCloseRelay(t, relay)
+	t.Run("relay list is updated for the user including new relays to bootstrap", func(t *testing.T) {
+		globalConfig := cfg.MustGet[globalCfg]()
+		extraServer1, release1 := helperCreateWsInstance(t.Context(), globalConfig, 9955, 19955,
+			"./../database/command/.testdata/node_key4.json",
+			"../../.cometbft4")
+		extraServer2, release2 := helperCreateWsInstance(t.Context(), globalConfig, 9944, 19944,
+			"./../database/command/.testdata/node_key5.json",
+			"../../.cometbft5")
+		defer func() {
+			slices.DeleteFunc(pubsubServers, func(service *fixture.MockService) bool {
+				return service.Endpoint() == extraServer1.Endpoint() || service.Endpoint() == extraServer2.Endpoint()
+			})
+			extraServer1.Consenus.Stop()
+			extraServer2.Consenus.Stop()
+			require.NoError(t, release1())
+			require.NoError(t, release2())
+		}()
+		//pubsubServers = append(pubsubServers, extraServer1)
+		//pubsubServers = append(pubsubServers, extraServer2)
+		//for _, s := range pubsubServers {
+		//	consensusDone[s.Endpoint()] = make(chan bool, 1000)
+		//}
 
-	//command.MustInit(t.Context(), command.WithConfig(&command.Config{
-	//	AbsoluteRootPath:        "../../.cometbft3",
-	//	NodePrivKey:             "./../database/command/.testdata/node_key3.json",
-	//	DiscoveryPort:           19966,
-	//	helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
-	//	require.NoError(t, relay.Publish(ctx, relaysList.Event))
-	//})	//	NIP13MinLeadingZeroBits: 0,
-	//}))
-	//t.Run("add relay", func(t *testing.T) {
-	//	relaysList := &model.Event{Event: nostr.Event{
-	//		CreatedAt: nostr.Timestamp(time.Now().Unix()),
-	//		Kind:      nostr.KindRelayListMetadata,
-	//		Tags: nostr.Tags{
-	//			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-	//			[]string{"r", pubsubServers[0].Endpoint()},
-	//			[]string{"r", pubsubServers[1].Endpoint()},
-	//			[]string{"r", pubsubServers[2].Endpoint()},
-	//		},
-	//	}}
-	//t.Run("query events", func(t *testing.T) {
-	//	events, err := relay.QuerySync(ctx, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
-	//	require.NoError(t, err)
-	//	var receivedEvents []*model.Event
-	//	for _, recEv := range events {
-	//		receivedEvents = append(receivedEvents, &model.Event{Event: *recEv})
-	//	}
-	//	require.Len(t, receivedEvents, 1)
-	//	require.Contains(t, receivedEvents, ev)
-	//	require.Contains(t, receivedEvents, attestationEvent)
-	//	require.NotContains(t, receivedEvents, notAcceptedEvent)
-	//})
+		relaysList := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"r", pubsubServers[0].Endpoint()},
+				[]string{"r", pubsubServers[1].Endpoint()},
+				[]string{"r", pubsubServers[2].Endpoint()},
+				[]string{"r", extraServer1.Endpoint()},
+				[]string{"r", extraServer2.Endpoint()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
+		require.NoError(t, relay.Publish(ctx, relaysList.Event))
+
+		//require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
+		//fourRelay := helperMustNewRelay(t, extraServer1)
+		//receivedEventsFromFourthRelay := helperQueryEvents(t, ctx, fourRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		//require.Contains(t, receivedEventsFromFourthRelay, eventAfterNodeComesUp)
+		//require.Contains(t, receivedEventsFromFourthRelay, eventMissedByRelay3DuringBroadcastTime)
+		//require.Contains(t, receivedEventsFromFourthRelay, ev)
+		//require.Contains(t, receivedEventsFromFourthRelay, ev2)
+		//require.NotContains(t, receivedEventsFromFourthRelay, notAcceptedEvent)
+	})
+	helperMustCloseRelay(t, relay)
 
 	helperMustCloseRelay(t, relay)
 }

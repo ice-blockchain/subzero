@@ -5,7 +5,6 @@ package command
 import (
 	"context"
 	"github.com/cockroachdb/errors"
-	"github.com/ice-blockchain/cometbft/p2p"
 	"os"
 	"sync"
 
@@ -99,11 +98,7 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 		serverCfg.P2P.AllowDuplicateIP = true
 		serverCfg.P2P.AddrBookStrict = false
 		logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
-		nodeKey, err := p2p.LoadNodeKey(serverCfg.NodeKeyFile())
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to load node key %v", serverCfg.NodeKeyFile()))
-		}
-		logger = logger.With("nodeID", nodeKey.ID(), "discoveryPort", globalCfg.DiscoveryPort)
+		logger = logger.With("port", globalCfg.DiscoveryPort)
 	}
 	cometbftServer, err := multiplex.NewServer(c, serverCfg, logger)
 	if err != nil {
