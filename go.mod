@@ -46,7 +46,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.36.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.12.0
-	github.com/xssnick/tonutils-storage v0.8.1
+	github.com/xssnick/tonutils-storage v0.8.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.39.0
 	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
@@ -59,7 +59,7 @@ require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/aws/aws-sdk-go v1.55.6 // indirect
+	github.com/aws/aws-sdk-go v1.55.7 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect

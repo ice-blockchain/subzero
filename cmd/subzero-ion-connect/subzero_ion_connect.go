@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
@@ -25,11 +26,17 @@ import (
 )
 
 var (
-	configPath string
-	subzero    = &cobra.Command{
+	configPath  string
+	showVersion bool
+	subzero     = &cobra.Command{
 		Use:   "subzero",
 		Short: "subzero",
 		Run: func(cmd *cobra.Command, _ []string) {
+			if showVersion {
+				printVersion()
+				return
+			}
+
 			cfg.MustInit(configPath)
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
@@ -39,6 +46,7 @@ var (
 	}
 	initFlags = func() {
 		subzero.Flags().StringVar(&configPath, "config", cfg.DefaultYAMLConfigurationFilePath, "absolute path to the service config yaml file")
+		subzero.Flags().BoolVar(&showVersion, "version", false, "show version")
 	}
 
 	// Do not require authentication for these kinds of events (publishing).
@@ -47,6 +55,25 @@ var (
 		nostr.KindFileMetadata: {},
 	}
 )
+
+func printVersion() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		fmt.Println("no build info")
+		return
+	}
+
+	fmt.Println("Package:", info.Main.Path)
+	fmt.Println("Version:", info.Main.Version)
+	for _, v := range info.Settings {
+		switch v.Key {
+		case "vcs.revision":
+			fmt.Println("Revision:", v.Value)
+		case "vcs.time":
+			fmt.Println("Build Time:", v.Value)
+		}
+	}
+}
 
 func init() {
 	initFlags()
