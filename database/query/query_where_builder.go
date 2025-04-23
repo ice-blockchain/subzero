@@ -990,6 +990,9 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 	sb.WriteString(` where `)
 	sb.WriteString(where)
 
+	sb.WriteString(" order by ")
+	sb.WriteString(cmp.Or(orderBy, whereBuilderDefaultOrderBy))
+
 	if filter.Limit > 0 {
 		sb.WriteString(` limit :`)
 		sb.WriteString(b.PushValue(filter.ID, "limit", filter.Limit))
