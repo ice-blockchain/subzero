@@ -20,7 +20,7 @@ import (
 type (
 	DeviceID   = pn.DeviceID
 	DeviceInfo struct {
-		Filters  nostr.Filters
+		Filters  model.Filters
 		Event    *model.Event
 		DeviceID DeviceID
 	}
@@ -32,22 +32,25 @@ type (
 )
 
 func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
-	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: []model.Filter{{
-			Kinds: []int{model.CustomIONKindDeviceRegistration},
-		}},
-	})
-	for event, err := range eventIterator {
-		if err != nil {
-			return fmt.Errorf("error getting device registration events: %w", err)
-		}
+	events, err := query.CollectDeviceRegistrationEvents(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting device registration events: %w", err)
+	}
+
+	for _, event := range events {
 		if err := pm.processDeviceRegistrationEvent(event); err != nil {
 			log.Printf("Error processing device registration event %s: %v", event.ID, err)
 
 			continue
 		}
 	}
-	log.Printf("Device synchronization completed: %d devices", len(pm.devices))
+
+	var totalDevices int
+	for _, devices := range pm.userDevicesMap {
+		totalDevices += len(devices)
+	}
+
+	log.Printf("Device synchronization completed: %d devices", totalDevices)
 
 	return nil
 }
@@ -69,23 +72,13 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
-	pm.devices[deviceID] = deviceInfo
-
 	masterPubKey := event.GetMasterPublicKey()
-	if _, ok := pm.userDevices[masterPubKey]; !ok {
-		pm.userDevices[masterPubKey] = []DeviceID{}
-	}
-	deviceExists := false
-	for _, id := range pm.userDevices[masterPubKey] {
-		if id == deviceID {
-			deviceExists = true
 
-			break
-		}
+	if _, ok := pm.userDevicesMap[masterPubKey]; !ok {
+		pm.userDevicesMap[masterPubKey] = make(map[DeviceID]DeviceInfo)
 	}
-	if !deviceExists {
-		pm.userDevices[masterPubKey] = append(pm.userDevices[masterPubKey], deviceID)
-	}
+
+	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
 
 	return nil
 }
@@ -94,24 +87,22 @@ func (pm *PushNotificationManager) RemoveDevice(ctx context.Context, deviceID De
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
-	deviceInfo, exists := pm.devices[deviceID]
-	if !exists {
-		return nil
-	}
-	if deviceInfo.Event.GetMasterPublicKey() != masterPubKey {
-		return fmt.Errorf("device belongs to another user")
-	}
-	if devices, ok := pm.userDevices[masterPubKey]; ok {
-		updatedDevices := make([]DeviceID, 0, len(devices))
-		for _, id := range devices {
-			if id != deviceID {
-				updatedDevices = append(updatedDevices, id)
-			}
+	if devices, ok := pm.userDevicesMap[masterPubKey]; ok {
+		deviceInfo, exists := devices[deviceID]
+		if !exists {
+			return nil
 		}
-		pm.userDevices[masterPubKey] = updatedDevices
-	}
 
-	delete(pm.devices, deviceID)
+		if deviceInfo.Event.GetMasterPublicKey() != masterPubKey {
+			return fmt.Errorf("device belongs to another user")
+		}
+
+		delete(pm.userDevicesMap[masterPubKey], deviceID)
+
+		if len(pm.userDevicesMap[masterPubKey]) == 0 {
+			delete(pm.userDevicesMap, masterPubKey)
+		}
+	}
 
 	return nil
 }
@@ -136,7 +127,7 @@ func (pm *PushNotificationManager) shouldProcessDeletionEvent(event *model.Event
 	return false
 }
 
-func (pm *PushNotificationManager) collectDevicesToRemove(ctx context.Context, events []*model.Event) (map[DeviceID]deviceToRemove, error) {
+func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, events []*model.Event) error {
 	var eventIDs []string
 	var deletionEvents []*model.Event
 	for _, event := range events {
@@ -145,14 +136,14 @@ func (pm *PushNotificationManager) collectDevicesToRemove(ctx context.Context, e
 		}
 	}
 	if len(deletionEvents) == 0 {
-		return nil, nil
+		return nil
 	}
 	for _, event := range deletionEvents {
 		for _, tag := range event.GetTags("e") {
 			eventIDs = append(eventIDs, tag.Value())
 		}
 	}
-	deviceToRemoveMap := make(map[DeviceID]deviceToRemove)
+	var errs error
 	if len(eventIDs) > 0 {
 		it := query.GetStoredEvents(ctx, &model.Subscription{
 			Filters: []model.Filter{
@@ -163,47 +154,24 @@ func (pm *PushNotificationManager) collectDevicesToRemove(ctx context.Context, e
 		})
 		for event, err := range it {
 			if err != nil {
-				log.Printf("Error getting event %v: %v", event.ID, err)
-
-				return nil, errors.Wrap(err, "error getting event")
+				return errors.Wrap(err, "error getting event")
 			}
-
 			if event.Kind == model.CustomIONKindDeviceRegistration {
-				if dTag := event.GetTag("d"); dTag != nil {
-					deviceID := DeviceID(dTag.Value())
-					masterPubKey := event.GetMasterPublicKey()
-					deviceToRemoveMap[deviceID] = deviceToRemove{
-						deviceID:     deviceID,
-						masterPubKey: masterPubKey,
-					}
+				if err := pm.RemoveDevice(ctx, DeviceID(event.Tags.GetD()), event.GetMasterPublicKey()); err != nil {
+					errs = errors.Join(errs, errors.Wrapf(err, "error when deleting device: %v", event.Tags.GetD()))
 				}
 			}
 		}
 	}
 
-	return deviceToRemoveMap, nil
+	return errors.Wrap(errs, "error on removing devices")
 }
 
-func (pm *PushNotificationManager) removeDevices(ctx context.Context, deviceToRemoveMap map[DeviceID]deviceToRemove) error {
-	var errs error
-	for _, device := range deviceToRemoveMap {
-		if err := pm.RemoveDevice(ctx, device.deviceID, device.masterPubKey); err != nil {
-			errs = errors.Join(errs, errors.Wrapf(err, "error when deleting device: %v", device.deviceID))
-		}
-	}
-
-	return errs
-}
-
-func (pm *PushNotificationManager) ProcessDeviceRegistrationEvents(ctx context.Context, events []*model.Event) error {
+func (pm *PushNotificationManager) ManageDeviceRegistrationEvents(ctx context.Context, events []*model.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
-	deviceToRemoveMap, err := pm.collectDevicesToRemove(ctx, events)
-	if err != nil {
-		return err
-	}
-	if err := pm.removeDevices(ctx, deviceToRemoveMap); err != nil {
+	if err := pm.removeDevicesIfAny(ctx, events); err != nil {
 		return err
 	}
 	var errs error

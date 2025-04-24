@@ -46,20 +46,19 @@ var (
 type (
 	databaseEvent struct {
 		model.Event
-		SystemKind               sql.NullInt64
-		ReferenceID              sql.NullString
-		NotificationTokenInvalid sql.NullBool
-		Jtags                    string
-		SigAlg                   string
-		KeyAlg                   string
-		MasterPubKey             string
-		Dtag                     string
-		Htag                     string
-		AddressValue             string
-		Lookup                   string
-		Deleted                  bool
-		HasImages                bool
-		HasVideos                bool
+		SystemKind   sql.NullInt64
+		ReferenceID  sql.NullString
+		Jtags        string
+		SigAlg       string
+		KeyAlg       string
+		MasterPubKey string
+		Dtag         string
+		Htag         string
+		AddressValue string
+		Lookup       string
+		Deleted      bool
+		HasImages    bool
+		HasVideos    bool
 	}
 	databaseEventAddress struct {
 		Kind   int

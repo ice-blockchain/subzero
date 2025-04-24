@@ -5,6 +5,7 @@ package pushnotifications
 import (
 	"context"
 
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -12,18 +13,20 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleNewFollowerNotification(event *model.Event) []*pn.Notification[*model.Event] {
-	oldEvent := pm.getOldFollowListEvent(context.Background(), event.GetMasterPublicKey())
-
-	shouldSend, recipientPubKey := pm.shouldSendNewFollowerNotification(event, oldEvent)
-	if !shouldSend {
-		return nil
+func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+	oldEvent, err := pm.getOldFollowListEvent(ctx, event.GetMasterPublicKey())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get old follow list event")
+	}
+	recipientPubKey := pm.getLastFollowerPubkey(event, oldEvent)
+	if recipientPubKey == "" {
+		return nil, nil
 	}
 
-	return pm.createNewFollowerNotification(event, recipientPubKey)
+	return pm.createNewFollowerNotification(event, recipientPubKey), nil
 }
 
-func (pm *PushNotificationManager) getOldFollowListEvent(ctx context.Context, authorPubKey string) *model.Event {
+func (pm *PushNotificationManager) getOldFollowListEvent(ctx context.Context, authorPubKey string) (*model.Event, error) {
 	subscription := &model.Subscription{
 		Filters: model.Filters{
 			{
@@ -34,42 +37,37 @@ func (pm *PushNotificationManager) getOldFollowListEvent(ctx context.Context, au
 	}
 
 	var oldEvent *model.Event
-	query.GetStoredEvents(ctx, subscription)(func(e *model.Event, err error) bool {
+	it := query.GetStoredEvents(ctx, subscription)
+	for ev, err := range it {
 		if err != nil {
-			return false
+			return nil, errors.Wrap(err, "failed to get old follow list event")
 		}
-		oldEvent = e
-		return true
-	})
+		oldEvent = ev
 
-	return oldEvent
+		break
+	}
+
+	return oldEvent, nil
 }
 
-func (pm *PushNotificationManager) shouldSendNewFollowerNotification(event *model.Event, oldEvent *model.Event) (bool, string) {
+func (pm *PushNotificationManager) getLastFollowerPubkey(event *model.Event, oldEvent *model.Event) string {
 	currentPTags := event.GetTags("p")
 	if len(currentPTags) == 0 {
-		return false, ""
+		return ""
 	}
 
 	if oldEvent != nil {
 		oldPTags := oldEvent.GetTags("p")
 		if len(currentPTags) < len(oldPTags) {
-			return false, ""
+			return ""
 		}
 	}
 
-	lastFollowedPubKey := currentPTags[len(currentPTags)-1].Value()
-	if lastFollowedPubKey == "" || lastFollowedPubKey == event.GetMasterPublicKey() {
-		return false, ""
-	}
-
-	return true, lastFollowedPubKey
+	return currentPTags[len(currentPTags)-1].Value()
 }
 
-func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[*model.Event] {
+func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[*DeviceRegistrationEvent] {
 	devices := pm.collectUserValidDevices(recipientPubKey, event)
 
-	return pm.createNotifications(devices, NotificationTypeNewFollower, map[string]interface{}{
-		"event": event.String(),
-	})
+	return pm.createNotifications(devices, NotificationTypeNewFollower, event)
 }

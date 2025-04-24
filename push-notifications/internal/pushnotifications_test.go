@@ -25,7 +25,7 @@ type mockClient struct {
 	dryRun bool
 }
 
-func (m *mockClient) SendSingle(ctx context.Context, notification *Notification[*model.Event]) error {
+func (m *mockClient) SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error {
 	tokenTag := notification.Target.GetTag("token")
 	if tokenTag == nil || tokenTag.Value() == "" || !isValidToken(tokenTag.Value()) {
 		return ErrInvalidDeviceToken
@@ -57,7 +57,7 @@ func TestSendSingle(t *testing.T) {
 	event1.Tags = append(event1.Tags, model.Tag{"token", testToken})
 	event1.Tags = append(event1.Tags, model.Tag{"deviceId", uuid.NewString()})
 
-	n1 := &Notification[*model.Event]{
+	n1 := &Notification[*DeviceRegistrationEvent]{
 		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
 		Target:   event1,
 		Title:    testTitle,
@@ -122,7 +122,7 @@ func TestSendSingle_Stability(t *testing.T) {
 	event.Tags = append(event.Tags, model.Tag{"token", testToken + "_valid"})
 	event.Tags = append(event.Tags, model.Tag{"deviceId", uuid.NewString()})
 
-	n1 := &Notification[*model.Event]{
+	n1 := &Notification[*DeviceRegistrationEvent]{
 		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
 		Target:   event,
 		Title:    testTitle,
@@ -137,10 +137,10 @@ func TestSendSingle_Stability(t *testing.T) {
 	results := make(chan error, concurrency)
 
 	for i := 0; i < concurrency; i++ {
-		go func(wg *sync.WaitGroup, n *Notification[*model.Event]) {
+		go func(wg *sync.WaitGroup, n *Notification[*DeviceRegistrationEvent]) {
 			defer wg.Done()
 
-			err := client.SendSingle(context.Background(), n)
+			err := client.SendSingle(t.Context(), n)
 			if err != nil {
 				results <- err
 			}

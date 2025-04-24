@@ -99,8 +99,8 @@ func GetStoredEvents(ctx context.Context, subscription *model.Subscription) Even
 	return globalDB.Client.SelectEvents(ctx, filters...)
 }
 
-func MarkTokenAsInvalidInEvents(ctx context.Context, events []*model.Event) error {
-	return globalDB.Client.markTokenAsInvalidInEvents(ctx, events)
+func MarkTokenAsInvalidInEventTags(ctx context.Context, events []*model.Event) error {
+	return globalDB.Client.markTokenAsInvalidInEventTags(ctx, events)
 }
 
 func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {
@@ -147,4 +147,8 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 		}
 		cancel()
 	}
+}
+
+func CollectDeviceRegistrationEvents(ctx context.Context) ([]*model.Event, error) {
+	return globalDB.Client.collectDeviceRegistrationEvents(ctx)
 }

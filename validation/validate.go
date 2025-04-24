@@ -267,6 +267,11 @@ var (
 				if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {
 					return errors.Errorf("wrong t tag value: %v", tTag)
 				}
+				relayTag := e.GetTag("relay").Value()
+				if relayTag != globalConfig.RelayURL {
+					return errors.Errorf("relay tag value '%s' does not match configured relay URL '%s'", relayTag, globalConfig.RelayURL)
+				}
+
 				var filters model.Filters
 				if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {
 					return errors.Errorf("wrong content JSON value: %v", err)

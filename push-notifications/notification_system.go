@@ -7,18 +7,16 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleSystemNotification(event *model.Event) []*pn.Notification[pn.SubscriptionTopic] {
+func (pm *PushNotificationManager) handleSystemEvent(event *model.Event) []*pn.Notification[pn.SubscriptionTopic] {
 	notifications := make([]*pn.Notification[pn.SubscriptionTopic], 0)
 
 	for _, language := range getAvailableLanguages() {
-		notification := &pn.Notification[pn.SubscriptionTopic]{
+		notifications = append(notifications, &pn.Notification[pn.SubscriptionTopic]{
 			Target: pn.SubscriptionTopic("system_" + language),
 			Data: map[string]interface{}{
-				"notificationType": string(NotificationTypeSystem),
-				"event":            event.String(),
+				"event": event.String(),
 			},
-		}
-		notifications = append(notifications, notification)
+		})
 	}
 
 	return notifications

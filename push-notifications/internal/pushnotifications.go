@@ -7,42 +7,63 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
 )
 
+const (
+	initialBackoffInterval = 300 * time.Millisecond
+	backoffMultiplier      = 2.5
+	maxBackoffInterval     = 2 * time.Second
+	maxRetries             = 3
+	requestDeadline        = 10 * time.Second
+)
+
 type (
-	DeviceID          string
-	SubscriptionTopic string
-	Client            interface {
-		SendSingle(ctx context.Context, notification *Notification[*model.Event]) error
+	DeviceRegistrationEvent = model.Event
+	DeviceID                string
+	SubscriptionTopic       string
+	Client                  interface {
+		SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error
 		SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error
 	}
-	Service struct {
+	notificationClient struct {
 		client *messaging.Client
-		dryRun bool
+		retry  RetryConfig
 	}
-	Notification[TARGET SubscriptionTopic | *model.Event] struct {
+	Notification[TARGET SubscriptionTopic | *DeviceRegistrationEvent] struct {
 		Data     map[string]interface{} `json:"data,omitempty"`
 		Target   TARGET
 		Title    string `json:"title,omitempty"`
 		Body     string `json:"body,omitempty"`
 		ImageURL string `json:"imageUrl,omitempty"`
 	}
-	ServiceOption func(*Service)
+	RetryConfig struct {
+		MaxRetries  int
+		InitialWait time.Duration
+		MaxWait     time.Duration
+	}
+	ServiceOption func(*notificationClient)
 )
 
 var (
 	ErrInvalidDeviceToken = errors.New("device token is invalid")
+	defaultRetryConfig    = RetryConfig{
+		MaxRetries:  maxRetries,
+		InitialWait: initialBackoffInterval,
+		MaxWait:     maxBackoffInterval,
+	}
 )
 
-func WithDryRun(dryRun bool) ServiceOption {
-	return func(s *Service) {
-		s.dryRun = dryRun
+func WithRetryConfig(config RetryConfig) ServiceOption {
+	return func(s *notificationClient) {
+		s.retry = config
 	}
 }
 
@@ -59,8 +80,9 @@ func New(ctx context.Context, credentialsFile string, opts ...ServiceOption) (Cl
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{
+	s := &notificationClient{
 		client: fcmClient,
+		retry:  defaultRetryConfig,
 	}
 
 	for _, opt := range opts {
@@ -70,7 +92,29 @@ func New(ctx context.Context, credentialsFile string, opts ...ServiceOption) (Cl
 	return s, nil
 }
 
-func (s *Service) SendSingle(ctx context.Context, notification *Notification[*model.Event]) error {
+func (s *notificationClient) sendWithRetry(ctx context.Context, message *messaging.Message) (string, error) {
+	var id string
+	err := retry(ctx, func() error {
+		var err error
+		id, err = s.client.Send(ctx, message)
+		return err
+	})
+
+	if err != nil {
+		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
+			return "", ErrInvalidDeviceToken
+		}
+		return "", fmt.Errorf("fcm send failed for %#v: %w", message, err)
+	}
+
+	return id, nil
+}
+
+func (s *notificationClient) SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error {
+	token := notification.Target.GetTag("token")
+	if token == nil || token.Value() == "" {
+		return nil
+	}
 	data := make(map[string]string)
 	for k, v := range notification.Data {
 		if str, ok := v.(string); ok {
@@ -79,31 +123,28 @@ func (s *Service) SendSingle(ctx context.Context, notification *Notification[*mo
 			data[k] = fmt.Sprintf("%v", v)
 		}
 	}
-	token := notification.Target.GetTag("token")
-	if token == nil || token.Value() == "" {
-		return nil
-	}
-
 	message := &messaging.Message{
 		Token: token.Value(),
-		Notification: &messaging.Notification{
+		Data:  data,
+	}
+
+	if notification.Title != "" || notification.Body != "" || notification.ImageURL != "" {
+		message.Notification = &messaging.Notification{
 			Title:    notification.Title,
 			Body:     notification.Body,
 			ImageURL: notification.ImageURL,
-		},
-		Data: data,
+		}
 	}
-	if s.dryRun {
-		_, err := s.client.SendDryRun(ctx, message)
 
-		return handleError(err, message)
+	_, err := s.sendWithRetry(ctx, message)
+	if err != nil {
+		return err
 	}
-	_, err := s.client.Send(ctx, message)
 
-	return handleError(err, message)
+	return nil
 }
 
-func (s *Service) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
+func (s *notificationClient) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
 	data := make(map[string]string)
 	for k, v := range notification.Data {
 		if str, ok := v.(string); ok {
@@ -115,34 +156,38 @@ func (s *Service) SendTopic(ctx context.Context, notification *Notification[Subs
 
 	message := &messaging.Message{
 		Topic: string(notification.Target),
-		Notification: &messaging.Notification{
+		Data:  data,
+	}
+
+	if notification.Title != "" || notification.Body != "" || notification.ImageURL != "" {
+		message.Notification = &messaging.Notification{
 			Title:    notification.Title,
 			Body:     notification.Body,
 			ImageURL: notification.ImageURL,
-		},
-		Data: data,
-	}
-	if s.dryRun {
-		_, err := s.client.SendDryRun(ctx, message)
-
-		return handleError(err, message)
-	}
-	_, err := s.client.Send(ctx, message)
-
-	return handleError(err, message)
-}
-
-func handleError(err error, message *messaging.Message) error {
-	if err != nil {
-		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
-			return ErrInvalidDeviceToken
-		} else {
-			rErr := fmt.Errorf("fcm send failed for %#v, %v", message, err)
-			log.Print(rErr)
-
-			return rErr
 		}
 	}
 
+	_, err := s.sendWithRetry(ctx, message)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func retry(ctx context.Context, op func() error) error {
+	return backoff.RetryNotify(
+		op,
+		backoff.WithContext(&backoff.ExponentialBackOff{
+			InitialInterval:     initialBackoffInterval,
+			RandomizationFactor: 0.5,
+			Multiplier:          backoffMultiplier,
+			MaxInterval:         maxBackoffInterval,
+			MaxElapsedTime:      requestDeadline,
+			Stop:                backoff.Stop,
+			Clock:               backoff.SystemClock,
+		}, ctx),
+		func(e error, next time.Duration) {
+			log.Printf("FCM call failed. retrying in %v... Error: %v", next, e)
+		})
 }
