@@ -6,20 +6,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"github.com/ice-blockchain/subzero/cfg"
-	"os"
-	"slices"
-
-	//"fmt"
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
-	//"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cfg"
 	"math/rand/v2"
-	//"slices"
-
-	//"os"
-
-	//"os"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,9 +53,6 @@ func TestConsensusEvents(t *testing.T) {
 	}
 
 	defer func() {
-		require.NoError(t, os.RemoveAll("../../.cometbft"))
-		require.NoError(t, os.RemoveAll("../../.cometbft2"))
-		require.NoError(t, os.RemoveAll("../../.cometbft3"))
 		require.NoError(t, os.RemoveAll("../../.cometbft4"))
 		require.NoError(t, os.RemoveAll("../../.cometbft5"))
 	}()
@@ -290,6 +279,7 @@ func TestConsensusEvents(t *testing.T) {
 		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 
 	})
+	var fourRelay *nostrRelay
 	t.Run("relay list is updated for the user including new relays to bootstrap", func(t *testing.T) {
 		globalConfig := cfg.MustGet[globalCfg]()
 		extraServer1, release1 := helperCreateWsInstance(t.Context(), globalConfig, 9955, 19955,
@@ -307,12 +297,12 @@ func TestConsensusEvents(t *testing.T) {
 			require.NoError(t, release1())
 			require.NoError(t, release2())
 		}()
-		//pubsubServers = append(pubsubServers, extraServer1)
-		//pubsubServers = append(pubsubServers, extraServer2)
-		//for _, s := range pubsubServers {
-		//	consensusDone[s.Endpoint()] = make(chan bool, 1000)
-		//}
-
+		pubsubServers = append(pubsubServers, extraServer1)
+		pubsubServers = append(pubsubServers, extraServer2)
+		for _, s := range pubsubServers {
+			consensusDone[s.Endpoint()] = make(chan bool, 1000)
+		}
+		time.Sleep(2 * time.Second)
 		relaysList := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindRelayListMetadata,
@@ -327,19 +317,32 @@ func TestConsensusEvents(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
 		require.NoError(t, relay.Publish(ctx, relaysList.Event))
-
-		//require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
-		//fourRelay := helperMustNewRelay(t, extraServer1)
-		//receivedEventsFromFourthRelay := helperQueryEvents(t, ctx, fourRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
-		//require.Contains(t, receivedEventsFromFourthRelay, eventAfterNodeComesUp)
-		//require.Contains(t, receivedEventsFromFourthRelay, eventMissedByRelay3DuringBroadcastTime)
-		//require.Contains(t, receivedEventsFromFourthRelay, ev)
-		//require.Contains(t, receivedEventsFromFourthRelay, ev2)
-		//require.NotContains(t, receivedEventsFromFourthRelay, notAcceptedEvent)
+		time.Sleep(2 * time.Second)
+		eventAfterBringingUpNewNode := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				[]string{"d", uuid.NewString()},
+			},
+			Content: "eventAfterBringingUpNewNode",
+		}}
+		helperSignWithMinLeadingZeroBits(t, eventAfterBringingUpNewNode, privkey)
+		require.NoError(t, relay.Publish(ctx, eventAfterBringingUpNewNode.Event))
+		time.Sleep(10 * time.Second) // Wait for bootstrap data.
+		fourRelay = helperMustNewRelay(t, extraServer2)
+		receivedEventsFromFourthRelay := helperQueryEvents(t, ctx, fourRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
+		require.Contains(t, receivedEventsFromFourthRelay, eventAfterNodeComesUp)
+		require.Contains(t, receivedEventsFromFourthRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.Contains(t, receivedEventsFromFourthRelay, ev)
+		require.Contains(t, receivedEventsFromFourthRelay, ev2)
 	})
 	helperMustCloseRelay(t, relay)
+	helperMustCloseRelay(t, secondRelay)
+	helperMustCloseRelay(t, thirdRelay)
+	helperMustCloseRelay(t, fourRelay)
 
-	helperMustCloseRelay(t, relay)
 }
 
 func BenchmarkConcurrentConsensusEvents(b *testing.B) {

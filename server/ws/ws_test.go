@@ -71,14 +71,14 @@ func TestMain(m *testing.M) {
 		nil,
 		map[string]gin.HandlerFunc{},
 	)
-	cl := []func() error{}
+	closeFuncs := []func() error{}
 	server, release := helperCreateWsInstance(serverCtx, globalConfig,
 		9988, 19988,
 		"./../database/command/.testdata/node_key.json",
 		"../../.cometbft",
 	)
 	pubsubServers = append(pubsubServers, server)
-	cl = append(cl, release)
+	closeFuncs = append(closeFuncs, release)
 
 	server2, release2 := helperCreateWsInstance(serverCtx, globalConfig,
 		9977, 19977,
@@ -86,7 +86,7 @@ func TestMain(m *testing.M) {
 		"../../.cometbft2",
 	)
 	pubsubServers = append(pubsubServers, server2)
-	cl = append(cl, release2)
+	closeFuncs = append(closeFuncs, release2)
 
 	server3, release3 := helperCreateWsInstance(serverCtx, globalConfig,
 		9966, 19966,
@@ -94,12 +94,16 @@ func TestMain(m *testing.M) {
 		"../../.cometbft3",
 	)
 	pubsubServers = append(pubsubServers, server3)
-	cl = append(cl, release3)
-
+	closeFuncs = append(closeFuncs, release3)
+	defer func() {
+		os.RemoveAll("../../.cometbft")
+		os.RemoveAll("../../.cometbft2")
+		os.RemoveAll("../../.cometbft3")
+	}()
 	code := m.Run()
 	serverCancel()
-	for _, c := range cl {
-		c()
+	for _, closeDb := range closeFuncs {
+		closeDb()
 	}
 
 	if code == 0 {

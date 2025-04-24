@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"github.com/ice-blockchain/cometbft/config"
 	"log"
 	"os"
 	"strconv"
@@ -34,14 +35,14 @@ func TestMain(m *testing.M) {
 	query.MustInit(serverCtx, query.WithConfig(&query.Config{
 		URL: conn,
 	}))
-	c = mustInit(serverCtx).(*consensus)
+	c = mustInit(serverCtx, config.DefaultConfig()).(*consensus)
 	defer func() {
 		if err := os.RemoveAll(globalCfg.AbsoluteRootPath); err != nil {
 			log.Panic(err)
 		}
 	}()
 	cfg.MustInit("./.testdata/application2.yaml")
-	c2 = mustInit(serverCtx).(*consensus)
+	c2 = mustInit(serverCtx, config.DefaultConfig()).(*consensus)
 	code := m.Run()
 	serverCancel()
 	defer func() {
@@ -56,7 +57,15 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-
+	defer func() {
+		if err := os.RemoveAll("../../.cometbft"); err != nil {
+			log.Printf("err cleanup: %v", err)
+		}
+		if err := os.RemoveAll("../../.cometbft2"); err != nil {
+			log.Printf("err cleanup: %v", err)
+		}
+		code = 1
+	}()
 	os.Exit(code)
 }
 
@@ -83,6 +92,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 		Tags: nostr.Tags{
 			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
 			[]string{"r", "wss://localhost:9988"},
+			[]string{"r", "wss://localhost:9977"},
 		},
 	}}
 	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
@@ -106,6 +116,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
 				[]string{"r", "wss://localhost:9988"},
+				[]string{"r", "wss://localhost:9977"},
 			},
 		}}
 		require.NoError(t, otherUserRelaysList.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
@@ -126,7 +137,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 				[]string{"e", repostedEvent.ID, "relay"},
 				[]string{"p", repostedEvent.GetMasterPublicKey()},
 				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
-			Content: "", //repostedEvent.String(),
+			Content: repostedEvent.String(),
 		}}
 		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(t.Context(), repostEvent))

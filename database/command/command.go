@@ -31,7 +31,7 @@ type (
 	}
 )
 
-const consensusTimeout = time.Second * 30
+const consensusTimeout = time.Second * 25
 
 var (
 	ErrMultipleMasterKeys = errors.New("cannot broadcast single batch to multiple master keys")
@@ -52,7 +52,7 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, t
 		events = append(events, evs...)
 	}
 	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
-	if consensusEventListener != nil {
+	if consensusEventListener != nil && len(events) > 0 {
 		err := consensusEventListener(ctx, events...)
 		if err != nil {
 			return errors.Wrapf(err, "failed to accept broadcasted txs %v", func() string {
@@ -103,6 +103,9 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	relays := []string{}
 	var profileDeletion *model.Event
 	for _, ev := range events {
+		if ev.IsEphemeral() {
+			continue
+		}
 		if ev.Kind == nostr.KindRelayListMetadata {
 			relays = collectRelaysFromRelayEvent(ev)
 		}
@@ -141,6 +144,9 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	if err != nil {
 		return errors.Wrapf(err, "failed to transform user key to address")
 	}
+	if len(txs) == 0 {
+		return nil
+	}
 	userAddr, err := client.PubKeyToAddress(string(userMasterKeyBytes))
 	if err != nil {
 		return errors.Wrapf(err, "failed to transform user key to address")
@@ -166,11 +172,15 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 			c.client.BroadcastTx(broadcastCtx, otherUserAddr, c.convertRelaysToBroadcastEndpoints(otherUserRelays...), otherUserNotifier, otherUserTx...)
 			otherUserEvents := []*model.Event{}
 			for _, otherUserTransaction := range otherUserTx {
-				var ev model.Event
-				if jErr := ev.UnmarshalJSON(otherUserTransaction.Data); jErr != nil {
+				var env nostr.EventEnvelope
+				if jErr := env.UnmarshalJSON(otherUserTransaction.Data); jErr != nil {
 					return errors.Wrapf(jErr, "failed to unmarshal event %v", string(otherUserTransaction.Data))
 				}
-				otherUserEvents = append(otherUserEvents, &ev)
+				evs := make([]*model.Event, 0, len(env.Events))
+				for _, e := range env.Events {
+					evs = append(evs, &model.Event{*e})
+				}
+				otherUserEvents = append(otherUserEvents, evs...)
 			}
 			err = c.rollbackIfErr(ctx, otherUserMasterKey, notifier, otherUserEvents...)
 		}
@@ -242,10 +252,10 @@ func mapEventKindToChainFingerprint(kind int) (fingerprint string) {
 		nostr.KindReactionToWebsite,
 		nostr.KindArticle,
 		model.CustomIONKindEditableTextNote,
-		nostr.KindDraftArticle:
-		fingerprint = client.GetFingerprint("posts")
+		nostr.KindDraftArticle,
+		nostr.KindFileMetadata:
+		fingerprint = client.GetFingerprint("feed")
 	case
-		// onboarding goes to single chain for atomicity
 		nostr.KindProfileMetadata,
 		nostr.KindRelayListMetadata,
 		nostr.KindSearchRelayList,
@@ -273,8 +283,6 @@ func mapEventKindToChainFingerprint(kind int) (fingerprint string) {
 		model.CustomIONKindCommunityDefinition,
 		nostr.KindDirectMessage:
 		fingerprint = client.GetFingerprint("chat")
-	case nostr.KindFileMetadata:
-		fingerprint = client.GetFingerprint("files")
 	case model.CustomIONKindFundSendNotify,
 		model.CustomIONKindFundReceive:
 		fingerprint = client.GetFingerprint("wallet")
@@ -339,6 +347,9 @@ func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Tr
 	otherUserTxs = make(map[string][]client.Transaction)
 	encodedEvents := map[string]nostr.EventEnvelope{}
 	for _, ev := range events {
+		if ev.IsEphemeral() {
+			continue
+		}
 		linkedMasterKey, otherUserTx, err := mapLinkedEventToTx(ctx, ev)
 		if err == nil {
 			otherUserTxs[linkedMasterKey] = append(otherUserTxs[linkedMasterKey], *otherUserTx)

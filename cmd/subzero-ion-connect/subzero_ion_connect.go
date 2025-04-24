@@ -88,12 +88,12 @@ func init() {
 	command.RegisterAcceptListener(query.AcceptEvents)
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
 		// Require authentication for all types/kinds of subscriptions.
-		return false
+		return true
 	})
 	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
 		for _, e := range events {
 			if _, exists := eventKindsNoAuth[e.Kind]; !exists {
-				return false
+				return true
 			}
 		}
 		return false

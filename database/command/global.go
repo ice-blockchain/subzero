@@ -39,6 +39,7 @@ type Config struct {
 	AbsoluteRootPath        string `yaml:"absolute-root-path"`
 	NodePrivKey             string `yaml:"absolute-node-private-key-path"`
 	DiscoveryPort           uint16 `yaml:"discovery-port"`
+	ExternalAddress         string `yaml:"external-address"`
 	Debug                   bool   `yaml:"debug"`
 	NIP13MinLeadingZeroBits int    `yaml:"nip13MinLeadingZeroBits"`
 	RelayUrl                string `yaml:"relay-url"`
@@ -91,7 +92,10 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 	serverCfg.P2P.MaxPacketMsgPayloadSize = 100 * 1024 * 1024
 	serverCfg.DBBackend = "goleveldb"
 	serverCfg.DiscoveryPort = globalCfg.DiscoveryPort
-	//serverCfg.P2P.Seeds = "edca2ee37726716daf90ba69272ee90c51a1f7a9@127.0.0.1:19911,778f8ec004cd98934e1de445cb67cbbc7239e008@127.0.0.1:19931"
+	if globalCfg.ExternalAddress != "" {
+		serverCfg.P2P.ExternalAddress = globalCfg.ExternalAddress
+		serverCfg.RPC.ListenAddress = globalCfg.ExternalAddress
+	}
 	logger := cmtlog.NewFilter(cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout)), cmtlog.AllowError())
 
 	if globalCfg.Debug {
