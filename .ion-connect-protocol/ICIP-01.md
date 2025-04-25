@@ -84,3 +84,34 @@ These are the extra fields not specified in [NIP-01](https://github.com/nostr-pr
   * possible values:
     * `follows` _-- people you follow --_ 
     * `friends` _-- people you follow that follow you back --_
+
+### Special ephemeral event for embedding other non-ephemeral events
+
+A new kind 21750 ephemeral event is defined that has atmost 1 tag, the `b` tag referencing the master account. 
+
+Its content is the stringified JSON of some other event.
+
+The main goal of this new ephemeral event is to provide additional runtime context to the published event to help the relay provide better suggestions or a more personalised logic for further interactions the user has with that relay. 
+
+###### Example
+```json
+{
+  "kind": 21750,
+  "content": "{
+                \"id\": \"c30fb87818fe9ac032241b3c339f015408c6b715154104210bcad27f93ab4d60\",
+                \"pubkey\": \"5fd2540955ef63a8a8ad09ef85416d3187fa16dd611411d79b5aed20d43ef0ea\",
+                \"created_at\": 1744100304,
+                \"kind\": 10002,
+                \"tags\": [
+                   [\"b\", \"10dedbb56ef369428029f5e1d9bfea6b990073b18c14aea0f781250adcbece7a\"],
+                   [\"r\",\"wss:\/\/example.com\"]
+                ],
+                \"content\": \"\",
+                \"sig\": \"eddsa\/curve25519:d2c262221797d9422b199a9cb18715d2f9a5e426afdb2e9a034569ecfe5a0adbe7c530d4d803c11d34b13dbfadd6702d501f4e6033d14304024bef17099a1101\"
+              }",
+  "tags": [
+    ["b", "a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919"]
+  ],
+  ... the rest of the fields
+}
+```
