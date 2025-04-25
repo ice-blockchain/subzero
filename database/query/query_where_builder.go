@@ -257,7 +257,7 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 		return
 	}
 
-	var tagID int
+	var tagID, tagValue uint64
 	for tagName, tagValues := range tags {
 		tagID++
 
@@ -269,7 +269,7 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 		}
 
 		b.MaybeAND()
-		tagParam := b.PushValue(filterID, "tag"+strconv.Itoa(tagID), queryTagName)
+		tagParam := b.PushValue(filterID, "tag"+strconv.FormatUint(tagID, 10), queryTagName)
 
 		// Only the tag name is specified, no values.
 		if !tags.HasValues(tagName) {
@@ -284,7 +284,7 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 		}
 
 		b.WriteRune('(')
-		for i, values := range tagValues {
+		for _, values := range tagValues {
 			if values.Empty() {
 				continue
 			}
@@ -327,7 +327,8 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 				b.WriteString("event_tag_value")
 				b.WriteString(strconv.Itoa(j + 1))
 				b.WriteString(" = :")
-				b.WriteValue(filterID, "tagvalue"+strconv.Itoa(tagID<<8|(j+1)*(i+1)), *values[j])
+				b.WriteValue(filterID, "tagvalue"+strconv.FormatUint(tagValue, 10), *values[j])
+				tagValue++
 			}
 			b.WriteRune(')')
 		}

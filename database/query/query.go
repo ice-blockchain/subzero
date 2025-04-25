@@ -745,47 +745,51 @@ func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []s
 }
 
 func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Filter) model.Filters {
+	var addressableTags = []string{"a", "Q"}
 	for i := range filters {
-		for _, tag := range []string{"a", "Q"} {
+		for _, tag := range addressableTags {
 			v, ok := filters[i].Tags[tag]
 			if !ok {
 				continue
 			}
 
-			var delegatedTags []*string
+			var subkeyFilters []model.TagValues
 			for _, b := range v {
-				// `entry` has format `kind:pubkey:d_tag`.
-				for _, entry := range b {
-					if entry == nil {
+				if len(b) == 0 || b[0] == nil || *b[0] == "" {
+					continue
+				}
+
+				// Format: `kind:pubkey:d_tag`.
+				parts := strings.Split(*b[0], ":")
+				if len(parts) != 3 {
+					continue
+				}
+
+				keys, err := db.fetchAllKeysOf(ctx, parts[1])
+				if err != nil {
+					log.Printf("subkeys fetch failed: %v", err)
+
+					continue
+				}
+
+				for _, subkey := range keys {
+					if subkey == *b[0] {
 						continue
 					}
-
-					parts := strings.Split(*entry, ":")
-					if len(parts) != 3 {
-						continue
-					}
-
-					keys, err := db.fetchAllKeysOf(ctx, parts[1])
-					if err != nil {
-						log.Printf("subkeys fetch failed: %v", err)
-
-						continue
-					}
-
-					delegatedTags = append(delegatedTags, entry)
-					for _, key := range keys {
-						str := strings.Join([]string{parts[0], key, parts[2]}, ":")
-						delegatedTags = append(delegatedTags, &str)
-					}
+					n := slices.Clone(b)
+					address := strings.Join([]string{parts[0], subkey, parts[2]}, ":")
+					n[0] = &address
+					subkeyFilters = append(subkeyFilters, n)
 				}
 			}
-			if len(delegatedTags) == 0 {
+
+			if len(subkeyFilters) == 0 {
 				continue
 			}
 
 			filters[i].Tags.Set(tag)
-			for _, entry := range model.DeduplicateSlice(delegatedTags, func(elem *string) string { return *elem }) {
-				filters[i].Tags.Append(tag, entry)
+			for _, v := range subkeyFilters {
+				filters[i].Tags.Append(tag, v...)
 			}
 		}
 	}
