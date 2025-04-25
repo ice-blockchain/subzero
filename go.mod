@@ -46,7 +46,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.36.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.12.0
-	github.com/xssnick/tonutils-storage v0.8.2
+	github.com/xssnick/tonutils-storage v0.8.4
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.39.0
 	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
@@ -96,7 +96,7 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/google/pprof v0.0.0-20250422154841-e1f9c1950416 // indirect
+	github.com/google/pprof v0.0.0-20250423184734-337e5dd93bb4 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
