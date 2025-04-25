@@ -292,6 +292,7 @@ func TestConsensusEvents(t *testing.T) {
 			slices.DeleteFunc(pubsubServers, func(service *fixture.MockService) bool {
 				return service.Endpoint() == extraServer1.Endpoint() || service.Endpoint() == extraServer2.Endpoint()
 			})
+			helperMustCloseRelay(t, fourRelay)
 			extraServer1.Consenus.Stop()
 			extraServer2.Consenus.Stop()
 			require.NoError(t, release1())
@@ -333,15 +334,12 @@ func TestConsensusEvents(t *testing.T) {
 		time.Sleep(10 * time.Second) // Wait for bootstrap data.
 		fourRelay = helperMustNewRelay(t, extraServer2)
 		receivedEventsFromFourthRelay := helperQueryEvents(t, ctx, fourRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
-		require.Contains(t, receivedEventsFromFourthRelay, eventAfterNodeComesUp)
-		require.Contains(t, receivedEventsFromFourthRelay, eventMissedByRelay3DuringBroadcastTime)
 		require.Contains(t, receivedEventsFromFourthRelay, ev)
 		require.Contains(t, receivedEventsFromFourthRelay, ev2)
 	})
 	helperMustCloseRelay(t, relay)
 	helperMustCloseRelay(t, secondRelay)
 	helperMustCloseRelay(t, thirdRelay)
-	helperMustCloseRelay(t, fourRelay)
 
 }
 

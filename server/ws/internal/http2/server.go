@@ -18,7 +18,7 @@ import (
 )
 
 func New(cfg *config.Config, router http.Handler) Server {
-	s := &srv{cfg: cfg}
+	s := &srv{cfg: cfg, shutdownCh: make(chan struct{}, 1)}
 	s.router = router
 
 	return s
@@ -82,5 +82,6 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 }
 
 func (s *srv) Shutdown(ctx context.Context) error {
+	close(s.shutdownCh)
 	return errors.Wrap(s.server.Shutdown(ctx), "failed to close server")
 }

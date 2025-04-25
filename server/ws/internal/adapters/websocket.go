@@ -19,7 +19,7 @@ import (
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 )
 
-func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration) (WSWithWriter, context.Context) {
+func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
 	wt := &WebsocketAdapter{
 		conn:         conn,
 		closeChannel: make(chan struct{}, 1),
@@ -28,7 +28,7 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeT
 		writeTimeout: writeTimeout,
 	}
 
-	return wt, NewCustomCancelContext(ctx, wt.closeChannel)
+	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
 }
 
 func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte) error {

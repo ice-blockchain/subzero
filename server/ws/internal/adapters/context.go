@@ -6,7 +6,7 @@ import (
 	"context"
 )
 
-func NewCustomCancelContext(reqCtx context.Context, ch <-chan struct{}) context.Context {
+func NewCustomCancelContext(reqCtx context.Context, ch <-chan struct{}, shutdownCh <-chan struct{}) context.Context {
 	return customCancelContext{Context: reqCtx, ch: ch}
 }
 
@@ -17,6 +17,8 @@ func (c customCancelContext) Done() <-chan struct{} {
 func (c customCancelContext) Err() error {
 	select {
 	case <-c.ch:
+		return context.Canceled
+	case <-c.shutdownCh:
 		return context.Canceled
 	default:
 		return nil

@@ -51,9 +51,7 @@ func TestMain(m *testing.M) {
 
 	addr, release := query.NewTestDatabase(serverCtx)
 	log.Println(addr)
-	//query.MustInit(serverCtx, query.WithConfig(&query.Config{
-	//	URL: addr,
-	//}))
+	closeFuncs := []func() error{release}
 	dvm.MustInit(serverCtx)
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
@@ -71,7 +69,7 @@ func TestMain(m *testing.M) {
 		nil,
 		map[string]gin.HandlerFunc{},
 	)
-	closeFuncs := []func() error{}
+
 	server, release := helperCreateWsInstance(serverCtx, globalConfig,
 		9988, 19988,
 		"./../database/command/.testdata/node_key.json",

@@ -175,7 +175,6 @@ func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Env
 	if err != nil {
 		return errors.Wrapf(err, "failed to serialize %+v into json", envelope)
 	}
-
 	return respWriter.WriteMessage(int(ws.OpText), b)
 }
 

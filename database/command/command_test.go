@@ -28,10 +28,6 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer serverCancel()
 	conn, closeDb := query.NewTestDatabase(serverCtx)
-	go func() {
-		<-serverCtx.Done()
-		closeDb()
-	}()
 	query.MustInit(serverCtx, query.WithConfig(&query.Config{
 		URL: conn,
 	}))
@@ -45,6 +41,7 @@ func TestMain(m *testing.M) {
 	c2 = mustInit(serverCtx, config.DefaultConfig()).(*consensus)
 	code := m.Run()
 	serverCancel()
+	closeDb()
 	defer func() {
 		if err := os.RemoveAll(globalCfg.AbsoluteRootPath); err != nil {
 			log.Panic(err)
@@ -64,7 +61,6 @@ func TestMain(m *testing.M) {
 		if err := os.RemoveAll("../../.cometbft2"); err != nil {
 			log.Printf("err cleanup: %v", err)
 		}
-		code = 1
 	}()
 	os.Exit(code)
 }
