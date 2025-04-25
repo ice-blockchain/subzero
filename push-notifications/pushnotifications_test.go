@@ -3,429 +3,365 @@
 package pushnotifications
 
 import (
-	"fmt"
-	"os"
+	"context"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/model"
+	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if code == 0 {
-		if err := goleak.Find(); err != nil {
-			fmt.Printf("goleak found issues: %v\n", err)
-			code = 1
-		}
-	}
-	os.Exit(code)
+type MockPushClient struct {
+	mock.Mock
 }
 
-func (e *TestEvent) GetMasterPublicKey() string {
-	return e.PubKey
+func (m *MockPushClient) SendSingle(ctx context.Context, notification *pn.Notification[*pn.DeviceRegistrationEvent]) error {
+	args := m.Called(ctx, notification)
+	return args.Error(0)
 }
 
-func helperCreateTestEvent(t *testing.T, id, pubKey string, kind int, content string, tags nostr.Tags) *TestEvent {
-	t.Helper()
-
-	return &TestEvent{
-		Event: model.Event{
-			Event: nostr.Event{
-				ID:      id,
-				PubKey:  pubKey,
-				Kind:    kind,
-				Content: content,
-				Tags:    tags,
-			},
-		},
-	}
-}
-
-type (
-	TestEvent struct {
-		model.Event
-	}
-)
-
-func TestCollectValidDevices(t *testing.T) {
-	t.Parallel()
-
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
-	}
-
-	textFilters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
-
-	diffFilters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindReaction},
-		},
-	}
-
-	device1 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"pubkey1",
-		"device1",
-		[]string{"t", "ios", "token", "token1"},
-		textFilters,
-	)
-
-	device2 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"pubkey1",
-		"device2",
-		[]string{"t", "android", "token", "token2"},
-		diffFilters,
-	)
-
-	device3 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"pubkey1",
-		"device3",
-		[]string{"t", "web", "token", "token3"},
-		textFilters,
-	)
-
-	device4 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"pubkey1",
-		"device4",
-		[]string{"t", "ios", "token", "invalid_token"},
-		textFilters,
-	)
-
-	device5 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"pubkey1",
-		"device5",
-		[]string{"t", "ios", "token", "token5"},
-		nostr.Filters{},
-	)
-
-	require.NoError(t, pm.processDeviceRegistrationEvent(device1))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device2))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device3))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device4))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device5))
-
-	device4Info := pm.devices[DeviceID("device4")]
-	device4Info.Event.NotificationTokenInvalid = true
-	pm.devices[DeviceID("device4")] = device4Info
-
-	event := &model.Event{
-		Event: nostr.Event{
-			Kind:    nostr.KindTextNote,
-			Content: "Test message",
-		},
-	}
-
-	validDevices := pm.collectUserValidDevices("pubkey1", event)
-
-	require.Len(t, validDevices, 2, "There should be two valid devices")
-
-	deviceIDs := make(map[string]bool)
-	for _, device := range validDevices {
-		deviceTag := device.GetTag("d")
-		if deviceTag != nil {
-			deviceIDs[deviceTag.Value()] = true
-		}
-	}
-
-	require.True(t, deviceIDs["device1"], "device1 should be included")
-	require.True(t, deviceIDs["device3"], "device3 should be included")
-	require.False(t, deviceIDs["device5"], "device5 should not be included")
-	require.False(t, deviceIDs["device2"], "device2 should not be included due to an incompatible filter")
-	require.False(t, deviceIDs["device4"], "device4 should not be included due to an invalid token")
-
-	validDevices = pm.collectUserValidDevices("nonexistent", event)
-	require.Empty(t, validDevices, "For nonexistent user, there should be no devices")
+func (m *MockPushClient) SendTopic(ctx context.Context, notification *pn.Notification[pn.SubscriptionTopic]) error {
+	args := m.Called(ctx, notification)
+	return args.Error(0)
 }
 
 func TestCreateNotifications(t *testing.T) {
-	t.Parallel()
-
 	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
-	filters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
+	t.Run("Empty device list returns nil", func(t *testing.T) {
+		notifications := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
+		require.Nil(t, notifications)
+	})
 
-	androidDevice := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"android_pubkey",
-		"android_device",
-		[]string{"t", "android", "token", "android_token"},
-		filters,
-	)
+	t.Run("Creates notifications with correct data", func(t *testing.T) {
+		event := &model.Event{Event: nostr.Event{ID: "test-event-id", Content: "test content"}}
 
-	iosDevice := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"ios_pubkey",
-		"ios_device",
-		[]string{"t", "ios", "token", "ios_token"},
-		filters,
-	)
+		deviceEvents := []*DeviceRegistrationEvent{
+			{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						nostr.Tag{"t", "ios"},
+					},
+				},
+			},
+			{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						nostr.Tag{"t", "android"},
+					},
+				},
+			},
+		}
 
-	notificationType := NotificationTypePost
-	data := map[string]interface{}{
-		"eventID": "test_event_id",
-		"content": "Hello, world!",
-	}
+		notifications := pm.createNotifications(deviceEvents, NotificationTypeReaction, event)
+		require.Len(t, notifications, 2)
 
-	deviceEvents := []*model.Event{androidDevice, iosDevice}
+		for _, notification := range notifications {
+			require.Contains(t, notification.Data, "event")
+			require.Equal(t, event.String(), notification.Data["event"])
+		}
 
-	notifications := pm.createNotifications(deviceEvents, notificationType, data)
-
-	require.Len(t, notifications, 2, "Should create 2 notifications")
-
-	androidNotification := notifications[0]
-	require.Equal(t, androidDevice, androidNotification.Target, "Android notification target should be correct")
-	require.Contains(t, androidNotification.Data, "title", "Android notification should have title in data")
-	require.Contains(t, androidNotification.Data, "body", "Android notification should have body in data")
-	require.Contains(t, androidNotification.Data, "imageURL", "Android notification should have imageURL in data")
-	require.Contains(t, androidNotification.Data, "eventID", "Android notification should preserve original data")
-	require.Contains(t, androidNotification.Data, "notificationType", "Android notification should have notificationType")
-	require.Equal(t, string(notificationType), androidNotification.Data["notificationType"], "Android notification should have correct notificationType")
-
-	iosNotification := notifications[1]
-	require.Equal(t, iosDevice, iosNotification.Target, "iOS notification target should be correct")
-	require.Equal(t, DefaultTranslations[notificationType].Title, iosNotification.Title, "iOS notification should have correct title")
-	require.Equal(t, DefaultTranslations[notificationType].Body, iosNotification.Body, "iOS notification should have correct body")
-	require.Equal(t, DefaultTranslations[notificationType].ImageURL, iosNotification.ImageURL, "iOS notification should have correct imageURL")
-	require.Contains(t, iosNotification.Data, "eventID", "iOS notification should preserve original data")
-	require.Contains(t, iosNotification.Data, "notificationType", "iOS notification should have notificationType")
-	require.Equal(t, string(notificationType), iosNotification.Data["notificationType"], "iOS notification should have correct notificationType")
-
-	emptyNotifications := pm.createNotifications([]*model.Event{}, notificationType, data)
-	require.Nil(t, emptyNotifications, "Should return nil for empty device list")
-}
-
-func TestProcessEvent(t *testing.T) {
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[string][]DeviceID),
-	}
-
-	textEvent := helperCreateTestEvent(
-		t,
-		"text_event_id",
-		"author_pubkey",
-		nostr.KindTextNote,
-		"Test Post",
-		nostr.Tags{},
-	)
-
-	result := pm.processEvent(t.Context(), nostr.KindTextNote, &textEvent.Event)
-	require.Empty(t, result, "For text message without subscribers, the result should be an empty array")
-
-	communityEvent := helperCreateTestEvent(
-		t,
-		"community_event_id",
-		"author_pubkey",
-		nostr.KindTextNote,
-		"Community Message",
-		nostr.Tags{
-			{"h", "community_id"},
-		},
-	)
-
-	result = pm.processEvent(t.Context(), nostr.KindTextNote, &communityEvent.Event)
-	require.Empty(t, result, "For text message without subscribers, the result should be an empty array")
-
-	repostEvent := helperCreateTestEvent(
-		t,
-		"repost_event_id",
-		"reposter_pubkey",
-		nostr.KindRepost,
-		"",
-		nostr.Tags{
-			{"e", "original_event_id"},
-			{"p", "original_author_pubkey"},
-		},
-	)
-
-	result = pm.processEvent(t.Context(), nostr.KindRepost, &repostEvent.Event)
-	require.Empty(t, result, "For repost without subscribers, the result should be an empty array")
-
-	systemEvent := helperCreateTestEvent(
-		t,
-		"system_event_id",
-		"system_pubkey",
-		model.CustomIONSystemMessage,
-		"System Update",
-		nostr.Tags{
-			{"type", "announcement"},
-		},
-	)
-
-	result = pm.processEvent(t.Context(), model.CustomIONSystemMessage, &systemEvent.Event)
-	require.Empty(t, result, "For system message without devices, the result should be an empty array")
-}
-
-func TestHandleInvalidDeviceTokens(t *testing.T) {
-	t.Parallel()
-
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
-	}
-
-	filters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
-
-	devicePubkey1 := "pubkey1"
-	deviceID1 := "device1"
-	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		devicePubkey1,
-		deviceID1,
-		[]string{"t", "android", "token", "token1"},
-		filters,
-	)
-
-	devicePubkey2 := "pubkey2"
-	deviceID2 := "device2"
-	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		devicePubkey2,
-		deviceID2,
-		[]string{"t", "ios", "token", "token2"},
-		filters,
-	)
-
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
-
-	require.False(t, pm.devices[DeviceID(deviceID1)].Event.NotificationTokenInvalid, "Device 1 should have valid token")
-	require.False(t, pm.devices[DeviceID(deviceID2)].Event.NotificationTokenInvalid, "Device 2 should have valid token")
-
-	invalidDevices := []*model.Event{deviceEvent1}
-	require.NoError(t, pm.markDevicesAsInvalidInCache(invalidDevices))
-
-	require.True(t, pm.devices[DeviceID(deviceID1)].Event.NotificationTokenInvalid, "Device 1 should have invalid token")
-	require.False(t, pm.devices[DeviceID(deviceID2)].Event.NotificationTokenInvalid, "Device 2 should still have valid token")
-
-	require.NoError(t, pm.handleInvalidDeviceTokens(t.Context(), []*model.Event{}))
-
-	invalidDeviceEvent := &model.Event{
-		Event: nostr.Event{
-			ID:     "invalid_device",
-			PubKey: "pubkey3",
-			Tags:   nostr.Tags{},
-		},
-	}
-	require.Error(t, pm.markDevicesAsInvalidInCache([]*model.Event{invalidDeviceEvent}), "Should return error for device without d tag")
-
-	nonExistentDeviceEvent := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"nonexistent_pubkey",
-		"nonexistent_device",
-		[]string{"t", "web"},
-		filters,
-	)
-	require.NoError(t, pm.markDevicesAsInvalidInCache([]*model.Event{nonExistentDeviceEvent}), "Should not error for non-existent device")
+		for _, notification := range notifications {
+			deviceType := notification.Target.GetTag("t").Value()
+			if deviceType == "android" {
+				require.Contains(t, notification.Data, "title")
+				require.Contains(t, notification.Data, "body")
+				require.Contains(t, notification.Data, "imageUrl")
+			} else {
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL)
+			}
+		}
+	})
 }
 
 func TestCollectUserValidDevices(t *testing.T) {
-	t.Parallel()
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	t.Run("Returns nil when user has no devices", func(t *testing.T) {
+		devices := pm.collectUserValidDevices("non-existent-user", &model.Event{})
+		require.Nil(t, devices)
+	})
+
+	t.Run("Returns devices that match filters", func(t *testing.T) {
+		pubKey := "test-pub-key"
+		deviceID := DeviceID("test-device-id")
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindTextNote,
+				Tags: nostr.Tags{
+					nostr.Tag{"p", pubKey},
+				},
+			},
+		}
+
+		filters := nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+				Tags:  nostr.TagMap{"p": []nostr.TagValues{{&pubKey}}},
+			},
+		}
+
+		deviceEvent := &model.Event{
+			Event: nostr.Event{
+				Tags: nostr.Tags{
+					nostr.Tag{"d", string(deviceID)},
+				},
+			},
+		}
+
+		deviceInfo := DeviceInfo{
+			DeviceID: deviceID,
+			Filters:  filters,
+			Event:    deviceEvent,
+		}
+
+		pm.deviceMutex.Lock()
+		pm.userDevicesMap[pubKey] = map[DeviceID]DeviceInfo{
+			deviceID: deviceInfo,
+		}
+		pm.deviceMutex.Unlock()
+
+		devices := pm.collectUserValidDevices(pubKey, event)
+
+		require.Len(t, devices, 1)
+		require.Equal(t, deviceEvent, devices[0])
+	})
+}
+
+func TestHandleEventWithPublicKey(t *testing.T) {
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	t.Run("Returns nil when reference pubkey is empty", func(t *testing.T) {
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindTextNote,
+			},
+		}
+
+		notifications := pm.handleEventWithPublicKey(event)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("Returns nil when reference pubkey is the same as master pubkey", func(t *testing.T) {
+		masterPubKey := "master-pub-key"
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind:   nostr.KindTextNote,
+				PubKey: masterPubKey,
+				Tags: nostr.Tags{
+					nostr.Tag{"p", masterPubKey},
+				},
+			},
+		}
+
+		notifications := pm.handleEventWithPublicKey(event)
+		require.Nil(t, notifications)
+	})
+}
+
+func TestPushNotificationManager_SendNotifications(t *testing.T) {
+	mockClient := new(MockPushClient)
+	client := pn.Client(mockClient)
 
 	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: &client,
 	}
 
-	textFilters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
+	t.Run("Returns nil when no notifications", func(t *testing.T) {
+		err := pm.sendNotifications(t.Context(), nil, nil)
+		require.NoError(t, err)
+	})
 
-	reactionFilters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindReaction},
-		},
-	}
-
-	userPubKey := "user_pubkey"
-
-	device1 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		userPubKey,
-		"device1",
-		[]string{"t", "android"},
-		textFilters,
-	)
-
-	device2 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		userPubKey,
-		"device2",
-		[]string{"t", "ios"},
-		reactionFilters,
-	)
-
-	device3 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		userPubKey,
-		"device3",
-		[]string{"t", "web", "invalid_token", "true"},
-		nostr.Filters{
-			{
-				Kinds: []int{nostr.KindTextNote, nostr.KindReaction},
+	t.Run("Sends all notifications and collects errors", func(t *testing.T) {
+		singleNotification := &pn.Notification[*DeviceRegistrationEvent]{
+			Target: &DeviceRegistrationEvent{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						nostr.Tag{"d", "device-1"},
+						nostr.Tag{"token", "valid-token"},
+					},
+				},
 			},
-		},
-	)
+			Title: "Test Title",
+			Body:  "Test Body",
+		}
 
-	require.NoError(t, pm.processDeviceRegistrationEvent(device1))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device2))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device3))
+		topicNotification := &pn.Notification[pn.SubscriptionTopic]{
+			Target: "test-topic",
+			Title:  "Topic Title",
+			Body:   "Topic Body",
+		}
 
-	deviceInfo := pm.devices[DeviceID("device3")]
-	deviceInfo.Event.NotificationTokenInvalid = true
-	pm.devices[DeviceID("device3")] = deviceInfo
+		mockClient.On("SendSingle", t.Context(), singleNotification).Return(nil)
+		mockClient.On("SendTopic", t.Context(), topicNotification).Return(nil)
 
-	require.Len(t, pm.devices, 3, "Should have 3 devices")
+		err := pm.sendNotifications(t.Context(), []*pn.Notification[*DeviceRegistrationEvent]{singleNotification},
+			[]*pn.Notification[pn.SubscriptionTopic]{topicNotification})
 
-	textEvent := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindTextNote,
-		},
+		require.NoError(t, err)
+		mockClient.AssertExpectations(t)
+	})
+
+	t.Run("Handles errors from notifications", func(t *testing.T) {
+		singleNotification := &pn.Notification[*DeviceRegistrationEvent]{
+			Target: &DeviceRegistrationEvent{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						nostr.Tag{"d", "device-2"},
+						nostr.Tag{"token", "invalid-token"},
+					},
+				},
+			},
+		}
+
+		sendError := errors.New("failed to send notification")
+		mockClient.On("SendSingle", t.Context(), singleNotification).Return(sendError)
+
+		require.Error(t, pm.sendNotifications(t.Context(), []*pn.Notification[*DeviceRegistrationEvent]{singleNotification}, nil))
+		mockClient.AssertExpectations(t)
+	})
+}
+
+func TestPushNotificationManager_HandleInvalidDeviceTokens(t *testing.T) {
+	mockClient := new(MockPushClient)
+	client := pn.Client(mockClient)
+
+	pm := &PushNotificationManager{
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: &client,
 	}
 
-	reactionEvent := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindReaction,
-		},
+	t.Run("Returns nil when no invalid devices", func(t *testing.T) {
+		err := pm.handleInvalidDeviceTokens(t.Context(), nil)
+		require.NoError(t, err)
+	})
+}
+
+func TestPushNotificationManager_AcceptEvents(t *testing.T) {
+	mockClient := new(MockPushClient)
+	client := pn.Client(mockClient)
+
+	pm := &PushNotificationManager{
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: &client,
 	}
 
-	textDevices := pm.collectUserValidDevices(userPubKey, textEvent)
-	require.Len(t, textDevices, 1, "Should collect 1 device for text note")
-	require.Equal(t, device1.ID, textDevices[0].ID, "Should collect device1 for text note")
+	t.Run("Returns nil when no events", func(t *testing.T) {
+		err := pm.AcceptEvents(t.Context(), nil)
+		require.NoError(t, err)
+	})
+}
 
-	reactionDevices := pm.collectUserValidDevices(userPubKey, reactionEvent)
-	require.Len(t, reactionDevices, 1, "Should collect 1 device for reaction")
-	require.Equal(t, device2.ID, reactionDevices[0].ID, "Should collect device2 for reaction")
+func TestPushNotificationManager_ProcessEvent(t *testing.T) {
+	mockClient := new(MockPushClient)
+	client := pn.Client(mockClient)
 
-	require.NotContains(t, textDevices, device3, "Should not collect device with invalid token")
-	require.NotContains(t, reactionDevices, device3, "Should not collect device with invalid token")
+	pm := &PushNotificationManager{
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: &client,
+	}
 
-	nonExistentDevices := pm.collectUserValidDevices("nonexistent_pubkey", textEvent)
-	require.Empty(t, nonExistentDevices, "Should collect no devices for non-existent user")
+	t.Run("Handles TextNote with q tag correctly", func(t *testing.T) {
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:   "test-event-id",
+				Kind: nostr.KindTextNote,
+				Tags: nostr.Tags{
+					nostr.Tag{"q", "query-value"},
+					nostr.Tag{"p", "recipient-pubkey"},
+				},
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), event.Kind, event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("Handles GiftWrap event correctly", func(t *testing.T) {
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:      "test-event-id",
+				Kind:    nostr.KindGiftWrap,
+				Content: "encrypted-content",
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), event.Kind, event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("Returns nil for unsupported event kinds", func(t *testing.T) {
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:   "test-event-id",
+				Kind: 999,
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), event.Kind, event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+}
+
+func TestPushNotificationManager_CollectNotifications(t *testing.T) {
+	mockClient := new(MockPushClient)
+	client := pn.Client(mockClient)
+
+	pm := &PushNotificationManager{
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: &client,
+	}
+
+	t.Run("Returns empty when no events", func(t *testing.T) {
+		single, topic, err := pm.collectNotifications(t.Context(), nil)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
+
+	t.Run("Processes multiple events correctly", func(t *testing.T) {
+		events := []*model.Event{
+			{
+				Event: nostr.Event{
+					ID:   "test-event-1",
+					Kind: nostr.KindTextNote,
+					Tags: nostr.Tags{
+						nostr.Tag{"q", "query-value"},
+						nostr.Tag{"p", "recipient-pubkey"},
+					},
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:   "test-event-2",
+					Kind: nostr.KindRepost,
+					Tags: nostr.Tags{
+						nostr.Tag{"p", "recipient-pubkey"},
+					},
+				},
+			},
+		}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
 }

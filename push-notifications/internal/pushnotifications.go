@@ -22,7 +22,7 @@ const (
 	backoffMultiplier      = 2.5
 	maxBackoffInterval     = 2 * time.Second
 	maxRetries             = 3
-	requestDeadline        = 10 * time.Second
+	requestDeadline        = 30 * time.Second
 )
 
 type (
@@ -49,7 +49,7 @@ type (
 		InitialWait time.Duration
 		MaxWait     time.Duration
 	}
-	ServiceOption func(*notificationClient)
+	Option func(*notificationClient)
 )
 
 var (
@@ -61,7 +61,7 @@ var (
 	}
 )
 
-func WithRetryConfig(config RetryConfig) ServiceOption {
+func WithRetryConfig(config RetryConfig) Option {
 	return func(s *notificationClient) {
 		s.retry = config
 	}
@@ -71,7 +71,7 @@ func IsInvalidDeviceToken(err error) bool {
 	return errors.Is(err, ErrInvalidDeviceToken)
 }
 
-func New(ctx context.Context, credentialsFile string, opts ...ServiceOption) (Client, error) {
+func New(ctx context.Context, credentialsFile string, opts ...Option) (Client, error) {
 	app, err := firebase.NewApp(ctx, nil, option.WithCredentialsFile(credentialsFile))
 	if err != nil {
 		return nil, err

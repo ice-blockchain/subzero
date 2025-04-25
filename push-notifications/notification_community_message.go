@@ -36,7 +36,7 @@ func getCommunityNotificationType(ctx context.Context, event *model.Event) (Noti
 		return NotificationTypeChannelMessage, nil
 	}
 	for _, setting := range settings {
-		if setting.Value() == model.CommentsEnabledSettings {
+		if setting.Value() == model.CommentsEnabledSettings && len(setting) > 2 && setting[2] == "true" {
 			return NotificationTypeGroupChatMessage, nil
 		}
 	}

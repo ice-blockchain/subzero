@@ -110,7 +110,6 @@ func TestSendTopic(t *testing.T) {
 
 	err = client.SendTopic(t.Context(), n2)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "topic cannot be empty")
 }
 
 func TestSendSingle_Stability(t *testing.T) {

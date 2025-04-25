@@ -4,27 +4,22 @@ package query
 
 import (
 	"context"
-	"encoding/json"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) (events []*model.Event, err error) {
+func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIterator {
 	const batchSize = 1000
-	events = make([]*model.Event, 0)
-
-	var lastCreatedAt time.Time
-	var lastID string
-	var hasCursor bool
-
-	for ctx.Err() == nil {
-		query := `
+	sqlQuery := `
+		WITH invalid_events AS (
+			SELECT event_id
+			FROM event_tags 
+			WHERE event_tag_key = 'token' AND event_tag_value2 = 'invalid'
+		)
 		SELECT 
 			e.kind,
 			e.created_at,
@@ -34,96 +29,50 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) (events
 			e.sig,
 			e.content,
 			e.d_tag,
-			e.tags,
-			COALESCE(et.event_tag_value2, '') as token_status
+			e.tags
 		FROM events e
-		LEFT JOIN event_tags et ON e.id = et.event_id AND et.event_tag_key = 'token'
-		WHERE e.kind = $1
-		`
+		WHERE e.kind = :kind
+			AND e.id NOT IN (SELECT event_id FROM invalid_events)
+			AND (e.created_at > :last_created_at OR (e.created_at = :last_created_at AND e.id > :last_id))
+		ORDER BY e.created_at ASC, e.id
+		LIMIT :batch_size
+	`
 
-		args := []interface{}{model.CustomIONKindDeviceRegistration}
-		paramPos := 2
-		if hasCursor {
-			query += `AND (e.created_at, e.id) > ($2, $3) `
-			args = append(args, lastCreatedAt, lastID)
-			paramPos = 4
-		}
+	return func(yield func(*model.Event, error) bool) {
+		var lastCreatedAt time.Time
+		var lastID string
 
-		query += ` ORDER BY e.created_at, e.id LIMIT $` + strconv.Itoa(paramPos)
-		args = append(args, batchSize)
-		rows, err := db.DB.QueryxContext(ctx, query, args...)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to query device registration events")
-		}
-		var currentBatch []*model.Event
-		for rows.Next() && ctx.Err() == nil {
-			var dbEvent struct {
-				Kind         int
-				CreatedAt    time.Time
-				ID           string
-				PubKey       string
-				MasterPubKey string
-				Sig          string
-				Content      string
-				Dtag         string
-				Tags         []byte
-				TokenStatus  string
+		for ctx.Err() == nil {
+
+			params := map[string]any{
+				"kind":            model.CustomIONKindDeviceRegistration,
+				"last_created_at": lastCreatedAt.UTC(),
+				"last_id":         lastID,
+				"batch_size":      batchSize,
 			}
-			err := rows.Scan(&dbEvent.Kind, &dbEvent.CreatedAt, &dbEvent.ID, &dbEvent.PubKey, &dbEvent.MasterPubKey, &dbEvent.Sig, &dbEvent.Content, &dbEvent.Dtag, &dbEvent.Tags, &dbEvent.TokenStatus)
-			if err != nil {
-				rows.Close()
 
-				return nil, errors.Wrap(err, "failed to scan device registration event")
-			}
-			event := &model.Event{
-				Event: nostr.Event{
-					Kind:      dbEvent.Kind,
-					CreatedAt: nostr.Timestamp(dbEvent.CreatedAt.Unix()),
-					ID:        dbEvent.ID,
-					PubKey:    dbEvent.PubKey,
-					Sig:       dbEvent.Sig,
-					Content:   dbEvent.Content,
-				},
-			}
-			if err := json.Unmarshal(dbEvent.Tags, &event.Tags); err != nil {
-				rows.Close()
-
-				return nil, errors.Wrap(err, "failed to unmarshal tags")
-			}
-			if dbEvent.TokenStatus == "invalid" {
-				for i, tag := range event.Tags {
-					if tag.Key() == "token" {
-						if len(tag) <= 2 {
-							event.Tags[i] = append(tag, "invalid")
-						} else {
-							event.Tags[i][2] = "invalid"
-						}
-
-						break
+			var eventsProcessed int
+			it := db.newReadEventIterator(ctx, sqlQuery, params)
+			for event, iterErr := range it {
+				if iterErr != nil {
+					if !yield(nil, errors.Wrap(iterErr, "failed to iterate device registration events")) {
+						return
 					}
+					break
 				}
-			}
-			currentBatch = append(currentBatch, event)
-			lastCreatedAt = dbEvent.CreatedAt
-			lastID = dbEvent.ID
-			hasCursor = true
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
+				if !yield(event, nil) {
+					return
+				}
 
-			return nil, errors.Wrap(err, "error iterating device registration events")
-		}
-		rows.Close()
-		if len(currentBatch) == 0 {
-			break
-		}
-		events = append(events, currentBatch...)
-		if len(currentBatch) < batchSize {
-			break
+				lastCreatedAt = time.Unix(int64(event.CreatedAt), 0)
+				lastID = event.ID
+				eventsProcessed++
+			}
+			if eventsProcessed < batchSize {
+				break
+			}
 		}
 	}
-
-	return events, nil
 }
 
 func (db *dbClient) markTokenAsInvalidInEventTags(ctx context.Context, events []*model.Event) error {

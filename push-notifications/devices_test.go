@@ -3,6 +3,7 @@
 package pushnotifications
 
 import (
+	"context"
 	"encoding/json"
 	"strconv"
 	"testing"
@@ -11,116 +12,169 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func helperCreateTestDeviceRegistrationEvent(t *testing.T, pubKey string, deviceID string, tags []string, filters nostr.Filters) *model.Event {
+func helperCreateTestDeviceRegistrationEvent(t *testing.T, pubKey string, deviceID string, tags nostr.Tags, filters nostr.Filters) *model.Event {
 	t.Helper()
-
-	filtersJSON, err := json.Marshal(filters)
-	require.NoError(t, err)
-
-	eventTags := nostr.Tags{
-		{"d", deviceID},
-	}
-
-	for i := 0; i < len(tags); i += 2 {
-		if i+1 < len(tags) {
-			eventTags = append(eventTags, nostr.Tag{tags[i], tags[i+1]})
-		}
-	}
 
 	return &model.Event{
 		Event: nostr.Event{
 			ID:      "test_id_" + deviceID,
 			PubKey:  pubKey,
 			Kind:    model.CustomIONKindDeviceRegistration,
-			Content: string(filtersJSON),
-			Tags:    eventTags,
+			Content: filters.String(),
+			Tags:    tags,
 		},
 	}
 }
 
 func TestProcessDeviceRegistrationEvent(t *testing.T) {
-	pm := &PushNotificationManager{
-		devices:     make(map[pn.DeviceID]DeviceInfo),
-		userDevices: make(map[string][]pn.DeviceID),
-	}
-
-	filters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote, model.CustomIONKindEditableTextNote},
-		},
-		{
-			Kinds: []int{nostr.KindReaction},
-		},
-	}
-
-	event := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"test_pubkey",
-		"device1",
-		[]string{"t", "android", "relay", "wss://relay.example.com", "token", "encrypted_token"},
-		filters,
-	)
-
-	require.NoError(t, pm.processDeviceRegistrationEvent(event))
-
-	deviceInfo, exists := pm.devices["device1"]
-	require.True(t, exists, "Device should be added to devices map")
-	require.Equal(t, DeviceID("device1"), deviceInfo.DeviceID, "DeviceID should be equal to device1")
-	require.Equal(t, "test_pubkey", deviceInfo.Event.PubKey, "PubKey should be equal to test_pubkey")
-	require.Equal(t, "test_id_device1", deviceInfo.Event.ID, "Event ID should be equal to test_id_device1")
-
-	devices, exists := pm.userDevices["test_pubkey"]
-	require.True(t, exists, "User should be added to userDevices map")
-	require.Contains(t, devices, DeviceID("device1"), "Device should be added to user's devices list")
-}
-
-func TestRemoveDevice(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
-	}
+	t.Run("basic_device_registration", func(t *testing.T) {
+		t.Parallel()
 
-	deviceID := DeviceID("device-id-1")
-	deviceID2 := DeviceID("device-id-2")
-	masterPubKey := "master-pub-key-1"
+		pm := &PushNotificationManager{
+			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		}
 
-	filters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
+		filters := nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote, model.CustomIONKindFundReceive},
+			},
+		}
 
-	event1 := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, string(deviceID), nil, filters)
-	event2 := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, string(deviceID2), nil, filters)
+		masterPubKey := "master_pubkey"
+		deviceID := "device1"
+		deviceTags := nostr.Tags{
+			{"t", "ios"},
+			{"d", deviceID},
+			{"relay", "wss://relay.example.com"},
+			{"token", "token1"},
+		}
 
-	pm.devices[deviceID] = DeviceInfo{
-		DeviceID: deviceID,
-		Event:    event1,
-	}
-	pm.devices[deviceID2] = DeviceInfo{
-		DeviceID: deviceID2,
-		Event:    event2,
-	}
-	pm.userDevices[masterPubKey] = []DeviceID{deviceID, deviceID2}
+		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
 
-	require.NoError(t, pm.RemoveDevice(t.Context(), deviceID, masterPubKey))
+		err := pm.processDeviceRegistrationEvent(event)
+		require.NoError(t, err)
 
-	_, exists := pm.devices[deviceID]
-	require.False(t, exists, "Device should be removed from devices map")
+		require.Len(t, pm.userDevicesMap, 1)
+		require.Contains(t, pm.userDevicesMap, masterPubKey)
+		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
+		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
 
-	devices, ok := pm.userDevices[masterPubKey]
-	require.True(t, ok, "User should remain in the list")
-	require.Equal(t, []DeviceID{deviceID2}, devices, "List of user's devices should contain only device2")
+		deviceInfo := pm.userDevicesMap[masterPubKey][DeviceID(deviceID)]
+		require.Equal(t, DeviceID(deviceID), deviceInfo.DeviceID)
+		require.Equal(t, event, deviceInfo.Event)
 
-	require.NoError(t, pm.RemoveDevice(t.Context(), DeviceID("non-existent"), masterPubKey))
+		var parsedFilters nostr.Filters
+		require.NoError(t, json.Unmarshal([]byte(event.Content), &parsedFilters))
+		require.Equal(t, parsedFilters, deviceInfo.Filters)
+	})
 
-	wrongPubKey := "wrong-pub-key"
-	require.Error(t, pm.RemoveDevice(t.Context(), deviceID2, wrongPubKey))
+	t.Run("invalid_filter_json", func(t *testing.T) {
+		t.Parallel()
+
+		pm := &PushNotificationManager{
+			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		}
+
+		masterPubKey := "master_pubkey"
+		deviceID := "device3"
+		deviceTags := nostr.Tags{
+			{"t", "ios"},
+			{"d", deviceID},
+			{"relay", "wss://relay.example.com"},
+			{"token", "token3"},
+		}
+
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:      "test_id_" + deviceID,
+				PubKey:  masterPubKey,
+				Kind:    model.CustomIONKindDeviceRegistration,
+				Content: "{invalid json",
+				Tags:    deviceTags,
+			},
+		}
+
+		require.Error(t, pm.processDeviceRegistrationEvent(event))
+		require.Len(t, pm.userDevicesMap, 0)
+	})
+}
+
+func TestRemoveDeviceFromCache(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic_device_removal", func(t *testing.T) {
+		t.Parallel()
+
+		pm := &PushNotificationManager{
+			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		}
+
+		filters := nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+			},
+		}
+
+		masterPubKey := "master_pubkey"
+		deviceID := "device1"
+		deviceTags := nostr.Tags{
+			{"t", "ios"},
+			{"d", deviceID},
+			{"relay", "wss://relay.example.com"},
+			{"token", "token1"},
+		}
+
+		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
+
+		require.NoError(t, pm.processDeviceRegistrationEvent(event))
+		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
+
+		pm.removeDeviceFromCache(DeviceID(deviceID), masterPubKey)
+		require.Len(t, pm.userDevicesMap, 0)
+	})
+
+	t.Run("device_belongs_to_another_user", func(t *testing.T) {
+		t.Parallel()
+
+		pm := &PushNotificationManager{
+			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		}
+
+		filters := nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+			},
+		}
+
+		masterPubKey := "master_pubkey"
+		otherPubKey := "other_pubkey"
+		deviceID := "device3"
+		deviceTags := nostr.Tags{
+			{"t", "ios"},
+			{"d", deviceID},
+			{"relay", "wss://relay.example.com"},
+			{"token", "token3"},
+		}
+
+		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(event))
+
+		require.Len(t, pm.userDevicesMap, 1)
+		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+
+		pm.userDevicesMap[otherPubKey] = make(map[DeviceID]DeviceInfo)
+		pm.userDevicesMap[otherPubKey][DeviceID(deviceID)] = DeviceInfo{
+			DeviceID: DeviceID(deviceID),
+			Event:    event,
+			Filters:  filters,
+		}
+		require.Len(t, pm.userDevicesMap, 2)
+		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+	})
 }
 
 func TestShouldProcessDeletionEvent(t *testing.T) {
@@ -128,205 +182,162 @@ func TestShouldProcessDeletionEvent(t *testing.T) {
 
 	pm := &PushNotificationManager{}
 
-	event1 := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindTextNote,
-		},
-	}
-	require.False(t, pm.shouldProcessDeletionEvent(event1), "Non-deletion event should return false")
+	t.Run("not_a_deletion_event", func(t *testing.T) {
+		t.Parallel()
 
-	event2 := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindDeletion,
-			Tags: nostr.Tags{},
-		},
-	}
-	require.True(t, pm.shouldProcessDeletionEvent(event2), "Deletion event without k-tags should return true")
-
-	event3 := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindDeletion,
-			Tags: nostr.Tags{
-				{"k", strconv.Itoa(model.CustomIONKindDeviceRegistration)},
-			},
-		},
-	}
-	require.True(t, pm.shouldProcessDeletionEvent(event3), "Deletion event with device registration k-tag should return true")
-
-	event4 := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindDeletion,
-			Tags: nostr.Tags{
-				{"k", strconv.Itoa(nostr.KindTextNote)},
-			},
-		},
-	}
-	require.False(t, pm.shouldProcessDeletionEvent(event4), "Deletion event with non-device registration k-tag should return false")
-}
-
-func TestProcessDeviceRegistrationEventWithInvalidToken(t *testing.T) {
-	t.Parallel()
-
-	pm := &PushNotificationManager{
-		devices:     make(map[pn.DeviceID]DeviceInfo),
-		userDevices: make(map[string][]pn.DeviceID),
-	}
-
-	filters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
-
-	event := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"test_pubkey",
-		"device1",
-		[]string{"invalid_token"},
-		filters,
-	)
-	event.NotificationTokenInvalid = true
-
-	require.NoError(t, pm.processDeviceRegistrationEvent(event))
-
-	deviceInfo, exists := pm.devices["device1"]
-	require.True(t, exists, "Device should be added to devices map")
-	require.Equal(t, DeviceID("device1"), deviceInfo.DeviceID, "DeviceID should be equal to device1")
-	require.True(t, deviceInfo.Event.NotificationTokenInvalid, "Device event should have NotificationTokenInvalid set to true")
-}
-
-func TestCollectDevicesToRemove(t *testing.T) {
-	t.Parallel()
-
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
-	}
-
-	deletionEvent := &model.Event{
-		Event: nostr.Event{
-			ID:     "deletion_event",
-			PubKey: "pubkey1",
-			Kind:   nostr.KindDeletion,
-			Tags: nostr.Tags{
-				{"e", "registration_event_id"},
-				{"k", strconv.Itoa(model.CustomIONKindDeviceRegistration)},
-			},
-		},
-	}
-
-	require.True(t, pm.shouldProcessDeletionEvent(deletionEvent), "Deletion event with device registration k-tag should return true")
-
-	emptyEvents := []*model.Event{}
-	deviceToRemoveMap, err := pm.collectDevicesToRemove(t.Context(), emptyEvents)
-	require.NoError(t, err)
-	require.Nil(t, deviceToRemoveMap, "Empty events slice should return nil map")
-
-	nonDeletionEvents := []*model.Event{
-		{
+		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindTextNote,
 			},
-		},
-	}
-	deviceToRemoveMap, err = pm.collectDevicesToRemove(t.Context(), nonDeletionEvents)
-	require.NoError(t, err)
-	require.Nil(t, deviceToRemoveMap, "Non-deletion events should return nil map")
+		}
+
+		should := pm.shouldProcessDeletionEvent(event)
+		require.False(t, should)
+	})
+
+	t.Run("deletion_event_without_k_tag", func(t *testing.T) {
+		t.Parallel()
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindDeletion,
+				Tags: nostr.Tags{},
+			},
+		}
+
+		should := pm.shouldProcessDeletionEvent(event)
+		require.True(t, should)
+	})
+
+	t.Run("deletion_event_with_matching_k_tag", func(t *testing.T) {
+		t.Parallel()
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindDeletion,
+				Tags: nostr.Tags{
+					{"k", strconv.Itoa(model.CustomIONKindDeviceRegistration)},
+				},
+			},
+		}
+
+		should := pm.shouldProcessDeletionEvent(event)
+		require.True(t, should)
+	})
+
+	t.Run("deletion_event_with_non_matching_k_tag", func(t *testing.T) {
+		t.Parallel()
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindDeletion,
+				Tags: nostr.Tags{
+					{"k", strconv.Itoa(nostr.KindTextNote)},
+				},
+			},
+		}
+
+		should := pm.shouldProcessDeletionEvent(event)
+		require.False(t, should)
+	})
+
+	t.Run("deletion_event_with_multiple_k_tags", func(t *testing.T) {
+		t.Parallel()
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindDeletion,
+				Tags: nostr.Tags{
+					{"k", strconv.Itoa(nostr.KindTextNote)},
+					{"k", strconv.Itoa(model.CustomIONKindDeviceRegistration)},
+				},
+			},
+		}
+
+		should := pm.shouldProcessDeletionEvent(event)
+		require.True(t, should)
+	})
 }
 
-func TestUpdateDevice(t *testing.T) {
+func TestManageDeviceRegistrationEvents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty_events_list", func(t *testing.T) {
+		t.Parallel()
+
+		pm := &PushNotificationManager{
+			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		}
+
+		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{})
+		require.NoError(t, err)
+	})
+
+	t.Run("process_registration_events", func(t *testing.T) {
+		t.Parallel()
+		pm := &PushNotificationManager{
+			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		}
+		filters := nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+			},
+		}
+		masterPubKey := "master_pubkey"
+		deviceID := "device1"
+		deviceTags := nostr.Tags{
+			{"t", "ios"},
+			{"d", deviceID},
+			{"relay", "wss://relay.example.com"},
+			{"token", "token1"},
+		}
+
+		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
+
+		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{event})
+		require.NoError(t, err)
+
+		require.Len(t, pm.userDevicesMap, 1)
+		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+	})
+}
+
+func TestProcessDeviceRegistrationBatch(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
-	initialFilters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
+	devices := []struct {
+		pubKey   string
+		deviceID string
+		platform string
+	}{
+		{"user1", "device1", "ios"},
+		{"user1", "device2", "android"},
+		{"user2", "device3", "web"},
 	}
 
-	event1 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"test_pubkey",
-		"device1",
-		[]string{"t", "android", "token", "encrypted_token1"},
-		initialFilters,
-	)
+	for _, d := range devices {
+		filters := nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+			},
+		}
 
-	require.NoError(t, pm.processDeviceRegistrationEvent(event1))
+		tags := nostr.Tags{
+			{"t", d.platform},
+			{"d", d.deviceID},
+			{"relay", "wss://relay.example.com"},
+			{"token", "token_" + d.deviceID},
+		}
 
-	deviceInfo, exists := pm.devices["device1"]
-	require.True(t, exists, "Device should be added to devices map")
-	require.Equal(t, 1, len(deviceInfo.Filters), "Filters should have 1 element")
-	require.Equal(t, "encrypted_token1", deviceInfo.Event.GetTag("token").Value(), "Token should match")
-
-	updatedFilters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote, nostr.KindReaction},
-		},
-		{
-			Kinds: []int{nostr.KindFollowList},
-		},
+		event := helperCreateTestDeviceRegistrationEvent(t, d.pubKey, d.deviceID, tags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 	}
 
-	event2 := helperCreateTestDeviceRegistrationEvent(
-		t,
-		"test_pubkey",
-		"device1",
-		[]string{"t", "ios", "token", "encrypted_token2"},
-		updatedFilters,
-	)
-
-	require.NoError(t, pm.processDeviceRegistrationEvent(event2))
-
-	updatedDeviceInfo, exists := pm.devices["device1"]
-	require.True(t, exists, "Device should still exist in devices map")
-	require.Equal(t, 2, len(updatedDeviceInfo.Filters), "Filters should have 2 elements after update")
-	require.Equal(t, "ios", updatedDeviceInfo.Event.GetTag("t").Value(), "Device type should be updated to ios")
-	require.Equal(t, "encrypted_token2", updatedDeviceInfo.Event.GetTag("token").Value(), "Token should be updated")
-	require.False(t, updatedDeviceInfo.Event.NotificationTokenInvalid, "Device event should not have NotificationTokenInvalid set to true")
-}
-
-func TestMultipleDevicesPerUser(t *testing.T) {
-	t.Parallel()
-
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[PublicKey][]DeviceID),
-	}
-
-	filters := nostr.Filters{
-		{
-			Kinds: []int{nostr.KindTextNote},
-		},
-	}
-
-	userPubKey := "user1_pubkey"
-
-	device1 := helperCreateTestDeviceRegistrationEvent(t, userPubKey, "device1", []string{"t", "android"}, filters)
-	device2 := helperCreateTestDeviceRegistrationEvent(t, userPubKey, "device2", []string{"t", "ios"}, filters)
-	device3 := helperCreateTestDeviceRegistrationEvent(t, userPubKey, "device3", []string{"t", "web"}, filters)
-
-	require.NoError(t, pm.processDeviceRegistrationEvent(device1))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device2))
-	require.NoError(t, pm.processDeviceRegistrationEvent(device3))
-
-	userDevices, exists := pm.userDevices[userPubKey]
-	require.True(t, exists, "User should be added to userDevices map")
-	require.Equal(t, 3, len(userDevices), "User should have 3 devices")
-	require.Contains(t, userDevices, DeviceID("device1"), "User's devices should contain device1")
-	require.Contains(t, userDevices, DeviceID("device2"), "User's devices should contain device2")
-	require.Contains(t, userDevices, DeviceID("device3"), "User's devices should contain device3")
-
-	require.NoError(t, pm.RemoveDevice(t.Context(), "device2", userPubKey))
-
-	userDevices, exists = pm.userDevices[userPubKey]
-	require.True(t, exists, "User should still be in userDevices map")
-	require.Equal(t, 2, len(userDevices), "User should have 2 devices after removal")
-	require.Contains(t, userDevices, DeviceID("device1"), "User's devices should still contain device1")
-	require.Contains(t, userDevices, DeviceID("device3"), "User's devices should still contain device3")
-	require.NotContains(t, userDevices, DeviceID("device2"), "User's devices should not contain device2 anymore")
+	require.Len(t, pm.userDevicesMap, 2)
+	require.Len(t, pm.userDevicesMap["user1"], 2)
+	require.Len(t, pm.userDevicesMap["user2"], 1)
 }

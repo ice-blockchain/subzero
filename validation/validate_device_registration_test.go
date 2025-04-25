@@ -16,451 +16,468 @@ func TestValidateDeviceRegistration(t *testing.T) {
 
 	key := model.GeneratePrivateKey()
 
-	tests := []struct {
-		name    string
-		setup   func(*model.Event)
-		wantErr bool
-	}{
-		{
-			name: "valid event with minimal filter",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid event with iOS platform",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSIOS},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid event with web platform",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSWeb},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid event with wrong complex filters",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[
-					{"kinds":[1,4]},
-					{"kinds":[1], "#p": ["pubkey1"]},
-					{"kinds":[4], "#p": ["pubkey2"]}
-				]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "valid event with allowed kinds in filter",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[
-					{"kinds":[1, 30175, 6, 16]},
-					{"kinds":[3]}
-				]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid event with community filter",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[
-					{"kinds":[1], "#h": ["community-id"]}
-				]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid event with giftwrap filter",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "missing d tag",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing t tag",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid t tag value",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", "windows"},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing relay tag",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing token tag",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "empty content",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = ""
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid JSON content",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `{invalid json`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "filter without kinds",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"authors":["pubkey"]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "community filter without required text note kind",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[5], "#h": ["community-id"]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "filter with disallowed kind",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[5]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-		{
-			name: "skip giftwrap test",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1]}]`
-				e.CreatedAt = 1
-			},
-			wantErr: false,
-		},
-		{
-			name: "giftwrap_filter_missing_expiration",
-			setup: func(e *model.Event) {
-				e.Kind = model.CustomIONKindDeviceRegistration
-				e.Tags = model.Tags{
-					{"d", "device-id"},
-					{"t", DeviceTokenOSAndroid},
-					{"relay", "wss://relay.example.com"},
-					{"token", "device-token"},
-				}
-				e.Content = `[{"kinds":[1059], "tags": {"p": ["pubkey1"], "k": ["1"]}}]`
-				e.CreatedAt = 1
-			},
-			wantErr: true,
-		},
-	}
+	t.Run("valid event with minimal filter", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	t.Run("valid event with iOS platform", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSIOS},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
 
-			var ev model.Event
-			tt.setup(&ev)
-			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	t.Run("valid event with web platform", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSWeb},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
 
-			err := Validate(t.Context(), &ev)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
+	t.Run("valid event with wrong complex filters", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[
+			{"kinds":[1,4]},
+			{"kinds":[1], "#p": ["pubkey1"]},
+			{"kinds":[4], "#p": ["pubkey2"]}
+		]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("valid event with allowed kinds in filter", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[
+			{"kinds":[1, 30175, 6, 16]},
+			{"kinds":[3]}
+		]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("valid event with community filter", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[
+			{"kinds":[1], "#h": ["community-id"]}
+		]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("valid event with giftwrap filter", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("missing d tag", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("missing t tag", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("invalid t tag value", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", "windows"},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("missing relay tag", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("invalid relay tag value", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", "wss://wrong-relay.example.com"},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("missing token tag", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("empty content", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = ""
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("invalid JSON content", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `{invalid json`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("filter without kinds", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"authors":["pubkey"]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("community filter without required text note kind", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[5], "#h": ["community-id"]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("filter with disallowed kind", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[5]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("skip giftwrap test", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("giftwrap_filter_missing_expiration", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1059], "tags": {"p": ["pubkey1"], "k": ["1"]}}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), &ev))
+	})
 }
 
 func TestValidateDeviceRegistrationFilters(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		content string
-		wantErr bool
-	}{
-		{
-			name:    "valid with text note",
-			content: `[{"kinds":[1]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid with editable text note",
-			content: `[{"kinds":[30175]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid with repost",
-			content: `[{"kinds":[6]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid with generic repost",
-			content: `[{"kinds":[16]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid with follow list",
-			content: `[{"kinds":[3]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid giftwrap with fund receive",
-			content: `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["1755"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid giftwrap with fund send notify",
-			content: `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["1756"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid giftwrap with direct message",
-			content: `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["14"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid giftwrap with custom direct message",
-			content: `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["30014"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "valid giftwrap with reaction",
-			content: `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["7"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "giftwrap with expired expiration",
-			content: `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["7"], "expiration": ["` + strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10) + `"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "invalid kind",
-			content: `[{"kinds":[7]}]`, // Reaction not directly allowed, only in giftwrap
-			wantErr: true,
-		},
-		{
-			name:    "giftwrap without k tag",
-			content: `[{"kinds":[1059]}]`,
-			wantErr: true,
-		},
-		{
-			name:    "giftwrap with invalid k value",
-			content: `[{"kinds":[1059], "#k": ["12345"]}]`,
-			wantErr: true,
-		},
-		{
-			name:    "community filter with valid kind",
-			content: `[{"kinds":[1], "#h": ["community-id"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "community filter with editable text note",
-			content: `[{"kinds":[30175], "#h": ["community-id"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "community filter with repost",
-			content: `[{"kinds":[6], "#h": ["community-id"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "community filter with generic repost",
-			content: `[{"kinds":[16], "#h": ["community-id"]}]`,
-			wantErr: false,
-		},
-		{
-			name:    "community filter with invalid kind",
-			content: `[{"kinds":[7], "#h": ["community-id"]}]`,
-			wantErr: true,
-		},
+	setupEvent := func(t *testing.T, content string) *model.Event {
+		key := model.GeneratePrivateKey()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", globalConfig.RelayURL},
+			{"token", "device-token"},
+		}
+		ev.Content = content
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		return &ev
 	}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	t.Run("valid with text note", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[1]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
 
-			key := model.GeneratePrivateKey()
-			var ev model.Event
-			ev.Kind = model.CustomIONKindDeviceRegistration
-			ev.Tags = model.Tags{
-				{"d", "device-id"},
-				{"t", DeviceTokenOSAndroid},
-				{"relay", "wss://relay.example.com"},
-				{"token", "device-token"},
-			}
-			ev.Content = tt.content
-			ev.CreatedAt = 1
-			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	t.Run("valid with editable text note", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[30175]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
 
-			err := Validate(t.Context(), &ev)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
+	t.Run("valid with repost", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[6]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid with generic repost", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[16]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid with follow list", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[3]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid giftwrap with fund receive", func(t *testing.T) {
+		t.Parallel()
+		content := `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["1755"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`
+		ev := setupEvent(t, content)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid giftwrap with fund send notify", func(t *testing.T) {
+		t.Parallel()
+		content := `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["1756"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`
+		ev := setupEvent(t, content)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid giftwrap with direct message", func(t *testing.T) {
+		t.Parallel()
+		content := `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["14"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`
+		ev := setupEvent(t, content)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid giftwrap with custom direct message", func(t *testing.T) {
+		t.Parallel()
+		content := `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["30014"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`
+		ev := setupEvent(t, content)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("valid giftwrap with reaction", func(t *testing.T) {
+		t.Parallel()
+		content := `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["7"], "expiration": ["` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `"]}]`
+		ev := setupEvent(t, content)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("giftwrap with expired expiration", func(t *testing.T) {
+		t.Parallel()
+		content := `[{"kinds":[1059], "#p": ["some-pubkey"], "#k": ["7"], "expiration": ["` + strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10) + `"]}]`
+		ev := setupEvent(t, content)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("invalid kind", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[7]}]`)
+		require.Error(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("giftwrap without k tag", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[1059]}]`)
+		require.Error(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("giftwrap with invalid k value", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[1059], "#k": ["12345"]}]`)
+		require.Error(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("community filter with valid kind", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[1], "#h": ["community-id"]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("community filter with editable text note", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[30175], "#h": ["community-id"]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("community filter with repost", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[6], "#h": ["community-id"]}]`)
+		require.Error(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("community filter with generic repost", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[16], "#h": ["community-id"]}]`)
+		require.NoError(t, Validate(t.Context(), ev))
+	})
+
+	t.Run("community filter with invalid kind", func(t *testing.T) {
+		t.Parallel()
+		ev := setupEvent(t, `[{"kinds":[7], "#h": ["community-id"]}]`)
+		require.Error(t, Validate(t.Context(), ev))
+	})
 }

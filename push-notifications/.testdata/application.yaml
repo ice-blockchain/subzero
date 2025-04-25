@@ -2,3 +2,10 @@
 
 push-notifications:
   fcm-credentials-path: /dev/null
+
+validation:
+  relay-url: wss://relay.example.com
+
+database/query:
+  relay-url: wss://relay.example.com
+  private-key: private-key

@@ -265,34 +265,33 @@ var (
 			Validate(func(e *model.Event) error {
 				tTag := e.GetTag("t").Value()
 				if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {
-					return errors.Errorf("wrong t tag value: %v", tTag)
+					return errors.Wrapf(ErrWrongEventParams, "wrong t tag value: %v", tTag)
 				}
 				relayTag := e.GetTag("relay").Value()
 				if relayTag != globalConfig.RelayURL {
-					return errors.Errorf("relay tag value '%s' does not match configured relay URL '%s'", relayTag, globalConfig.RelayURL)
+					return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, globalConfig.RelayURL)
 				}
 
 				var filters model.Filters
 				if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {
-					return errors.Errorf("wrong content JSON value: %v", err)
+					return errors.Wrapf(ErrWrongEventParams, "wrong content JSON value: %v", err)
 				}
 				for _, filter := range filters {
 					if filter.Kinds == nil {
-						return errors.Errorf("filter must have kinds defined: %v", filter)
+						return errors.Wrapf(ErrWrongEventParams, "filter must have kinds defined: %v", filter)
 					}
 					if filter.Tags != nil && filter.Tags.HasValues(model.CustomIONTagCommunity) {
 						hasValidCommunityKind := false
 						for _, kind := range filter.Kinds {
-							if kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote ||
-								kind == nostr.KindRepost || kind == nostr.KindGenericRepost {
+							if kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote || kind == nostr.KindGenericRepost {
 								hasValidCommunityKind = true
 
 								break
 							}
 						}
 						if !hasValidCommunityKind {
-							return errors.Errorf("filter with h tag must contain at least one of these kinds: %v",
-								[]int{nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindRepost, nostr.KindGenericRepost})
+							return errors.Wrapf(ErrWrongEventParams, "filter with h tag must contain at least one of these kinds: %v",
+								[]int{nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost})
 						}
 
 						continue
@@ -306,11 +305,11 @@ var (
 						case nostr.KindGiftWrap:
 							hasAllowedKind = true
 							if filter.Tags == nil {
-								return errors.Errorf("filter with KindGiftWrap kind must have tags: %v", filter)
+								return errors.Wrapf(ErrWrongEventParams, "filter with KindGiftWrap kind must have tags: %v", filter)
 							}
 							kTagValues := filter.Tags["k"]
 							if kTagValues == nil || len(kTagValues) == 0 {
-								return errors.Errorf("filter with KindGiftWrap kind must have k tag: %v", filter)
+								return errors.Wrapf(ErrWrongEventParams, "filter with KindGiftWrap kind must have k tag: %v", filter)
 							}
 
 							validKTagValue := false
@@ -333,13 +332,13 @@ var (
 							}
 
 							if !validKTagValue {
-								return errors.Errorf("filter with KindGiftWrap kind has invalid k tag value: %v", filter)
+								return errors.Wrapf(ErrWrongEventParams, "filter with KindGiftWrap kind has invalid k tag value: %v", filter)
 							}
 						}
 					}
 
 					if !hasAllowedKind {
-						return errors.Errorf("filter must contain at least one allowed kind: %v", filter)
+						return errors.Wrapf(ErrWrongEventParams, "filter must contain at least one allowed kind: %v", filter)
 					}
 				}
 

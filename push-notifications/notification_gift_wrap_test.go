@@ -1,0 +1,290 @@
+// SPDX-License-Identifier: ice License 1.0
+
+package pushnotifications
+
+import (
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
+)
+
+func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tags nostr.Tags) *model.Event {
+	t.Helper()
+
+	return &model.Event{
+		Event: nostr.Event{
+			ID:      id,
+			PubKey:  authorPubKey,
+			Kind:    nostr.KindGiftWrap,
+			Content: "",
+			Tags:    tags,
+		},
+	}
+}
+
+func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	recipientMasterPubKey := "recipient_master_pubkey"
+	deviceID := "device1"
+	devicePubKey := "device_pubkey"
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindDirectMessage, model.CustomIONDirectMessage, model.CustomIONKindFundReceive,
+				model.CustomIONKindFundSendNotify, nostr.KindReaction},
+		},
+	}
+
+	deviceTags := nostr.Tags{
+		{"t", "ios"},
+		{"d", deviceID},
+		{"relay", "wss://relay.example.com"},
+		{"token", "token1"},
+	}
+
+	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+
+	pm.deviceMutex.Lock()
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	require.True(t, ok, "Device should exist in userDevicesMap")
+
+	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
+		pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+	}
+	pm.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.deviceMutex.Unlock()
+
+	t.Run("self recipient", func(t *testing.T) {
+		event := helperCreateGiftWrapEvent(
+			t,
+			"test_self_recipient",
+			"sender_pubkey",
+			nostr.Tags{
+				{"k", strconv.Itoa(nostr.KindDirectMessage)},
+				{"p", "sender_pubkey", devicePubKey},
+				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+			},
+		)
+
+		notifications, err := pm.handleGiftWrapEvent(event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("p tag without device pubkey", func(t *testing.T) {
+		event := helperCreateGiftWrapEvent(
+			t,
+			"test_p_tag_without_device",
+			"sender_pubkey",
+			nostr.Tags{
+				{"k", strconv.Itoa(nostr.KindDirectMessage)},
+				{"p", recipientMasterPubKey},
+				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+			},
+		)
+
+		notifications, err := pm.handleGiftWrapEvent(event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("device not found", func(t *testing.T) {
+		event := helperCreateGiftWrapEvent(
+			t,
+			"test_device_not_found",
+			"sender_pubkey",
+			nostr.Tags{
+				{"k", strconv.Itoa(nostr.KindDirectMessage)},
+				{"p", recipientMasterPubKey, "unknown_device_pubkey"},
+				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+			},
+		)
+
+		notifications, err := pm.handleGiftWrapEvent(event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+}
+
+func TestHandleGiftWrapEvent(t *testing.T) {
+	t.Parallel()
+
+	recipientMasterPubKey := "recipient_master_pubkey"
+	deviceID := "device1"
+	devicePubKey := "device_pubkey"
+	senderPubKey := "sender_pubkey"
+
+	tests := []struct {
+		name        string
+		kind        int
+		notifyType  NotificationType
+		description string
+	}{
+		{"DirectMessage", nostr.KindDirectMessage, NotificationTypeDirectMessage, "standard direct message"},
+		{"IONDirectMessage", model.CustomIONDirectMessage, NotificationTypeDirectMessage, "ION direct message"},
+		{"FundReceive", model.CustomIONKindFundReceive, NotificationTypePaymentReceived, "fund receive"},
+		{"FundSendNotify", model.CustomIONKindFundSendNotify, NotificationTypePaymentRequest, "fund send notify"},
+		{"Reaction", nostr.KindReaction, NotificationTypeReaction, "reaction"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			localPM := &PushNotificationManager{
+				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			}
+
+			filters := nostr.Filters{
+				{
+					Kinds: []int{nostr.KindGiftWrap, tc.kind},
+				},
+			}
+
+			deviceTags := nostr.Tags{
+				{"t", "ios"},
+				{"d", deviceID},
+				{"relay", "wss://relay.example.com"},
+				{"token", "token1"},
+			}
+
+			deviceEvent := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
+			require.NoError(t, localPM.processDeviceRegistrationEvent(deviceEvent))
+
+			localPM.deviceMutex.Lock()
+			deviceInfo, ok := localPM.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+			require.True(t, ok, "Device should exist in userDevicesMap")
+
+			if _, ok := localPM.userDevicesMap[recipientMasterPubKey]; !ok {
+				localPM.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+			}
+			localPM.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+			localPM.deviceMutex.Unlock()
+
+			eventID := "test_gift_wrap_" + tc.name
+			event := helperCreateGiftWrapEvent(
+				t,
+				eventID,
+				senderPubKey,
+				nostr.Tags{
+					{"k", strconv.Itoa(tc.kind)},
+					{"p", recipientMasterPubKey, devicePubKey},
+					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+				},
+			)
+
+			notifications, err := localPM.handleGiftWrapEvent(event)
+			require.NoError(t, err)
+			require.NotNil(t, notifications, "Notifications should not be nil for "+tc.description)
+			require.Len(t, notifications, 1, "Should create one notification for "+tc.description)
+
+			notification := notifications[0]
+			require.Equal(t, DefaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
+			require.Equal(t, DefaultTranslations[tc.notifyType].Body, notification.Body, "Body should match for "+tc.description)
+			require.Equal(t, deviceEvent, notification.Target, "Target should match for "+tc.description)
+			require.Contains(t, notification.Data, "event", "Data should contain event for "+tc.description)
+			require.Equal(t, event.String(), notification.Data["event"], "Event should match for "+tc.description)
+		})
+	}
+}
+
+func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
+	t.Parallel()
+
+	recipientMasterPubKey := "recipient_with_multiple_devices"
+	senderPubKey := "sender_pubkey"
+
+	devices := []struct {
+		id       string
+		pubKey   string
+		platform string
+	}{
+		{"device1", "device_pubkey1", "ios"},
+		{"device2", "device_pubkey2", "android"},
+		{"device3", "device_pubkey3", "web"},
+	}
+
+	for _, device := range devices {
+		device := device
+		t.Run("notify_"+device.platform+"_device", func(t *testing.T) {
+			t.Parallel()
+
+			pm := &PushNotificationManager{
+				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			}
+
+			filters := nostr.Filters{
+				{
+					Kinds: []int{nostr.KindGiftWrap, nostr.KindDirectMessage},
+				},
+			}
+
+			deviceTags := nostr.Tags{
+				{"t", device.platform},
+				{"d", device.id},
+				{"relay", "wss://relay.example.com"},
+				{"token", "token_" + device.id},
+			}
+
+			deviceEvent := helperCreateTestDeviceRegistrationEvent(t, device.pubKey, device.id, deviceTags, filters)
+			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+			pm.deviceMutex.Lock()
+			deviceInfo, ok := pm.userDevicesMap[device.pubKey][DeviceID(device.id)]
+			require.True(t, ok, "Device should exist in userDevicesMap")
+
+			if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
+				pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+			}
+			pm.userDevicesMap[recipientMasterPubKey][DeviceID(device.id)] = deviceInfo
+			pm.deviceMutex.Unlock()
+
+			event := helperCreateGiftWrapEvent(
+				t,
+				"test_gift_wrap_"+device.id,
+				senderPubKey,
+				nostr.Tags{
+					{"k", strconv.Itoa(nostr.KindDirectMessage)},
+					{"p", recipientMasterPubKey, device.pubKey},
+					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+				},
+			)
+
+			notifications, err := pm.handleGiftWrapEvent(event)
+			require.NoError(t, err)
+			require.NotNil(t, notifications, "Notifications should not be nil for "+device.platform)
+			require.Len(t, notifications, 1, "Should create one notification for "+device.platform)
+
+			notification := notifications[0]
+
+			if device.platform == "android" {
+				require.Equal(t, "", notification.Title, "Title should be empty for Android")
+				require.Equal(t, "", notification.Body, "Body should be empty for Android")
+				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title, notification.Data["title"],
+					"Title in data should match for Android")
+				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Body, notification.Data["body"],
+					"Body in data should match for Android")
+			} else {
+				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title, notification.Title,
+					"Title should match for "+device.platform)
+				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Body, notification.Body,
+					"Body should match for "+device.platform)
+			}
+
+			require.Contains(t, notification.Data, "event", "Data should contain event")
+			require.Equal(t, event.String(), notification.Data["event"], "Event should match")
+		})
+	}
+}

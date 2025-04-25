@@ -19,6 +19,7 @@ var (
 		model.CustomIONDirectMessage:      NotificationTypeDirectMessage,
 		model.CustomIONKindFundReceive:    NotificationTypePaymentReceived,
 		model.CustomIONKindFundSendNotify: NotificationTypePaymentRequest,
+		nostr.KindReaction:                NotificationTypeReaction,
 	}
 )
 
@@ -43,28 +44,21 @@ func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*p
 	if recipientMasterPubKey == "" || recipientMasterPubKey == event.GetMasterPublicKey() {
 		return nil, nil
 	}
-	switch kind {
-	case nostr.KindDirectMessage, model.CustomIONDirectMessage:
-		if len(pTag) <= 2 {
-			return nil, nil
-		}
-		devicePubKey := pTag[2]
-		if devicePubKey == "" {
-			return nil, nil
-		}
-		deviceRegistrationEvents := pm.collectUserValidDevices(recipientMasterPubKey, event)
-		evIdx := slices.IndexFunc(deviceRegistrationEvents, func(ev *model.Event) bool {
-			return ev.PubKey == devicePubKey
-		})
-		if evIdx == -1 {
-			return nil, nil
-		}
-		deviceEvents = append(deviceEvents, deviceRegistrationEvents[evIdx])
-	case model.CustomIONKindFundReceive, model.CustomIONKindFundSendNotify, nostr.KindReaction:
-		deviceEvents = pm.collectUserValidDevices(recipientMasterPubKey, event)
-	default:
+	if len(pTag) <= 2 {
 		return nil, nil
 	}
+	devicePubKey := pTag[2]
+	if devicePubKey == "" {
+		return nil, nil
+	}
+	deviceRegistrationEvents := pm.collectUserValidDevices(recipientMasterPubKey, event)
+	evIdx := slices.IndexFunc(deviceRegistrationEvents, func(ev *model.Event) bool {
+		return ev.PubKey == devicePubKey
+	})
+	if evIdx == -1 {
+		return nil, nil
+	}
+	deviceEvents = append(deviceEvents, deviceRegistrationEvents[evIdx])
 
 	return pm.createNotifications(deviceEvents, mapGiftWrapToNotificationType[kind], event), nil
 }

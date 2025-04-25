@@ -149,6 +149,6 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	}
 }
 
-func CollectDeviceRegistrationEvents(ctx context.Context) ([]*model.Event, error) {
+func CollectDeviceRegistrationEvents(ctx context.Context) EventIterator {
 	return globalDB.Client.collectDeviceRegistrationEvents(ctx)
 }

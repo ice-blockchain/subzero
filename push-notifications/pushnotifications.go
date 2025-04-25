@@ -143,11 +143,16 @@ func MustInit() {
 }
 
 func AcceptEvents(ctx context.Context, events []*model.Event) error {
-	if err := globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events); err != nil {
-		return err
+	var errs error
+	errs = errors.Join(errs,
+		globalPushNotificationManager.AcceptEvents(ctx, events),
+		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
+	)
+	if errs != nil {
+		return errors.Wrap(errs, "failed to process events")
 	}
 
-	return globalPushNotificationManager.AcceptEvents(ctx, events)
+	return nil
 }
 
 func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*model.Event) error {
@@ -198,11 +203,11 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, kind int, e
 			return notifications, nil
 		}
 		if (kind == nostr.KindTextNote && event.GetTag("q") != nil) || (kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
-			kind == nostr.KindRepost || kind == nostr.KindGenericRepost {
+			kind == nostr.KindGenericRepost {
 			return pm.handleEventWithPublicKey(event), nil
 		}
 
-		return pm.handleMentionReplyEvent(ctx, event), nil
+		return pm.handleMentionReplyEvent(event), nil
 	case nostr.KindGiftWrap:
 		notifications, err := pm.handleGiftWrapEvent(event)
 		if err != nil {
@@ -229,7 +234,7 @@ func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
 	errChan := make(chan error, totalCount)
 	invalidDevices := pm.sendNotificationsAsync(ctx, singleNotifications, topicNotifications, errChan)
 
-	return pm.collectErrorsAndProcessInvalidDevices(ctx, totalCount, errChan, invalidDevices)
+	return errors.Wrap(pm.collectErrorsAndProcessInvalidDevices(ctx, totalCount, errChan, invalidDevices), "failed to collect errors and process invalid devices")
 }
 
 func (pm *PushNotificationManager) sendNotificationsAsync(
@@ -287,34 +292,11 @@ func (pm *PushNotificationManager) handleInvalidDeviceTokens(ctx context.Context
 	if len(deviceEvents) == 0 {
 		return nil
 	}
-	if err := pm.markDevicesAsInvalidInCache(deviceEvents); err != nil {
-		return err
+	if err := query.MarkTokenAsInvalidInEventTags(ctx, deviceEvents); err != nil {
+		return errors.Wrap(err, "failed to mark devices as invalid on query level")
 	}
 
-	return query.MarkTokenAsInvalidInEventTags(ctx, deviceEvents)
-}
-
-func (pm *PushNotificationManager) markDevicesAsInvalidInCache(deviceEvents []*DeviceRegistrationEvent) error {
-	for _, deviceEvent := range deviceEvents {
-		deviceID := DeviceID(deviceEvent.Tags.GetD())
-
-		pm.deviceMutex.Lock()
-		deviceInfo, ok := pm.userDevicesMap[deviceEvent.GetMasterPublicKey()][deviceID]
-		if ok {
-			for i, tag := range deviceInfo.Event.Tags {
-				if tag.Key() == "token" {
-					if len(tag) <= 2 {
-						deviceInfo.Event.Tags[i] = append(tag, "invalid")
-					} else {
-						deviceInfo.Event.Tags[i][2] = "invalid"
-					}
-					break
-				}
-			}
-			pm.userDevicesMap[deviceEvent.GetMasterPublicKey()][deviceID] = deviceInfo
-		}
-		pm.deviceMutex.Unlock()
-	}
+	pm.removeInvalidTokenDevicesFromCache(deviceEvents)
 
 	return nil
 }
@@ -327,13 +309,14 @@ func (pm *PushNotificationManager) createNotifications(
 	if len(deviceRegistrationEvents) == 0 {
 		return nil
 	}
-	data := map[string]interface{}{
-		"event": incomingEvent.String(),
-	}
 
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
 	defaultTranslation := DefaultTranslations[notificationType]
 	for _, event := range deviceRegistrationEvents {
+		data := map[string]interface{}{
+			"event": incomingEvent.String(),
+		}
+
 		switch event.GetTag("t").Value() {
 		case validation.DeviceTokenOSAndroid:
 			data["title"] = defaultTranslation.Title
@@ -369,11 +352,6 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	defer pm.deviceMutex.RUnlock()
 
 	for _, deviceInfo := range userDevices {
-		tokenTag := deviceInfo.Event.GetTag("token")
-		isTokenInvalid := tokenTag != nil && len(tokenTag) > 2 && tokenTag[2] == "invalid"
-		if isTokenInvalid {
-			continue
-		}
 		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {
 			devices = append(devices, deviceInfo.Event)
 		}

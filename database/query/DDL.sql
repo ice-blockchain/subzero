@@ -12,34 +12,34 @@ EXCEPTION
 END;$$;
 
 CREATE TABLE IF NOT EXISTS events (
-    created_at      TIMESTAMP NOT NULL,
-    kind            INTEGER   NOT NULL,
-    system_kind     INTEGER,
-    lookup          tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
-    key_alg         TEXT    NOT NULL DEFAULT '',
-    content         TEXT    NOT NULL,
-    d_tag           TEXT    NOT NULL DEFAULT '',
-    h_tag           TEXT    NOT NULL DEFAULT '',
-    address         TEXT    NOT NULL GENERATED ALWAYS AS (
-                    CASE
+    created_at     TIMESTAMP NOT NULL,
+    kind           INTEGER   NOT NULL,
+    system_kind    INTEGER,
+    lookup         tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
+    key_alg        TEXT    NOT NULL DEFAULT '',
+    content        TEXT    NOT NULL,
+    d_tag          TEXT    NOT NULL DEFAULT '',
+    h_tag          TEXT    NOT NULL DEFAULT '',
+    address        TEXT    NOT NULL GENERATED ALWAYS AS (
+                      CASE
                         WHEN (10000 <= kind AND kind < 20000) OR kind = 0 OR kind = 3
-                            THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':'
+                          THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':'
                         WHEN 30000 <= kind AND kind < 40000
-                            THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':' || coalesce(d_tag, '')
+                          THEN coalesce(kind, 0) || ':' || coalesce(master_pubkey, pubkey, '') || ':' || coalesce(d_tag, '')
                         ELSE id
-                        END
-                    ) STORED,
-    id              TEXT    PRIMARY KEY,
-    pubkey          TEXT    NOT NULL,
-    master_pubkey   TEXT    NOT NULL,
-    sig             TEXT    NOT NULL,
-    sig_alg         TEXT    NOT NULL DEFAULT '',
-    reference_id    TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    tags            JSONB   NOT NULL DEFAULT '[]',
-    has_images      BOOLEAN NOT NULL DEFAULT FALSE,
-    has_videos      BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted         BOOLEAN NOT NULL DEFAULT FALSE,
-    hidden          BOOLEAN NOT NULL DEFAULT FALSE
+                      END
+                  ) STORED,
+    id             TEXT    PRIMARY KEY,
+    pubkey         TEXT    NOT NULL,
+    master_pubkey  TEXT    NOT NULL,
+    sig            TEXT    NOT NULL,
+    sig_alg        TEXT    NOT NULL DEFAULT '',
+    reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    tags           JSONB   NOT NULL DEFAULT '[]',
+    has_images     BOOLEAN NOT NULL DEFAULT FALSE,
+    has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted        BOOLEAN NOT NULL DEFAULT FALSE,
+    hidden         BOOLEAN NOT NULL DEFAULT FALSE
 );
 --------
 DO $$ BEGIN
@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_created_at ON events(id, pubkey,
 CREATE INDEX IF NOT EXISTS idx_events_id_master_pubkey_created_at ON events(id, master_pubkey, created_at DESC) WHERE hidden = FALSE;;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_created_at ON events(pubkey, master_pubkey, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_h_tag_created_at  ON events(h_tag, created_at DESC) WHERE kind = 1753 AND hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_kind_created_at_id ON events(kind, created_at ASC, id);
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);

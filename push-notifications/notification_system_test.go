@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 func helperCreateSystemNotificationEvent(t *testing.T, id string, pubKey string, content string, notificationType string, targetPubKey string) *model.Event {
@@ -38,144 +38,94 @@ func helperCreateSystemNotificationEvent(t *testing.T, id string, pubKey string,
 	}
 }
 
-func TestHandleSystemNotification(t *testing.T) {
+func TestHandleSystemEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[string][]DeviceID),
-	}
+	pm := &PushNotificationManager{}
 
-	event := helperCreateSystemNotificationEvent(
-		t,
-		"test_id",
-		"system_pubkey",
-		"System announcement",
-		"announcement",
-		"",
-	)
+	t.Run("Basic system event", func(t *testing.T) {
+		t.Parallel()
 
-	notifications := pm.handleSystemNotification(event)
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:      "test_id",
+				PubKey:  "system_pubkey",
+				Kind:    model.CustomIONSystemMessage,
+				Content: "System notification",
+				Tags:    nostr.Tags{{"type", "system_announcement"}},
+			},
+		}
 
-	require.Len(t, notifications, 6, "Should return 1 item for system notification")
-	require.Equal(t, event.String(), notifications[0].Data["event"], "Event should match")
+		expectedTopics := []string{"system_en", "system_zh", "system_es", "system_fr", "system_de", "system_ru"}
+		expectedCount := 6
+
+		notifications := pm.handleSystemEvent(event)
+
+		require.NotNil(t, notifications, "Notifications should not be nil")
+		assert.Len(t, notifications, expectedCount, "Should have correct number of notifications")
+
+		for _, notification := range notifications {
+			topicName := string(notification.Target)
+			assert.Contains(t, expectedTopics, topicName, "Topic name should be in expected list")
+			assert.Contains(t, notification.Data, "event", "Data should contain event")
+			assert.NotEmpty(t, notification.Data["event"], "Event data should not be empty")
+		}
+	})
+
+	t.Run("System event with custom content", func(t *testing.T) {
+		t.Parallel()
+
+		event := helperCreateSystemNotificationEvent(
+			t,
+			"custom_id",
+			"system_pubkey",
+			"Important update",
+			"maintenance",
+			"",
+		)
+
+		expectedTopics := []string{"system_en", "system_zh", "system_es", "system_fr", "system_de", "system_ru"}
+		expectedCount := 6
+
+		notifications := pm.handleSystemEvent(event)
+
+		require.NotNil(t, notifications, "Notifications should not be nil")
+		assert.Len(t, notifications, expectedCount, "Should have correct number of notifications")
+
+		for _, notification := range notifications {
+			topicName := string(notification.Target)
+			assert.Contains(t, expectedTopics, topicName, "Topic name should be in expected list")
+			assert.Contains(t, notification.Data, "event", "Data should contain event")
+			assert.NotEmpty(t, notification.Data["event"], "Event data should not be empty")
+		}
+	})
 }
 
-func TestHandleSystemNotificationWithPubKey(t *testing.T) {
+func TestHandleSystemEventDataFormat(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		devices:     make(map[DeviceID]DeviceInfo),
-		userDevices: make(map[string][]DeviceID),
-	}
+	pm := &PushNotificationManager{}
 
-	targetPubKey := "target_pubkey"
-	deviceID := "device1"
-
-	filters := nostr.Filters{
-		{
-			Kinds: []int{model.CustomIONSystemMessage},
+	event := &model.Event{
+		Event: nostr.Event{
+			ID:      "data_format_test",
+			PubKey:  "system_pubkey",
+			Kind:    model.CustomIONSystemMessage,
+			Content: "Test data format",
+			Tags:    nostr.Tags{{"type", "data_format_test"}},
 		},
 	}
 
-	deviceEvent := helperCreateTestDeviceRegistrationEvent(
-		t,
-		targetPubKey,
-		deviceID,
-		[]string{"t", "ios", "token", "test_token"},
-		filters,
-	)
+	notifications := pm.handleSystemEvent(event)
 
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NotNil(t, notifications, "Notifications should not be nil")
+	assert.Len(t, notifications, 6, "Should have 6 notifications")
 
-	require.Contains(t, pm.devices, DeviceID(deviceID), "Device should be in devices map")
-	require.Contains(t, pm.userDevices[targetPubKey], DeviceID(deviceID), "Device should be in user's devices list")
+	for _, notification := range notifications {
+		assert.Len(t, notification.Data, 1, "Data should contain exactly one entry")
 
-	event := helperCreateSystemNotificationEvent(
-		t,
-		"test_id",
-		"system_pubkey",
-		"Targeted announcement",
-		"announcement",
-		targetPubKey,
-	)
-
-	notifications := pm.handleSystemNotification(event)
-
-	languages := getAvailableLanguages()
-	require.Len(t, notifications, len(languages), "Should return notifications for all supported languages")
-
-	for i, lang := range languages {
-		require.Equal(t, pn.SubscriptionTopic("system_"+lang), notifications[i].Target, "Target should be system_"+lang)
-		require.Equal(t, NotificationTypeSystem, NotificationType(notifications[i].Data["notificationType"].(string)), "Type should be system")
-		require.Equal(t, event.String(), notifications[i].Data["event"], "Event should match")
-	}
-}
-
-func TestHandleSystemNotificationDifferentTypes(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name      string
-		notifType string
-	}{
-		{
-			name:      "Type: announcement",
-			notifType: "announcement",
-		},
-		{
-			name:      "Type: maintenance",
-			notifType: "maintenance",
-		},
-		{
-			name:      "Type: warning",
-			notifType: "warning",
-		},
-		{
-			name:      "Type: info",
-			notifType: "info",
-		},
-		{
-			name:      "Type: update",
-			notifType: "update",
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			pm := &PushNotificationManager{
-				devices:     make(map[DeviceID]DeviceInfo),
-				userDevices: make(map[string][]DeviceID),
-			}
-
-			event := helperCreateSystemNotificationEvent(
-				t,
-				"test_id_"+tc.notifType,
-				"system_pubkey",
-				"Message for "+tc.notifType,
-				tc.notifType,
-				"",
-			)
-
-			notifications := pm.handleSystemNotification(event)
-
-			languages := getAvailableLanguages()
-			require.Len(t, notifications, len(languages),
-				"Should return notifications for all supported languages for type %s", tc.notifType)
-
-			for i, lang := range languages {
-				require.Equal(t, pn.SubscriptionTopic("system_"+lang), notifications[i].Target,
-					"Target topic should be system_%s for language %s", lang, lang)
-
-				require.Equal(t, NotificationTypeSystem, NotificationType(notifications[i].Data["notificationType"].(string)),
-					"Type should be system for notification type %s", tc.notifType)
-
-				require.Equal(t, event.String(), notifications[i].Data["event"],
-					"Event string representation should match for notification type %s", tc.notifType)
-			}
-		})
+		assert.Empty(t, notification.Title, "Title should be empty")
+		assert.Empty(t, notification.Body, "Body should be empty")
+		assert.Empty(t, notification.ImageURL, "ImageURL should be empty")
 	}
 }
