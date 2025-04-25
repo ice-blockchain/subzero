@@ -773,9 +773,6 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 				}
 
 				for _, subkey := range keys {
-					if subkey == parts[1] {
-						continue
-					}
 					n := slices.Clone(b)
 					address := strings.Join([]string{parts[0], subkey, parts[2]}, ":")
 					n[0] = &address
