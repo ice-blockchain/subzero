@@ -37,8 +37,9 @@ var (
 	ErrOnBehalfAccessDenied      = model.ErrOnBehalfAccessDenied
 	ErrRepostOfDeletedPost       = errors.New("repost of deleted post")
 	ErrInvalidEvent              = errors.New("invalid event")
-	ErrRaceCondition             = errors.New("race")
-	errEventIteratorInterrupted  = errors.New("interrupted")
+	ErrRaceCondition             = errors.New("race condition")
+
+	errEventIteratorInterrupted = errors.New("interrupted")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )

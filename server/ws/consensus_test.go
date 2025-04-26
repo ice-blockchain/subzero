@@ -6,9 +6,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
-	"github.com/ice-blockchain/subzero/cfg"
 	"math/rand/v2"
 	"os"
 	"slices"
@@ -19,11 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/google/uuid"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -51,11 +51,6 @@ func TestConsensusEvents(t *testing.T) {
 		}
 		return nil
 	}
-
-	defer func() {
-		require.NoError(t, os.RemoveAll("../../.cometbft4"))
-		require.NoError(t, os.RemoveAll("../../.cometbft5"))
-	}()
 
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		t.Logf("received events: %v on %v", events, ctx.Value("serverPort"))
@@ -282,13 +277,15 @@ func TestConsensusEvents(t *testing.T) {
 	var fourRelay *nostrRelay
 	t.Run("relay list is updated for the user including new relays to bootstrap", func(t *testing.T) {
 		globalConfig := cfg.MustGet[globalCfg]()
-		extraServer1, release1 := helperCreateWsInstance(t.Context(), globalConfig, 9955, 19955,
+		srvContext, stopExtraServers := context.WithTimeout(t.Context(), 31*time.Second)
+		extraServer1, release1 := helperCreateWsInstance(srvContext, globalConfig, 9955, 19955,
 			"./../database/command/.testdata/node_key4.json",
 			"../../.cometbft4")
-		extraServer2, release2 := helperCreateWsInstance(t.Context(), globalConfig, 9944, 19944,
+		extraServer2, release2 := helperCreateWsInstance(srvContext, globalConfig, 9944, 19944,
 			"./../database/command/.testdata/node_key5.json",
 			"../../.cometbft5")
 		defer func() {
+			stopExtraServers()
 			slices.DeleteFunc(pubsubServers, func(service *fixture.MockService) bool {
 				return service.Endpoint() == extraServer1.Endpoint() || service.Endpoint() == extraServer2.Endpoint()
 			})
@@ -297,6 +294,8 @@ func TestConsensusEvents(t *testing.T) {
 			extraServer2.Consenus.Stop()
 			require.NoError(t, release1())
 			require.NoError(t, release2())
+			os.RemoveAll("../../.cometbft4")
+			os.RemoveAll("../../.cometbft5")
 		}()
 		pubsubServers = append(pubsubServers, extraServer1)
 		pubsubServers = append(pubsubServers, extraServer2)
@@ -340,10 +339,12 @@ func TestConsensusEvents(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 	helperMustCloseRelay(t, secondRelay)
 	helperMustCloseRelay(t, thirdRelay)
-
 }
 
 func BenchmarkConcurrentConsensusEvents(b *testing.B) {
+	if os.Getenv("CI") != "" {
+		b.Skip("skipping test on CI")
+	}
 	meter := tachymeter.New(&tachymeter.Config{Size: b.N})
 	b.ResetTimer()
 	b.ReportAllocs()

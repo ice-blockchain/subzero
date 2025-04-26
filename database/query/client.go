@@ -143,7 +143,7 @@ func hashEvents(events ...*model.Event) (hash string) {
 	var buf bytes.Buffer
 
 	for _, e := range events {
-		buf.WriteString(e.Address())
+		buf.WriteString(e.String())
 	}
 	sum := sha256.Sum256(buf.Bytes())
 

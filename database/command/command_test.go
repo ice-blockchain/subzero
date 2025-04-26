@@ -4,7 +4,6 @@ package command
 
 import (
 	"context"
-	"github.com/ice-blockchain/cometbft/config"
 	"log"
 	"os"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/ice-blockchain/cometbft/config"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command/fixture"

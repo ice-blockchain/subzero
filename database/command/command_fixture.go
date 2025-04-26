@@ -6,7 +6,9 @@ package command
 
 import (
 	"context"
+
 	"github.com/google/uuid"
+
 	"github.com/ice-blockchain/cometbft/config"
 )
 

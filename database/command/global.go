@@ -4,9 +4,10 @@ package command
 
 import (
 	"context"
-	"github.com/cockroachdb/errors"
 	"os"
 	"sync"
+
+	"github.com/cockroachdb/errors"
 
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
