@@ -4,7 +4,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -12,6 +11,7 @@ import (
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
 	"github.com/cenkalti/backoff/v4"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -49,7 +49,13 @@ type (
 		InitialWait time.Duration
 		MaxWait     time.Duration
 	}
-	Option func(*notificationClient)
+	Option func(*options)
+
+	options struct {
+		credentialsFile string
+		credentialsJSON []byte
+		retryConfig     RetryConfig
+	}
 )
 
 var (
@@ -62,8 +68,20 @@ var (
 )
 
 func WithRetryConfig(config RetryConfig) Option {
-	return func(s *notificationClient) {
-		s.retry = config
+	return func(o *options) {
+		o.retryConfig = config
+	}
+}
+
+func WithCredentialsFile(filePath string) Option {
+	return func(o *options) {
+		o.credentialsFile = filePath
+	}
+}
+
+func WithCredentialsJSON(jsonStr string) Option {
+	return func(o *options) {
+		o.credentialsJSON = []byte(jsonStr)
 	}
 }
 
@@ -71,22 +89,40 @@ func IsInvalidDeviceToken(err error) bool {
 	return errors.Is(err, ErrInvalidDeviceToken)
 }
 
-func New(ctx context.Context, credentialsFile string, opts ...Option) (Client, error) {
-	app, err := firebase.NewApp(ctx, nil, option.WithCredentialsFile(credentialsFile))
+func New(ctx context.Context, opts ...Option) (Client, error) {
+	options := &options{
+		retryConfig: defaultRetryConfig,
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	var (
+		app *firebase.App
+		err error
+	)
+
+	if len(options.credentialsJSON) > 0 {
+		app, err = firebase.NewApp(ctx, nil, option.WithCredentialsJSON(options.credentialsJSON))
+	} else if options.credentialsFile != "" {
+		app, err = firebase.NewApp(ctx, nil, option.WithCredentialsFile(options.credentialsFile))
+	} else {
+		return nil, fmt.Errorf("neither credentials file nor JSON provided")
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	fcmClient, err := app.Messaging(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	s := &notificationClient{
 		client: fcmClient,
-		retry:  defaultRetryConfig,
-	}
-
-	for _, opt := range opts {
-		opt(s)
+		retry:  options.retryConfig,
 	}
 
 	return s, nil
@@ -168,11 +204,8 @@ func (s *notificationClient) SendTopic(ctx context.Context, notification *Notifi
 	}
 
 	_, err := s.sendWithRetry(ctx, message)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return errors.Wrap(err, "failed to send topic notification")
 }
 
 func retry(ctx context.Context, op func() error) error {

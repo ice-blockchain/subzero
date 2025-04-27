@@ -137,6 +137,8 @@ create index if not exists idx_event_tags_id_key_value1_value3        on event_t
 create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
 create index if not exists idx_event_tags_key_value1_expiration       on event_tags(event_tag_key, to_timestamp(cast(event_tag_value1 as bigint))) where
     event_tag_key = 'expiration';
+CREATE INDEX IF NOT EXISTS idx_event_tags_token_valid ON event_tags(event_tag_key, event_tag_value2) WHERE 
+    event_tag_key = 'token' AND event_tag_value2 != 'invalid';
 --------
 CREATE OR REPLACE FUNCTION trigger_events_after_insert_generate_tags()
 RETURNS TRIGGER AS $$

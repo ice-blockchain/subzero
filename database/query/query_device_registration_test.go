@@ -153,7 +153,7 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), event))
 
 		helperAddTokenTag(t, db, event.ID, "token_value1")
-		helperCheckTokenStatus(t, db, event.ID, "token_value1")
+		helperCheckTokenStatus(t, db, event.ID, "")
 
 		err := db.markTokenAsInvalidInEventTags(t.Context(), []*model.Event{event})
 		require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 		require.NoError(t, err)
 
 		for i, event := range events {
-			expectedValue := "token_value" + strconv.Itoa(i)
+			expectedValue := ""
 			if i%2 == 1 {
 				expectedValue = "invalid"
 			}
@@ -251,6 +251,9 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 		err := db.markTokenAsInvalidInEventTags(t.Context(), []*model.Event{invalidEvent})
 		require.NoError(t, err)
 
+		helperCheckTokenStatus(t, db, validEvent.ID, "")
+		helperCheckTokenStatus(t, db, invalidEvent.ID, "invalid")
+
 		it2 := db.collectDeviceRegistrationEvents(t.Context())
 		filteredEvents := helperCollectAllEvents(t, it2)
 		require.Len(t, filteredEvents, 1, "Have only valid event")
@@ -260,77 +263,64 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 
 func helperCreateDeviceRegistrationEvent(t *testing.T, pubKey, deviceID, tokenValue string) *model.Event {
 	t.Helper()
-	return &model.Event{
-		Event: nostr.Event{
-			ID:        "devreg-" + deviceID + "-" + uuid.NewString(),
-			PubKey:    pubKey,
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      model.CustomIONKindDeviceRegistration,
-			Tags: model.Tags{
-				{"d", deviceID},
-				{"token", tokenValue},
-				{"t", "android"},
-			},
-			Content: `{"kinds":[1]}`,
-		},
+
+	event := &model.Event{}
+	event.PubKey = pubKey
+	event.Kind = model.CustomIONKindDeviceRegistration
+
+	tags := nostr.Tags{{"d", deviceID}}
+	if tokenValue != "" {
+		tags = append(tags, nostr.Tag{"token", tokenValue})
 	}
+	tags = append(tags, nostr.Tag{"t", "android"})
+	event.Tags = tags
+
+	event.ID = uuid.New().String()
+
+	return event
 }
 
 func helperAddTokenTag(t *testing.T, db *dbClient, eventID, tokenValue string) {
 	t.Helper()
+
 	_, err := db.DB.ExecContext(t.Context(), `
-		INSERT INTO event_tags (
-			event_id, 
-			event_tag_key, 
-			event_tag_value1, 
-			event_tag_value2
-		) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (event_id, event_tag_key, event_tag_value1) DO NOTHING
-	`, eventID, "token", tokenValue, tokenValue)
+		INSERT INTO event_tags (event_id, event_tag_key, event_tag_value1, event_tag_value2)
+		VALUES ($1, $2, $3, $4)
+	`, eventID, "token", tokenValue, "")
+
 	require.NoError(t, err)
 }
 
 func helperCheckTokenStatus(t *testing.T, db *dbClient, eventID, expectedValue string) {
 	t.Helper()
-	var tokenValue string
+
+	var value string
 	err := db.DB.QueryRowContext(t.Context(), `
-		SELECT event_tag_value2
-			FROM event_tags
+		SELECT event_tag_value2 FROM event_tags
 		WHERE event_id = $1 AND event_tag_key = 'token'
-	`, eventID).Scan(&tokenValue)
+	`, eventID).Scan(&value)
+
 	require.NoError(t, err)
-	require.Equal(t, expectedValue, tokenValue, "Token must have value '%s'", expectedValue)
+	require.Equal(t, expectedValue, value)
 }
 
 func helperCreateBatchEvents(t *testing.T, db *dbClient, startIdx, count int, baseTimestamp int64) []*model.Event {
-	events := make([]*model.Event, 0, count)
+	t.Helper()
 
-	for i := startIdx; i < startIdx+count; i++ {
-		pubKey := "pubkey" + strconv.Itoa(i%10)
-		deviceID := "device" + strconv.Itoa(i)
-		tokenValue := "token_value" + strconv.Itoa(i)
+	events := make([]*model.Event, count)
+	for i := 0; i < count; i++ {
+		idx := startIdx + i
+		pubKey := "pubkey" + strconv.Itoa(idx)
+		deviceID := "device" + strconv.Itoa(idx)
+		tokenValue := "token_value" + strconv.Itoa(idx)
 
-		event := &model.Event{
-			Event: nostr.Event{
-				ID:        "devreg" + strconv.Itoa(i) + uuid.NewString(),
-				PubKey:    pubKey,
-				CreatedAt: nostr.Timestamp(baseTimestamp + int64(i)),
-				Kind:      model.CustomIONKindDeviceRegistration,
-				Tags: model.Tags{
-					{"d", deviceID},
-					{"token", tokenValue},
-					{"t", "android"},
-				},
-				Content: `{"kinds":[1]}`,
-			},
-		}
-		events = append(events, event)
-	}
+		event := helperCreateDeviceRegistrationEvent(t, pubKey, deviceID, tokenValue)
+		event.CreatedAt = nostr.Timestamp(baseTimestamp + int64(idx))
 
-	require.NoError(t, db.AcceptEvents(t.Context(), events...))
+		require.NoError(t, db.AcceptEvents(t.Context(), event))
+		helperAddTokenTag(t, db, event.ID, tokenValue)
 
-	for _, event := range events {
-		helperAddTokenTag(t, db, event.ID, event.Tags.GetFirst([]string{"token"}).Value())
+		events[i] = event
 	}
 
 	return events
@@ -338,46 +328,48 @@ func helperCreateBatchEvents(t *testing.T, db *dbClient, startIdx, count int, ba
 
 func helperCountEvents(t *testing.T, db *dbClient, kind int) int {
 	t.Helper()
+
 	var count int
 	err := db.DB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM events WHERE kind = $1`, kind).Scan(&count)
 	require.NoError(t, err)
-
 	return count
 }
 
 func helperCollectAllEvents(t *testing.T, it EventIterator) []*model.Event {
 	t.Helper()
-	var events []*model.Event
-	for event, err := range it {
-		require.NoError(t, err)
-		events = append(events, event)
-	}
 
+	var events []*model.Event
+	it(func(event *model.Event, err error) bool {
+		require.NoError(t, err)
+		if event != nil {
+			events = append(events, event)
+		}
+		return true
+	})
 	return events
 }
 
 func helperCollectBatchSizes(t *testing.T, it EventIterator, batchSize int) ([]int, []*model.Event) {
 	t.Helper()
+
 	var events []*model.Event
 	var batchSizes []int
 	var currentBatchSize int
-	var collectedCount int
 
-	for event, err := range it {
+	it(func(event *model.Event, err error) bool {
 		require.NoError(t, err)
-		events = append(events, event)
-		currentBatchSize++
-		collectedCount++
+		if event != nil {
+			events = append(events, event)
+			currentBatchSize++
 
-		if collectedCount%100 == 0 {
-			t.Logf("Collected %d events", collectedCount)
+			if currentBatchSize == batchSize {
+				batchSizes = append(batchSizes, currentBatchSize)
+				currentBatchSize = 0
+			}
 		}
+		return true
+	})
 
-		if currentBatchSize >= batchSize {
-			batchSizes = append(batchSizes, currentBatchSize)
-			currentBatchSize = 0
-		}
-	}
 	if currentBatchSize > 0 {
 		batchSizes = append(batchSizes, currentBatchSize)
 	}
@@ -387,9 +379,9 @@ func helperCollectBatchSizes(t *testing.T, it EventIterator, batchSize int) ([]i
 
 func helperMinInt(t *testing.T, a, b int) int {
 	t.Helper()
+
 	if a < b {
 		return a
 	}
-
 	return b
 }

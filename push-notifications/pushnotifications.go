@@ -5,7 +5,6 @@ package pushnotifications
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -35,7 +34,11 @@ type (
 	}
 
 	config struct {
-		FCMCredentialsPath string `yaml:"fcm-credentials-path" validate:"required"`
+		FCMCredentialsFile string   `yaml:"fcm-credentials-file" validate:"required_without=FCMCredentialsJSON"`
+		FCMCredentialsJSON string   `yaml:"fcm-credentials-json" validate:"required_without=FCMCredentialsFile"`
+		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
+		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
+		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
 	}
 	notificationCollections struct {
 		single []*pn.Notification[*DeviceRegistrationEvent]
@@ -62,52 +65,52 @@ var (
 		NotificationTypeReaction: {
 			Title:    "New reaction",
 			Body:     "Someone reacted to your post",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeRepost: {
 			Title:    "New repost",
 			Body:     "Someone reposted your post",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeMentionReply: {
 			Title:    "New mention/reply",
 			Body:     "Someone mentioned/replied you",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeDirectMessage: {
 			Title:    "New message",
 			Body:     "You have a new message",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeGroupChatMessage: {
 			Title:    "New group message",
 			Body:     "New message in group",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeChannelMessage: {
 			Title:    "New channel message",
 			Body:     "New message in channel",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypePaymentRequest: {
 			Title:    "Payment request",
 			Body:     "Someone requested a payment",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypePaymentReceived: {
 			Title:    "Payment received",
 			Body:     "You received a payment",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeSystem: {
 			Title:    "System notification",
 			Body:     "System notification",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeNewFollower: {
 			Title:    "New follower",
 			Body:     "Someone is now following you",
-			ImageURL: "",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 	}
 )
@@ -120,16 +123,20 @@ func MustInit() {
 
 	cfg := cfg.MustGet[config]()
 
-	if cfg.FCMCredentialsPath == "" {
-		panic("FCM credentials file path is empty")
+	if cfg.FCMCredentialsFile == "" && cfg.FCMCredentialsJSON == "" {
+		panic("FCM credentials not provided")
 	}
 
-	if _, err := os.Stat(cfg.FCMCredentialsPath); err != nil {
-		panic("FCM credentials file not found, push notifications will be disabled")
+	var opts []pn.Option
+	if cfg.FCMCredentialsFile != "" {
+		opts = append(opts, pn.WithCredentialsFile(cfg.FCMCredentialsFile))
+	} else if cfg.FCMCredentialsJSON != "" {
+		opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsJSON))
 	}
-	pnClient, err = pn.New(context.Background(), cfg.FCMCredentialsPath)
+
+	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {
-		panic("Failed to create push notification client")
+		panic(fmt.Sprintf("Failed to create push notification client: %v", err))
 	}
 
 	globalPushNotificationManager = &PushNotificationManager{
@@ -140,6 +147,12 @@ func MustInit() {
 	if err := globalPushNotificationManager.syncDevices(context.Background()); err != nil {
 		panic(errors.Wrap(err, "failed to perform full device synchronization at startup"))
 	}
+}
+
+func GetFCMConfigs() (androidConfigs, iosConfigs, webConfigs []string) {
+	config := cfg.MustGet[config]()
+
+	return config.FCMAndroidConfigs, config.FCMIOSConfigs, config.FCMWebConfigs
 }
 
 func AcceptEvents(ctx context.Context, events []*model.Event) error {
@@ -192,7 +205,7 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 
 func (pm *PushNotificationManager) processEvent(ctx context.Context, kind int, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	switch kind {
-	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindRepost, nostr.KindGenericRepost:
+	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost:
 		hTag := event.GetHTag()
 		if hTag != "" && hTag != event.ID {
 			notifications, err := pm.handleCommunityMessageEvent(ctx, event)
