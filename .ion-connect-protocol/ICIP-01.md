@@ -87,7 +87,7 @@ These are the extra fields not specified in [NIP-01](https://github.com/nostr-pr
 
 ### Special ephemeral event for embedding other non-ephemeral events
 
-A new kind 21750 ephemeral event is defined that has atmost 1 tag, the `b` tag referencing the master account. 
+A new kind 21750 ephemeral event is defined that has atmost 2 tags, the `b` tag referencing the master account, which is optional if clients don't use [ICIP-2000](ICIP-2000.md) and the `e`/`a` tag to point to the event in the publishing request the client is adding context to, which is mandatory. 
 
 Its content is the stringified JSON of some other event.
 
@@ -110,7 +110,8 @@ The main goal of this new ephemeral event is to provide additional runtime conte
                 \"sig\": \"eddsa\/curve25519:d2c262221797d9422b199a9cb18715d2f9a5e426afdb2e9a034569ecfe5a0adbe7c530d4d803c11d34b13dbfadd6702d501f4e6033d14304024bef17099a1101\"
               }",
   "tags": [
-    ["b", "a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919"]
+    ["b", "a695f6b60119d9521934a691347d9f78e8770b56da16bb255ee286ddf9fda919"],
+    ["e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87"]  
   ],
   ... the rest of the fields
 }
