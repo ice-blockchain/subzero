@@ -74,10 +74,10 @@ type (
 		Exclude bool
 	}
 	databaseCTE struct {
-		Name         string
-		Body         string
-		OrderBy      string
-		Dependencies []*filterDependency
+		Name    string
+		Body    string
+		OrderBy string
+		Filter  *databaseFilterSearch
 	}
 )
 
@@ -470,6 +470,21 @@ func (b *queryBuilder) ApplyTextSearch(filter *databaseFilterSearch) {
 	b.WriteString(`))`)
 }
 
+func (b *queryBuilder) MaybeApplyTextSearch(filter *databaseFilterSearch) {
+	// Skip text search if we have kinds=3 AND kind3>kind0 as a dependency.
+	if len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindFollowList {
+		for i := range filter.Dependencies {
+			if filter.Dependencies[i].Start.Kind == nostr.KindFollowList &&
+				len(filter.Dependencies[i].Reduce.Kinds) > 0 &&
+				filter.Dependencies[i].Reduce.Kinds[0] == nostr.KindProfileMetadata {
+				return
+			}
+		}
+	}
+
+	b.ApplyTextSearch(filter)
+}
+
 func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
@@ -493,7 +508,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	b.ApplyFilterTags(filter.ID, filter.Tags)
 	b.ApplyFilterTagMarkers(filter.ID, filter.TagMarkers...)
 	b.ApplyFilterSoftDeleted(filter)
-	b.ApplyTextSearch(filter)
+	b.MaybeApplyTextSearch(filter)
 
 	if _, ok := filter.Tags[model.CustomIONTagCommunity]; !ok {
 		b.MaybeAND()
@@ -577,10 +592,10 @@ group by t.poll_id, t.pubkey, t.master_pubkey, t.kind, t.h_tag, t.d_tag, t.addre
 `)
 }
 
-func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *filterDependency) {
-	if len(filter.Reduce.Kinds) > 0 && filter.Reduce.Kinds[0] == model.KindDVMCountResponse {
-		if len(filter.Reduce.Kinds) > 1 && filter.Reduce.Kinds[1] == model.CustomIONKindPollVote && filter.Reduce.Group {
-			b.CountVotesOf(filterID, cteName, filter)
+func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.KindDVMCountResponse {
+		if len(current.Reduce.Kinds) > 1 && current.Reduce.Kinds[1] == model.CustomIONKindPollVote && current.Reduce.Group {
+			b.CountVotesOf(filterID, cteName, current)
 
 			return
 		}
@@ -595,7 +610,7 @@ select
 	coalesce(evr.master_pubkey, ''),
 	'',
 `)
-		if filter.Reduce.Group && len(filter.Reduce.Kinds) > 1 && filter.Reduce.Kinds[1] == nostr.KindReaction {
+		if current.Reduce.Group && len(current.Reduce.Kinds) > 1 && current.Reduce.Kinds[1] == nostr.KindReaction {
 			b.WriteString(`text(jsonb_object_agg(coalesce(nullif(f.reference_type, ''), '+'), f.value)) as content,`)
 		} else {
 			b.WriteString(`cast(f.value as text) as content,`)
@@ -614,7 +629,7 @@ select
 						else
 							f.reference_id
 						end`)
-		if filter.Reduce.Context == "root" || filter.Reduce.Context == "reply" {
+		if current.Reduce.Context == "root" || current.Reduce.Context == "reply" {
 			b.WriteString(`, null, text(:` + filterID + "context" + `)`)
 		}
 		b.WriteString(`))))) as d_tag,
@@ -648,8 +663,8 @@ where
 			b.WriteString(f)
 		}
 		b.WriteString(` from events e`)
-		if len(filter.Reduce.Kinds) > 0 && filter.Reduce.Kinds[0] == nostr.KindProfileMetadata && filter.Reduce.Author != "" {
-			authors := strings.Split(filter.Reduce.Author, ",")
+		if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == nostr.KindProfileMetadata && current.Reduce.Author != "" {
+			authors := strings.Split(current.Reduce.Author, ",")
 			// Most relevant follwers.
 			b.WriteString(`
 INNER JOIN (
@@ -682,13 +697,13 @@ AND `)
 		b.WriteString(`) AND `)
 	}
 
-	switch filter.Reduce.Kinds[0] {
+	switch current.Reduce.Kinds[0] {
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
-		tag := filter.Reduce.Tag // Could be "q" or "e" or "p" or empty.
+		tag := current.Reduce.Tag // Could be "q" or "e" or "p" or empty.
 		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id ")
-		if filter.Reduce.Author != "" {
+		if current.Reduce.Author != "" {
 			b.WriteString(" and :")
-			b.WriteValue(filterID, "rauthor", filter.Reduce.Author)
+			b.WriteValue(filterID, "rauthor", current.Reduce.Author)
 			b.WriteString(" in (et.pubkey, et.master_pubkey)")
 		}
 		b.WriteString(" where mctx.event_tag_key ")
@@ -702,19 +717,19 @@ AND `)
 			b.WriteValue(filterID, "rtag", tag)
 		}
 		b.WriteString(" and et.kind = :")
-		b.WriteValue(filterID, "rkind", filter.Reduce.Kinds[0])
+		b.WriteValue(filterID, "rkind", current.Reduce.Kinds[0])
 		b.WriteString(" and mctx.event_tag_value1 = em.address")
-		if filter.Reduce.Context != "" {
+		if current.Reduce.Context != "" {
 			b.WriteString(" and mctx.event_tag_value3 = :")
-			b.WriteValue(filterID, "rcontext", filter.Reduce.Context)
-			if filter.Reduce.Context == "root" {
+			b.WriteValue(filterID, "rcontext", current.Reduce.Context)
+			if current.Reduce.Context == "root" {
 				b.WriteString(` and NOT EXISTS (select true from event_tags rctx where rctx.event_id = et.id AND rctx.event_tag_key = mctx.event_tag_key and rctx.event_tag_value3 = 'reply')`)
 			}
 		}
 		b.WriteString(` LIMIT 1) FROM ` + cteName + ` em) AND e.hidden = FALSE`)
 
 	case nostr.KindBadgeDefinition:
-		startFilter := b.BuildQueryForDependencyStart(filterID, cteName, "id", &filter.Start)
+		startFilter := b.BuildQueryForDependencyStart(filterID, cteName, "id", &current.Start)
 		b.WriteString("e.id in ((select event_tag_value1 from event_tags where event_id in (")
 		b.WriteString(startFilter)
 		b.WriteString(") and event_tag_key = 'e'),")
@@ -723,13 +738,13 @@ AND `)
 		b.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = false)) AND e.hidden=false")
 
 	case nostr.KindMuteList, nostr.KindRelayListMetadata:
-		reduceKindParam := b.PushValue(filterID, "rkind", filter.Reduce.Kinds[0])
+		reduceKindParam := b.PushValue(filterID, "rkind", current.Reduce.Kinds[0])
 		b.WriteString("e.kind = :")
 		b.WriteString(reduceKindParam)
 		b.WriteString(" AND ( master_pubkey IN (")
-		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &filter.Start))
+		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &current.Start))
 		b.WriteString(") OR pubkey IN (")
-		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &filter.Start))
+		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
 		b.WriteString(")) AND e.hidden=false")
 		b.WriteString(`
 union all
@@ -752,12 +767,12 @@ inner join `)
 		b.WriteString(` on e.id = `)
 		b.WriteString(cteName)
 		b.WriteString(`.id where exists (select 1 FROM ` + cteName + ` ) AND e.kind =:`)
-		b.WriteValue(filterID, "kind", filter.Start.Kind)
-		if filter.Start.Tag != "" {
+		b.WriteValue(filterID, "kind", current.Start.Kind)
+		if current.Start.Tag != "" {
 			b.WriteString(" AND EXISTS (select true from event_tags where event_id = ")
 			b.WriteString(cteName)
 			b.WriteString(".id AND event_tag_key = :")
-			b.WriteValue(filterID, "tag", filter.Start.Tag)
+			b.WriteValue(filterID, "tag", current.Start.Tag)
 			b.WriteString(")")
 		}
 		b.WriteString(` AND
@@ -771,40 +786,40 @@ not exists (select true from events subev where subev.kind = :` + reduceKindPara
 group by e.master_pubkey, e.pubkey`)
 
 	case nostr.KindProfileMetadata:
-		// Check for `Author` in the filter.
 		b.WriteString("e.kind = :")
-		b.WriteValue(filterID, "rkind", filter.Reduce.Kinds[0])
-		if filter.Reduce.Author == "" {
+		b.WriteValue(filterID, "rkind", current.Reduce.Kinds[0])
+		b.ApplyTextSearch(filter)
+		if current.Reduce.Author == "" {
 			b.WriteString(" AND ( master_pubkey IN (")
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &filter.Start))
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &current.Start))
 			b.WriteString(") OR pubkey IN (")
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &filter.Start))
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
 			b.WriteString("))")
 		}
 		b.WriteString(" and e.hidden=false")
 
 	case model.KindDVMCountResponse:
 		b.WriteString("f.kind = :")
-		b.WriteValue(filterID, "rkind", filter.Reduce.Kinds[1])
+		b.WriteValue(filterID, "rkind", current.Reduce.Kinds[1])
 		b.PushValue(filterID, "ftagname", "lookup")
-		b.PushValue(filterID, "fkind", filter.Reduce.Kinds[1])
+		b.PushValue(filterID, "fkind", current.Reduce.Kinds[1])
 		var refType string
 		switch {
-		case strings.EqualFold(filter.Reduce.Tag, "q"):
+		case strings.EqualFold(current.Reduce.Tag, "q"):
 			b.PushValue(filterID, "ftagname", "#q")
-			b.PushValue(filterID, "context", filter.Reduce.Tag)
+			b.PushValue(filterID, "context", current.Reduce.Tag)
 			refType = "quote"
 
-		case filter.Reduce.Context == "content" || filter.Reduce.Tag == "e":
-			b.PushValue(filterID, "context", cmp.Or(filter.Reduce.Context, filter.Reduce.Tag))
+		case current.Reduce.Context == "content" || current.Reduce.Tag == "e":
+			b.PushValue(filterID, "context", cmp.Or(current.Reduce.Context, current.Reduce.Tag))
 
-		case filter.Reduce.Context == "root" || filter.Reduce.Context == "reply":
+		case current.Reduce.Context == "root" || current.Reduce.Context == "reply":
 			b.PushValue(filterID, "context", "reply")
-			refType = filter.Reduce.Context
+			refType = current.Reduce.Context
 
-		case filter.Reduce.Tag == "p":
+		case current.Reduce.Tag == "p":
 			b.PushValue(filterID, "ftagname", "#p")
-			b.PushValue(filterID, "context", filter.Reduce.Tag)
+			b.PushValue(filterID, "context", current.Reduce.Tag)
 			refType = "follower"
 		}
 		if refType != "" {
@@ -812,15 +827,15 @@ group by e.master_pubkey, e.pubkey`)
 			b.WriteString(b.PushValue(filterID, "rref", refType))
 		}
 		b.WriteString(" AND f.reference_id IN (")
-		if filter.Reduce.Kinds[1] == nostr.KindFollowList {
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &filter.Start))
+		if current.Reduce.Kinds[1] == nostr.KindFollowList {
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
 			b.WriteString(" UNION ")
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &filter.Start))
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &current.Start))
 		} else {
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "address", &filter.Start))
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "address", &current.Start))
 		}
 		b.WriteString(")")
-		if filter.Reduce.Group && filter.Reduce.Kinds[1] == nostr.KindReaction {
+		if current.Reduce.Group && current.Reduce.Kinds[1] == nostr.KindReaction {
 			b.WriteString(" GROUP BY reference_id, f.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
 		}
 	}
@@ -915,8 +930,13 @@ func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[st
 			b.WriteString(ctes[i].OrderBy)
 		}
 		b.WriteString(` ) `)
-		for j := range ctes[i].Dependencies {
-			b.BuildDependency(ctes[i].Name+"_dep"+strconv.Itoa(j), ctes[i].Name, ctes[i].Dependencies[j])
+		for j := range ctes[i].Filter.Dependencies {
+			b.BuildDependency(
+				ctes[i].Name+"_dep"+strconv.Itoa(j),
+				ctes[i].Name,
+				ctes[i].Filter,
+				ctes[i].Filter.Dependencies[j],
+			)
 		}
 	}
 	b.WriteString(" )")
@@ -1001,10 +1021,10 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 	sb.WriteString(`)`)
 
 	return &databaseCTE{
-		Name:         filter.ID + "events_cte",
-		Body:         sb.String(),
-		OrderBy:      orderBy,
-		Dependencies: filter.Dependencies,
+		Name:    filter.ID + "events_cte",
+		Body:    sb.String(),
+		OrderBy: orderBy,
+		Filter:  filter,
 	}, nil
 }
 
