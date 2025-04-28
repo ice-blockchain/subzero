@@ -250,10 +250,9 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromThirdRelay := helperQueryEvents(t, ctx, thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.NotContains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 		pubsubServers[2].Consenus = command.GetConsensusWithMetricsOverride(t.Context(), command.WithConfig(&command.Config{
-			AbsoluteRootPath:        "../../.cometbft3",
-			NodePrivKey:             "./../database/command/.testdata/node_key3.json",
-			DiscoveryPort:           19966,
-			NIP13MinLeadingZeroBits: 0,
+			AbsoluteRootPath: "../../.cometbft3",
+			NodePrivKey:      "./../database/command/.testdata/node_key3.json",
+			DiscoveryPort:    19966,
 		}))
 		eventAfterNodeComesUp = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),

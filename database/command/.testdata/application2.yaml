@@ -3,7 +3,6 @@
 database/command:
   debug: true
   nip13MinLeadingZeroBits: 0
-  discovery-port: 19977
   absolute-node-private-key-path: "./../database/command/.testdata/node_key3.json"
   absolute-root-path: "../../.cometbft2"
 

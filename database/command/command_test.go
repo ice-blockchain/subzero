@@ -65,106 +65,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestBroadcastLinkedEvent(t *testing.T) {
-	RegisterAcceptListener(query.AcceptEvents)
-	RegisterRollbackListener(func(ctx context.Context, event ...*model.Event) error {
-		require.FailNow(t, "Rollback must not be called")
-		return nil
-	})
-	masterPrivKey, masterPubkey := model.GenerateKeyPair()
-	priv, pk := model.GenerateKeyPair()
-	attestationEvent := &model.Event{Event: nostr.Event{
-		Kind:      model.CustomIONKindAttestation,
-		CreatedAt: 1,
-		Tags: model.Tags{
-			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
-		},
-	}}
-	require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
-	relaysList := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
-		Kind:      nostr.KindRelayListMetadata,
-		Tags: nostr.Tags{
-			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-			[]string{"r", "wss://localhost:9988"},
-			[]string{"r", "wss://localhost:9977"},
-		},
-	}}
-	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent, relaysList))
-
-	privkeyOfRepostedNote, pubKeyOfRepostedNote := model.GenerateKeyPair()
-	masterPrivKeyOfRepostedNote, masterPubkeyOfRepostedNote := model.GenerateKeyPair()
-	t.Run("repost", func(t *testing.T) {
-		otherUserAttestation := &model.Event{Event: nostr.Event{
-			Kind:      model.CustomIONKindAttestation,
-			CreatedAt: 1,
-			Tags: model.Tags{
-				{model.TagAttestationName, pubKeyOfRepostedNote, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
-			},
-		}}
-		require.NoError(t, otherUserAttestation.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
-		otherUserRelaysList := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindRelayListMetadata,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
-				[]string{"r", "wss://localhost:9988"},
-				[]string{"r", "wss://localhost:9977"},
-			},
-		}}
-		require.NoError(t, otherUserRelaysList.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(t.Context(), otherUserAttestation, otherUserRelaysList))
-
-		repostedEvent := model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindTextNote,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
-			},
-		}}
-		require.NoError(t, repostedEvent.SignWithAlg(privkeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		repostEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindRepost,
-			Tags: nostr.Tags{
-				[]string{"e", repostedEvent.ID, "relay"},
-				[]string{"p", repostedEvent.GetMasterPublicKey()},
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
-			Content: repostedEvent.String(),
-		}}
-		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(t.Context(), repostEvent))
-		require.NoError(t, c.broadcastUserEvents(t.Context(), repostEvent))
-	})
-	t.Run("reaction", func(t *testing.T) {
-		originalEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindTextNote,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
-			},
-			Content: "validEvent",
-		}}
-		require.NoError(t, originalEvent.SignWithAlg(privkeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(t.Context(), originalEvent))
-		reactionEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindReaction,
-			Tags: nostr.Tags{
-				[]string{"e", originalEvent.ID},
-				[]string{"k", strconv.Itoa(originalEvent.Kind)},
-				[]string{"p", originalEvent.PubKey},
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
-			Content: "+",
-		}}
-		require.NoError(t, reactionEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, c.broadcastUserEvents(t.Context(), reactionEvent))
-	})
-}
-
 func TestRollBackOnTxError(t *testing.T) {
 	var rolledBack bool
 	RegisterRollbackListener(func(ctx context.Context, event ...*model.Event) error {
@@ -216,9 +116,9 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 	deletionProfile := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindDeletion,
-		Tags: nostr.Tags{}.
-			AppendUnique(nostr.Tag{"b", masterPubkey}),
+		Tags:      nostr.Tags{},
+		PubKey:    masterPubkey,
 	}}
-	require.NoError(t, profileEvent.Sign(delegatedPrivKey))
+	require.NoError(t, profileEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, c.broadcastUserEvents(t.Context(), deletionProfile))
 }

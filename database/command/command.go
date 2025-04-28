@@ -5,8 +5,8 @@ package command
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -44,11 +44,6 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, t
 		if err != nil {
 			return errors.Wrapf(err, "failed to transform tx into event: %v", tx.Data)
 		}
-		for _, ev := range evs {
-			if err = validation.ValidateIncomingEvent(ctx, ev, globalCfg.NIP13MinLeadingZeroBits); err != nil {
-				return errors.Wrapf(err, "failed to validate tx %x", tx.Data)
-			}
-		}
 		events = append(events, evs...)
 	}
 	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
@@ -81,6 +76,7 @@ func (c *consensus) RollbackTx(ctx context.Context, userAddress string, transact
 }
 
 func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
+	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
 		evs, err := mapTxToEvent(tx)
 		if err != nil {
@@ -90,6 +86,20 @@ func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, userAddress st
 			if err = validation.Validate(ctx, ev); err != nil {
 				return errors.Wrapf(err, "failed to validate removal tx")
 			}
+		}
+		events = append(events, evs...)
+	}
+	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	if consensusEventListener != nil && len(events) > 0 {
+		err := consensusEventListener(ctx, events...)
+		if err != nil {
+			return errors.Wrapf(err, "failed to accept broadcasted txs %v", func() string {
+				res := []string{}
+				for _, tx := range transactions {
+					res = append(res, string(tx.Data))
+				}
+				return "[" + strings.Join(res, ", ") + "]"
+			}())
 		}
 	}
 	return nil
@@ -109,7 +119,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 		if ev.Kind == nostr.KindRelayListMetadata {
 			relays = collectRelaysFromRelayEvent(ev)
 		}
-		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0 || (len(ev.Tags) == 1 && ev.GetTag("b").Value() != "")) && ev.GetMasterPublicKey() != "" {
+		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0 || (len(ev.Tags) == 1 && ev.GetTag("b").Value() != "")) && ev.PubKey == ev.GetMasterPublicKey() {
 			profileDeletion = ev
 		}
 		userMasterKeys[ev.GetMasterPublicKey()] = true
@@ -130,13 +140,13 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	}
 	broadcastCtx, broadcastCancel := context.WithTimeout(ctx, consensusTimeout)
 	defer broadcastCancel()
-	notifier := make(chan client.BroadcastStatus, 100)
+	notifier := make(chan client.BroadcastStatus, 1)
 	if profileDeletion != nil {
 		c.client.BroadcastTxRemoval(broadcastCtx, userMasterKey, c.convertRelaysToBroadcastEndpoints(relays...), notifier)
 		res := <-notifier
 		return errors.Wrapf(res.Error, "failed to delete chains for user deletion %v", profileDeletion)
 	}
-	txs, otherUserTxDueToLinkedEvents, err := mapEventsToTXs(ctx, events)
+	txs, err := mapEventsToTXs(ctx, events)
 	if err != nil {
 		return errors.Wrapf(err, "failed serialize events: %v", events)
 	}
@@ -152,39 +162,8 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 		return errors.Wrapf(err, "failed to transform user key to address")
 	}
 	c.client.BroadcastTx(broadcastCtx, userAddr, c.convertRelaysToBroadcastEndpoints(relays...), notifier, txs...)
-
 	err = c.rollbackIfErr(ctx, userMasterKey, notifier, events...)
-	if err == nil {
-		for otherUserMasterKey, otherUserTx := range otherUserTxDueToLinkedEvents {
-			otherUserRelays, err := c.fetchUserRelays(ctx, otherUserMasterKey)
-			if err != nil {
-				return errors.Wrapf(err, "failed to get relay list for user %v", userMasterKey)
-			}
-			otherUserNotifier := make(chan client.BroadcastStatus, 100)
-			otherUserMasterKeyBytes, err := hex.DecodeString(otherUserMasterKey)
-			if err != nil {
-				return errors.Wrapf(err, "failed to transform user key to address")
-			}
-			otherUserAddr, err := client.PubKeyToAddress(string(otherUserMasterKeyBytes))
-			if err != nil {
-				return errors.Wrapf(err, "failed to transform user key to address")
-			}
-			c.client.BroadcastTx(broadcastCtx, otherUserAddr, c.convertRelaysToBroadcastEndpoints(otherUserRelays...), otherUserNotifier, otherUserTx...)
-			otherUserEvents := []*model.Event{}
-			for _, otherUserTransaction := range otherUserTx {
-				var env nostr.EventEnvelope
-				if jErr := env.UnmarshalJSON(otherUserTransaction.Data); jErr != nil {
-					return errors.Wrapf(jErr, "failed to unmarshal event %v", string(otherUserTransaction.Data))
-				}
-				evs := make([]*model.Event, 0, len(env.Events))
-				for _, e := range env.Events {
-					evs = append(evs, &model.Event{*e})
-				}
-				otherUserEvents = append(otherUserEvents, evs...)
-			}
-			err = c.rollbackIfErr(ctx, otherUserMasterKey, notifier, otherUserEvents...)
-		}
-	}
+
 	return errors.Wrapf(err, "failed to broadcast user events for %v to %#v", userMasterKeys, relays)
 }
 
@@ -219,15 +198,12 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 			model.Filter{Authors: []string{userMasterKey}, Kinds: []int{nostr.KindRelayListMetadata}},
 		},
 	})
-	createdAt := int64(0)
 	for ev, iErr := range evIt {
 		if iErr != nil {
 			return nil, errors.Wrapf(err, "failed to fetch user's relays for user %v", userMasterKey)
 		}
-		if ev.CreatedAt.Time().UnixNano() > createdAt {
-			relays = collectRelaysFromRelayEvent(ev)
-			createdAt = ev.CreatedAt.Time().UnixNano()
-		}
+		relays = collectRelaysFromRelayEvent(ev)
+		break
 	}
 	return relays, nil
 }
@@ -292,44 +268,6 @@ func mapEventKindToChainFingerprint(kind int) (fingerprint string) {
 	return
 }
 
-func mapLinkedEventToTx(ctx context.Context, event *model.Event) (linkedMasterKey string, transaction *client.Transaction, err error) {
-	var linkedEvent *model.Event
-	switch event.Kind {
-	case nostr.KindRepost:
-		err = json.Unmarshal([]byte(event.Content), &linkedEvent)
-	case nostr.KindReaction, nostr.KindTextNote:
-		if eTag := event.GetTag("e"); eTag != nil && eTag.Value() != "" {
-			it := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{
-				model.Filter{IDs: eTag},
-			}})
-			for ev, iErr := range it {
-				if iErr != nil {
-					return "", nil, errors.Wrapf(iErr, "failed to fetch linked event for %+v", event)
-				}
-				linkedEvent = ev
-				break
-			}
-		}
-	default:
-		return "", nil, ErrUserIsNotPresentedOnRelay
-	}
-	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to fetch linked event for %+v", event)
-	}
-	if linkedEvent == nil {
-		return "", nil, ErrUserIsNotPresentedOnRelay
-	}
-	var env nostr.EventEnvelope
-	env.Events = append(env.Events, &event.Event)
-	jBytes, err := env.MarshalJSON()
-	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to serialize linked event")
-	}
-	return linkedEvent.GetMasterPublicKey(), &client.Transaction{
-		Data:        jBytes,
-		Fingerprint: mapEventKindToChainFingerprint(linkedEvent.Kind),
-	}, nil
-}
 func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
 	var env nostr.EventEnvelope
 	err := env.UnmarshalJSON(tx.Data)
@@ -342,17 +280,11 @@ func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
 	return events, err
 }
 
-func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Transaction, otherUserTxs map[string][]client.Transaction, err error) {
+func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Transaction, err error) {
 	txs = make([]client.Transaction, 0, len(events))
-	otherUserTxs = make(map[string][]client.Transaction)
 	encodedEvents := map[string]nostr.EventEnvelope{}
 	for _, ev := range events {
 		if ev.IsEphemeral() {
-			continue
-		}
-		linkedMasterKey, otherUserTx, err := mapLinkedEventToTx(ctx, ev)
-		if err == nil {
-			otherUserTxs[linkedMasterKey] = append(otherUserTxs[linkedMasterKey], *otherUserTx)
 			continue
 		}
 		fingerprint := mapEventKindToChainFingerprint(ev.Kind)
@@ -367,7 +299,7 @@ func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Tr
 	for f, e := range encodedEvents {
 		jBytes, err := e.MarshalJSON()
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to serialize events json")
+			return nil, errors.Wrapf(err, "failed to serialize events json")
 		}
 		txs = append(txs, client.Transaction{
 			Data:        jBytes,
@@ -375,7 +307,7 @@ func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Tr
 		})
 	}
 
-	return txs, otherUserTxs, nil
+	return txs, nil
 }
 
 func (c *consensus) convertRelaysToBroadcastEndpoints(relays ...string) []string {
@@ -383,14 +315,16 @@ func (c *consensus) convertRelaysToBroadcastEndpoints(relays ...string) []string
 	for _, relay := range relays {
 		u, err := url.Parse(relay)
 		if err != nil {
+			log.Printf("malformed relay: %v", relay)
 			continue
 		}
 		port, err := strconv.ParseUint(u.Port(), 10, 64)
 		if err != nil {
+			log.Printf("malformed relay: %v", relay)
 			continue
 		}
-		globalRPCPort := (port + 10000)
-		discoveryAddresses = append(discoveryAddresses, fmt.Sprintf("%v:%v", u.Hostname(), globalRPCPort))
+		discoveryPort := (port + 10000)
+		discoveryAddresses = append(discoveryAddresses, fmt.Sprintf("%v:%v", u.Hostname(), discoveryPort))
 	}
 	return discoveryAddresses
 }

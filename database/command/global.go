@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"github.com/ice-blockchain/cometbft/p2p"
 	"os"
 	"sync"
 
@@ -37,13 +38,12 @@ var consensusEventListener func(context.Context, ...*model.Event) error
 var rollback func(context.Context, ...*model.Event) error
 
 type Config struct {
-	AbsoluteRootPath        string `yaml:"absolute-root-path"`
-	NodePrivKey             string `yaml:"absolute-node-private-key-path"`
-	DiscoveryPort           uint16 `yaml:"discovery-port"`
-	ExternalAddress         string `yaml:"external-address"`
-	Debug                   bool   `yaml:"debug"`
-	NIP13MinLeadingZeroBits int    `yaml:"nip13MinLeadingZeroBits"`
-	RelayUrl                string `yaml:"relay-url"`
+	AbsoluteRootPath string `yaml:"absolute-root-path"`
+	NodePrivKey      string `yaml:"absolute-node-private-key-path"`
+	DiscoveryPort    uint16 `yaml:"discovery-port"`
+	ExternalAddress  string `yaml:"external-address"`
+	Debug            bool   `yaml:"debug"`
+	RelayUrl         string `yaml:"relay-url"`
 }
 
 type Option func(cfg *Config)
@@ -58,9 +58,6 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.AbsoluteRootPath != "" {
 			in.AbsoluteRootPath = cfg.AbsoluteRootPath
-		}
-		if cfg.NIP13MinLeadingZeroBits != 0 {
-			in.NIP13MinLeadingZeroBits = cfg.NIP13MinLeadingZeroBits
 		}
 		if cfg.DiscoveryPort != 0 {
 			in.DiscoveryPort = cfg.DiscoveryPort
@@ -104,6 +101,10 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 		serverCfg.P2P.AddrBookStrict = false
 		logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
 		logger = logger.With("port", globalCfg.DiscoveryPort)
+	}
+	_, err := p2p.LoadOrGenNodeKey(serverCfg.NodeKeyFile())
+	if err != nil {
+		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
 	cometbftServer, err := multiplex.NewServer(c, serverCfg, logger)
 	if err != nil {

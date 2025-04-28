@@ -1712,7 +1712,8 @@ func (v *kindValidator) Execute(e *model.Event) (err error) {
 	return err
 }
 
-func ValidateIncomingEvent(ctx context.Context, evt *model.Event, nip13ZeroBits int) (err error) {
+func ValidateIncomingEvent(ctx context.Context, evt *model.Event) (err error) {
+	nip13ZeroBits := globalConfig.NIP13MinLeadingZeroBits
 	if !evt.CheckID() {
 		return ErrEventInvalidID
 	}

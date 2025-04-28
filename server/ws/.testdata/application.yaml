@@ -2,6 +2,7 @@
 
 validation:
   max-wrapped-event-expiration: 720h
+  nip13MinLeadingZeroBits: 5
   max-content-sizes:
     30023: 65535
     30175: 65535
@@ -78,6 +79,5 @@ database/query:
 
 database/command:
   debug: true
-  nip13MinLeadingZeroBits: 0
   absolute-node-private-key-path: "./../database/command/.testdata/node_key.json"
   absolute-root-path: "../../.cometbft"

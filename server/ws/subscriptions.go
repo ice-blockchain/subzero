@@ -342,7 +342,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event, cfg *Config) error {
 	for i := range events {
-		if err := validation.ValidateIncomingEvent(ctx, events[i], cfg.NIP13MinLeadingZeroBits); err != nil {
+		if err := validation.ValidateIncomingEvent(ctx, events[i]); err != nil {
 			return errors.Wrapf(err, "event %v: invalid", events[i])
 		}
 	}

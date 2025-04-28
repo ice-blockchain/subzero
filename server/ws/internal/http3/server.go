@@ -18,7 +18,7 @@ import (
 )
 
 func New(cfg *config.Config, router http.Handler) Server {
-	s := &srv{cfg: cfg, shutdownCh: make(chan struct{}, 1)}
+	s := &srv{cfg: cfg, shutdownCh: make(chan struct{})}
 	s.router = router
 
 	return s

@@ -124,19 +124,17 @@ func helperCreateWsInstance(serverCtx context.Context, globalConfig *globalCfg, 
 	log.Println(addr)
 	hdl := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort))
 	srv := fixture.NewTestServer(serverCtx, &Config{
-		Port:                    wsPort,
-		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-		TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		Port:      wsPort,
+		TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 	}, hdl.Handle, nil, map[string]gin.HandlerFunc{})
 	srv.DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
 		URL: addr,
 	}))
 
 	srv.Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
-		AbsoluteRootPath:        consensusStorage,
-		NodePrivKey:             consensusKey,
-		DiscoveryPort:           consensusPort,
-		NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
+		AbsoluteRootPath: consensusStorage,
+		NodePrivKey:      consensusKey,
+		DiscoveryPort:    consensusPort,
 	}))
 	return srv, release
 }
