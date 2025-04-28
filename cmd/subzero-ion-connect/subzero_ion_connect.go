@@ -90,7 +90,7 @@ func init() {
 			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
 		}
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(sErr, "failed to process NIP-94 events")
+			return errors.Wrapf(err, "failed to process NIP-94 events")
 		}
 		return nil
 	})

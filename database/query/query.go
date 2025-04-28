@@ -81,6 +81,8 @@ type databaseBatchRequest struct {
 
 	// Events to delete.
 	Delete []databaseFilterDelete
+	// IDs of replaceable events to rollback update
+	ReplaceableEvents map[string]bool
 }
 
 func detectImagesVideos(tags model.Tags) (images, videos bool) {
@@ -206,7 +208,7 @@ func (req *databaseBatchRequest) Remove(e *model.Event) error {
 }
 
 func (req *databaseBatchRequest) Empty() bool {
-	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0
+	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0 && len(req.ReplaceableEvents) == 0
 }
 
 func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) error {
@@ -253,12 +255,13 @@ func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) 
 		return nil
 	} else {
 		if err := db.executeBatch(ctx, &databaseBatchRequest{
-			InsertOrReplace: eventsToRollback.InsertOrReplace,
-			Delete:          eventsToRollback.Delete,
+			InsertOrReplace:   eventsToRollback.InsertOrReplace,
+			Delete:            eventsToRollback.Delete,
+			ReplaceableEvents: eventsToRollback.ReplaceableEvents,
 		}); err != nil {
 			return errors.Wrap(err, "failed to perform rollback")
 		}
-		return db.rollbackReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents)
+		return nil
 	}
 }
 
@@ -390,118 +393,17 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 	return err
 }
 
-func (db *dbClient) rollbackReplaceableEvents(ctx context.Context, replacedEvents map[string]bool) error {
-	if len(replacedEvents) == 0 {
-		return nil
-	}
-	eventIDs := make([]string, 0, len(replacedEvents))
-	for evID := range replacedEvents {
-		eventIDs = append(eventIDs, evID)
-	}
-	var stmt = `
-		WITH replaced AS (DELETE FROM replaceable_events_before_update
-						WHERE replaced_by_id = ANY($1)
-						RETURNING kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
-						    deleted, has_images, has_videos, lookup ,replaced_by_id)
-		MERGE INTO events AS target
-				USING (SELECT * FROM replaced) AS source (
-					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-					has_images, has_videos, lookup
-				)
-				ON (
-					target.id = source.replaced_by_id 
-					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
-					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
-				)
-			WHEN MATCHED AND
-				target.master_pubkey = source.master_pubkey
-				AND target.kind = source.kind
-				AND target.d_tag = source.d_tag
-				AND (30000 <= source.kind AND source.kind < 40000) THEN
-				UPDATE SET
-					id = source.id,
-					system_kind = source.system_kind,
-					created_at = source.created_at,
-					pubkey = source.pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					content = source.content,
-					tags = source.tags,
-					h_tag = source.h_tag,
-					deleted = source.deleted,
-					has_images = source.has_images,
-					has_videos = source.has_videos,
-				    lookup = source.lookup
-			WHEN MATCHED AND
-				target.master_pubkey = source.master_pubkey
-				AND target.kind = source.kind
-				AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
-				UPDATE SET
-					id = source.id,
-					system_kind = source.system_kind,
-					d_tag = source.d_tag,
-					pubkey = source.pubkey,
-					created_at = source.created_at,
-				    sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					content = source.content,
-					tags = source.tags,
-					has_images = source.has_images,
-					has_videos = source.has_videos,
-				    lookup = source.lookup
-			WHEN MATCHED AND target.id = source.id THEN
-				UPDATE SET
-					kind = source.kind,
-					system_kind = source.system_kind,
-					master_pubkey = source.master_pubkey,
-					d_tag = source.d_tag,
-					created_at = source.created_at,
-					pubkey = source.pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					content = source.content,
-					tags = source.tags,
-					has_images = source.has_images,
-					has_videos = source.has_videos,
-				    lookup = source.lookup
-			WHEN MATCHED AND target.id = source.replaced_by_id THEN
-				UPDATE SET 
-					kind = source.kind,
-					system_kind = source.system_kind,
-					master_pubkey = source.master_pubkey,
-					d_tag = source.d_tag,
-					created_at = source.created_at,
-					pubkey = source.pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					content = source.content,
-					tags = source.tags,
-					has_images = source.has_images,
-					has_videos = source.has_videos,
-					lookup = source.lookup
-				;`
-
-	result, err := db.ExecContext(ctx, stmt, eventIDs)
-	if err != nil {
-		err = errors.Wrap(handleError(err), "failed to exec rollback replaceable events sql")
-	} else if rows, err := result.RowsAffected(); err != nil {
-		err = errors.Wrap(err, "failed to get rows affected")
-	} else if expected := int64(len(eventIDs)); rows < expected {
-		err = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expected, rows)
-	}
-	return err
-}
-
-func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eventIterator {
+func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, replaceableEventsToRollback map[string]bool) *eventIterator {
 	var stmt string
-	params := []any{}
 	values := []string{}
-
-	idx := 1
+	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
+	if len(replaceableEventsToRollback) > 0 {
+		for evID := range replaceableEventsToRollback {
+			replaceableEventsIDs = append(replaceableEventsIDs, evID)
+		}
+	}
+	params := []any{replaceableEventsIDs}
+	idx := 2
 	for _, ev := range events {
 		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
 			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
@@ -512,26 +414,36 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eve
 			`($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint),
 			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
 			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
-			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text))`,
+			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text),
+			'')`, // replaced_by_id to match replaceable_events_before_update schema.
 			idx, idx+1, idx+2,
 			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
 		))
 		idx += 17
 	}
-
-	stmt = `MERGE INTO events AS target
-				USING (VALUES
-					` + strings.Join(values, ",") + `
+	valuesStr := ""
+	if len(values) > 0 {
+		valuesStr = "UNION ALL VALUES " + strings.Join(values, ",")
+	}
+	stmt = `
+				WITH replaced AS (DELETE FROM replaceable_events_before_update
+										WHERE replaced_by_id = ANY($1)
+										RETURNING *)
+				MERGE INTO events AS target
+				USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
+					has_images, has_videos, lookup, replaced_by_id FROM replaced 
+						` + valuesStr + `
 				) AS source (
 					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
 					has_images,
 					has_videos,
-					lookup
+					lookup, replaced_by_id
 				)
 				ON (
 					target.id = source.id
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
+					OR (target.id = source.replaced_by_id AND source.replaced_by_id != '')
 				)
 			WHEN MATCHED AND
 				target.master_pubkey = source.master_pubkey
@@ -559,8 +471,10 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eve
 				AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
 				UPDATE SET
 					id = source.id,
+					kind = source.kind,
 					system_kind = source.system_kind,
 					d_tag = source.d_tag,
+					master_pubkey = source.master_pubkey,
 					sig = source.sig,
 					sig_alg = source.sig_alg,
 					key_alg = source.key_alg,
@@ -573,6 +487,23 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eve
 					has_videos = source.has_videos
 			WHEN MATCHED AND target.id = source.id THEN
 				UPDATE SET
+					kind = source.kind,
+					system_kind = source.system_kind,
+					master_pubkey = source.master_pubkey,
+					d_tag = source.d_tag,
+					created_at = source.created_at,
+					pubkey = source.pubkey,
+					sig = source.sig,
+					sig_alg = source.sig_alg,
+					key_alg = source.key_alg,
+					lookup = source.lookup,
+					content = source.content,
+					tags = source.tags,
+					has_images = source.has_images,
+					has_videos = source.has_videos
+			WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' THEN
+				UPDATE SET
+					id = source.id,
 					kind = source.kind,
 					system_kind = source.system_kind,
 					master_pubkey = source.master_pubkey,
@@ -638,10 +569,10 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) *eve
 }
 
 func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) (replaceableEvents map[string]bool, inserted []databaseFilterDelete, err error) {
-	if len(req.InsertOrReplace) == 0 {
+	if len(req.InsertOrReplace) == 0 && len(req.ReplaceableEvents) == 0 {
 		return map[string]bool{}, []databaseFilterDelete{}, nil
 	}
-	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace)
+	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace, req.ReplaceableEvents)
 	events := []*model.Event{}
 	replaceableEvents = map[string]bool{}
 	sErr := insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
@@ -668,8 +599,9 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		}
 		events = slices.DeleteFunc(events, keepOnlyInsertedEvents)
 	}
-	if actual := len(events) + len(replaceableEvents); sErr == nil && actual != len(req.InsertOrReplace) {
-		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(req.InsertOrReplace), actual)
+	expectedRows := len(req.InsertOrReplace) + len(req.ReplaceableEvents)
+	if actual := len(events) + len(replaceableEvents); sErr == nil && actual != expectedRows {
+		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expectedRows, actual)
 	}
 	if sErr == nil && req.EventsHash != nil && len(events) > 0 {
 		for _, ev := range events {
