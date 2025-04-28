@@ -800,10 +800,11 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	const stmt = `
 	WITH expired_events AS (
 		SELECT e.id
-		FROM events e
-		INNER JOIN event_tags et ON e.id = et.event_id AND et.event_tag_key = 'expiration'
+		FROM event_tags et
+		INNER JOIN events e ON e.id = et.event_id 
 		WHERE
-			to_timestamp(cast(event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
+			et.event_tag_key = 'expiration'
+		AND to_timestamp(cast(et.event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
 		ORDER BY et.id ASC
 		LIMIT :batch_size
 	)
