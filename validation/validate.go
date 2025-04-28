@@ -57,6 +57,10 @@ const (
 	tagStateOneOf
 
 	kindValidatorFlagContentRequired uint = 1 << 0
+
+	DeviceTokenOSAndroid = "android"
+	DeviceTokenOSIOS     = "ios"
+	DeviceTokenOSWeb     = "web"
 )
 
 type (
@@ -249,6 +253,93 @@ var (
 					return errors.Errorf("fund send notify: address in content %q does not match tag l %q", address.To, addr.Value())
 				} else if len(addr) < 3 || addr[2] != "wallet.address" {
 					return errors.Errorf("fund send notify: invalid alias in tag l %q", addr.Value())
+				}
+
+				return nil
+			}).
+			Build(),
+
+		model.CustomIONKindDeviceRegistration: newKindValidatorBuilder().
+			ContentNotEmpty().
+			Required("d", "t", "relay", "token").
+			Validate(func(e *model.Event) error {
+				tTag := e.GetTag("t").Value()
+				if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {
+					return errors.Wrapf(ErrWrongEventParams, "wrong t tag value: %v", tTag)
+				}
+				relayTag := e.GetTag("relay").Value()
+				if relayTag != globalConfig.RelayURL {
+					return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, globalConfig.RelayURL)
+				}
+
+				var filters model.Filters
+				if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {
+					return errors.Wrapf(ErrWrongEventParams, "wrong content JSON value: %v", err)
+				}
+				for _, filter := range filters {
+					if filter.Kinds == nil {
+						return errors.Wrapf(ErrWrongEventParams, "filter must have kinds defined: %v", filter)
+					}
+					if filter.Tags != nil && filter.Tags.HasValues(model.CustomIONTagCommunity) {
+						hasValidCommunityKind := false
+						for _, kind := range filter.Kinds {
+							if kind == nostr.KindTextNote || kind == model.CustomIONKindEditableTextNote || kind == nostr.KindGenericRepost {
+								hasValidCommunityKind = true
+
+								break
+							}
+						}
+						if !hasValidCommunityKind {
+							return errors.Wrapf(ErrWrongEventParams, "filter with h tag must contain at least one of these kinds: %v",
+								[]int{nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost})
+						}
+
+						continue
+					}
+					hasAllowedKind := false
+					for _, kind := range filter.Kinds {
+						switch kind {
+						case nostr.KindTextNote, model.CustomIONKindEditableTextNote,
+							nostr.KindRepost, nostr.KindGenericRepost, nostr.KindFollowList:
+							hasAllowedKind = true
+						case nostr.KindGiftWrap:
+							hasAllowedKind = true
+							if filter.Tags == nil {
+								return errors.Wrapf(ErrWrongEventParams, "filter with KindGiftWrap kind must have tags: %v", filter)
+							}
+							kTagValues := filter.Tags["k"]
+							if kTagValues == nil || len(kTagValues) == 0 {
+								return errors.Wrapf(ErrWrongEventParams, "filter with KindGiftWrap kind must have k tag: %v", filter)
+							}
+
+							validKTagValue := false
+							for _, kValues := range kTagValues {
+								for _, kValuePtr := range kValues {
+									if kValuePtr == nil {
+										continue
+									}
+
+									kInt, err := strconv.Atoi(*kValuePtr)
+									if err == nil {
+										switch kInt {
+										case model.CustomIONKindFundReceive, model.CustomIONKindFundSendNotify,
+											nostr.KindDirectMessage, model.CustomIONDirectMessage, nostr.KindReaction:
+											validKTagValue = true
+											break
+										}
+									}
+								}
+							}
+
+							if !validKTagValue {
+								return errors.Wrapf(ErrWrongEventParams, "filter with KindGiftWrap kind has invalid k tag value: %v", filter)
+							}
+						}
+					}
+
+					if !hasAllowedKind {
+						return errors.Wrapf(ErrWrongEventParams, "filter must contain at least one allowed kind: %v", filter)
+					}
 				}
 
 				return nil

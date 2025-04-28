@@ -20,6 +20,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
+	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/storage"
@@ -41,6 +42,7 @@ var (
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
+			pushnotifications.MustInit()
 			server.MustListenAndServe(cmd.Context())
 		},
 	}
@@ -112,6 +114,11 @@ func init() {
 		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
 		}
+		go func() {
+			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
+				log.Printf("failed to pushnotifications.AcceptEvents(%#v): %v", events, err)
+			}
+		}()
 
 		return nil
 	})

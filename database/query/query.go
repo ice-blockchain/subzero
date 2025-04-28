@@ -56,6 +56,7 @@ type (
 		Htag         string
 		AddressValue string
 		Lookup       string
+		TagID        int64
 		Deleted      bool
 		HasImages    bool
 		HasVideos    bool
@@ -602,8 +603,8 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	}
 
 	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *model.Event) error {
-			if !yield(event, nil) {
+		err := it.Each(ctx, func(event *databaseEvent) error {
+			if !yield(&event.Event, nil) {
 				return errEventIteratorInterrupted
 			}
 
@@ -798,12 +799,13 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	const batchSize = 1000
 	const stmt = `
 	WITH expired_events AS (
-		SELECT id
-		FROM events
-		INNER JOIN event_tags et ON events.id = et.event_id AND et.event_tag_key = 'expiration'
+		SELECT e.id
+		FROM event_tags et
+		INNER JOIN events e ON e.id = et.event_id 
 		WHERE
-			to_timestamp(cast(event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
-		ORDER BY created_at ASC
+			et.event_tag_key = 'expiration'
+		AND to_timestamp(cast(et.event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
+		ORDER BY et.id ASC
 		LIMIT :batch_size
 	)
 	DELETE FROM events
