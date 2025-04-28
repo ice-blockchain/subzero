@@ -29,7 +29,7 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 		FROM event_tags et
 		JOIN events e ON et.event_id = e.id AND e.kind = :kind
 		WHERE et.event_tag_key = 'token' AND et.event_tag_value2 != 'invalid' AND et.id > :last_tag_id
-		ORDER BY et.id
+		ORDER BY et.id ASC
 		LIMIT :batch_size
 	`
 
