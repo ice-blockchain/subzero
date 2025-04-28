@@ -82,7 +82,6 @@ CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_created_at ON events(id, pubkey,
 CREATE INDEX IF NOT EXISTS idx_events_id_master_pubkey_created_at ON events(id, master_pubkey, created_at DESC) WHERE hidden = FALSE;;
 CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_created_at ON events(pubkey, master_pubkey, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_h_tag_created_at  ON events(h_tag, created_at DESC) WHERE kind = 1753 AND hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_kind_created_at_id ON events(kind, created_at ASC, id);
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
@@ -90,6 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
 --------
 CREATE TABLE IF NOT EXISTS event_tags
 (
+    id                bigserial,
     event_id          text not null references events (id) ON UPDATE RESTRICT ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     event_tag_key     text not null,
     event_tag_value1  text not null DEFAULT '',
@@ -99,6 +99,10 @@ CREATE TABLE IF NOT EXISTS event_tags
     event_tag_value5  text not null DEFAULT '',
     primary key (event_id, event_tag_key, event_tag_value1)
 );
+
+--------
+ALTER TABLE event_tags ADD COLUMN IF NOT EXISTS id BIGSERIAL;
+
 --------
 -- Update primary key.
 DO $$ BEGIN

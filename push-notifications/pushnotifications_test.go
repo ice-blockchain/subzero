@@ -4,6 +4,7 @@ package pushnotifications
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -287,7 +288,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event.Kind, event)
+		notifications, err := pm.processEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -301,7 +302,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event.Kind, event)
+		notifications, err := pm.processEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -314,7 +315,59 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event.Kind, event)
+		notifications, err := pm.processEvent(t.Context(), event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("Handles valid GenericRepost event correctly", func(t *testing.T) {
+		repostedEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: model.CustomIONKindEditableTextNote,
+			},
+		}
+
+		repostedEventJSON, err := json.Marshal(repostedEvent)
+		require.NoError(t, err)
+
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:      "test-repost-id",
+				Kind:    nostr.KindGenericRepost,
+				Content: string(repostedEventJSON),
+				Tags: nostr.Tags{
+					nostr.Tag{"p", "recipient-pubkey"},
+				},
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
+
+	t.Run("Handles non-editable GenericRepost event correctly", func(t *testing.T) {
+		repostedEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindTextNote,
+			},
+		}
+
+		repostedEventJSON, err := json.Marshal(repostedEvent)
+		require.NoError(t, err)
+
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:      "test-repost-id",
+				Kind:    nostr.KindGenericRepost,
+				Content: string(repostedEventJSON),
+				Tags: nostr.Tags{
+					nostr.Tag{"p", "recipient-pubkey"},
+				},
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -363,5 +416,57 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, single)
 		require.Empty(t, topic)
+	})
+}
+
+func TestShouldProcessGenericRepostEvent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid_editable_text_note_repost", func(t *testing.T) {
+		t.Parallel()
+
+		repostedEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: model.CustomIONKindEditableTextNote,
+			},
+		}
+
+		repostedEventJSON, err := json.Marshal(repostedEvent)
+		require.NoError(t, err)
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindGenericRepost,
+				Content: string(repostedEventJSON),
+			},
+		}
+
+		shouldProcess, err := shouldProcessGenericRepostEvent(event)
+		require.NoError(t, err)
+		require.True(t, shouldProcess)
+	})
+
+	t.Run("non_editable_text_note_repost", func(t *testing.T) {
+		t.Parallel()
+
+		repostedEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindTextNote,
+			},
+		}
+
+		repostedEventJSON, err := json.Marshal(repostedEvent)
+		require.NoError(t, err)
+
+		event := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindGenericRepost,
+				Content: string(repostedEventJSON),
+			},
+		}
+
+		shouldProcess, err := shouldProcessGenericRepostEvent(event)
+		require.NoError(t, err)
+		require.False(t, shouldProcess)
 	})
 }

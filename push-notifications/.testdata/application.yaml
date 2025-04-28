@@ -2,11 +2,12 @@
 
 push-notifications:
   fcm-credentials-file: /dev/null
-  # fcm-credentials-json: '{"type":"service_account","project_id":"example","private_key_id":"key_id"}'
-
-  fcm-android-configs: []
-  fcm-ios-configs: []
-  fcm-web-configs: []
+  fcm-android-configs:
+    - {}
+  fcm-ios-configs:
+    - {}
+  fcm-web-configs:
+    - {}
 
 validation:
   relay-url: wss://relay.example.com

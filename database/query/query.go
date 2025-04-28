@@ -56,6 +56,7 @@ type (
 		Htag         string
 		AddressValue string
 		Lookup       string
+		TagID        int64
 		Deleted      bool
 		HasImages    bool
 		HasVideos    bool
@@ -602,8 +603,8 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	}
 
 	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *model.Event) error {
-			if !yield(event, nil) {
+		err := it.Each(ctx, func(event *databaseEvent) error {
+			if !yield(&event.Event, nil) {
 				return errEventIteratorInterrupted
 			}
 

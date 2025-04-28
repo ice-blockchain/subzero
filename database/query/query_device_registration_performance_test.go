@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -72,7 +71,7 @@ func TestLargeDatasetPerformance(t *testing.T) {
 	require.NoError(t, err, "Failed to create kind_filter index")
 
 	t.Run("generate_large_dataset", func(t *testing.T) {
-		counts, err := helperGenerateLargeDataset(t, t.Context(), db, totalEvents, deviceRegEvents,
+		counts, err := helperGenerateLargeDataset(t, db, totalEvents, deviceRegEvents,
 			tokenTagDeviceRegCount, invalidTokensCount, insertBatchSize, otherTagsCount)
 		require.NoError(t, err, "Failed to generate dataset")
 
@@ -121,16 +120,16 @@ func TestLargeDatasetPerformance(t *testing.T) {
 	})
 
 	t.Run("compare_performance", func(t *testing.T) {
-		validEvents := helperCountValidDeviceRegistrationEvents(t, t.Context(), db)
+		validEvents := helperCountValidDeviceRegistrationEvents(t, db)
 
 		t.Logf("Found %d valid device registration events to test with", validEvents)
 
-		// Method 1: No join
+		// Method 1: PRODUCTION REQUEST
 		helperClearCache(t, db)
 		start := time.Now()
-		eventsCount1 := helperCountEventsFromIterator(helperCollectDeviceRegistrationEventsNoJoin(t, db))
+		eventsCount1 := helperCountEventsFromIterator(db.collectDeviceRegistrationEvents(t.Context()))
 		duration1 := time.Since(start)
-		helperLogMethodPerformance(t, "Method 1 (NO JOIN)", eventsCount1, duration1)
+		helperLogMethodPerformance(t, "Method 1 (PRODUCTION REQUEST)", eventsCount1, duration1)
 
 		// Method 2: INNER JOIN
 		helperClearCache(t, db)
@@ -200,7 +199,7 @@ func TestLargeDatasetPerformance(t *testing.T) {
 			duration time.Duration
 			count    int
 		}{
-			{"Method 1 (NO JOIN)", duration1, eventsCount1},
+			{"Method 1 (PRODUCTION REQUEST)", duration1, eventsCount1},
 			{"Method 2 (FROM events JOIN event_tags WHERE val2 != 'invalid')", duration2, eventsCount2},
 			{"Method 3 (INNER JOIN with subquery)", duration3, eventsCount3},
 			{"Method 4 (LATERAL JOIN)", duration4, eventsCount4},
@@ -233,7 +232,7 @@ type EventCounts struct {
 	otherTagsCount     int
 }
 
-func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient, totalEvents, deviceRegEvents,
+func helperGenerateLargeDataset(t *testing.T, db *dbClient, totalEvents, deviceRegEvents,
 	tokenTagDeviceRegCount, invalidTokensCount, insertBatchSize, otherTagsCount int) (*EventCounts, error) {
 	t.Helper()
 
@@ -311,7 +310,7 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 			paramIdx += 11
 		}
 
-		_, err := db.DB.ExecContext(ctx, query, values...)
+		_, err := db.DB.ExecContext(t.Context(), query, values...)
 		require.NoError(t, err, "failed to insert device registration events")
 
 		fmt.Printf("Generated %d/%d device registration events\n", endIdx, deviceRegEvents)
@@ -324,14 +323,13 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 		eventID := deviceRegEventIDs[i]
 		tokenValue := "token_" + strconv.Itoa(i)
 
-		_, err := db.DB.ExecContext(ctx, `
+		_, err := db.DB.ExecContext(t.Context(), `
 			INSERT INTO event_tags (
 				event_id, 
 				event_tag_key, 
 				event_tag_value1,
 				event_tag_value2
 			) VALUES ($1, $2, $3, $4)
-			ON CONFLICT (event_id, event_tag_key, event_tag_value1) DO NOTHING
 		`, eventID, "token", tokenValue, "")
 
 		require.NoError(t, err, "failed to insert valid token tags")
@@ -346,7 +344,7 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 		invalidTokensToAdd = totalTokensToAdd / 2
 	}
 
-	_, err := db.DB.ExecContext(ctx, `
+	_, err := db.DB.ExecContext(t.Context(), `
 		UPDATE event_tags 
 		SET event_tag_value2 = 'invalid'
 		WHERE event_id IN (
@@ -420,7 +418,7 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 			paramIdx += 10
 		}
 
-		_, err := db.DB.ExecContext(ctx, query, values...)
+		_, err := db.DB.ExecContext(t.Context(), query, values...)
 		require.NoError(t, err, "failed to insert regular events")
 
 		fmt.Printf("Generated %d/%d regular events\n", endIdx, otherEvents)
@@ -471,7 +469,7 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 				paramIdx += 4
 			}
 
-			_, err := db.DB.ExecContext(ctx, query, values...)
+			_, err := db.DB.ExecContext(t.Context(), query, values...)
 			require.NoError(t, err, "failed to insert additional tags")
 
 			fmt.Printf("Added %d/%d additional tags\n", endIdx, otherTagsCount)
@@ -479,11 +477,11 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 	}
 
 	var totalEventsCount int64
-	err = db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM events").Scan(&totalEventsCount)
+	err = db.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM events").Scan(&totalEventsCount)
 	require.NoError(t, err, "failed to count events")
 
 	var deviceRegEventsCount int64
-	err = db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM events WHERE kind = $1", model.CustomIONKindDeviceRegistration).Scan(&deviceRegEventsCount)
+	err = db.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM events WHERE kind = $1", model.CustomIONKindDeviceRegistration).Scan(&deviceRegEventsCount)
 	require.NoError(t, err, "failed to count device registration events")
 
 	fmt.Printf("Verified events in database: total %d, device registrations %d\n", totalEventsCount, deviceRegEventsCount)
@@ -492,7 +490,7 @@ func helperGenerateLargeDataset(t *testing.T, ctx context.Context, db *dbClient,
 	}
 
 	var invalidCount int64
-	err = db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_tags WHERE event_tag_key = 'token' AND event_tag_value2 = 'invalid'").Scan(&invalidCount)
+	err = db.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_tags WHERE event_tag_key = 'token' AND event_tag_value2 = 'invalid'").Scan(&invalidCount)
 	require.NoError(t, err, "failed to count invalid tokens")
 
 	fmt.Printf("Valid device registration events: %d (of %d total)\n", validDeviceRegCount, deviceRegEventsCount)
@@ -525,10 +523,10 @@ func helperCountEventsByMethod(methodNum int, count2, count3, count4, count5, co
 	}
 }
 
-func helperCountValidDeviceRegistrationEvents(t *testing.T, ctx context.Context, db *dbClient) int {
+func helperCountValidDeviceRegistrationEvents(t *testing.T, db *dbClient) int {
 	t.Helper()
 	var validDeviceRegCount int64
-	err := db.DB.QueryRowContext(ctx, `
+	err := db.DB.QueryRowContext(t.Context(), `
 		SELECT COUNT(*)
 		FROM events e
 		WHERE e.kind = $1
@@ -616,28 +614,6 @@ func helperQueryWithIteratorBase(t *testing.T, db *dbClient, sqlQuery string) Ev
 			}
 		}
 	}
-}
-
-func helperCollectDeviceRegistrationEventsNoJoin(t *testing.T, db *dbClient) EventIterator {
-	t.Helper()
-	t.Helper()
-	sqlQuery := `SELECT 
-			e.kind,
-			e.created_at,
-			e.id,
-			e.pubkey,
-			e.master_pubkey,
-			e.sig,
-			e.content,
-			e.d_tag,
-			e.tags
-		FROM events e
-		WHERE e.kind = :kind
-			AND e.id IN (SELECT event_id FROM event_tags WHERE event_tag_key = 'token' AND event_tag_value2 = '')
-			AND (e.created_at > :last_created_at OR (e.created_at = :last_created_at AND e.id > :last_id))
-		ORDER BY e.created_at ASC, e.id
-		LIMIT :batch_size`
-	return helperQueryWithIteratorBase(t, db, sqlQuery)
 }
 
 // helperCollectDeviceRegistrationEventsJoin uses INNER JOIN for filtering device registration events

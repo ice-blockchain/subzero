@@ -4,7 +4,10 @@ package pushnotifications
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -34,8 +37,7 @@ type (
 	}
 
 	config struct {
-		FCMCredentialsFile string   `yaml:"fcm-credentials-file" validate:"required_without=FCMCredentialsJSON"`
-		FCMCredentialsJSON string   `yaml:"fcm-credentials-json" validate:"required_without=FCMCredentialsFile"`
+		FCMCredentialsFile string   `yaml:"fcm-credentials-file"`
 		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
 		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
 		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
@@ -123,15 +125,19 @@ func MustInit() {
 
 	cfg := cfg.MustGet[config]()
 
-	if cfg.FCMCredentialsFile == "" && cfg.FCMCredentialsJSON == "" {
+	if cfg.FCMCredentialsFile == "" {
 		panic("FCM credentials not provided")
 	}
 
 	var opts []pn.Option
-	if cfg.FCMCredentialsFile != "" {
-		opts = append(opts, pn.WithCredentialsFile(cfg.FCMCredentialsFile))
-	} else if cfg.FCMCredentialsJSON != "" {
-		opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsJSON))
+	if strings.HasPrefix(strings.TrimSpace(cfg.FCMCredentialsFile), "{") {
+		opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsFile))
+	} else {
+		if _, err := os.Stat(cfg.FCMCredentialsFile); err != nil {
+			opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsFile))
+		} else {
+			opts = append(opts, pn.WithCredentialsFile(cfg.FCMCredentialsFile))
+		}
 	}
 
 	pnClient, err = pn.New(context.Background(), opts...)
@@ -191,7 +197,7 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 				topicNotifications = append(topicNotifications, notifications...)
 			}
 		}
-		notifications, err := pm.processEvent(ctx, event.Kind, event)
+		notifications, err := pm.processEvent(ctx, event)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to process event")
 		}
@@ -203,11 +209,20 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 	return singleNotifications, topicNotifications, nil
 }
 
-func (pm *PushNotificationManager) processEvent(ctx context.Context, kind int, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
-	switch kind {
+func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+	if event.Kind == nostr.KindGenericRepost {
+		shouldProcess, err := shouldProcessGenericRepostEvent(event)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to check if generic repost event should be processed")
+		}
+		if !shouldProcess {
+			return nil, nil
+		}
+	}
+
+	switch event.Kind {
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost:
-		hTag := event.GetHTag()
-		if hTag != "" && hTag != event.ID {
+		if hTag := event.GetHTag(); hTag != "" && hTag != event.ID {
 			notifications, err := pm.handleCommunityMessageEvent(ctx, event)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to handle community message event")
@@ -215,8 +230,8 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, kind int, e
 
 			return notifications, nil
 		}
-		if (kind == nostr.KindTextNote && event.GetTag("q") != nil) || (kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
-			kind == nostr.KindGenericRepost {
+		if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
+			event.Kind == nostr.KindGenericRepost {
 			return pm.handleEventWithPublicKey(event), nil
 		}
 
@@ -233,6 +248,18 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, kind int, e
 	}
 
 	return nil, nil
+}
+
+func shouldProcessGenericRepostEvent(event *model.Event) (bool, error) {
+	var repostedEvent *model.Event
+	if err := json.Unmarshal([]byte(event.Content), &repostedEvent); err != nil {
+		return false, errors.Wrap(err, "failed to unmarshal repost event")
+	}
+	if repostedEvent.Kind != model.CustomIONKindEditableTextNote {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
