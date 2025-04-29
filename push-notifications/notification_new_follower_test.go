@@ -3,6 +3,8 @@
 package pushnotifications
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -136,8 +138,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "Someone"), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
@@ -264,12 +267,15 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 
 		if platform == validation.DeviceTokenOSIOS || platform == validation.DeviceTokenOSWeb {
 			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
+			require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "Someone"), notification.Body, "Body should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL, "Image URL should match")
 		} else if platform == validation.DeviceTokenOSAndroid {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
+			require.Equal(t, "", notification.ImageURL, "Image URL should match")
 			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Data["title"], "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Data["body"], "Body should match")
+			require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "Someone"), notification.Data["body"], "Body should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.Data["imageUrl"], "Image URL should match")
 		}
 	}
 
@@ -420,4 +426,89 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		require.NotNil(t, notifications)
 		require.Len(t, notifications, 1)
 	})
+}
+
+func TestCreateNewFollowerNotificationWithRelatedEvents(t *testing.T) {
+	t.Parallel()
+
+	testSuffix := uuid.NewString()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	followerPubKey := "follower_pubkey_" + testSuffix
+	targetPubKey := "target_pubkey_" + testSuffix
+
+	followListEvent := helperCreateFollowListEvent(
+		t,
+		"test_id_"+testSuffix,
+		followerPubKey,
+		[]string{"pubkey1", "pubkey2", targetPubKey},
+	)
+
+	profileData := struct {
+		Name        string `json:"name,omitempty"`
+		DisplayName string `json:"display_name,omitempty"`
+	}{
+		Name:        "FollowerUsername",
+		DisplayName: "Follower Display Name",
+	}
+
+	profileJSON, err := json.Marshal(profileData)
+	require.NoError(t, err)
+
+	profileEvent := &model.Event{
+		Event: nostr.Event{
+			ID:      "profile_id_" + testSuffix,
+			PubKey:  followerPubKey,
+			Kind:    nostr.KindProfileMetadata,
+			Content: string(profileJSON),
+		},
+	}
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindFollowList},
+		},
+	}
+
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		targetPubKey,
+		"device1_"+testSuffix,
+		nostr.Tags{
+			{"t", "ios"},
+			{"token", "test_token_" + testSuffix},
+		},
+		filters,
+	)
+
+	pm.deviceMutex.Lock()
+	pm.userDevicesMap[targetPubKey] = map[DeviceID]DeviceInfo{
+		DeviceID("device1_" + testSuffix): {
+			DeviceID: DeviceID("device1_" + testSuffix),
+			Filters:  filters,
+			Event:    deviceEvent,
+		},
+	}
+	pm.deviceMutex.Unlock()
+
+	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey, profileEvent)
+
+	require.NotNil(t, notifications, "Notifications should not be nil")
+	require.Len(t, notifications, 1, "Should create one notification")
+
+	notification := notifications[0]
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "@Follower Display Name"), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
+	require.Equal(t, deviceEvent, notification.Target, "Target should match")
+
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Contains(t, notification.Data, "related_events", "Data should contain related events")
+	relatedEvents, ok := notification.Data["related_events"].([]string)
+	require.True(t, ok, "related_events should be a string slice")
+	require.Len(t, relatedEvents, 1, "Should contain one related event")
+	require.Contains(t, relatedEvents[0], profileEvent.ID, "Related event should match profile event")
 }

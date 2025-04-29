@@ -3,6 +3,7 @@
 package pushnotifications
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -191,8 +192,13 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			require.Len(t, notifications, 1, "Should create one notification for "+tc.description)
 
 			notification := notifications[0]
-			require.Equal(t, DefaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
-			require.Equal(t, DefaultTranslations[tc.notifyType].Body, notification.Body, "Body should match for "+tc.description)
+			if tc.notifyType == NotificationTypeReaction {
+				require.Equal(t, DefaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
+				require.Equal(t, fmt.Sprintf(DefaultTranslations[tc.notifyType].Body, "Someone"), notification.Body, "Body should match for "+tc.description)
+			} else {
+				require.Equal(t, DefaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
+				require.Equal(t, DefaultTranslations[tc.notifyType].Body, notification.Body, "Body should match for "+tc.description)
+			}
 			require.Equal(t, deviceEvent, notification.Target, "Target should match for "+tc.description)
 			require.Contains(t, notification.Data, "event", "Data should contain event for "+tc.description)
 			require.Equal(t, event.String(), notification.Data["event"], "Event should match for "+tc.description)
@@ -287,4 +293,67 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			require.Equal(t, event.String(), notification.Data["event"], "Event should match")
 		})
 	}
+}
+
+func TestHandleGiftWrapEventReaction(t *testing.T) {
+	t.Parallel()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	recipientMasterPubKey := "recipient_master_pubkey"
+	deviceID := "device1"
+	devicePubKey := "device_pubkey"
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindGiftWrap, nostr.KindReaction},
+		},
+	}
+
+	deviceTags := nostr.Tags{
+		{"t", "ios"},
+		{"d", deviceID},
+		{"relay", "wss://relay.example.com"},
+		{"token", "token1"},
+	}
+
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	pm.deviceMutex.Lock()
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	require.True(t, ok, "Device should exist in userDevicesMap")
+
+	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
+		pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+	}
+	pm.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.deviceMutex.Unlock()
+
+	t.Run("Reaction", func(t *testing.T) {
+		event := helperCreateGiftWrapEvent(
+			t,
+			"test_reaction",
+			"sender_pubkey",
+			nostr.Tags{
+				{"k", strconv.Itoa(nostr.KindReaction)},
+				{"p", recipientMasterPubKey, devicePubKey},
+				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+			},
+		)
+
+		notifications, err := pm.handleGiftWrapEvent(event)
+		require.NoError(t, err)
+		require.NotNil(t, notifications)
+		require.Len(t, notifications, 1)
+
+		notification := notifications[0]
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
+		require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeReaction].Body, "Someone"), notification.Body, "Body should match for reaction")
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL, "Image URL should match")
+		require.Equal(t, deviceEvent, notification.Target)
+		require.Contains(t, notification.Data["event"], event.String())
+	})
 }

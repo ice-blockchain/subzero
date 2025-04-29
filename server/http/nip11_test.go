@@ -112,7 +112,60 @@ func TestNIP11(t *testing.T) {
 	err = json.Unmarshal(body, &fullResponse)
 	require.NoError(t, err)
 
-	require.Equal(t, expected.FCMAndroidConfigs, fullResponse.FCMAndroidConfigs)
-	require.Equal(t, expected.FCMIOSConfigs, fullResponse.FCMIOSConfigs)
-	require.Equal(t, expected.FCMWebConfigs, fullResponse.FCMWebConfigs)
+	require.Len(t, fullResponse.FCMAndroidConfigs, len(expected.FCMAndroidConfigs))
+	require.Len(t, fullResponse.FCMIOSConfigs, len(expected.FCMIOSConfigs))
+	require.Len(t, fullResponse.FCMWebConfigs, len(expected.FCMWebConfigs))
+}
+
+func TestFCMConfigParsing(t *testing.T) {
+	t.Parallel()
+
+	androidConfig := `{"apiKey":"android-key","appId":"android-app-id","senderId":"android-sender","messagingSenderId":"android-messaging-sender","projectId":"android-project"}`
+	iosConfig := `{"apiKey":"ios-key","appId":"ios-app-id","senderId":"ios-sender"}`
+	webConfig := `{"apiKey":"web-key","projectId":"web-project"}`
+
+	handler := nip11handler{
+		cfg: &Config{
+			MinLeadingZeroBits: minLeadingZeroBits,
+			FCMAndroidConfigs:  []string{androidConfig},
+			FCMIOSConfigs:      []string{iosConfig},
+			FCMWebConfigs:      []string{webConfig},
+		},
+	}
+
+	info := handler.info()
+
+	require.Len(t, info.FCMAndroidConfigs, 1)
+	androidCfg := info.FCMAndroidConfigs[0]
+	require.Equal(t, "android-key", androidCfg.ApiKey)
+	require.Equal(t, "android-app-id", androidCfg.AppID)
+	require.Equal(t, "android-sender", androidCfg.SenderID)
+	require.Equal(t, "android-messaging-sender", androidCfg.MessagingSenderID)
+	require.Equal(t, "android-project", androidCfg.ProjectID)
+
+	require.Len(t, info.FCMIOSConfigs, 1)
+	iosCfg := info.FCMIOSConfigs[0]
+	require.Equal(t, "ios-key", iosCfg.ApiKey)
+	require.Equal(t, "ios-app-id", iosCfg.AppID)
+	require.Equal(t, "ios-sender", iosCfg.SenderID)
+	require.Empty(t, iosCfg.MessagingSenderID)
+	require.Empty(t, iosCfg.ProjectID)
+
+	require.Len(t, info.FCMWebConfigs, 1)
+	webCfg := info.FCMWebConfigs[0]
+	require.Equal(t, "web-key", webCfg.ApiKey)
+	require.Empty(t, webCfg.AppID)
+	require.Empty(t, webCfg.SenderID)
+	require.Empty(t, webCfg.MessagingSenderID)
+	require.Equal(t, "web-project", webCfg.ProjectID)
+
+	handlerWithInvalidJSON := nip11handler{
+		cfg: &Config{
+			MinLeadingZeroBits: minLeadingZeroBits,
+			FCMAndroidConfigs:  []string{`invalid json`},
+		},
+	}
+
+	infoWithInvalidJSON := handlerWithInvalidJSON.info()
+	require.Empty(t, infoWithInvalidJSON.FCMAndroidConfigs)
 }

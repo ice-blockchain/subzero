@@ -6,7 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -66,17 +69,17 @@ var (
 	DefaultTranslations           = map[NotificationType]NotificationKind{
 		NotificationTypeReaction: {
 			Title:    "New reaction",
-			Body:     "Someone reacted to your post",
+			Body:     "%v reacted to your post",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeRepost: {
 			Title:    "New repost",
-			Body:     "Someone reposted your post",
+			Body:     "%v reposted your post",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeMentionReply: {
 			Title:    "New mention/reply",
-			Body:     "Someone mentioned/replied you",
+			Body:     "%v mentioned/replied you",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeDirectMessage: {
@@ -111,7 +114,7 @@ var (
 		},
 		NotificationTypeNewFollower: {
 			Title:    "New follower",
-			Body:     "Someone is now following you",
+			Body:     "%v is now following you",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 	}
@@ -191,13 +194,22 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 	topicNotifications []*pn.Notification[pn.SubscriptionTopic],
 	err error,
 ) {
-	for _, event := range events {
+	ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
+
+	for _, event := range nonEphemeralEvents {
 		if event.Kind == model.CustomIONSystemMessage {
 			if notifications := pm.handleSystemEvent(event); notifications != nil {
 				topicNotifications = append(topicNotifications, notifications...)
 			}
 		}
-		notifications, err := pm.processEvent(ctx, event)
+		var relatedEvents []*model.Event
+		if !shouldSkipEphemeralEvent(event) {
+			if evs, ok := ephemeralEvents[event.ID]; ok {
+				relatedEvents = evs
+			}
+		}
+
+		notifications, err := pm.processEvent(ctx, event, relatedEvents...)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to process event")
 		}
@@ -209,7 +221,63 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 	return singleNotifications, topicNotifications, nil
 }
 
-func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) sortEphemeralEvents(events []*model.Event) (map[string][]*model.Event, []*model.Event) {
+	ephemeralEvents := make(map[string][]*model.Event)
+	nonEphemeralEvents := make([]*model.Event, 0)
+
+	for _, event := range events {
+		if event.Kind == model.CustomIONKindEphemeralEmbeddding {
+			var refID string
+			if eTag := event.GetTag("e"); eTag != nil {
+				refID = eTag.Value()
+			} else if aTag := event.GetTag("a"); aTag != nil {
+				var pubKey string
+				parts := strings.Split(aTag.Value(), ":")
+				if len(parts) >= 2 {
+					pubKey = parts[1]
+				}
+				for _, e := range events {
+					if e.Kind != model.CustomIONKindEphemeralEmbeddding && e.GetMasterPublicKey() == pubKey {
+						refID = e.ID
+
+						break
+					}
+				}
+			}
+
+			if refID != "" {
+				if _, exists := ephemeralEvents[refID]; !exists {
+					ephemeralEvents[refID] = make([]*model.Event, 0)
+				}
+				ephemeralEvents[refID] = append(ephemeralEvents[refID], event)
+			}
+		} else {
+			nonEphemeralEvents = append(nonEphemeralEvents, event)
+		}
+	}
+
+	return ephemeralEvents, nonEphemeralEvents
+}
+
+func shouldSkipEphemeralEvent(event *model.Event) bool {
+	if event.Kind == nostr.KindGiftWrap {
+		if kTag := event.GetTag("k"); kTag != nil {
+			kindStr := kTag.Value()
+			if kind, err := strconv.Atoi(kindStr); err == nil {
+				return kind == nostr.KindDirectMessage ||
+					kind == model.CustomIONDirectMessage ||
+					kind == model.CustomIONKindFundReceive ||
+					kind == model.CustomIONKindFundSendNotify
+			}
+		}
+
+		return false
+	}
+
+	return event.Kind == model.CustomIONSystemMessage
+}
+
+func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relatedEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	if event.Kind == nostr.KindGenericRepost {
 		shouldProcess, err := shouldProcessGenericRepostEvent(event)
 		if err != nil {
@@ -223,7 +291,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	switch event.Kind {
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost:
 		if hTag := event.GetHTag(); hTag != "" && hTag != event.ID {
-			notifications, err := pm.handleCommunityMessageEvent(ctx, event)
+			notifications, err := pm.handleCommunityMessageEvent(ctx, event, relatedEvents...)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to handle community message event")
 			}
@@ -232,10 +300,10 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		}
 		if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
 			event.Kind == nostr.KindGenericRepost {
-			return pm.handleEventWithPublicKey(event), nil
+			return pm.handleEventWithPublicKey(event, relatedEvents...), nil
 		}
 
-		return pm.handleMentionReplyEvent(event), nil
+		return pm.handleMentionReplyEvent(event, relatedEvents...), nil
 	case nostr.KindGiftWrap:
 		notifications, err := pm.handleGiftWrapEvent(event)
 		if err != nil {
@@ -345,16 +413,26 @@ func (pm *PushNotificationManager) createNotifications(
 	deviceRegistrationEvents []*DeviceRegistrationEvent,
 	notificationType NotificationType,
 	incomingEvent *model.Event,
+	relatedEvents ...*model.Event,
 ) []*pn.Notification[*DeviceRegistrationEvent] {
 	if len(deviceRegistrationEvents) == 0 {
 		return nil
 	}
 
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
-	defaultTranslation := DefaultTranslations[notificationType]
+	defaultTranslation := pm.getTranslationWithRelatedInfo(notificationType, relatedEvents...)
+
 	for _, event := range deviceRegistrationEvents {
 		data := map[string]interface{}{
 			"event": incomingEvent.String(),
+		}
+
+		if len(relatedEvents) > 0 {
+			relatedEventsStrings := make([]string, 0, len(relatedEvents))
+			for _, relatedEvent := range relatedEvents {
+				relatedEventsStrings = append(relatedEventsStrings, relatedEvent.String())
+			}
+			data["related_events"] = relatedEventsStrings
 		}
 
 		switch event.GetTag("t").Value() {
@@ -400,12 +478,44 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	return devices
 }
 
-func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil
 	}
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
-	return pm.createNotifications(deviceEvents, NotificationTypeRepost, event)
+	return pm.createNotifications(deviceEvents, NotificationTypeRepost, event, relatedEvents...)
+}
+
+func (pm *PushNotificationManager) getTranslationWithRelatedInfo(notificationType NotificationType, relatedEvents ...*model.Event) NotificationKind {
+	translation := DefaultTranslations[notificationType]
+	if len(relatedEvents) == 0 {
+		translation.Body = strings.Replace(translation.Body, "%v", "Someone", 1)
+
+		return translation
+	}
+	profileMetadataIndex := slices.IndexFunc(relatedEvents, func(event *model.Event) bool {
+		return event.Kind == nostr.KindProfileMetadata
+	})
+	if profileMetadataIndex != -1 {
+		var profileData struct {
+			Name        string `json:"name,omitempty"`
+			DisplayName string `json:"display_name,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(relatedEvents[profileMetadataIndex].Content), &profileData); err != nil {
+			log.Printf("failed to unmarshal profile metadata: %v", err)
+
+			return translation
+		}
+		if profileData.DisplayName != "" {
+			translation.Body = fmt.Sprintf(translation.Body, "@"+profileData.DisplayName)
+		} else if profileData.Name != "" {
+			translation.Body = fmt.Sprintf(translation.Body, "@"+profileData.Name)
+		} else {
+			translation.Body = fmt.Sprintf(translation.Body, "Someone")
+		}
+	}
+
+	return translation
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/ice-blockchain/subzero/validation"
 )
 
-func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Context, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Context, event *model.Event, relatedEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil, nil
@@ -23,7 +23,7 @@ func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Conte
 	}
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
-	return pm.createNotifications(deviceEvents, notificationType, event), nil
+	return pm.createNotifications(deviceEvents, notificationType, event, relatedEvents...), nil
 }
 
 func getCommunityNotificationType(ctx context.Context, event *model.Event) (NotificationType, error) {

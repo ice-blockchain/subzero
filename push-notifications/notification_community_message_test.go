@@ -3,6 +3,8 @@
 package pushnotifications
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -508,4 +510,100 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestHandleCommunityMessageEventWithRelatedEvents(t *testing.T) {
+	t.Parallel()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	authorPubKey := "author_pubkey_" + uuid.NewString()
+	recipientPubKey := "recipient_pubkey_" + uuid.NewString()
+	communityID := "community_id_" + uuid.NewString()
+
+	profileData := struct {
+		Name        string `json:"name,omitempty"`
+		DisplayName string `json:"display_name,omitempty"`
+	}{
+		Name:        "AuthorUsername",
+		DisplayName: "Author Display Name",
+	}
+
+	profileJSON, err := json.Marshal(profileData)
+	require.NoError(t, err)
+
+	profileEvent := &model.Event{
+		Event: nostr.Event{
+			ID:      "profile_id_" + uuid.NewString(),
+			PubKey:  authorPubKey,
+			Kind:    nostr.KindProfileMetadata,
+			Content: string(profileJSON),
+		},
+	}
+
+	messageEvent := helperCreateCommunityMessageEvent(
+		t,
+		"message_id_"+uuid.NewString(),
+		authorPubKey,
+		"Message with recipient",
+		communityID,
+		recipientPubKey,
+	)
+
+	deviceID := "device1_" + uuid.NewString()
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		recipientPubKey,
+		deviceID,
+		nostr.Tags{
+			{"t", "ios"},
+			{"token", "test_token_" + uuid.NewString()},
+		},
+		nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+				Tags:  nostr.TagMap{"p": []nostr.TagValues{{&recipientPubKey}}},
+			},
+		},
+	)
+
+	pm.deviceMutex.Lock()
+	pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
+		DeviceID(deviceID): {
+			DeviceID: DeviceID(deviceID),
+			Filters: nostr.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+					Tags:  nostr.TagMap{"p": []nostr.TagValues{{&recipientPubKey}}},
+				},
+			},
+			Event: deviceEvent,
+		},
+	}
+	pm.deviceMutex.Unlock()
+
+	notifications := pm.createNotifications(
+		[]*DeviceRegistrationEvent{deviceEvent},
+		NotificationTypeMentionReply,
+		messageEvent,
+		profileEvent,
+	)
+
+	require.NotNil(t, notifications)
+	require.Len(t, notifications, 1)
+
+	notification := notifications[0]
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
+	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeMentionReply].Body, "@Author Display Name"), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
+
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Contains(t, notification.Data, "related_events", "Data should contain related events")
+
+	relatedEvents, ok := notification.Data["related_events"].([]string)
+	require.True(t, ok, "related_events should be a string slice")
+	require.Len(t, relatedEvents, 1, "Should have one related event")
+	require.Contains(t, relatedEvents[0], profileEvent.ID, "Related event should match profile event")
 }

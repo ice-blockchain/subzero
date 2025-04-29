@@ -12,11 +12,19 @@ import (
 )
 
 type (
+	FCMConfig struct {
+		ApiKey            string `json:"apiKey,omitempty"`
+		AppID             string `json:"appId,omitempty"`
+		SenderID          string `json:"senderId,omitempty"`
+		MessagingSenderID string `json:"messagingSenderId,omitempty"`
+		ProjectID         string `json:"projectId,omitempty"`
+	}
+
 	RelayInformationDocument struct {
 		nip11.RelayInformationDocument `json:",inline"`
-		FCMAndroidConfigs              []string `json:"fcm_android_configs"`
-		FCMIOSConfigs                  []string `json:"fcm_ios_configs"`
-		FCMWebConfigs                  []string `json:"fcm_web_configs"`
+		FCMAndroidConfigs              []FCMConfig `json:"fcm_android_configs"`
+		FCMIOSConfigs                  []FCMConfig `json:"fcm_ios_configs"`
+		FCMWebConfigs                  []FCMConfig `json:"fcm_web_configs"`
 	}
 	Config struct {
 		MinLeadingZeroBits int
@@ -51,6 +59,36 @@ func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) 
 }
 
 func (n *nip11handler) info() RelayInformationDocument {
+	var androidConfigs []FCMConfig
+	var iosConfigs []FCMConfig
+	var webConfigs []FCMConfig
+
+	for _, jsonStr := range n.cfg.FCMAndroidConfigs {
+		var config FCMConfig
+		if err := json.Unmarshal([]byte(jsonStr), &config); err == nil {
+			androidConfigs = append(androidConfigs, config)
+		} else {
+			log.Printf("Failed to parse Android FCM config: %v", err)
+		}
+	}
+
+	for _, jsonStr := range n.cfg.FCMIOSConfigs {
+		var config FCMConfig
+		if err := json.Unmarshal([]byte(jsonStr), &config); err == nil {
+			iosConfigs = append(iosConfigs, config)
+		} else {
+			log.Printf("Failed to parse iOS FCM config: %v", err)
+		}
+	}
+	for _, jsonStr := range n.cfg.FCMWebConfigs {
+		var config FCMConfig
+		if err := json.Unmarshal([]byte(jsonStr), &config); err == nil {
+			webConfigs = append(webConfigs, config)
+		} else {
+			log.Printf("Failed to parse Web FCM config: %v", err)
+		}
+	}
+
 	return RelayInformationDocument{
 		RelayInformationDocument: nip11.RelayInformationDocument{
 			Name:          "subzero",
@@ -63,8 +101,8 @@ func (n *nip11handler) info() RelayInformationDocument {
 				MinPowDifficulty: n.cfg.MinLeadingZeroBits,
 			},
 		},
-		FCMAndroidConfigs: n.cfg.FCMAndroidConfigs,
-		FCMIOSConfigs:     n.cfg.FCMIOSConfigs,
-		FCMWebConfigs:     n.cfg.FCMWebConfigs,
+		FCMAndroidConfigs: androidConfigs,
+		FCMIOSConfigs:     iosConfigs,
+		FCMWebConfigs:     webConfigs,
 	}
 }

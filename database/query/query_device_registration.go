@@ -69,16 +69,12 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 				return nil
 			})
 
-			if err != nil && !errors.Is(err, errEventIteratorInterrupted) {
-				if !yield(nil, errors.Wrap(err, "failed to iterate device registration events")) {
-					return
-				}
-				break
-			}
-
-			if lastErr != nil {
-				if !yield(nil, lastErr) {
-					return
+			if err != nil {
+				if !errors.Is(err, errEventIteratorInterrupted) {
+					lastErr = errors.Wrap(err, "failed to iterate device registration events")
+					if !yield(nil, lastErr) {
+						return
+					}
 				}
 				break
 			}
