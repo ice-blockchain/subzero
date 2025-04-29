@@ -4,7 +4,6 @@ package pushnotifications
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -102,9 +101,9 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	require.Len(t, notifications, 2)
 	for _, notification := range notifications {
 		if notification.Target.GetTag("t").Value() == "ios" {
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
-			require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeMentionReply].Body, "Someone"), notification.Body)
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
+			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
+			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
 		} else {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
@@ -157,9 +156,9 @@ func TestMention(t *testing.T) {
 	notifications := pm.handleMentionReplyEvent(event)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications, 1)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
-	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeMentionReply].Body, "Someone"), notifications[0].Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notifications[0].ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notifications[0].Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notifications[0].ImageURL)
 	require.Contains(t, notifications[0].Data["event"], event.String(), "Data should contain event")
 }
 
@@ -279,9 +278,9 @@ func TestHandleMentionReplyEventWithRelatedEvents(t *testing.T) {
 	notifications := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
 	require.Len(t, notifications, 1)
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
-	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeMentionReply].Body, "@Author Display Name"), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "related_events", "Data should contain related events")

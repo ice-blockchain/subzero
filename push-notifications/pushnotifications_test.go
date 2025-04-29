@@ -76,11 +76,11 @@ func TestCreateNotifications(t *testing.T) {
 				require.Contains(t, notification.Data, "title")
 				require.Contains(t, notification.Data, "body")
 				require.Contains(t, notification.Data, "imageUrl")
-				require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeReaction].Body, "Someone"), notification.Data["body"])
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Data["body"])
 			} else {
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title)
-				require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeReaction].Body, "Someone"), notification.Body)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL)
 			}
 		}
 	})
@@ -557,9 +557,9 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 	t.Run("Returns default translation when no related events", func(t *testing.T) {
 		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
-		require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeReaction].Body, "Someone"), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
 	})
 
 	t.Run("Returns translation with display name when available", func(t *testing.T) {
@@ -583,9 +583,9 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 
 		translation := pm.getTranslationWithRelatedInfo(NotificationTypeMentionReply, profileEvent)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, translation.Title)
-		require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeMentionReply].Body, "@User Display Name"), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, translation.ImageURL)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), translation.ImageURL)
 	})
 
 	t.Run("Returns translation with name when display name not available", func(t *testing.T) {
@@ -608,9 +608,9 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 
 		translation := pm.getTranslationWithRelatedInfo(NotificationTypeNewFollower, profileEvent)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, translation.Title)
-		require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "@username"), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, translation.ImageURL)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(profileEvent), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), translation.ImageURL)
 	})
 
 	t.Run("Returns default translation with 'Someone' when no name or display name", func(t *testing.T) {
@@ -631,9 +631,9 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 
 		translation := pm.getTranslationWithRelatedInfo(NotificationTypeRepost, profileEvent)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title, translation.Title)
-		require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeRepost].Body, "Someone"), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].ImageURL, translation.ImageURL)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].ImageURL(), translation.ImageURL)
 	})
 
 	t.Run("Returns default translation when profile event has invalid JSON", func(t *testing.T) {
@@ -646,9 +646,9 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 
 		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction, profileEvent)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
 	})
 
 	t.Run("Uses first profile metadata event when multiple provided", func(t *testing.T) {
@@ -694,9 +694,9 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 
 		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction, otherEvent, profileEvent1, profileEvent2)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
-		require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeReaction].Body, "@First User"), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(profileEvent1), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
 	})
 }
 
@@ -864,11 +864,8 @@ func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
 		kind     int
 		expected bool
 	}{
-		{"DirectMessage", nostr.KindDirectMessage, true},
-		{"IONDirectMessage", model.CustomIONDirectMessage, true},
-		{"FundReceive", model.CustomIONKindFundReceive, true},
-		{"FundSendNotify", model.CustomIONKindFundSendNotify, true},
-		{"Reaction", nostr.KindReaction, false},
+		{"GiftWrap", nostr.KindGiftWrap, true},
+		{"SystemMessage", model.CustomIONSystemMessage, true},
 	}
 
 	for _, tc := range tests {
@@ -878,7 +875,7 @@ func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
 
 			event := &model.Event{
 				Event: nostr.Event{
-					Kind: nostr.KindGiftWrap,
+					Kind: tc.kind,
 					Tags: nostr.Tags{
 						nostr.Tag{"k", strconv.Itoa(tc.kind)},
 						nostr.Tag{"p", "recipient_pubkey", "device_pubkey"},

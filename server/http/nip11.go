@@ -13,11 +13,10 @@ import (
 
 type (
 	FCMConfig struct {
-		ApiKey            string `json:"apiKey,omitempty"`
-		AppID             string `json:"appId,omitempty"`
-		SenderID          string `json:"senderId,omitempty"`
-		MessagingSenderID string `json:"messagingSenderId,omitempty"`
-		ProjectID         string `json:"projectId,omitempty"`
+		ApiKey            string `json:"apiKey"`
+		AppID             string `json:"appId"`
+		MessagingSenderID string `json:"messagingSenderId"`
+		ProjectID         string `json:"projectId"`
 	}
 
 	RelayInformationDocument struct {
@@ -66,7 +65,11 @@ func (n *nip11handler) info() RelayInformationDocument {
 	for _, jsonStr := range n.cfg.FCMAndroidConfigs {
 		var config FCMConfig
 		if err := json.Unmarshal([]byte(jsonStr), &config); err == nil {
-			androidConfigs = append(androidConfigs, config)
+			if isValidFCMConfig(config) {
+				androidConfigs = append(androidConfigs, config)
+			} else {
+				log.Printf("Invalid Android FCM config %v: missing required fields", config)
+			}
 		} else {
 			log.Printf("Failed to parse Android FCM config: %v", err)
 		}
@@ -75,7 +78,11 @@ func (n *nip11handler) info() RelayInformationDocument {
 	for _, jsonStr := range n.cfg.FCMIOSConfigs {
 		var config FCMConfig
 		if err := json.Unmarshal([]byte(jsonStr), &config); err == nil {
-			iosConfigs = append(iosConfigs, config)
+			if isValidFCMConfig(config) {
+				iosConfigs = append(iosConfigs, config)
+			} else {
+				log.Printf("Invalid iOS FCM config %v: missing required fields", config)
+			}
 		} else {
 			log.Printf("Failed to parse iOS FCM config: %v", err)
 		}
@@ -83,7 +90,11 @@ func (n *nip11handler) info() RelayInformationDocument {
 	for _, jsonStr := range n.cfg.FCMWebConfigs {
 		var config FCMConfig
 		if err := json.Unmarshal([]byte(jsonStr), &config); err == nil {
-			webConfigs = append(webConfigs, config)
+			if isValidFCMConfig(config) {
+				webConfigs = append(webConfigs, config)
+			} else {
+				log.Printf("Invalid Web FCM config %v: missing required fields", config)
+			}
 		} else {
 			log.Printf("Failed to parse Web FCM config: %v", err)
 		}
@@ -105,4 +116,11 @@ func (n *nip11handler) info() RelayInformationDocument {
 		FCMIOSConfigs:     iosConfigs,
 		FCMWebConfigs:     webConfigs,
 	}
+}
+
+func isValidFCMConfig(config FCMConfig) bool {
+	return config.ApiKey != "" &&
+		config.AppID != "" &&
+		config.MessagingSenderID != "" &&
+		config.ProjectID != ""
 }

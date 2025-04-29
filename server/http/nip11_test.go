@@ -120,9 +120,9 @@ func TestNIP11(t *testing.T) {
 func TestFCMConfigParsing(t *testing.T) {
 	t.Parallel()
 
-	androidConfig := `{"apiKey":"android-key","appId":"android-app-id","senderId":"android-sender","messagingSenderId":"android-messaging-sender","projectId":"android-project"}`
-	iosConfig := `{"apiKey":"ios-key","appId":"ios-app-id","senderId":"ios-sender"}`
-	webConfig := `{"apiKey":"web-key","projectId":"web-project"}`
+	androidConfig := `{"apiKey":"android-key","appId":"android-app-id","messagingSenderId":"android-messaging-sender","projectId":"android-project"}`
+	iosConfig := `{"apiKey":"ios-key","appId":"ios-app-id","messagingSenderId":"ios-messaging-sender","projectId":"ios-project"}`
+	webConfig := `{"apiKey":"web-key","appId":"web-app-id","messagingSenderId":"web-messaging-sender","projectId":"web-project"}`
 
 	handler := nip11handler{
 		cfg: &Config{
@@ -139,7 +139,6 @@ func TestFCMConfigParsing(t *testing.T) {
 	androidCfg := info.FCMAndroidConfigs[0]
 	require.Equal(t, "android-key", androidCfg.ApiKey)
 	require.Equal(t, "android-app-id", androidCfg.AppID)
-	require.Equal(t, "android-sender", androidCfg.SenderID)
 	require.Equal(t, "android-messaging-sender", androidCfg.MessagingSenderID)
 	require.Equal(t, "android-project", androidCfg.ProjectID)
 
@@ -147,16 +146,14 @@ func TestFCMConfigParsing(t *testing.T) {
 	iosCfg := info.FCMIOSConfigs[0]
 	require.Equal(t, "ios-key", iosCfg.ApiKey)
 	require.Equal(t, "ios-app-id", iosCfg.AppID)
-	require.Equal(t, "ios-sender", iosCfg.SenderID)
-	require.Empty(t, iosCfg.MessagingSenderID)
-	require.Empty(t, iosCfg.ProjectID)
+	require.Equal(t, "ios-messaging-sender", iosCfg.MessagingSenderID)
+	require.Equal(t, "ios-project", iosCfg.ProjectID)
 
 	require.Len(t, info.FCMWebConfigs, 1)
 	webCfg := info.FCMWebConfigs[0]
 	require.Equal(t, "web-key", webCfg.ApiKey)
-	require.Empty(t, webCfg.AppID)
-	require.Empty(t, webCfg.SenderID)
-	require.Empty(t, webCfg.MessagingSenderID)
+	require.Equal(t, "web-app-id", webCfg.AppID)
+	require.Equal(t, "web-messaging-sender", webCfg.MessagingSenderID)
 	require.Equal(t, "web-project", webCfg.ProjectID)
 
 	handlerWithInvalidJSON := nip11handler{

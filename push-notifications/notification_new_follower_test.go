@@ -4,7 +4,6 @@ package pushnotifications
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -138,9 +137,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
-	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "Someone"), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
@@ -266,16 +265,16 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		require.Equal(t, followListEvent.String(), notification.Data["event"], "Event should match")
 
 		if platform == validation.DeviceTokenOSIOS || platform == validation.DeviceTokenOSWeb {
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
-			require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "Someone"), notification.Body, "Body should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL, "Image URL should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title, "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body, "Body should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL, "Image URL should match")
 		} else if platform == validation.DeviceTokenOSAndroid {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
 			require.Equal(t, "", notification.ImageURL, "Image URL should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Data["title"], "Title should match")
-			require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "Someone"), notification.Data["body"], "Body should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.Data["imageUrl"], "Image URL should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Data["title"], "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Data["body"], "Body should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.Data["imageUrl"], "Image URL should match")
 		}
 	}
 
@@ -500,9 +499,9 @@ func TestCreateNewFollowerNotificationWithRelatedEvents(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
-	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeNewFollower].Body, "@Follower Display Name"), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(profileEvent), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")

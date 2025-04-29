@@ -4,7 +4,6 @@ package pushnotifications
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -239,8 +238,8 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.Len(t, notifications, 1, "Should create one notification")
 
 		notification := notifications[0]
-		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
-		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
+		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Title, "Title should match")
+		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Body, "Body should match")
 		assert.Equal(t, deviceEvent, notification.Target, "Target should match")
 		assert.Contains(t, notification.Data, "event", "Data should contain event")
 	})
@@ -500,13 +499,13 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			require.Contains(t, notification.Data, "event", "Data should contain event")
 
 			if platform == validation.DeviceTokenOSIOS || platform == validation.DeviceTokenOSWeb {
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
+				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Title, "Title should match")
+				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Body, "Body should match")
 			} else if platform == validation.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android devices")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android devices")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Data["title"], "Title in data should match")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Data["body"], "Body in data should match")
+				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Data["title"], "Title in data should match")
+				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Data["body"], "Body in data should match")
 			}
 		}
 	})
@@ -595,9 +594,9 @@ func TestHandleCommunityMessageEventWithRelatedEvents(t *testing.T) {
 	require.Len(t, notifications, 1)
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
-	require.Equal(t, fmt.Sprintf(DefaultTranslations[NotificationTypeMentionReply].Body, "@Author Display Name"), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "related_events", "Data should contain related events")
