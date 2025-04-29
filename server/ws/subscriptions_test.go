@@ -366,7 +366,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	var validEventNIP09WithEKTags, validEventNIP09AllTags *model.Event
+	var validEventNIP09WithEKTags, validEventNIP09AllTags, validEventAccountDelete *model.Event
 	t.Run("kind 5 (Deletion) (NIP-05): valid event with e/k tag", func(t *testing.T) {
 		validEventNIP09WithEKTags = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
@@ -374,7 +374,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Tags: model.Tags{
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
 				{"k", "1"},
-				{model.CustomIONTagOnBehalfOf, "foo"},
 			},
 			Content: "Deletion reason",
 		}}
@@ -389,21 +388,20 @@ func TestPublishingNIP09Events(t *testing.T) {
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
 				{"k", "1"},
 				{"a", "1:foo:"},
-				{model.CustomIONTagOnBehalfOf, "foo"},
 			},
 			Content: "Deletion reason",
 		}}
 		helperSignWithMinLeadingZeroBits(t, validEventNIP09AllTags, privkey)
 		require.NoError(t, relay.Publish(ctx, validEventNIP09AllTags.Event))
 	})
-	t.Run("kind 5 (Deletion) (NIP-05): invalid event, no required tags", func(t *testing.T) {
-		invalidEvent := &model.Event{Event: nostr.Event{
+	t.Run("kind 5 (Deletion) (NIP-05): account deletion", func(t *testing.T) {
+		validEventAccountDelete = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
-			Content:   "Deletion reason",
+			Content:   "account deletion reason",
 		}}
-		helperSignWithMinLeadingZeroBits(t, invalidEvent, privkey)
-		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
+		helperSignWithMinLeadingZeroBits(t, validEventAccountDelete, privkey)
+		require.NoError(t, relay.Publish(ctx, validEventAccountDelete.Event))
 	})
 	t.Run("kind 5 (Deletion) (NIP-05): invalid event, mismatch e -> k tags", func(t *testing.T) {
 		invalidEvent := &model.Event{Event: nostr.Event{
@@ -411,7 +409,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"e", "b3e392b11f5d4f28321cedd09303a748acfd0487aea5a7450b3481c60b6e4f87", "wss://relay.example.com"},
-				{model.CustomIONTagOnBehalfOf, "foo"},
 			},
 			Content: "Deletion reason",
 		}}
@@ -424,7 +421,6 @@ func TestPublishingNIP09Events(t *testing.T) {
 			Kind:      nostr.KindDeletion,
 			Tags: model.Tags{
 				{"r", "wss://relay.example.com"},
-				{model.CustomIONTagOnBehalfOf, "foo"},
 			},
 			Content: "Deletion reason",
 		}}
@@ -433,7 +429,7 @@ func TestPublishingNIP09Events(t *testing.T) {
 	})
 
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validEventNIP09WithEKTags, validEventNIP09AllTags}, storedEvents)
+	require.ElementsMatch(t, []*model.Event{validEventNIP09WithEKTags, validEventAccountDelete, validEventNIP09AllTags}, storedEvents)
 }
 
 func TestPublishingNIP09Events_NoEvent(t *testing.T) {

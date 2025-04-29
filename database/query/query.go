@@ -282,7 +282,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		if len(genericFilters) == 0 {
 			panic("attempt to delete events without filters")
 		}
-		where, params, err = builder.BuildSingleWhere(db.extendWhereFilters(ctx, genericFilters...)...)
+		where, params, err = builder.BuildSingleWhere(genericFilters...)
 	}
 	if err != nil {
 		return 0, nil, errors.Wrap(err, "failed to generate events where clause")
@@ -333,52 +333,9 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 }
 
 func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
-	var selectFilters []model.Filter
-	for _, filter := range filters {
-		fltr := model.Filter{
-			IDs:     filter.IDs,
-			Authors: []string{filter.Author},
-		}
-		for _, e := range filter.Events {
-			fltr.Authors = append(fltr.Authors, filter.Author)
-			fltr.Kinds = append(fltr.Kinds, e.Kind)
-			if e.Dtag != "" {
-				fltr.Tags = model.TagMap{}.SetLiterals("d", e.Dtag)
-			}
-			selectFilters = append(selectFilters, fltr)
-		}
-	}
-
-	var filtersToDelete []databaseFilterDelete
-	for ev, err := range db.SelectEvents(ctx, selectFilters...) {
-		if err != nil {
-			return errors.Wrap(db.handleError(err), "failed to exec select events")
-		}
-		for _, filter := range filters {
-			if len(filter.IDs) == 0 && len(filter.Events) == 0 && filter.Author == ev.PubKey {
-				filtersToDelete = append(filtersToDelete, filter)
-
-				break
-			}
-			if slices.Contains(filter.IDs, ev.ID) {
-				filtersToDelete = append(filtersToDelete, filter)
-			}
-			for _, e := range filter.Events {
-				if e.Pubkey == ev.PubKey && e.Kind == ev.Kind && e.Dtag == ev.Tags.GetD() {
-					filtersToDelete = append(filtersToDelete, filter)
-
-					break
-				}
-			}
-		}
-	}
-	if len(filtersToDelete) == 0 {
+	_, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filters)
+	if err != nil {
 		return nil
-	}
-
-	deleted, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filtersToDelete)
-	if deleted == 0 && err == nil {
-		err = ErrUnexpectedRowsAffected
 	}
 
 	for len(filtersToDelete) > 0 && err == nil {

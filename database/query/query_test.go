@@ -734,7 +734,10 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			var ev model.Event
 			ev.Kind = nostr.KindDeletion
 			ev.CreatedAt = 11
-			ev.Tags = model.Tags{{"e", user1MessageIds[1]}}
+			ev.Tags = model.Tags{
+				{"e", user1MessageIds[1]},
+				{model.CustomIONTagOnBehalfOf, masterPublic},
+			}
 			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
@@ -758,11 +761,13 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(hackerPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(t.Context(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 
 			ev.Tags = model.Tags{{"e", masterMessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(hackerPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(t.Context(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+
+			require.EqualValues(t, 2, counter(t, nil, []string{user2MessageIds[0], masterMessageIds[0]}, nil))
 		})
 		t.Run("User1 could not remove master events", func(t *testing.T) {
 			var ev model.Event
@@ -770,7 +775,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", masterMessageIds[1]}}
 			require.NoError(t, ev.SignWithAlg(user2Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(t.Context(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			mustBeOne(t, masterMessageIds[1])
 			require.Equal(t, int64(4), counter(t, []int{nostr.KindTextNote}, nil, []string{masterPublic}))
 		})
@@ -791,7 +796,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			ev.CreatedAt = 11
 			ev.Tags = model.Tags{{"e", user2MessageIds[0]}}
 			require.NoError(t, ev.SignWithAlg(user1Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.Error(t, db.AcceptEvents(t.Context(), &ev))
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			mustBeOne(t, user2MessageIds[0])
 		})
 	})

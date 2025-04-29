@@ -51,7 +51,7 @@ require (
 	github.com/xssnick/tonutils-storage v0.8.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.39.0
-	google.golang.org/api v0.230.0
+	google.golang.org/api v0.231.0
 	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
 )
 
@@ -166,7 +166,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	github.com/planetscale/vtprotobuf v0.6.1-0.20250313105119-ba97887b0a25 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/pterm/pterm v0.12.80 // indirect

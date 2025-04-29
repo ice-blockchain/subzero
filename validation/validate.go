@@ -118,7 +118,7 @@ var (
 		nostr.KindTextNote:              tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
 		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
 		nostr.KindFollowList:            tagsTable("p"),
-		nostr.KindDeletion:              newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce").Required(model.CustomIONTagOnBehalfOf).Build(),
+		nostr.KindDeletion:              newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
 		nostr.KindRepost:                newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
 		nostr.KindReaction:              newKindValidatorBuilder().Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindBadgeAward:            tagsTable("a", "p"),
@@ -856,6 +856,11 @@ func validateKindProfileBadgesEvent(e *model.Event) error {
 }
 
 func validateKindDeletionEvent(ctx context.Context, e *model.Event) error {
+	if len(e.Tags) == 0 {
+		// Account deletion request.
+		return nil
+	}
+
 	if eTags, kTags := e.GetTags("e"), e.GetTags("k"); len(eTags) != len(kTags) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-09: deletion request should include k tag for the each event: found %d e tags and %d k tags", len(eTags), len(kTags))
 	}
