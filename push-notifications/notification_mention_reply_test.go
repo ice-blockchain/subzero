@@ -3,6 +3,7 @@
 package pushnotifications
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -100,9 +101,9 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	require.Len(t, notifications, 2)
 	for _, notification := range notifications {
 		if notification.Target.GetTag("t").Value() == "ios" {
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title, "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, notification.Body, "Body should match")
-			require.Contains(t, notification.Data, "event", "Data should contain event")
+			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
+			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
 		} else {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
@@ -155,8 +156,9 @@ func TestMention(t *testing.T) {
 	notifications := pm.handleMentionReplyEvent(event)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications, 1)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, notifications[0].Body, "Body should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notifications[0].Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notifications[0].ImageURL)
 	require.Contains(t, notifications[0].Data["event"], event.String(), "Data should contain event")
 }
 
@@ -198,4 +200,93 @@ func TestSelfReplyNotification(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
 	require.Empty(t, pm.handleMentionReplyEvent(selfReplyEvent), "Self-reply should not create notifications")
+}
+
+func TestHandleMentionReplyEventWithRelatedEvents(t *testing.T) {
+	t.Parallel()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	authorPubKey := "author_pubkey_" + uuid.NewString()
+	mentionedPubKey := "mentioned_pubkey_" + uuid.NewString()
+
+	profileData := struct {
+		Name        string `json:"name,omitempty"`
+		DisplayName string `json:"display_name,omitempty"`
+	}{
+		Name:        "AuthorUsername",
+		DisplayName: "Author Display Name",
+	}
+
+	profileJSON, err := json.Marshal(profileData)
+	require.NoError(t, err)
+
+	profileEvent := &model.Event{
+		Event: nostr.Event{
+			ID:      "profile_id_" + uuid.NewString(),
+			PubKey:  authorPubKey,
+			Kind:    nostr.KindProfileMetadata,
+			Content: string(profileJSON),
+		},
+	}
+
+	mentionEvent := helperCreatePostEvent(
+		t,
+		"mention_id_"+uuid.NewString(),
+		authorPubKey,
+		nostr.KindTextNote,
+		"Post mentioning someone",
+		nostr.Tags{
+			{"e", "event_id", "", model.TagMarkerMention},
+			{"p", mentionedPubKey},
+		},
+	)
+
+	deviceID := "device1_" + uuid.NewString()
+	deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		t,
+		mentionedPubKey,
+		deviceID,
+		nostr.Tags{
+			{"t", "ios"},
+			{"d", deviceID},
+			{"token", "token1_" + uuid.NewString()},
+		},
+		nostr.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+			},
+		},
+	)
+
+	pm.deviceMutex.Lock()
+	pm.userDevicesMap[mentionedPubKey] = map[DeviceID]DeviceInfo{
+		DeviceID(deviceID): {
+			DeviceID: DeviceID(deviceID),
+			Filters: nostr.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+				},
+			},
+			Event: deviceEvent,
+		},
+	}
+	pm.deviceMutex.Unlock()
+
+	notifications := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
+	require.Len(t, notifications, 1)
+	notification := notifications[0]
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Contains(t, notification.Data, "related_events", "Data should contain related events")
+
+	relatedEvents, ok := notification.Data["related_events"].([]string)
+	require.True(t, ok, "related_events should be a string slice")
+	require.Len(t, relatedEvents, 1, "Should have one related event")
+	require.Contains(t, relatedEvents[0], profileEvent.ID, "Related event should match profile event")
 }

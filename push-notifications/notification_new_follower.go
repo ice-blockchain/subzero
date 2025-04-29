@@ -13,7 +13,7 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, event *model.Event, relatedEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	oldEvent, err := pm.getOldFollowListEvent(ctx, event.GetMasterPublicKey())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get old follow list event")
@@ -23,7 +23,7 @@ func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, e
 		return nil, nil
 	}
 
-	return pm.createNewFollowerNotification(event, recipientPubKey), nil
+	return pm.createNewFollowerNotification(event, recipientPubKey, relatedEvents...), nil
 }
 
 func (pm *PushNotificationManager) getOldFollowListEvent(ctx context.Context, authorPubKey string) (*model.Event, error) {
@@ -66,8 +66,8 @@ func (pm *PushNotificationManager) getLastFollowerPubkey(event *model.Event, old
 	return currentPTags[len(currentPTags)-1].Value()
 }
 
-func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
 	devices := pm.collectUserValidDevices(recipientPubKey, event)
 
-	return pm.createNotifications(devices, NotificationTypeNewFollower, event)
+	return pm.createNotifications(devices, NotificationTypeNewFollower, event, relatedEvents...)
 }

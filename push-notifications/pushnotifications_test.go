@@ -5,6 +5,8 @@ package pushnotifications
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -74,10 +76,11 @@ func TestCreateNotifications(t *testing.T) {
 				require.Contains(t, notification.Data, "title")
 				require.Contains(t, notification.Data, "body")
 				require.Contains(t, notification.Data, "imageUrl")
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Data["body"])
 			} else {
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL)
 			}
 		}
 	})
@@ -417,6 +420,81 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		require.Empty(t, single)
 		require.Empty(t, topic)
 	})
+
+	t.Run("Processes ephemeral events correctly", func(t *testing.T) {
+		mainEventID := "main-event-id"
+		mainEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   mainEventID,
+				Kind: nostr.KindTextNote,
+				Tags: nostr.Tags{
+					nostr.Tag{"p", "recipient-pubkey"},
+				},
+			},
+		}
+
+		ephemeralEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", mainEventID},
+				},
+			},
+		}
+
+		events := []*model.Event{mainEvent, ephemeralEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
+
+	t.Run("Processes ephemeral events with a tag correctly", func(t *testing.T) {
+		pubKey := "test-pub-key"
+		mainEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "main-event-id",
+				Kind:   nostr.KindTextNote,
+				PubKey: pubKey,
+			},
+		}
+
+		ephemeralEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"a", fmt.Sprintf("30023:%v", pubKey)},
+				},
+			},
+		}
+
+		events := []*model.Event{mainEvent, ephemeralEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
+
+	t.Run("Skips ephemeral events when shouldSkipEphemeralEvent returns true", func(t *testing.T) {
+		mainEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   "main-event-id",
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", "some-other-event-id"},
+				},
+			},
+		}
+
+		events := []*model.Event{mainEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
 }
 
 func TestShouldProcessGenericRepostEvent(t *testing.T) {
@@ -469,4 +547,344 @@ func TestShouldProcessGenericRepostEvent(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, shouldProcess)
 	})
+}
+
+func TestGetTranslationWithRelatedInfo(t *testing.T) {
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	t.Run("Returns default translation when no related events", func(t *testing.T) {
+		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction)
+
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
+	})
+
+	t.Run("Returns translation with display name when available", func(t *testing.T) {
+		profileData := struct {
+			Name        string `json:"name,omitempty"`
+			DisplayName string `json:"display_name,omitempty"`
+		}{
+			Name:        "username",
+			DisplayName: "User Display Name",
+		}
+
+		content, err := json.Marshal(profileData)
+		require.NoError(t, err)
+
+		profileEvent := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindProfileMetadata,
+				Content: string(content),
+			},
+		}
+
+		translation := pm.getTranslationWithRelatedInfo(NotificationTypeMentionReply, profileEvent)
+
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), translation.ImageURL)
+	})
+
+	t.Run("Returns translation with name when display name not available", func(t *testing.T) {
+		profileData := struct {
+			Name        string `json:"name,omitempty"`
+			DisplayName string `json:"display_name,omitempty"`
+		}{
+			Name: "username",
+		}
+
+		content, err := json.Marshal(profileData)
+		require.NoError(t, err)
+
+		profileEvent := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindProfileMetadata,
+				Content: string(content),
+			},
+		}
+
+		translation := pm.getTranslationWithRelatedInfo(NotificationTypeNewFollower, profileEvent)
+
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(profileEvent), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), translation.ImageURL)
+	})
+
+	t.Run("Returns default translation with 'Someone' when no name or display name", func(t *testing.T) {
+		profileData := struct {
+			Name        string `json:"name,omitempty"`
+			DisplayName string `json:"display_name,omitempty"`
+		}{}
+
+		content, err := json.Marshal(profileData)
+		require.NoError(t, err)
+
+		profileEvent := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindProfileMetadata,
+				Content: string(content),
+			},
+		}
+
+		translation := pm.getTranslationWithRelatedInfo(NotificationTypeRepost, profileEvent)
+
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].ImageURL(), translation.ImageURL)
+	})
+
+	t.Run("Returns default translation when profile event has invalid JSON", func(t *testing.T) {
+		profileEvent := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindProfileMetadata,
+				Content: "invalid json",
+			},
+		}
+
+		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction, profileEvent)
+
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
+	})
+
+	t.Run("Uses first profile metadata event when multiple provided", func(t *testing.T) {
+		profileData1 := struct {
+			Name        string `json:"name,omitempty"`
+			DisplayName string `json:"display_name,omitempty"`
+		}{
+			DisplayName: "First User",
+		}
+
+		content1, err := json.Marshal(profileData1)
+		require.NoError(t, err)
+
+		profileEvent1 := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindProfileMetadata,
+				Content: string(content1),
+			},
+		}
+
+		profileData2 := struct {
+			Name        string `json:"name,omitempty"`
+			DisplayName string `json:"display_name,omitempty"`
+		}{
+			DisplayName: "Second User",
+		}
+
+		content2, err := json.Marshal(profileData2)
+		require.NoError(t, err)
+
+		profileEvent2 := &model.Event{
+			Event: nostr.Event{
+				Kind:    nostr.KindProfileMetadata,
+				Content: string(content2),
+			},
+		}
+
+		otherEvent := &model.Event{
+			Event: nostr.Event{
+				Kind: nostr.KindTextNote,
+			},
+		}
+
+		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction, otherEvent, profileEvent1, profileEvent2)
+
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(profileEvent1), translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
+	})
+}
+
+func TestSortEphemeralEvents(t *testing.T) {
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	t.Run("Empty events list returns empty maps", func(t *testing.T) {
+		ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(nil)
+		require.Empty(t, ephemeralEvents)
+		require.Empty(t, nonEphemeralEvents)
+	})
+
+	t.Run("Non-ephemeral events are correctly sorted", func(t *testing.T) {
+		events := []*model.Event{
+			{
+				Event: nostr.Event{
+					ID:     "event1",
+					Kind:   nostr.KindTextNote,
+					PubKey: "pub-key-1",
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:     "event2",
+					Kind:   nostr.KindFollowList,
+					PubKey: "pub-key-2",
+				},
+			},
+		}
+
+		ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
+		require.Empty(t, ephemeralEvents)
+		require.Len(t, nonEphemeralEvents, 2)
+		require.Equal(t, events, nonEphemeralEvents)
+	})
+
+	t.Run("Ephemeral events with e tag are correctly sorted", func(t *testing.T) {
+		refID := "ref-event-id"
+		ephemeralEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   "ephemeral-event",
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", refID},
+				},
+			},
+		}
+		regularEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     refID,
+				Kind:   nostr.KindTextNote,
+				PubKey: "pub-key-1",
+			},
+		}
+
+		events := []*model.Event{ephemeralEvent, regularEvent}
+
+		ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
+		require.Len(t, ephemeralEvents, 1)
+		require.Len(t, nonEphemeralEvents, 1)
+		require.Equal(t, []*model.Event{ephemeralEvent}, ephemeralEvents[refID])
+		require.Equal(t, []*model.Event{regularEvent}, nonEphemeralEvents)
+	})
+
+	t.Run("Ephemeral events with a tag are correctly sorted", func(t *testing.T) {
+		pubKey := "pub-key-1"
+		regularEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "regular-event",
+				Kind:   nostr.KindTextNote,
+				PubKey: "pub",
+				Tags:   nostr.Tags{nostr.Tag{"b", pubKey}},
+			},
+		}
+		ephemeralEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   "ephemeral-event",
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"a", "30023:" + pubKey + ":some-other-data"},
+				},
+			},
+		}
+
+		events := []*model.Event{ephemeralEvent, regularEvent}
+
+		ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
+		require.Len(t, ephemeralEvents, 1)
+		require.Len(t, nonEphemeralEvents, 1)
+		require.Equal(t, []*model.Event{ephemeralEvent}, ephemeralEvents[regularEvent.ID])
+		require.Equal(t, []*model.Event{regularEvent}, nonEphemeralEvents)
+	})
+
+	t.Run("Multiple ephemeral events for same reference are grouped", func(t *testing.T) {
+		refID := "ref-event-id"
+		ephemeralEvent1 := &model.Event{
+			Event: nostr.Event{
+				ID:   "ephemeral-event-1",
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", refID},
+				},
+			},
+		}
+		ephemeralEvent2 := &model.Event{
+			Event: nostr.Event{
+				ID:   "ephemeral-event-2",
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", refID},
+				},
+			},
+		}
+		regularEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     refID,
+				Kind:   nostr.KindTextNote,
+				PubKey: "pub-key-1",
+			},
+		}
+
+		events := []*model.Event{ephemeralEvent1, ephemeralEvent2, regularEvent}
+
+		ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
+		require.Len(t, ephemeralEvents, 1)
+		require.Len(t, nonEphemeralEvents, 1)
+		require.Len(t, ephemeralEvents[refID], 2)
+		require.Contains(t, ephemeralEvents[refID], ephemeralEvent1)
+		require.Contains(t, ephemeralEvents[refID], ephemeralEvent2)
+		require.Equal(t, []*model.Event{regularEvent}, nonEphemeralEvents)
+	})
+
+	t.Run("Ephemeral events without valid tags are added to nonEphemeral events", func(t *testing.T) {
+		ephemeralEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   "ephemeral-event",
+				Kind: model.CustomIONKindEphemeralEmbeddding,
+			},
+		}
+		regularEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "regular-event",
+				Kind:   nostr.KindTextNote,
+				PubKey: "pub-key-1",
+			},
+		}
+
+		events := []*model.Event{ephemeralEvent, regularEvent}
+
+		ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
+		require.Empty(t, ephemeralEvents)
+		require.Len(t, nonEphemeralEvents, 1)
+		require.NotContains(t, nonEphemeralEvents, ephemeralEvent)
+		require.Contains(t, nonEphemeralEvents, regularEvent)
+	})
+}
+
+func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		kind     int
+		expected bool
+	}{
+		{"GiftWrap", nostr.KindGiftWrap, true},
+		{"SystemMessage", model.CustomIONSystemMessage, true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			event := &model.Event{
+				Event: nostr.Event{
+					Kind: tc.kind,
+					Tags: nostr.Tags{
+						nostr.Tag{"k", strconv.Itoa(tc.kind)},
+						nostr.Tag{"p", "recipient_pubkey", "device_pubkey"},
+					},
+				},
+			}
+
+			result := shouldSkipEphemeralEvent(event)
+			require.Equal(t, tc.expected, result, "Unexpected result for kind %d (%s)", tc.kind, tc.name)
+		})
+	}
 }
