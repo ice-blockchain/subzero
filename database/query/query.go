@@ -335,7 +335,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
 	_, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filters)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	for len(filtersToDelete) > 0 && err == nil {
