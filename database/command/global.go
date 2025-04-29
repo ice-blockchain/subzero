@@ -4,7 +4,6 @@ package command
 
 import (
 	"context"
-	"github.com/ice-blockchain/cometbft/p2p"
 	"os"
 	"sync"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex"
+	"github.com/ice-blockchain/cometbft/p2p"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
 )

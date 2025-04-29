@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"encoding/hex"
 	"log"
 	"os"
 	"strconv"
@@ -121,4 +122,139 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 	}}
 	require.NoError(t, profileEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, c.broadcastUserEvents(t.Context(), deletionProfile))
+}
+
+func TestBroadcastLinkedEvent(t *testing.T) {
+	masterPrivKey, masterPubkey := model.GenerateKeyPair()
+	priv, pk := model.GenerateKeyPair()
+	attestationEvent := &model.Event{Event: nostr.Event{
+		Kind:      model.CustomIONKindAttestation,
+		CreatedAt: 1,
+		Tags: model.Tags{
+			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+		},
+	}}
+	require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	relaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+			[]string{"r", "wss://localhost:9988"},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent, relaysList))
+
+	privkeyOfRepostedNote, pubKeyOfRepostedNote := model.GenerateKeyPair()
+	masterPrivKeyOfRepostedNote, masterPubkeyOfRepostedNote := model.GenerateKeyPair()
+
+	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
+		for _, tx := range transactions {
+			evs, err := mapTxToEvent(tx)
+			require.NoError(t, err)
+			unhex, err := hex.DecodeString(masterPubkeyOfRepostedNote)
+			require.NoError(t, err)
+			addr, err := client.PubKeyToAddress(string(unhex))
+			require.NoError(t, err)
+			expected := map[int]string{
+				nostr.KindTextNote: addr,
+				nostr.KindRepost:   addr,
+				nostr.KindReaction: addr,
+			}
+			for _, ev := range evs {
+				require.Equal(t, expected[ev.Kind], userAddress)
+			}
+		}
+	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
+		require.Fail(t, "Rollback should not be called")
+	})
+	c.client = consensusClient
+
+	t.Run("repost", func(t *testing.T) {
+		otherUserAttestation := &model.Event{Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: 1,
+			Tags: model.Tags{
+				{model.TagAttestationName, pubKeyOfRepostedNote, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+			},
+		}}
+		require.NoError(t, otherUserAttestation.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		otherUserRelaysList := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
+				[]string{"r", "wss://localhost:9988"},
+				[]string{"r", "wss://localhost:9977"},
+			},
+		}}
+		require.NoError(t, otherUserRelaysList.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(t.Context(), otherUserAttestation, otherUserRelaysList))
+
+		repostedEvent := model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
+			},
+		}}
+		require.NoError(t, repostedEvent.SignWithAlg(privkeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		repostEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRepost,
+			Tags: nostr.Tags{
+				[]string{"e", repostedEvent.ID, "relay"},
+				[]string{"p", repostedEvent.GetMasterPublicKey()},
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+			Content: repostedEvent.String(),
+		}}
+		ack := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.CustomIONKindEphemeralEmbeddding,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+			Content: relaysList.String(),
+		}}
+		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(t.Context(), repostEvent, ack))
+		require.NoError(t, c.broadcastUserEvents(t.Context(), repostEvent, ack))
+	})
+
+	t.Run("reaction", func(t *testing.T) {
+		originalEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
+			},
+			Content: "validEvent",
+		}}
+		require.NoError(t, originalEvent.SignWithAlg(privkeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(t.Context(), originalEvent))
+		reactionEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindReaction,
+			Tags: nostr.Tags{
+				[]string{"e", originalEvent.ID},
+				[]string{"k", strconv.Itoa(originalEvent.Kind)},
+				[]string{"p", originalEvent.PubKey},
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+			Content: "+",
+		}}
+		ack := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      model.CustomIONKindEphemeralEmbeddding,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+			Content: relaysList.String(),
+		}}
+		require.NoError(t, reactionEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, c.broadcastUserEvents(t.Context(), reactionEvent, ack))
+	})
 }

@@ -7,6 +7,8 @@ replace (
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250331131831-51fe89b5e305
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.11.1
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250325160150-e1bb11d2b23c
+	github.com/ice-blockchain/cometbft => ../cometbft
+	github.com/ice-blockchain/cometbft/api => ../cometbft/api
 )
 
 require (

@@ -35,6 +35,8 @@ const consensusTimeout = time.Second * 25
 
 var (
 	ErrMultipleMasterKeys = errors.New("cannot broadcast single batch to multiple master keys")
+
+	errNotFound = errors.New("not found")
 )
 
 func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
@@ -105,48 +107,23 @@ func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, userAddress st
 	return nil
 }
 func (c *consensus) RollbackTxRemoval(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
-	return nil
+	return c.RollbackTx(ctx, userAddress, transactions...)
 }
 
 func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Event) error {
-	userMasterKeys := map[string]bool{}
-	relays := []string{}
-	var profileDeletion *model.Event
-	for _, ev := range events {
-		if ev.IsEphemeral() {
-			continue
-		}
-		if ev.Kind == nostr.KindRelayListMetadata {
-			relays = collectRelaysFromRelayEvent(ev)
-		}
-		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0 || (len(ev.Tags) == 1 && ev.GetTag("b").Value() != "")) && ev.PubKey == ev.GetMasterPublicKey() {
-			profileDeletion = ev
-		}
-		userMasterKeys[ev.GetMasterPublicKey()] = true
-	}
-	if len(userMasterKeys) > 1 {
-		return ErrMultipleMasterKeys
-	}
-	var userMasterKey string
-	for userKey, _ := range userMasterKeys {
-		userMasterKey = userKey
-		break
-	}
-	var err error
-	if len(relays) == 0 {
-		if relays, err = c.fetchUserRelays(ctx, userMasterKey); err != nil {
-			return errors.Wrapf(err, "failed to get relay list for user %v", userMasterKey)
-		}
+	userMasterKey, relays, isProfileDeletion, err := c.getUserAndRelaysForBroadcast(ctx, events...)
+	if err != nil {
+		return errors.Wrapf(err, "failed to detect user master key and relays")
 	}
 	broadcastCtx, broadcastCancel := context.WithTimeout(ctx, consensusTimeout)
 	defer broadcastCancel()
 	notifier := make(chan client.BroadcastStatus, 1)
-	if profileDeletion != nil {
+	if isProfileDeletion {
 		c.client.BroadcastTxRemoval(broadcastCtx, userMasterKey, c.convertRelaysToBroadcastEndpoints(relays...), notifier)
 		res := <-notifier
-		return errors.Wrapf(res.Error, "failed to delete chains for user deletion %v", profileDeletion)
+		return errors.Wrapf(res.Error, "failed to delete chains for user deletion %v", userMasterKey)
 	}
-	txs, err := mapEventsToTXs(ctx, events)
+	txs, err := mapEventsToTXs(events)
 	if err != nil {
 		return errors.Wrapf(err, "failed serialize events: %v", events)
 	}
@@ -164,7 +141,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	c.client.BroadcastTx(broadcastCtx, userAddr, c.convertRelaysToBroadcastEndpoints(relays...), notifier, txs...)
 	err = c.rollbackIfErr(ctx, userMasterKey, notifier, events...)
 
-	return errors.Wrapf(err, "failed to broadcast user events for %v to %#v", userMasterKeys, relays)
+	return errors.Wrapf(err, "failed to broadcast user events for %v to %#v", userMasterKey, relays)
 }
 
 func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey string, notifier <-chan client.BroadcastStatus, events ...*model.Event) error {
@@ -208,6 +185,176 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 	return relays, nil
 }
 
+func (c *consensus) parseEphemeralAckEvent(ev *model.Event) (*model.Event, error) {
+	var ack model.Event
+	err := ack.UnmarshalJSON([]byte(ev.Content))
+	if err != nil {
+		return nil, errors.Wrapf(err, "malformed ack")
+	}
+	return &ack, nil
+}
+
+func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...*model.Event) (masterKey string, relays []string, isProfileDeletion bool, err error) {
+	userMasterKeys := map[string][]string{}
+	var profileDeletion *model.Event
+	matchingEphemeralAckEvents := map[string]*model.Event{}
+	for _, ev := range events {
+		if !ev.IsEphemeral() {
+			continue
+		}
+		if ev.Kind != model.CustomIONKindEphemeralEmbeddding {
+			continue
+		}
+		ackEvent, aErr := c.parseEphemeralAckEvent(ev)
+		if aErr != nil {
+			return "", nil, false, errors.Wrapf(aErr, "malformed 21750: %v", ev.Content)
+		}
+		matchingEphemeralAckEvents[ackEvent.GetMasterPublicKey()] = ackEvent
+	}
+	for _, ev := range events {
+		if ev.IsEphemeral() {
+			continue
+		}
+		if ev.Kind == nostr.KindRelayListMetadata {
+			relays = collectRelaysFromRelayEvent(ev)
+		}
+		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0) && ev.PubKey == ev.GetMasterPublicKey() {
+			profileDeletion = ev
+		}
+		masterKey, err = c.broadcastMasterKey(ctx, ev, matchingEphemeralAckEvents)
+		if err != nil {
+			if errors.Is(err, ErrUserIsNotPresentedOnRelay) {
+				continue
+			}
+			return "", nil, false, errors.Wrapf(err, "failed to get master key to broadcast the event %+v", ev)
+		}
+		if userMasterKeys[masterKey] == nil {
+			userMasterKeys[masterKey] = relays
+		}
+	}
+	if len(userMasterKeys) > 1 {
+		return "", nil, false, ErrMultipleMasterKeys
+	}
+	var userMasterKey string
+	for userKey, _ := range userMasterKeys {
+		userMasterKey = userKey
+		break
+	}
+	if len(userMasterKeys[userMasterKey]) == 0 {
+		if userMasterKeys[userMasterKey], err = c.fetchUserRelays(ctx, userMasterKey); err != nil {
+			return "", nil, false, errors.Wrapf(err, "failed to get relay list for user %v", userMasterKey)
+		}
+	}
+	return userMasterKey, userMasterKeys[userMasterKey], profileDeletion != nil, nil
+}
+
+func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string]*model.Event) (masterKey string, err error) {
+	var ack *model.Event
+	hasAck := false
+	if ack, hasAck = ephemeralAckEvents[ev.GetMasterPublicKey()]; !hasAck {
+		return ev.GetMasterPublicKey(), nil
+	}
+	var linkedEvent *model.Event
+	switch ev.Kind {
+	case nostr.KindRepost, nostr.KindGenericRepost:
+		var repostedEvent model.Event
+		err = repostedEvent.UnmarshalJSON([]byte(ev.Content))
+		if err != nil {
+			return "", errors.Wrapf(err, "malformed repost")
+		}
+		linkedEvent = &repostedEvent
+		masterKey = repostedEvent.GetMasterPublicKey()
+	case nostr.KindFollowList:
+		if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
+			masterKey = pTag[1]
+		}
+	case nostr.KindGiftWrap:
+		if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
+			masterKey = pTag[1]
+			linkedEvent = ev
+		}
+	case nostr.KindReaction, nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
+		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
+			linkedEvent, err = c.getEvent(ctx, eTag.Value())
+			if err != nil {
+				if errors.Is(err, errNotFound) {
+					linkedEvent = nil
+					err = nil
+				}
+				if err != nil {
+					return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
+				}
+			}
+			masterKey = linkedEvent.GetMasterPublicKey()
+		}
+		if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
+			relays, rErr := c.fetchUserRelays(ctx, pTag.Value()) // Mentioned user is presented on relay
+			if rErr == nil && len(relays) > 0 {
+				masterKey = pTag.Value()
+			}
+		}
+		if qTag := ev.GetTag("q"); qTag != nil && qTag.Value() != "" {
+			linkedEvent, err = c.getEvent(ctx, qTag.Value())
+			if err != nil {
+				if errors.Is(err, errNotFound) {
+					linkedEvent = nil
+					err = nil
+				}
+				if err != nil {
+					return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
+				}
+			}
+			if linkedEvent != nil {
+				masterKey = linkedEvent.GetMasterPublicKey()
+			}
+		}
+		if qTag := ev.GetTag("Q"); qTag != nil && qTag.Value() != "" {
+			if splitted := strings.Split(qTag.Value(), ":"); len(splitted) >= 2 {
+				linkedEvent, err = c.getEvent(ctx, splitted[1])
+				if err != nil {
+					if errors.Is(err, errNotFound) {
+						linkedEvent = nil
+						err = nil
+					}
+					if err != nil {
+						return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
+					}
+				}
+				if linkedEvent != nil {
+					masterKey = linkedEvent.GetMasterPublicKey()
+				}
+			}
+		}
+
+	default:
+		masterKey = ev.GetMasterPublicKey()
+	}
+	if linkedEvent == nil && masterKey == "" {
+		return "", ErrUserIsNotPresentedOnRelay
+	}
+	if ev.GetMasterPublicKey() != ack.GetMasterPublicKey() {
+		return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "21750 was not provided with kind %v or b tag mismatch (%v %v)", ev.Kind, linkedEvent.GetMasterPublicKey(), ack.GetMasterPublicKey())
+	}
+	return masterKey, nil
+}
+
+func (c *consensus) getEvent(ctx context.Context, eventID string) (event *model.Event, err error) {
+	it := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{
+		model.Filter{IDs: []string{eventID}},
+	}})
+	for e, iErr := range it {
+		if iErr != nil {
+			return nil, errors.Wrapf(iErr, "failed to fetch linked event for by id %v", eventID)
+		}
+		event = e
+		break
+	}
+	if event == nil {
+		return nil, errNotFound
+	}
+	return event, nil
+}
+
 func collectRelaysFromRelayEvent(ev *model.Event) []string {
 	relays := make([]string, 0, len(ev.Tags))
 	for _, tag := range ev.Tags {
@@ -218,54 +365,17 @@ func collectRelaysFromRelayEvent(ev *model.Event) []string {
 	return relays
 }
 
-func mapEventKindToChainFingerprint(kind int) (fingerprint string) {
-	switch kind {
-	case
-		nostr.KindTextNote,
-		nostr.KindRepost,
-		nostr.KindReaction,
-		nostr.KindGenericRepost,
-		nostr.KindReactionToWebsite,
-		nostr.KindArticle,
-		model.CustomIONKindEditableTextNote,
-		nostr.KindDraftArticle,
-		nostr.KindFileMetadata:
-		fingerprint = client.GetFingerprint("feed")
-	case
-		nostr.KindProfileMetadata,
-		nostr.KindRelayListMetadata,
-		nostr.KindSearchRelayList,
-		nostr.KindInterestSets,
-		nostr.KindInterestList,
-		nostr.KindFollowList,
-		model.CustomIONKindAttestation,
-		nostr.KindDMRelayList,
-		nostr.KindBookmarkSets,
-		nostr.KindBadgeAward,
-		nostr.KindMuteList,
-		nostr.KindPinList,
-		nostr.KindBookmarkList,
-		nostr.KindBlockedRelayList,
-		nostr.KindProfileBadges:
-		fingerprint = client.GetFingerprint("profile")
-	case nostr.KindPublicChatList,
-		nostr.KindSimpleGroupList,
-		nostr.KindGiftWrap,
-		nostr.KindSeal,
-		model.CustomIONKindCommunityJoin,
-		model.CustomIONKindCommunityOwnershipTransferring,
-		model.CustomIONKindCommunityBanUser,
-		model.CustomIONKindCommunityChangeDefinition,
-		model.CustomIONKindCommunityDefinition,
-		nostr.KindDirectMessage:
-		fingerprint = client.GetFingerprint("chat")
-	case model.CustomIONKindFundSendNotify,
-		model.CustomIONKindFundReceive:
-		fingerprint = client.GetFingerprint("wallet")
-	default:
-		fingerprint = client.GetFingerprint("others")
+func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string) {
+	kTagValue := ""
+	kind := event.Kind
+	if event.Kind == nostr.KindRelayListMetadata {
+		kind = model.CustomIONKindAttestation
 	}
-	return
+	if kTag := event.GetTag("k"); kTag != nil {
+		kTagValue = "_" + kTag.Value()
+	}
+
+	return client.GetFingerprint(fmt.Sprintf("%v%v", kind, kTagValue))
 }
 
 func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
@@ -280,14 +390,14 @@ func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
 	return events, err
 }
 
-func mapEventsToTXs(ctx context.Context, events []*model.Event) (txs []client.Transaction, err error) {
+func mapEventsToTXs(events []*model.Event) (txs []client.Transaction, err error) {
 	txs = make([]client.Transaction, 0, len(events))
 	encodedEvents := map[string]nostr.EventEnvelope{}
 	for _, ev := range events {
 		if ev.IsEphemeral() {
 			continue
 		}
-		fingerprint := mapEventKindToChainFingerprint(ev.Kind)
+		fingerprint := mapEventKindToChainFingerprint(ev)
 		var env nostr.EventEnvelope
 		ok := false
 		if env, ok = encodedEvents[fingerprint]; !ok {

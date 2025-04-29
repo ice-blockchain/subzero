@@ -82,7 +82,7 @@ type databaseBatchRequest struct {
 	// Events to delete.
 	Delete []databaseFilterDelete
 	// IDs of replaceable events to rollback update
-	ReplaceableEvents map[string]bool
+	Rollback map[string]bool
 }
 
 func detectImagesVideos(tags model.Tags) (images, videos bool) {
@@ -208,7 +208,7 @@ func (req *databaseBatchRequest) Remove(e *model.Event) error {
 }
 
 func (req *databaseBatchRequest) Empty() bool {
-	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0 && len(req.ReplaceableEvents) == 0
+	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0 && len(req.Rollback) == 0
 }
 
 func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) error {
@@ -255,9 +255,9 @@ func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) 
 		return nil
 	} else {
 		if err := db.executeBatch(ctx, &databaseBatchRequest{
-			InsertOrReplace:   eventsToRollback.InsertOrReplace,
-			Delete:            eventsToRollback.Delete,
-			ReplaceableEvents: eventsToRollback.ReplaceableEvents,
+			InsertOrReplace: eventsToRollback.InsertOrReplace,
+			Delete:          eventsToRollback.Delete,
+			Rollback:        eventsToRollback.ReplaceableEvents,
 		}); err != nil {
 			return errors.Wrap(err, "failed to perform rollback")
 		}
@@ -569,10 +569,10 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 }
 
 func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) (replaceableEvents map[string]bool, inserted []databaseFilterDelete, err error) {
-	if len(req.InsertOrReplace) == 0 && len(req.ReplaceableEvents) == 0 {
+	if len(req.InsertOrReplace) == 0 && len(req.Rollback) == 0 {
 		return map[string]bool{}, []databaseFilterDelete{}, nil
 	}
-	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace, req.ReplaceableEvents)
+	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace, req.Rollback)
 	events := []*model.Event{}
 	replaceableEvents = map[string]bool{}
 	sErr := insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
@@ -599,7 +599,7 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		}
 		events = slices.DeleteFunc(events, keepOnlyInsertedEvents)
 	}
-	expectedRows := len(req.InsertOrReplace) + len(req.ReplaceableEvents)
+	expectedRows := len(req.InsertOrReplace) + len(req.Rollback)
 	if actual := len(events) + len(replaceableEvents); sErr == nil && actual != expectedRows {
 		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expectedRows, actual)
 	}
