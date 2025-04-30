@@ -39,7 +39,7 @@ var (
 	errNotFound = errors.New("not found")
 )
 
-func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
+func (c *consensus) AcceptBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
 		evs, err := mapTxToEvent(tx)
@@ -64,7 +64,7 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, userAddress string, t
 	return nil
 }
 
-func (c *consensus) RollbackTx(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
+func (c *consensus) RollbackTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
 		evs, err := mapTxToEvent(tx)
@@ -77,7 +77,7 @@ func (c *consensus) RollbackTx(ctx context.Context, userAddress string, transact
 	return errors.Wrapf(rollback(ctx, events...), "failed to rollback non-accepted txs")
 }
 
-func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
+func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
 		evs, err := mapTxToEvent(tx)
@@ -106,14 +106,17 @@ func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, userAddress st
 	}
 	return nil
 }
-func (c *consensus) RollbackTxRemoval(ctx context.Context, userAddress string, transactions ...client.Transaction) error {
-	return c.RollbackTx(ctx, userAddress, transactions...)
+func (c *consensus) RollbackTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
+	return c.RollbackTx(ctx, transactions...)
 }
 
 func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Event) error {
 	userMasterKey, relays, isProfileDeletion, err := c.getUserAndRelaysForBroadcast(ctx, events...)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect user master key and relays")
+	}
+	if userMasterKey == "" {
+		return nil
 	}
 	broadcastCtx, broadcastCancel := context.WithTimeout(ctx, consensusTimeout)
 	defer broadcastCancel()
@@ -212,7 +215,7 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 		matchingEphemeralAckEvents[ackEvent.GetMasterPublicKey()] = ackEvent
 	}
 	for _, ev := range events {
-		if ev.IsEphemeral() {
+		if ev.IsEphemeral() || ev.IsJobResponse() || ev.IsJobRequest() {
 			continue
 		}
 		if ev.Kind == nostr.KindRelayListMetadata {
@@ -234,6 +237,8 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 	}
 	if len(userMasterKeys) > 1 {
 		return "", nil, false, ErrMultipleMasterKeys
+	} else if len(userMasterKeys) == 0 {
+		return "", nil, false, nil
 	}
 	var userMasterKey string
 	for userKey, _ := range userMasterKeys {

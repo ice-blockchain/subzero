@@ -634,12 +634,16 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
 		eventsToRollback.ReplaceableEvents = replacedEvents
 		err = errors.Join(err, errors.Wrap(sErr, "failed to save events"))
-		if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
-			err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
+		if len(req.Delete) > 0 {
+			if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
+				err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
+			}
 		}
 	} else {
-		if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
-			err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
+		if len(req.Delete) > 0 {
+			if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
+				err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
+			}
 		}
 		_, toRollbackDeleteOp, sErr := db.executeSave(ctx, req)
 		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
