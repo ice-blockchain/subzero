@@ -89,6 +89,9 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
 		}
+		return nil
+	})
+	command.RegisterCommitListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to process NIP-94 events")
 		}
@@ -124,6 +127,11 @@ func init() {
 		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
 		}
+
+		if err := storage.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to process NIP-94 events")
+		}
+
 		go func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%#v): %v", events, err)

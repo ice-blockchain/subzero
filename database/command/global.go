@@ -25,6 +25,9 @@ func RegisterRollbackListener(listen func(context.Context, ...*model.Event) erro
 func RegisterAcceptListener(listen func(context.Context, ...*model.Event) error) {
 	consensusEventListener = listen
 }
+func RegisterCommitListener(listen func(context.Context, ...*model.Event) error) {
+	consensusEventListener = listen
+}
 
 type Consensus interface {
 	AcceptEvents(ctx context.Context, events ...*model.Event) error
@@ -35,6 +38,7 @@ var once sync.Once
 var globalCfg *Config
 
 var consensusEventListener func(context.Context, ...*model.Event) error
+var commitEventListener func(context.Context, ...*model.Event) error
 var rollback func(context.Context, ...*model.Event) error
 
 type Config struct {

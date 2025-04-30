@@ -38,6 +38,55 @@ var (
 	errNotFound = errors.New("not found")
 )
 
+func (c *consensus) CommitBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
+	events := make([]*model.Event, 0, len(transactions))
+	for _, tx := range transactions {
+		evs, err := mapTxToEvent(tx)
+		if err != nil {
+			return errors.Wrapf(err, "failed to transform tx into event: %v", tx.Data)
+		}
+		events = append(events, evs...)
+	}
+	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	if commitEventListener != nil && len(events) > 0 {
+		err := commitEventListener(ctx, events...)
+		if err != nil {
+			return errors.Wrapf(err, "failed to commit broadcasted txs %v", func() string {
+				res := []string{}
+				for _, tx := range transactions {
+					res = append(res, string(tx.Data))
+				}
+				return "[" + strings.Join(res, ", ") + "]"
+			}())
+		}
+	}
+	return nil
+}
+
+func (c *consensus) CommitBroadcastTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
+	events := make([]*model.Event, 0, len(transactions))
+	for _, tx := range transactions {
+		evs, err := mapTxToEvent(tx)
+		if err != nil {
+			return errors.Wrapf(err, "failed to transform tx into event: %v", tx.Data)
+		}
+		events = append(events, evs...)
+	}
+	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	if commitEventListener != nil && len(events) > 0 {
+		err := commitEventListener(ctx, events...)
+		if err != nil {
+			return errors.Wrapf(err, "failed to commit broadcasted txs %v", func() string {
+				res := []string{}
+				for _, tx := range transactions {
+					res = append(res, string(tx.Data))
+				}
+				return "[" + strings.Join(res, ", ") + "]"
+			}())
+		}
+	}
+	return nil
+}
 func (c *consensus) AcceptBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
