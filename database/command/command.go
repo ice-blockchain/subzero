@@ -19,7 +19,6 @@ import (
 	"github.com/ice-blockchain/cometbft/multiplex/server"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 type (
@@ -83,11 +82,6 @@ func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, transactions .
 		evs, err := mapTxToEvent(tx)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transform removal tx into event")
-		}
-		for _, ev := range evs {
-			if err = validation.Validate(ctx, ev); err != nil {
-				return errors.Wrapf(err, "failed to validate removal tx")
-			}
 		}
 		events = append(events, evs...)
 	}
@@ -253,6 +247,21 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 	return userMasterKey, userMasterKeys[userMasterKey], profileDeletion != nil, nil
 }
 
+func parseAddress(addr string) (*model.Filter, error) {
+	if splitted := strings.Split(addr, ":"); len(splitted) >= 3 {
+		kind, err := strconv.ParseInt(splitted[0], 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "malformed event address: %v", addr)
+		}
+		return &model.Filter{
+			Kinds:   []int{int(kind)},
+			Authors: []string{splitted[1]},
+			Tags:    nostr.TagMap{}.SetLiterals("d", splitted[2]),
+		}, nil
+	}
+	return nil, errors.Errorf("malformed event address: %v", addr)
+}
+
 func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string]*model.Event) (masterKey string, err error) {
 	var ack *model.Event
 	hasAck := false
@@ -280,7 +289,7 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 		}
 	case nostr.KindReaction:
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
-			linkedEvent, err = c.getEvent(ctx, eTag.Value())
+			linkedEvent, err = c.getEvent(ctx, &model.Filter{IDs: []string{eTag.Value()}})
 			if err != nil {
 				if errors.Is(err, errNotFound) {
 					linkedEvent = nil
@@ -292,9 +301,28 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 			masterKey = linkedEvent.GetMasterPublicKey()
 		}
+		if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
+			if f, fErr := parseAddress(aTag.Value()); fErr == nil {
+				linkedEvent, err = c.getEvent(ctx, f)
+				if err != nil {
+					if errors.Is(err, errNotFound) {
+						linkedEvent = nil
+						err = nil
+					}
+					if err != nil {
+						return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
+					}
+				}
+				if linkedEvent != nil {
+					masterKey = linkedEvent.GetMasterPublicKey()
+				}
+			} else {
+				log.Printf("Malformed a tag: %v", aTag.Value())
+			}
+		}
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
-			linkedEvent, err = c.getEvent(ctx, eTag.Value())
+			linkedEvent, err = c.getEvent(ctx, &model.Filter{IDs: []string{eTag.Value()}})
 			if err != nil {
 				if errors.Is(err, errNotFound) {
 					linkedEvent = nil
@@ -313,7 +341,7 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 		}
 		if qTag := ev.GetTag("q"); qTag != nil && qTag.Value() != "" {
-			linkedEvent, err = c.getEvent(ctx, qTag.Value())
+			linkedEvent, err = c.getEvent(ctx, &model.Filter{IDs: []string{qTag.Value()}})
 			if err != nil {
 				if errors.Is(err, errNotFound) {
 					linkedEvent = nil
@@ -328,8 +356,8 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 		}
 		if qTag := ev.GetTag("Q"); qTag != nil && qTag.Value() != "" {
-			if splitted := strings.Split(qTag.Value(), ":"); len(splitted) >= 2 {
-				linkedEvent, err = c.getEvent(ctx, splitted[1])
+			if f, fErr := parseAddress(qTag.Value()); fErr == nil {
+				linkedEvent, err = c.getEvent(ctx, f)
 				if err != nil {
 					if errors.Is(err, errNotFound) {
 						linkedEvent = nil
@@ -342,6 +370,27 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 				if linkedEvent != nil {
 					masterKey = linkedEvent.GetMasterPublicKey()
 				}
+			} else {
+				log.Printf("Malformed Q tag: %v", qTag.Value())
+			}
+		}
+		if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
+			if f, fErr := parseAddress(aTag.Value()); fErr == nil {
+				linkedEvent, err = c.getEvent(ctx, f)
+				if err != nil {
+					if errors.Is(err, errNotFound) {
+						linkedEvent = nil
+						err = nil
+					}
+					if err != nil {
+						return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
+					}
+				}
+				if linkedEvent != nil {
+					masterKey = linkedEvent.GetMasterPublicKey()
+				}
+			} else {
+				log.Printf("Malformed a tag: %v", aTag.Value())
 			}
 		}
 
@@ -357,13 +406,13 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 	return masterKey, nil
 }
 
-func (c *consensus) getEvent(ctx context.Context, eventID string) (event *model.Event, err error) {
+func (c *consensus) getEvent(ctx context.Context, filter *model.Filter) (event *model.Event, err error) {
 	it := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{
-		model.Filter{IDs: []string{eventID}},
+		*filter,
 	}})
 	for e, iErr := range it {
 		if iErr != nil {
-			return nil, errors.Wrapf(iErr, "failed to fetch linked event for by id %v", eventID)
+			return nil, errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", filter.String())
 		}
 		event = e
 		break
@@ -385,11 +434,14 @@ func collectRelaysFromRelayEvent(ev *model.Event) []string {
 }
 
 func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string) {
+	if event.Kind == nostr.KindRelayListMetadata ||
+		event.Kind == model.CustomIONKindAttestation ||
+		event.Kind == nostr.KindFileStorageServerList ||
+		event.Kind == nostr.KindDMRelayList {
+		return client.GetFingerprint("metadata")
+	}
 	kTagValue := ""
 	kind := event.Kind
-	if event.Kind == nostr.KindRelayListMetadata {
-		kind = model.CustomIONKindAttestation
-	}
 	if kTag := event.GetTag("k"); kTag != nil {
 		kTagValue = "_" + kTag.Value()
 	}
@@ -444,12 +496,12 @@ func (c *consensus) convertRelaysToBroadcastEndpoints(relays ...string) []string
 	for _, relay := range relays {
 		u, err := url.Parse(relay)
 		if err != nil {
-			log.Printf("malformed relay: %v", relay)
+			log.Printf("malformed relay %v: %v", relay, err)
 			continue
 		}
 		port, err := strconv.ParseUint(u.Port(), 10, 64)
 		if err != nil {
-			log.Printf("malformed relay: %v", relay)
+			log.Printf("malformed relay %v: %v", relay, err)
 			continue
 		}
 		discoveryPort := (port + 10000)

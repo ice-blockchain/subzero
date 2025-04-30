@@ -76,7 +76,7 @@ func TestRollBackOnTxError(t *testing.T) {
 		return nil
 	})
 	consensusClient := fixture.NewErrornousClient()
-	privKeyOfOriginalNote, _ := model.GenerateKeyPair()
+	privKeyOfOriginalNote := model.GeneratePrivateKey()
 	originalEvent := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindTextNote,

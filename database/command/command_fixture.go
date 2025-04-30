@@ -23,7 +23,6 @@ func (c *consensus) DiscoveryPort() uint16 {
 }
 
 func (c *consensus) Stop() {
-	c.shutdownCh <- struct{}{}
 	close(c.shutdownCh)
 }
 

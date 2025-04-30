@@ -364,10 +364,10 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 	if err != nil {
 		return err
 	}
-	if err == nil && filters.EventsHash != nil {
+	if filters.EventsHash != nil {
 		for _, e := range deleted {
 			if err = eventsToRollback.Save(e); err != nil {
-				break
+				return errors.Wrapf(err, "failed to convert event to dbEvent: %v", e.String())
 			}
 		}
 	}
@@ -381,7 +381,7 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 			if filters.EventsHash != nil {
 				for _, e := range batchDelete {
 					if err = eventsToRollback.Save(e); err != nil {
-						break
+						return errors.Wrapf(err, "failed to convert event to dbEvent: %v", e.String())
 					}
 				}
 			}

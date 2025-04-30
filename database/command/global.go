@@ -38,12 +38,12 @@ var consensusEventListener func(context.Context, ...*model.Event) error
 var rollback func(context.Context, ...*model.Event) error
 
 type Config struct {
-	AbsoluteRootPath string `yaml:"absolute-root-path"`
-	NodePrivKey      string `yaml:"absolute-node-private-key-path"`
-	DiscoveryPort    uint16 `yaml:"discovery-port"`
-	ExternalAddress  string `yaml:"external-address"`
-	Debug            bool   `yaml:"debug"`
-	RelayUrl         string `yaml:"relay-url"`
+	AbsoluteRootPath           string `yaml:"absolute-root-path"`
+	AbsoluteNodePrivateKeyPath string `yaml:"absolute-node-private-key-path"`
+	DiscoveryPort              uint16 `yaml:"discovery-port"`
+	ExternalAddress            string `yaml:"external-address"`
+	Debug                      bool   `yaml:"debug"`
+	RelayUrl                   string `yaml:"relay-url"`
 }
 
 type Option func(cfg *Config)
@@ -53,8 +53,8 @@ func WithConfig(cfg *Config) Option {
 		if cfg == nil {
 			return
 		}
-		if cfg.NodePrivKey != "" {
-			in.NodePrivKey = cfg.NodePrivKey
+		if cfg.AbsoluteNodePrivateKeyPath != "" {
+			in.AbsoluteNodePrivateKeyPath = cfg.AbsoluteNodePrivateKeyPath
 		}
 		if cfg.AbsoluteRootPath != "" {
 			in.AbsoluteRootPath = cfg.AbsoluteRootPath
@@ -79,10 +79,10 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 	}
 	c := &consensus{
 		cfg:        globalCfg,
-		shutdownCh: make(chan struct{}, 1),
+		shutdownCh: make(chan struct{}),
 	}
 	serverCfg.SetRoot(globalCfg.AbsoluteRootPath)
-	serverCfg.NodeKey = globalCfg.NodePrivKey
+	serverCfg.NodeKey = globalCfg.AbsoluteNodePrivateKeyPath
 	serverCfg.MultiplexConfig = config.MultiplexBaseConfig(
 		map[string]string{},
 		map[string][]string{},
@@ -108,7 +108,7 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 	}
 	cometbftServer, err := multiplex.NewServer(c, serverCfg, logger)
 	if err != nil {
-		panic(err)
+		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}
 	c.server = cometbftServer
 	c.server.MustStart()
