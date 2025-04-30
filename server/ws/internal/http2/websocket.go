@@ -55,6 +55,8 @@ func (s *srv) ping(ctx context.Context, conn net.Conn) {
 			}
 		case <-ctx.Done():
 			return
+		case <-s.shutdownCh:
+			return
 		}
 	}
 }

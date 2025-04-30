@@ -273,8 +273,22 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			masterKey = pTag[1]
 			linkedEvent = ev
 		}
-	case nostr.KindReaction, nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
+	case nostr.KindReaction:
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
+			linkedEvent, err = c.getEvent(ctx, eTag.Value())
+			if err != nil {
+				if errors.Is(err, errNotFound) {
+					linkedEvent = nil
+					err = nil
+				}
+				if err != nil {
+					return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
+				}
+			}
+			masterKey = linkedEvent.GetMasterPublicKey()
+		}
+	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
+		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
 			linkedEvent, err = c.getEvent(ctx, eTag.Value())
 			if err != nil {
 				if errors.Is(err, errNotFound) {

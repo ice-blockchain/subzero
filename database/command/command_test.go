@@ -49,7 +49,6 @@ func TestMain(m *testing.M) {
 		}
 	}()
 	if code == 0 {
-		time.Sleep(10 * time.Second) // Pruner shutdown
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
 			code = 1
