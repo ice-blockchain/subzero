@@ -247,7 +247,6 @@ func helperQueryHas(t *testing.T, q []Query, op string) bool {
 }
 
 func TestQueryFuzzIndexes(t *testing.T) {
-	t.Skip()
 	t.Parallel()
 
 	if os.Getenv("CI") != "" {
