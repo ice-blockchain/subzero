@@ -20,7 +20,7 @@ var (
 	globalConfig *config
 )
 
-func init() {
+func MustInit() {
 	globalConfig = cfg.MustGet[config]()
 }
 

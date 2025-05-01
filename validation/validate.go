@@ -268,7 +268,7 @@ var (
 					return errors.Wrapf(ErrWrongEventParams, "wrong t tag value: %v", tTag)
 				}
 				relayTag := e.GetTag("relay").Value()
-				if relayTag != globalConfig.RelayURL {
+				if globalConfig != nil && relayTag != globalConfig.RelayURL {
 					return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, globalConfig.RelayURL)
 				}
 

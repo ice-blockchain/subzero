@@ -32,6 +32,41 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		require.NoError(t, Validate(t.Context(), &ev))
 	})
 
+	t.Run("relay url matches configuration", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", "wss://example.com"},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), &ev))
+	})
+
+	t.Run("relay url doesn't match configuration", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", DeviceTokenOSAndroid},
+			{"relay", "wss://different-relay.example.com"},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		err := Validate(t.Context(), &ev)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "relay tag value")
+		require.Contains(t, err.Error(), "does not match configured relay URL")
+	})
+
 	t.Run("valid event with iOS platform", func(t *testing.T) {
 		t.Parallel()
 		var ev model.Event

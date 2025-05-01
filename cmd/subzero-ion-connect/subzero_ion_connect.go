@@ -24,6 +24,7 @@ import (
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/storage"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 var (
@@ -39,6 +40,7 @@ var (
 			}
 
 			cfg.MustInit(configPath)
+			validation.MustInit()
 			query.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
