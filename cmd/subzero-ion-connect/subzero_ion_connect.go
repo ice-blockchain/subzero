@@ -104,7 +104,7 @@ func init() {
 	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
 		for _, e := range events {
 			if _, exists := eventKindsNoAuth[e.Kind]; !exists {
-				return false
+				return true
 			}
 		}
 		return false
@@ -121,11 +121,11 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
 		}
-		if err := command.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
-		}
 		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
+		}
+		if err := command.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
 		}
 
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
