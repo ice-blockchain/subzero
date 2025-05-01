@@ -331,6 +331,10 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
+github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250501110214-46e2990c02ba h1:w3XfRd9XqtoseEA0o37EZeaR3a++ctnfR2UQYY5CGYQ=
+github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250501110214-46e2990c02ba/go.mod h1:bVl4CEwl6WZEzbhOckZimH9MOe/FiKOoCR77si4LATE=
+github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250501110214-46e2990c02ba h1:/I64xq4PGy5t0kdqHfRsizT+AN7yc6QtmRCVvKrod44=
+github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250501110214-46e2990c02ba/go.mod h1:2CYWOH6Lxdb1DeMpvCXsArRzLV1CwTj781meNNiAu6I=
 github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250331131831-51fe89b5e305 h1:f1sF4EH73vV/reYeq5+L7N55ds+219QyXO3bCrInfAk=
 github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250331131831-51fe89b5e305/go.mod h1:zZd/PAYWpzEW3wLixx+O8d628jm4TQhzEJsJ1SXOjL8=
 github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd h1:SY8V7ujSDgEYEdtMk26DEaiq8qvCTEZ7XlojacrWZj4=
@@ -555,8 +559,8 @@ github.com/schollz/progressbar/v3 v3.18.0/go.mod h1:IsO3lpbaGuzh8zIMzgY3+J8l4C8G
 github.com/sergi/go-diff v1.2.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
 github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 h1:n661drycOFuPLCN3Uc8sB6B/s6Z4t2xvBgU1htSHuq8=
 github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
-github.com/shirou/gopsutil/v4 v4.25.3 h1:SeA68lsu8gLggyMbmCn8cmp97V1TI9ld9sVzAUcKcKE=
-github.com/shirou/gopsutil/v4 v4.25.3/go.mod h1:xbuxyoZj+UsgnZrENu3lQivsngRR5BdjbJwf2fv4szA=
+github.com/shirou/gopsutil/v4 v4.25.4 h1:cdtFO363VEOOFrUCjZRh4XVJkb548lyF0q0uTeMqYPw=
+github.com/shirou/gopsutil/v4 v4.25.4/go.mod h1:xbuxyoZj+UsgnZrENu3lQivsngRR5BdjbJwf2fv4szA=
 github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1 h1:NVK+OqnavpyFmUiKfUMHrpvbCi2VFoWTrcpI7aDaJ2I=
 github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1/go.mod h1:9/etS5gpQq9BJsJMWg1wpLbfuSnkm8dPF6FdW2JXVhA=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=

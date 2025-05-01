@@ -4,8 +4,6 @@ go 1.24.2
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
-	github.com/ice-blockchain/cometbft => ../cometbft
-	github.com/ice-blockchain/cometbft/api => ../cometbft/api
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250331131831-51fe89b5e305
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.11.1
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250325160150-e1bb11d2b23c
@@ -27,7 +25,7 @@ require (
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250430082545-cd5544ad9b2a
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250501110214-46e2990c02ba
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
@@ -147,7 +145,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250430082545-cd5544ad9b2a // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250501110214-46e2990c02ba // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
@@ -208,7 +206,7 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
-	github.com/shirou/gopsutil/v4 v4.25.3 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.4 // indirect
 	github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
