@@ -5,7 +5,6 @@ package ws
 import (
 	"context"
 	"fmt"
-	"github.com/ice-blockchain/subzero/validation"
 	"log"
 	"os"
 	"sync"
@@ -26,6 +25,7 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 const (
