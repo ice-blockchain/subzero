@@ -148,6 +148,9 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 			val += field.GetName() + ":" + helperRandomBool(t)
 			value.Set(reflect.ValueOf(val))
 
+		case "Addresses":
+			// Skip this field.
+
 		default:
 			t.Fatalf("unknown field: %s", field.GetName())
 		}
