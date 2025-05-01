@@ -41,7 +41,6 @@ var (
 
 			cfg.MustInit(configPath)
 			validation.MustInit()
-			command.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
 			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())

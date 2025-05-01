@@ -34,8 +34,6 @@ const consensusTimeout = time.Second * 25
 
 var (
 	ErrMultipleMasterKeys = errors.New("cannot broadcast single batch to multiple master keys")
-
-	errNotFound = errors.New("not found")
 )
 
 func (c *consensus) CommitBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
@@ -91,6 +89,31 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, transactions ...clien
 	return nil
 }
 
+func (c *consensus) ReplayBroadcastTxBatch(ctx context.Context, transactions ...client.Transaction) error {
+	events := make([]*model.Event, 0, len(transactions))
+	for _, tx := range transactions {
+		evs, err := mapTxToEvent(tx)
+		if err != nil {
+			return errors.Wrapf(err, "failed to transform tx into event: %v", tx.Data)
+		}
+		events = append(events, evs...)
+	}
+	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	if consensusEventListener != nil && len(events) > 0 {
+		err := consensusEventListener(ctx, events...)
+		if err != nil {
+			return errors.Wrapf(err, "failed to accept replayed txs (%v)", len(transactions))
+		}
+	}
+	if commitEventListener != nil && len(events) > 0 {
+		err := commitEventListener(ctx, events...)
+		if err != nil {
+			return errors.Wrapf(err, "failed to commit replayed txs (%v)", len(transactions))
+		}
+	}
+	return nil
+}
+
 func (c *consensus) RollbackTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
@@ -112,7 +135,7 @@ func (c *consensus) RollbackTxRemoval(ctx context.Context, transactions ...clien
 }
 
 func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Event) error {
-	userMasterKey, relays, isProfileDeletion, err := c.getUserAndRelaysForBroadcast(ctx, events...)
+	userMasterKey, relays, ackEvents, isProfileDeletion, err := c.getUserAndRelaysForBroadcast(ctx, events...)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect user master key and relays")
 	}
@@ -127,7 +150,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 		res := <-notifier
 		return errors.Wrapf(res.Error, "failed to delete chains for user deletion %v", userMasterKey)
 	}
-	txs, err := mapEventsToTXs(events)
+	txs, err := mapEventsToTXs(events, ackEvents)
 	if err != nil {
 		return errors.Wrapf(err, "failed serialize events: %v", events)
 	}
@@ -189,37 +212,11 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 	return relays, nil
 }
 
-func (c *consensus) parseEphemeralAckEvent(ev *model.Event) (key string, eventContent *model.Event, err error) {
-	var ack model.Event
-	err = ack.UnmarshalJSON([]byte(ev.Content))
-	if err != nil {
-		return "", nil, errors.Wrapf(err, "malformed ack")
-	}
-	ref := ""
-	if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
-		ref = eTag.Value()
-	} else if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
-		ref = aTag.Value()
-	} else {
-		return "", nil, errors.Errorf("malformed %v event, none of e/a tags passed: %v", model.CustomIONKindEphemeralEmbeddding, ev)
-	}
-	return ref, &ack, nil
-}
-
-func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...*model.Event) (masterKey string, relays []string, isProfileDeletion bool, err error) {
+func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...*model.Event) (masterKey string, relays []string, matchingEphemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent, isProfileDeletion bool, err error) {
 	userMasterKeys := map[string][]string{}
 	var profileDeletion *model.Event
-	matchingEphemeralAckEvents := map[string]*model.Event{}
-	for _, ev := range events {
-		if ev.Kind != model.CustomIONKindEphemeralEmbeddding {
-			continue
-		}
-		ref, ackEvent, aErr := c.parseEphemeralAckEvent(ev)
-		if aErr != nil {
-			return "", nil, false, errors.Wrapf(aErr, "malformed 21750: %v", ev.Content)
-		}
-		matchingEphemeralAckEvents[ref] = ackEvent
-	}
+	matchingEphemeralAckEvents, err = model.ParseEphemeralEmbeddingEvents(false, events...)
+
 	for _, ev := range events {
 		if ev.IsEphemeral() || ev.IsJobResponse() || ev.IsJobRequest() {
 			continue
@@ -235,16 +232,16 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 			if errors.Is(err, ErrUserIsNotPresentedOnRelay) {
 				continue
 			}
-			return "", nil, false, errors.Wrapf(err, "failed to get master key to broadcast the event %+v", ev)
+			return "", nil, nil, false, errors.Wrapf(err, "failed to get master key to broadcast the event %+v", ev)
 		}
 		if userMasterKeys[masterKey] == nil {
 			userMasterKeys[masterKey] = relays
 		}
 	}
 	if len(userMasterKeys) > 1 {
-		return "", nil, false, ErrMultipleMasterKeys
+		return "", nil, nil, false, ErrMultipleMasterKeys
 	} else if len(userMasterKeys) == 0 {
-		return "", nil, false, nil
+		return "", nil, nil, false, nil
 	}
 	var userMasterKey string
 	for userKey, _ := range userMasterKeys {
@@ -253,31 +250,16 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 	}
 	if len(userMasterKeys[userMasterKey]) == 0 {
 		if userMasterKeys[userMasterKey], err = c.fetchUserRelays(ctx, userMasterKey); err != nil {
-			return "", nil, false, errors.Wrapf(err, "failed to get relay list for user %v", userMasterKey)
+			return "", nil, nil, false, errors.Wrapf(err, "failed to get relay list for user %v", userMasterKey)
 		}
 	}
-	return userMasterKey, userMasterKeys[userMasterKey], profileDeletion != nil, nil
+	return userMasterKey, userMasterKeys[userMasterKey], matchingEphemeralAckEvents, profileDeletion != nil, nil
 }
 
-func parseAddress(addr string) (*model.Filter, error) {
-	if splitted := strings.Split(addr, ":"); len(splitted) >= 3 {
-		kind, err := strconv.ParseInt(splitted[0], 10, 64)
-		if err != nil {
-			return nil, errors.Wrapf(err, "malformed event address: %v", addr)
-		}
-		return &model.Filter{
-			Kinds:   []int{int(kind)},
-			Authors: []string{splitted[1]},
-			Tags:    nostr.TagMap{}.SetLiterals("d", splitted[2]),
-		}, nil
-	}
-	return nil, errors.Errorf("malformed event address: %v", addr)
-}
-
-func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string]*model.Event) (masterKey string, err error) {
-	var ack *model.Event
+func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent) (masterKey string, err error) {
+	var acks []*model.EphemeralEmbeddingEvent
 	hasAck := false
-	if ack, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck {
+	if acks, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck || len(acks) == 0 {
 		if ev.Kind == nostr.KindGiftWrap {
 			if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
 				return pTag.Value(), nil
@@ -297,112 +279,44 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 		masterKey = repostedEvent.GetMasterPublicKey()
 	case nostr.KindFollowList:
 		if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
-			masterKey = pTag[1]
+			masterKey = pTag.Value()
 		}
 	case nostr.KindReaction:
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
-			linkedEvent, err = c.getEvent(ctx, &model.Filter{IDs: []string{eTag.Value()}})
+			linkedEvent, masterKey, err = c.getEvent(ctx, eTag.Value())
 			if err != nil {
-				if errors.Is(err, errNotFound) {
-					linkedEvent = nil
-					err = nil
-				}
-				if err != nil {
-					return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
-				}
+				return "", errors.Wrapf(err, "failed to get referenced event")
 			}
-			masterKey = linkedEvent.GetMasterPublicKey()
 		}
 		if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
-			if f, fErr := parseAddress(aTag.Value()); fErr == nil {
-				linkedEvent, err = c.getEvent(ctx, f)
-				if err != nil {
-					if errors.Is(err, errNotFound) {
-						linkedEvent = nil
-						err = nil
-					}
-					if err != nil {
-						return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
-					}
-				}
-				if linkedEvent != nil {
-					masterKey = linkedEvent.GetMasterPublicKey()
-				}
-			} else {
-				log.Printf("Malformed a tag: %v", aTag.Value())
+			linkedEvent, masterKey, err = c.getEvent(ctx, aTag.Value())
+			if err != nil {
+				return "", errors.Wrapf(err, "failed to get referenced event")
 			}
 		}
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
-		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
-			linkedEvent, err = c.getEvent(ctx, &model.Filter{IDs: []string{eTag.Value()}})
-			if err != nil {
-				if errors.Is(err, errNotFound) {
-					linkedEvent = nil
-					err = nil
-				}
-				if err != nil {
-					return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
-				}
-			}
-			masterKey = linkedEvent.GetMasterPublicKey()
-		}
 		if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
 			relays, rErr := c.fetchUserRelays(ctx, pTag.Value()) // Mentioned user is presented on relay
 			if rErr == nil && len(relays) > 0 {
 				masterKey = pTag.Value()
 			}
 		}
-		if qTag := ev.GetTag("q"); qTag != nil && qTag.Value() != "" {
-			linkedEvent, err = c.getEvent(ctx, &model.Filter{IDs: []string{qTag.Value()}})
+		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
+			linkedEvent, masterKey, err = c.getEvent(ctx, eTag.Value())
 			if err != nil {
-				if errors.Is(err, errNotFound) {
-					linkedEvent = nil
-					err = nil
-				}
-				if err != nil {
-					return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
-				}
-			}
-			if linkedEvent != nil {
-				masterKey = linkedEvent.GetMasterPublicKey()
+				return "", errors.Wrapf(err, "failed to get referenced event")
 			}
 		}
-		if qTag := ev.GetTag("Q"); qTag != nil && qTag.Value() != "" {
-			if f, fErr := parseAddress(qTag.Value()); fErr == nil {
-				linkedEvent, err = c.getEvent(ctx, f)
+		refTags := []string{"q", "Q", "a"}
+		for _, tagName := range refTags {
+			if tag := ev.GetTag(tagName); tag != nil && tag.Value() != "" {
+				linkedEvent, masterKey, err = c.getEvent(ctx, tag.Value())
 				if err != nil {
-					if errors.Is(err, errNotFound) {
-						linkedEvent = nil
-						err = nil
-					}
-					if err != nil {
-						return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
-					}
+					return "", errors.Wrapf(err, "failed to get referenced event")
 				}
-				if linkedEvent != nil {
-					masterKey = linkedEvent.GetMasterPublicKey()
+				if linkedEvent != nil && masterKey != "" {
+					break
 				}
-			} else {
-				log.Printf("Malformed Q tag: %v", qTag.Value())
-			}
-		}
-		if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
-			if f, fErr := parseAddress(aTag.Value()); fErr == nil {
-				linkedEvent, err = c.getEvent(ctx, f)
-				if err != nil {
-					if errors.Is(err, errNotFound) {
-						linkedEvent = nil
-						err = nil
-					}
-					if err != nil {
-						return "", errors.Wrapf(err, "failed to fetch linked event for event %+v", ev)
-					}
-				}
-				if linkedEvent != nil {
-					masterKey = linkedEvent.GetMasterPublicKey()
-				}
-			} else {
-				log.Printf("Malformed a tag: %v", aTag.Value())
 			}
 		}
 
@@ -412,34 +326,43 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 	if linkedEvent == nil && masterKey == "" {
 		return "", ErrUserIsNotPresentedOnRelay
 	}
-	if ev.GetMasterPublicKey() != ack.GetMasterPublicKey() {
-		return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "21750 was not provided with kind %v or b tag mismatch (%v %v)", ev.Kind, linkedEvent.GetMasterPublicKey(), ack.GetMasterPublicKey())
+	foundMatchingMasterKey := true
+	mismatchedMasterKey := ""
+	for _, e := range acks {
+		if ev.GetMasterPublicKey() != e.GetMasterPublicKey() {
+			foundMatchingMasterKey = false
+			mismatchedMasterKey = e.GetMasterPublicKey()
+			break
+		}
+	}
+	if !foundMatchingMasterKey {
+		return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "21750 was not provided with kind %v or b tag mismatch (%v %v)", ev.Kind, linkedEvent.GetMasterPublicKey(), mismatchedMasterKey)
 	}
 	return masterKey, nil
 }
 
-func (c *consensus) getEvent(ctx context.Context, filter *model.Filter) (event *model.Event, err error) {
+func (c *consensus) getEvent(ctx context.Context, address string) (event *model.Event, masterKey string, err error) {
 	it := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{
-		*filter,
+		model.Filter{Addresses: []string{address}},
 	}})
 	for e, iErr := range it {
 		if iErr != nil {
-			return nil, errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", filter.String())
+			return nil, "", errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", address)
 		}
 		event = e
 		break
 	}
-	if event == nil {
-		return nil, errNotFound
+	if event != nil {
+		masterKey = event.GetMasterPublicKey()
 	}
-	return event, nil
+	return event, masterKey, nil
 }
 
 func collectRelaysFromRelayEvent(ev *model.Event) []string {
 	relays := make([]string, 0, len(ev.Tags))
 	for _, tag := range ev.Tags {
 		if tag.Key() == "r" {
-			relays = append(relays, tag[1])
+			relays = append(relays, tag.Value())
 		}
 	}
 	return relays
@@ -488,11 +411,11 @@ func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
 	return events, err
 }
 
-func mapEventsToTXs(events []*model.Event) (txs []client.Transaction, err error) {
+func mapEventsToTXs(events []*model.Event, ackEvents map[string][]*model.EphemeralEmbeddingEvent) (txs []client.Transaction, err error) {
 	txs = make([]client.Transaction, 0, len(events))
 	encodedEvents := map[string]nostr.EventEnvelope{}
 	for _, ev := range events {
-		if ev.IsEphemeral() {
+		if ev.IsEphemeral() && ev.Kind != model.CustomIONKindEphemeralEmbeddding {
 			continue
 		}
 		fingerprint, err := mapEventKindToChainFingerprint(ev)
@@ -505,6 +428,15 @@ func mapEventsToTXs(events []*model.Event) (txs []client.Transaction, err error)
 			env = nostr.EventEnvelope{}
 		}
 		env.Events = append(env.Events, &ev.Event)
+		mappedEphemeralEvents := ackEvents[ev.Address()]
+		ackEphepheralEvents := make([]*nostr.Event, 0, len(mappedEphemeralEvents))
+		for _, e := range mappedEphemeralEvents {
+			ackEphepheralEvents = append(ackEphepheralEvents, &e.Event.Event)
+		}
+		if len(ackEphepheralEvents) > 0 {
+			env.Events = append(env.Events, ackEphepheralEvents...)
+		}
+
 		encodedEvents[fingerprint] = env
 	}
 	for f, e := range encodedEvents {

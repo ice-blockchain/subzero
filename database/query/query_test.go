@@ -596,15 +596,15 @@ func TestQueryEventAttestation(t *testing.T) {
 			require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
+		var originalPost model.Event
 		t.Run("OnBehalf", func(t *testing.T) {
-			var ev model.Event
-			ev.Kind = nostr.KindTextNote
-			ev.CreatedAt = 2
-			ev.Content = "hello world from active"
-			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPk}}
-			require.NoError(t, ev.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			t.Logf("event %+v", ev)
-			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+			originalPost.Kind = nostr.KindTextNote
+			originalPost.CreatedAt = 2
+			originalPost.Content = "hello world from active"
+			originalPost.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPk}}
+			require.NoError(t, originalPost.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			t.Logf("event %+v", originalPost)
+			require.NoError(t, db.AcceptEvents(t.Context(), &originalPost))
 		})
 		t.Run("OnBehalfOfUnknownUser", func(t *testing.T) {
 			var ev model.Event
@@ -616,6 +616,34 @@ func TestQueryEventAttestation(t *testing.T) {
 			t.Logf("event %+v", ev)
 			require.ErrorIs(t, db.AcceptEvents(t.Context(), &ev), model.ErrOnBehalfAccessDenied)
 		})
+		otherUserMasterPrivKey, otherUserMasterPubkey := model.GenerateKeyPair()
+		t.Run("OnBehalfOfUnknownUserWithEphemeralEmbedding", func(t *testing.T) {
+			var repost model.Event
+			repost.Kind = nostr.KindRepost
+			repost.CreatedAt = 4
+			contentBytes, err := originalPost.MarshalJSON()
+			require.NoError(t, err)
+			repost.Content = string(contentBytes)
+			privKey, pubKey := model.GenerateKeyPair()
+			repost.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, otherUserMasterPubkey}}
+			require.NoError(t, repost.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			var ephemeralAttestation model.Event
+			ephemeralAttestation.Kind = model.CustomIONKindAttestation
+			ephemeralAttestation.CreatedAt = 1
+			ephemeralAttestation.Tags = model.Tags{{model.TagAttestationName, pubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(1, 10)}}
+			require.NoError(t, ephemeralAttestation.SignWithAlg(otherUserMasterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			wrappedEphemeralAttestation := &model.Event{Event: nostr.Event{
+				CreatedAt: 4,
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					[]string{model.CustomIONTagOnBehalfOf, otherUserMasterPubkey},
+					[]string{"e", repost.ID}},
+				Content: ephemeralAttestation.String(),
+			}}
+
+			t.Logf("event %+v %+v", repost, wrappedEphemeralAttestation)
+			require.NoError(t, db.AcceptEvents(t.Context(), &repost, wrappedEphemeralAttestation))
+		})
 		t.Run("Count", func(t *testing.T) {
 			count, err := db.CountEvents(t.Context(), model.Filter{
 				Kinds:   []int{nostr.KindTextNote},
@@ -624,6 +652,13 @@ func TestQueryEventAttestation(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, int64(2), count) // Both events should be counted, master + on behalf.
+			count, err = db.CountEvents(t.Context(), model.Filter{
+				Kinds:   []int{nostr.KindRepost},
+				Authors: []string{otherUserMasterPubkey},
+				Search:  "nostr",
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(1), count) // Repost saved althrough it did not have attestation saved
 		})
 	})
 }
@@ -647,6 +682,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 	masterMessageIds := []string{}
 	user1MessageIds := []string{}
 	user2MessageIds := []string{}
+	user3MessageIds := []string{}
 
 	counter := func(t *testing.T, kinds []int, ids, authors []string) int64 {
 		count, err := db.CountEvents(t.Context(), model.Filter{
@@ -805,6 +841,65 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 			require.NoError(t, ev.SignWithAlg(user1Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			mustBeOne(t, user2MessageIds[0])
+		})
+	})
+	t.Run("ephemeral", func(t *testing.T) {
+		user3MasterPrivate, user3MasterPublic := model.GenerateKeyPair()
+		user3Private, user3Public := model.GenerateKeyPair()
+
+		var ephemeralAttestation model.Event
+		ephemeralAttestation.Kind = model.CustomIONKindAttestation
+		ephemeralAttestation.CreatedAt = 1
+		ephemeralAttestation.Tags = model.Tags{{model.TagAttestationName, user3Public, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(1, 10)}}
+		require.NoError(t, ephemeralAttestation.SignWithAlg(user3MasterPrivate, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		t.Run("user 3 publishes reply to master event", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(8 + n)
+				ev.Content = "hello world from user3 number" + strconv.Itoa(n)
+				ev.Tags = model.Tags{
+					{model.CustomIONTagOnBehalfOf, user3MasterPublic},
+					{"e", masterMessageIds[0], "wss://relay.com", model.TagMarkerReply},
+				}
+				require.NoError(t, ev.SignWithAlg(user3Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				user3Attestation := &model.Event{Event: nostr.Event{
+					CreatedAt: 4,
+					Kind:      model.CustomIONKindEphemeralEmbeddding,
+					Tags: nostr.Tags{
+						[]string{model.CustomIONTagOnBehalfOf, user3MasterPublic},
+						[]string{"e", ev.ID}},
+					Content: ephemeralAttestation.String(),
+				}}
+				require.NoError(t, ephemeralAttestation.SignWithAlg(user3Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, db.AcceptEvents(t.Context(), &ev, user3Attestation))
+				user3MessageIds = append(user3MessageIds, ev.ID)
+			}
+			t.Logf("user 3 messages = %v", user3MessageIds)
+		})
+		t.Run("user 3 deletes his replies to master event", func(t *testing.T) {
+			for n := range 2 {
+				var ev model.Event
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = model.Timestamp(9 + n)
+				ev.Tags = model.Tags{
+					{model.CustomIONTagOnBehalfOf, user3MasterPublic},
+					{"k", fmt.Sprintf("%v", nostr.KindTextNote)},
+					{"e", user3MessageIds[n]},
+				}
+				require.NoError(t, ev.SignWithAlg(user3Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				user3Attestation := &model.Event{Event: nostr.Event{
+					CreatedAt: 4,
+					Kind:      model.CustomIONKindEphemeralEmbeddding,
+					Tags: nostr.Tags{
+						[]string{model.CustomIONTagOnBehalfOf, user3MasterPublic},
+						[]string{"e", ev.ID}},
+					Content: ephemeralAttestation.String(),
+				}}
+				require.NoError(t, ephemeralAttestation.SignWithAlg(user3Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, db.AcceptEvents(t.Context(), &ev, user3Attestation))
+			}
 		})
 	})
 }

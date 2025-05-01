@@ -19,13 +19,15 @@ import (
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
-func RegisterRollbackListener(listen func(context.Context, ...*model.Event) error) {
+type CallbackFunc func(context.Context, ...*model.Event) error
+
+func RegisterRollbackListener(listen CallbackFunc) {
 	rollback = listen
 }
-func RegisterAcceptListener(listen func(context.Context, ...*model.Event) error) {
+func RegisterAcceptListener(listen CallbackFunc) {
 	consensusEventListener = listen
 }
-func RegisterCommitListener(listen func(context.Context, ...*model.Event) error) {
+func RegisterCommitListener(listen CallbackFunc) {
 	commitEventListener = listen
 }
 
@@ -33,13 +35,16 @@ type Consensus interface {
 	AcceptEvents(ctx context.Context, events ...*model.Event) error
 }
 
-var globalConsensus *consensus
-var once sync.Once
-var globalCfg *Config
-
-var consensusEventListener func(context.Context, ...*model.Event) error
-var commitEventListener func(context.Context, ...*model.Event) error
-var rollback func(context.Context, ...*model.Event) error
+var (
+	globalConsensus struct {
+		Consensus *consensus
+		Once      sync.Once
+	}
+	globalCfg              *Config
+	consensusEventListener CallbackFunc
+	commitEventListener    CallbackFunc
+	rollback               CallbackFunc
+)
 
 type Config struct {
 	AbsoluteRootPath           string `yaml:"absolute-root-path"`
@@ -70,8 +75,8 @@ func WithConfig(cfg *Config) Option {
 }
 
 func MustInit(ctx context.Context, opts ...Option) {
-	once.Do(func() {
-		globalConsensus = mustInit(ctx, config.DefaultConfig(), opts...).(*consensus)
+	globalConsensus.Once.Do(func() {
+		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...).(*consensus)
 	})
 
 }
@@ -129,7 +134,7 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	return errors.Wrapf(globalConsensus.AcceptEvents(ctx, events...), "errors occured while broadcasting events")
+	return errors.Wrapf(globalConsensus.Consensus.AcceptEvents(ctx, events...), "errors occured while broadcasting events")
 }
 
 func (c *consensus) AcceptEvents(ctx context.Context, events ...*model.Event) error {

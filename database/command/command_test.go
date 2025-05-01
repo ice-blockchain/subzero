@@ -163,9 +163,15 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 				nostr.KindRepost:   addr,
 				nostr.KindReaction: addr,
 			}
+			hasEphemeralAck := false
 			for _, ev := range evs {
+				if ev.Kind == model.CustomIONKindEphemeralEmbeddding {
+					hasEphemeralAck = true
+					continue
+				}
 				require.Equal(t, expected[ev.Kind], userAddress)
 			}
+			require.True(t, hasEphemeralAck)
 		}
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Rollback should not be called")

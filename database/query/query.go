@@ -211,12 +211,16 @@ func (req *databaseBatchRequest) Empty() bool {
 	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0 && len(req.Rollback) == 0
 }
 
-func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) error {
+func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 	var req databaseBatchRequest
 	eventsHash := hashEvents(events...)
 	req.EventsHash = &eventsHash
 	if _, accepted := db.rollbackableEvents.Load(eventsHash); accepted {
 		return nil
+	}
+	var ephemeralEmbeddings map[string][]*model.EphemeralEmbeddingEvent
+	if ephemeralEmbeddings, err = model.ParseEphemeralEmbeddingEvents(true, events...); err != nil {
+		return errors.Wrapf(err, "malformed embeddings")
 	}
 	for i := range events {
 		if events[i].IsEphemeral() {
@@ -236,10 +240,20 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 
 				continue
 			}
+			if embeddings, hasEmbeddings := ephemeralEmbeddings[events[i].Address()]; hasEmbeddings && eventValidForEphemeralAttestation(events[i]) {
+				if err = verifyEphemeralAttestation(embeddings, events[i], &req); err != nil {
+					return err
+				}
+			}
 			if err := req.Remove(events[i]); err != nil {
 				return err
 			}
 		} else {
+			if embeddings, hasEmbeddings := ephemeralEmbeddings[events[i].Address()]; hasEmbeddings && eventValidForEphemeralAttestation(events[i]) {
+				if err = verifyEphemeralAttestation(embeddings, events[i], &req); err != nil {
+					return err
+				}
+			}
 			if err := req.Save(events[i]); err != nil {
 				return err
 			}
@@ -1039,4 +1053,72 @@ func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingE
 	}
 
 	return filters, nil
+}
+
+func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, event *model.Event, req *databaseBatchRequest) error {
+	var ephemeralAttestationEvent *model.Event
+	for _, embedding := range embeddings {
+		if embedding.ContentEvent.Kind == model.CustomIONKindAttestation && event.GetMasterPublicKey() == embedding.ContentEvent.GetMasterPublicKey() {
+			ephemeralAttestationEvent = embedding.ContentEvent
+			break
+		}
+	}
+	if ephemeralAttestationEvent != nil {
+		allowed, err := model.OnBehalfIsAccessAllowed(ephemeralAttestationEvent.Tags, event.PubKey, event.Kind, time.Now().Unix())
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse attestation event")
+		}
+		if !allowed {
+			return model.ErrOnBehalfAccessDenied
+		}
+		dbEvent, err := toDatabaseEvent(ephemeralAttestationEvent)
+		if err != nil {
+			return err
+		}
+		req.InsertOrReplace = append([]databaseEvent{*dbEvent}, req.InsertOrReplace...)
+	}
+	return nil
+}
+
+func eventValidForEphemeralAttestation(event *model.Event) bool {
+	switch event.Kind {
+	case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
+		// reply, quote or mention
+		eTag := event.GetTag("e")
+		if eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
+			return true
+		}
+		refTags := []string{"q", "Q", "a", "p"}
+		haveAnyOfQorPorA := false
+		for _, tagName := range refTags {
+			if tag := event.GetTag(tagName); tag != nil && tag.Value() != "" {
+				haveAnyOfQorPorA = true
+				break
+			}
+		}
+		return haveAnyOfQorPorA
+	case nostr.KindFollowList:
+		return true
+	case nostr.KindReaction:
+		return true
+	case nostr.KindGenericRepost, nostr.KindRepost:
+		return true
+	case nostr.KindDeletion:
+		if kTag := event.GetTag("k"); kTag != nil {
+			kValue, err := strconv.Atoi(kTag.Value())
+			if err != nil {
+				return false
+			}
+			switch kValue {
+			case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle,
+				nostr.KindFollowList, nostr.KindReaction, nostr.KindGenericRepost, nostr.KindRepost:
+				return true
+			default:
+				return false
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
