@@ -999,3 +999,33 @@ func TestCommunityEventsLookup(t *testing.T) {
 	require.Equal(t, 1, len(eventsWithCommunity)) // Only one event with tag "h".
 	require.Equal(t, "2", eventsWithCommunity[0].ID)
 }
+
+func TestBuilderLookupByAddress(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var eventRegular, eventAddressable model.Event
+	eventRegular.Kind = nostr.KindTextNote
+	eventRegular.ID = "1"
+	eventRegular.PubKey = "1"
+	eventRegular.CreatedAt = 1
+	eventRegular.Content = "foo"
+	eventRegular.Tags = model.Tags{}
+
+	eventAddressable.Kind = model.CustomIONKindEditableTextNote
+	eventAddressable.ID = "2"
+	eventAddressable.PubKey = "2"
+	eventAddressable.CreatedAt = 2
+	eventAddressable.Content = "bar"
+	eventAddressable.Tags = model.Tags{{"d", "test-addressable"}}
+
+	err := db.AcceptEvents(t.Context(), &eventRegular, &eventAddressable)
+	require.NoError(t, err)
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Addresses: []string{eventRegular.Address(), eventAddressable.Address()},
+	})
+	require.Equal(t, []*model.Event{&eventAddressable, &eventRegular}, events)
+}

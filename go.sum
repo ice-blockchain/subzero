@@ -283,8 +283,8 @@ github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9
 github.com/hashicorp/golang-lru v0.5.4/go.mod h1:iADmTwqILo4mZ8BN3D2Q6+9jd8WM5uGBxy+E8yxSoD4=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
-github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250331131831-51fe89b5e305 h1:f1sF4EH73vV/reYeq5+L7N55ds+219QyXO3bCrInfAk=
-github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250331131831-51fe89b5e305/go.mod h1:zZd/PAYWpzEW3wLixx+O8d628jm4TQhzEJsJ1SXOjL8=
+github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250501135515-dfa5ad0b914f h1:lzykVrwNpCzAf3rni1eUa9sba0XzZKlJcgdw91BZ8r8=
+github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250501135515-dfa5ad0b914f/go.mod h1:1xVLzyxDHvGKQYggcfHu0wYmFsdMTrAGqMiX0Kbd8/c=
 github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd h1:SY8V7ujSDgEYEdtMk26DEaiq8qvCTEZ7XlojacrWZj4=
 github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd/go.mod h1:pVzkmaIwkLaJ5cKPHPtuKyxaXiTsa/V7kbbgLmsr4Hw=
 github.com/ice-blockchain/tonutils-storage v0.0.0-20250325160150-e1bb11d2b23c h1:jiF6fi13Loj285orZHE/46JWI4p7Rouuk/LNdfBIYts=
