@@ -249,6 +249,18 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 	return db.executeBatch(ctx, &req)
 }
 
+func (db *dbClient) CommitEvents(ctx context.Context, events ...*model.Event) error {
+	eventsHash := hashEvents(events...)
+	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.LoadAndDelete(eventsHash); !hasEventsToRollback {
+		return nil
+	} else {
+		if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents); err != nil {
+			return errors.Wrap(err, "failed to delete tmp replaceableEvents")
+		}
+		return nil
+	}
+}
+
 func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) error {
 	eventsHash := hashEvents(events...)
 	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.Load(eventsHash); !hasEventsToRollback {
@@ -357,6 +369,36 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	}
 
 	return deletedEvents, dependencies, nil
+}
+
+func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool) error {
+	if len(replaceableEventsToDelete) == 0 {
+		return nil
+	}
+	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToDelete))
+	for evID := range replaceableEventsToDelete {
+		replaceableEventsIDs = append(replaceableEventsIDs, evID)
+	}
+	sqlQuery := `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY(:ids)`
+	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
+	params := map[string]any{
+		"ids": replaceableEventsIDs,
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
+	}
+	res, err := stmt.ExecContext(ctx, params)
+	if err != nil {
+		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql")
+	}
+	actual, err := res.RowsAffected()
+	if err != nil {
+		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql (rows)")
+	}
+	if actual != int64(len(replaceableEventsToDelete)) {
+		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), actual)
+	}
+	return nil
 }
 
 func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequest, eventsToRollback *databaseRollbackRequest) error {

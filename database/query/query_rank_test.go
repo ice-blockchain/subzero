@@ -83,6 +83,7 @@ func TestEventScore(t *testing.T) {
 			helperPointsScoreEqual(t, db, target.ID, 1, 1.0)
 		}
 	})
+	var reposts []model.Event
 	t.Run("Repost", func(t *testing.T) {
 		for _, target := range targetEvents {
 			var ev model.Event
@@ -97,6 +98,7 @@ func TestEventScore(t *testing.T) {
 			ev.Tags = model.Tags{
 				{target.Tag, target.Address},
 			}
+			reposts = append(reposts, ev)
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperPointsScoreEqual(t, db, target.ID, 4, 4.0) // like (1) + repost (3).
 		}
@@ -199,6 +201,27 @@ func TestEventScore(t *testing.T) {
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperPointsScoreEqual(t, db, evArticle.ID, 4, 4.0) // like (1) + repost (3).
 			helperPointsScoreEqual(t, db, evNote.ID, 6, 6.0)    // like (1) + repost (3) + root comment (2).
+		})
+		t.Run("rollback deletes", func(t *testing.T) {
+			for _, id := range quotes {
+				var ev model.Event
+				ev.Kind = nostr.KindDeletion
+				ev.ID = "delete_" + id
+				ev.PubKey = "quote_pub"
+				ev.Tags = model.Tags{
+					{"e", id},
+				}
+				require.NoError(t, db.RollbackEvents(t.Context(), &ev))
+			}
+			helperPointsScoreEqual(t, db, evArticle.ID, 8, 8) // like (1) + repost (3) + quote(4)
+			helperPointsScoreEqual(t, db, evNote.ID, 10, 10)  // like (1) + repost (3) + root comment (2) + quote(4)
+		})
+		t.Run("rollback reposts", func(t *testing.T) {
+			for _, repost := range reposts {
+				require.NoError(t, db.RollbackEvents(t.Context(), &repost))
+			}
+			helperPointsScoreEqual(t, db, evArticle.ID, 5, 5) // like (1) + quote(4)
+			helperPointsScoreEqual(t, db, evNote.ID, 7, 7)    // like (1) + root comment (2) + quote(4)
 		})
 	})
 }

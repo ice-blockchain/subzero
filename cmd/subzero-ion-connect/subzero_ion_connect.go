@@ -95,6 +95,9 @@ func init() {
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to process NIP-94 events")
 		}
+		if err := query.CommitEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to delete outdated replaced events")
+		}
 		return nil
 	})
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {

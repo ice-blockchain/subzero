@@ -5,6 +5,7 @@ package ws
 import (
 	"context"
 	"fmt"
+	"github.com/ice-blockchain/subzero/validation"
 	"log"
 	"os"
 	"sync"
@@ -48,7 +49,7 @@ func TestMain(m *testing.M) {
 	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
-
+	validation.MustInit()
 	addr, release := query.NewTestDatabase(serverCtx)
 	log.Println(addr)
 	closeFuncs := []func() error{release}
