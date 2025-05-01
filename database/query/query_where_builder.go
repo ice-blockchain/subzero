@@ -492,6 +492,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 
 	b.WriteRune('(') // Begin the filter section.
 	buildFromSlice(b, sqlOpCodeNONE, filter.ID, filter.IDs, "e.id", "")
+	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Kinds, "e.kind", "")
 	b.ApplyFilterForExtensions(filter)
 	if len(filter.Authors) > 0 {
