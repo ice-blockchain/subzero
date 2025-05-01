@@ -64,28 +64,7 @@ func (c *consensus) CommitBroadcastTx(ctx context.Context, transactions ...clien
 }
 
 func (c *consensus) CommitBroadcastTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
-	events := make([]*model.Event, 0, len(transactions))
-	for _, tx := range transactions {
-		evs, err := mapTxToEvent(tx)
-		if err != nil {
-			return errors.Wrapf(err, "failed to transform tx into event: %v", tx.Data)
-		}
-		events = append(events, evs...)
-	}
-	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
-	if commitEventListener != nil && len(events) > 0 {
-		err := commitEventListener(ctx, events...)
-		if err != nil {
-			return errors.Wrapf(err, "failed to commit broadcasted txs %v", func() string {
-				res := []string{}
-				for _, tx := range transactions {
-					res = append(res, string(tx.Data))
-				}
-				return "[" + strings.Join(res, ", ") + "]"
-			}())
-		}
-	}
-	return nil
+	return c.CommitBroadcastTx(ctx, transactions...)
 }
 func (c *consensus) AcceptBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
@@ -126,28 +105,7 @@ func (c *consensus) RollbackTx(ctx context.Context, transactions ...client.Trans
 }
 
 func (c *consensus) AcceptBroadcastTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
-	events := make([]*model.Event, 0, len(transactions))
-	for _, tx := range transactions {
-		evs, err := mapTxToEvent(tx)
-		if err != nil {
-			return errors.Wrapf(err, "failed to transform removal tx into event")
-		}
-		events = append(events, evs...)
-	}
-	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
-	if consensusEventListener != nil && len(events) > 0 {
-		err := consensusEventListener(ctx, events...)
-		if err != nil {
-			return errors.Wrapf(err, "failed to accept broadcasted txs %v", func() string {
-				res := []string{}
-				for _, tx := range transactions {
-					res = append(res, string(tx.Data))
-				}
-				return "[" + strings.Join(res, ", ") + "]"
-			}())
-		}
-	}
-	return nil
+	return c.AcceptBroadcastTx(ctx, transactions...)
 }
 func (c *consensus) RollbackTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
 	return c.RollbackTx(ctx, transactions...)
@@ -231,13 +189,21 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 	return relays, nil
 }
 
-func (c *consensus) parseEphemeralAckEvent(ev *model.Event) (*model.Event, error) {
+func (c *consensus) parseEphemeralAckEvent(ev *model.Event) (key string, eventContent *model.Event, err error) {
 	var ack model.Event
-	err := ack.UnmarshalJSON([]byte(ev.Content))
+	err = ack.UnmarshalJSON([]byte(ev.Content))
 	if err != nil {
-		return nil, errors.Wrapf(err, "malformed ack")
+		return "", nil, errors.Wrapf(err, "malformed ack")
 	}
-	return &ack, nil
+	ref := ""
+	if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
+		ref = eTag.Value()
+	} else if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
+		ref = aTag.Value()
+	} else {
+		return "", nil, errors.Errorf("malformed %v event, none of e/a tags passed: %v", model.CustomIONKindEphemeralEmbeddding, ev)
+	}
+	return ref, &ack, nil
 }
 
 func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...*model.Event) (masterKey string, relays []string, isProfileDeletion bool, err error) {
@@ -245,17 +211,14 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 	var profileDeletion *model.Event
 	matchingEphemeralAckEvents := map[string]*model.Event{}
 	for _, ev := range events {
-		if !ev.IsEphemeral() {
-			continue
-		}
 		if ev.Kind != model.CustomIONKindEphemeralEmbeddding {
 			continue
 		}
-		ackEvent, aErr := c.parseEphemeralAckEvent(ev)
+		ref, ackEvent, aErr := c.parseEphemeralAckEvent(ev)
 		if aErr != nil {
 			return "", nil, false, errors.Wrapf(aErr, "malformed 21750: %v", ev.Content)
 		}
-		matchingEphemeralAckEvents[ackEvent.GetMasterPublicKey()] = ackEvent
+		matchingEphemeralAckEvents[ref] = ackEvent
 	}
 	for _, ev := range events {
 		if ev.IsEphemeral() || ev.IsJobResponse() || ev.IsJobRequest() {
@@ -314,7 +277,12 @@ func parseAddress(addr string) (*model.Filter, error) {
 func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string]*model.Event) (masterKey string, err error) {
 	var ack *model.Event
 	hasAck := false
-	if ack, hasAck = ephemeralAckEvents[ev.GetMasterPublicKey()]; !hasAck {
+	if ack, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck {
+		if ev.Kind == nostr.KindGiftWrap {
+			if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
+				return pTag.Value(), nil
+			}
+		}
 		return ev.GetMasterPublicKey(), nil
 	}
 	var linkedEvent *model.Event
@@ -330,11 +298,6 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 	case nostr.KindFollowList:
 		if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
 			masterKey = pTag[1]
-		}
-	case nostr.KindGiftWrap:
-		if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
-			masterKey = pTag[1]
-			linkedEvent = ev
 		}
 	case nostr.KindReaction:
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
@@ -482,20 +445,35 @@ func collectRelaysFromRelayEvent(ev *model.Event) []string {
 	return relays
 }
 
-func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string) {
-	if event.Kind == nostr.KindRelayListMetadata ||
-		event.Kind == model.CustomIONKindAttestation ||
-		event.Kind == nostr.KindFileStorageServerList ||
-		event.Kind == nostr.KindDMRelayList {
-		return client.GetFingerprint("metadata")
-	}
-	kTagValue := ""
-	kind := event.Kind
-	if kTag := event.GetTag("k"); kTag != nil {
-		kTagValue = "_" + kTag.Value()
-	}
+func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string, err error) {
+	switch event.Kind {
+	case nostr.KindRelayListMetadata,
+		model.CustomIONKindAttestation,
+		nostr.KindFileStorageServerList,
+		nostr.KindDMRelayList:
+		return client.GetFingerprint("metadata"), nil
+	case nostr.KindGiftWrap:
+		if kTag := event.GetTag("k"); kTag != nil {
+			kTagValue, err := strconv.Atoi(kTag.Value())
+			if err != nil {
+				return "", errors.Wrapf(err, "malformed k tag:%v", kTagValue)
+			}
+			switch kTagValue {
+			case nostr.KindDirectMessage, model.CustomIONDirectMessage, nostr.KindReaction, nostr.KindDeletion:
+				return client.GetFingerprint("tmp"), nil
+			default:
+				return client.GetFingerprint(fmt.Sprintf("%v%v", event.Kind, kTagValue)), nil
+			}
+		}
+		return "", errors.Errorf("malformed %v event, no k tag", nostr.KindGiftWrap)
+	default:
+		kTagValue := ""
+		if kTag := event.GetTag("k"); kTag != nil {
+			kTagValue = "_" + kTag.Value()
+		}
 
-	return client.GetFingerprint(fmt.Sprintf("%v%v", kind, kTagValue))
+		return client.GetFingerprint(fmt.Sprintf("%v%v", event.Kind, kTagValue)), nil
+	}
 }
 
 func mapTxToEvent(tx client.Transaction) ([]*model.Event, error) {
@@ -517,7 +495,10 @@ func mapEventsToTXs(events []*model.Event) (txs []client.Transaction, err error)
 		if ev.IsEphemeral() {
 			continue
 		}
-		fingerprint := mapEventKindToChainFingerprint(ev)
+		fingerprint, err := mapEventKindToChainFingerprint(ev)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to detect event's fingerprint, probably malformed event %v", ev)
+		}
 		var env nostr.EventEnvelope
 		ok := false
 		if env, ok = encodedEvents[fingerprint]; !ok {

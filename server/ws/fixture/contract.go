@@ -41,7 +41,7 @@ type (
 		readerWg          *sync.WaitGroup
 		port              int
 		DB                TestDB
-		Consenus          command.TestConsensus
+		Consensus         command.TestConsensus
 	}
 	Client interface {
 		Received

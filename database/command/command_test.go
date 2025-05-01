@@ -211,14 +211,16 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
 			Content: repostedEvent.String(),
 		}}
+		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		ack := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      model.CustomIONKindEphemeralEmbeddding,
 			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"e", repostEvent.ID},
+			},
 			Content: relaysList.String(),
 		}}
-		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(t.Context(), repostEvent, ack))
 		require.NoError(t, c.broadcastUserEvents(t.Context(), repostEvent, ack))
@@ -245,14 +247,15 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
 			Content: "+",
 		}}
+		require.NoError(t, reactionEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		ack := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      model.CustomIONKindEphemeralEmbeddding,
 			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+				[]string{"e", reactionEvent.ID}},
 			Content: relaysList.String(),
 		}}
-		require.NoError(t, reactionEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, c.broadcastUserEvents(t.Context(), reactionEvent, ack))
 	})

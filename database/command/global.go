@@ -26,7 +26,7 @@ func RegisterAcceptListener(listen func(context.Context, ...*model.Event) error)
 	consensusEventListener = listen
 }
 func RegisterCommitListener(listen func(context.Context, ...*model.Event) error) {
-	consensusEventListener = listen
+	commitEventListener = listen
 }
 
 type Consensus interface {

@@ -104,7 +104,7 @@ func init() {
 	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
 		for _, e := range events {
 			if _, exists := eventKindsNoAuth[e.Kind]; !exists {
-				return true
+				return false
 			}
 		}
 		return false

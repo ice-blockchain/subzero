@@ -123,7 +123,7 @@ func helperCreateWsInstance(serverCtx context.Context, globalConfig *globalCfg, 
 		URL: addr,
 	}))
 
-	srv.Consenus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
+	srv.Consensus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
 		AbsoluteRootPath:           consensusStorage,
 		AbsoluteNodePrivateKeyPath: consensusKey,
 		DiscoveryPort:              consensusPort,

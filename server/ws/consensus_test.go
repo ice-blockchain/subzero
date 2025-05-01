@@ -45,7 +45,7 @@ func TestConsensusEvents(t *testing.T) {
 			if port != 0 && strings.HasSuffix(s.Endpoint(), strconv.FormatInt(int64(port), 10)) {
 				return s
 			}
-			if consensusPort != 0 && s.Consenus.DiscoveryPort() == consensusPort {
+			if consensusPort != 0 && s.Consensus.DiscoveryPort() == consensusPort {
 				return s
 			}
 		}
@@ -57,7 +57,7 @@ func TestConsensusEvents(t *testing.T) {
 		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
 			return qErr
 		}
-		if cErr := mapPort(ctx).Consenus.AcceptEvents(ctx, events...); cErr != nil {
+		if cErr := mapPort(ctx).Consensus.AcceptEvents(ctx, events...); cErr != nil {
 			return cErr
 		}
 		return nil
@@ -227,7 +227,7 @@ func TestConsensusEvents(t *testing.T) {
 	command.RegisterAcceptListener(normalAccept)
 	var eventMissedByRelay3DuringBroadcastTime, eventAfterNodeComesUp *model.Event
 	t.Run("relay fetches missed data after downtime, broadcast still works as 2/3 reached", func(t *testing.T) {
-		pubsubServers[2].Consenus.Stop()
+		pubsubServers[2].Consensus.Stop()
 		time.Sleep(10 * time.Second)
 		eventMissedByRelay3DuringBroadcastTime = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -249,7 +249,7 @@ func TestConsensusEvents(t *testing.T) {
 		require.Contains(t, receivedEventsFromSecondRelay, eventMissedByRelay3DuringBroadcastTime)
 		receivedEventsFromThirdRelay := helperQueryEvents(t, ctx, thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.NotContains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
-		pubsubServers[2].Consenus = command.GetConsensusWithMetricsOverride(t.Context(), command.WithConfig(&command.Config{
+		pubsubServers[2].Consensus = command.GetConsensusWithMetricsOverride(t.Context(), command.WithConfig(&command.Config{
 			AbsoluteRootPath:           "../../.cometbft3",
 			AbsoluteNodePrivateKeyPath: "./../database/command/.testdata/node_key3.json",
 			DiscoveryPort:              19966,
@@ -289,8 +289,8 @@ func TestConsensusEvents(t *testing.T) {
 				return service.Endpoint() == extraServer1.Endpoint() || service.Endpoint() == extraServer2.Endpoint()
 			})
 			helperMustCloseRelay(t, fourRelay)
-			extraServer1.Consenus.Stop()
-			extraServer2.Consenus.Stop()
+			extraServer1.Consensus.Stop()
+			extraServer2.Consensus.Stop()
 			require.NoError(t, release1())
 			require.NoError(t, release2())
 			os.RemoveAll("../../.cometbft4")
@@ -363,7 +363,7 @@ func BenchmarkConcurrentConsensusEvents(b *testing.B) {
 			if port != 0 && strings.HasSuffix(s.Endpoint(), strconv.FormatInt(int64(port), 10)) {
 				return s
 			}
-			if consensusPort != 0 && s.Consenus.DiscoveryPort() == consensusPort {
+			if consensusPort != 0 && s.Consensus.DiscoveryPort() == consensusPort {
 				return s
 			}
 		}
@@ -373,7 +373,7 @@ func BenchmarkConcurrentConsensusEvents(b *testing.B) {
 		if qErr := mapPort(ctx).DB.AcceptEvents(ctx, events...); qErr != nil {
 			return qErr
 		}
-		if cErr := mapPort(ctx).Consenus.AcceptEvents(ctx, events...); cErr != nil {
+		if cErr := mapPort(ctx).Consensus.AcceptEvents(ctx, events...); cErr != nil {
 			return cErr
 		}
 		return nil
@@ -485,6 +485,9 @@ func helperPickRandomRelay(tb testing.TB) *nostrRelay {
 func helperAwaitConsensus(t testing.TB, broadcastFrom *nostrRelay, consensusDone map[string]chan bool) error {
 	t.Helper()
 	for endpoint, done := range consensusDone {
+		if endpoint == broadcastFrom.URL {
+			continue
+		}
 		select {
 		case <-done:
 			continue
