@@ -48,7 +48,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.12.0
-	github.com/xssnick/tonutils-storage v0.8.5
+	github.com/xssnick/tonutils-storage v0.8.6
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.39.0
 	google.golang.org/api v0.231.0
@@ -175,7 +175,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
-	github.com/shirou/gopsutil/v4 v4.25.3 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.4 // indirect
 	github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect

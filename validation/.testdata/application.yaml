@@ -5,6 +5,7 @@ validation:
   max-content-sizes:
     30023: 65535
     30175: 65535
+  relay-url: wss://example.com
 
 database:
   query:

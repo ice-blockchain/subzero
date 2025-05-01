@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 	query.MustInit(ctx, query.WithConfig(&query.Config{
 		URL: addr,
 	}))
+	MustInit()
 
 	code := m.Run()
 	cancel()
