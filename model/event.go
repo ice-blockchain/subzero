@@ -274,5 +274,8 @@ func ParseEphemeralEmbeddingEventRef(ev *Event, parseContent bool) (key string, 
 		eventContent = &content
 	}
 	ref := cmp.Or(ev.GetTag("e").Value(), ev.GetTag("a").Value())
+	if ref == "" {
+		return "", nil, errors.Errorf("malformed ephemeral embedding, missing a / e tag: %+v", ev)
+	}
 	return ref, eventContent, nil
 }

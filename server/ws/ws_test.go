@@ -101,6 +101,7 @@ func TestMain(m *testing.M) {
 	os.RemoveAll("../../.cometbft2")
 	os.RemoveAll("../../.cometbft3")
 	if code == 0 {
+		time.Sleep(1 * time.Second)
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
 			code = 1
