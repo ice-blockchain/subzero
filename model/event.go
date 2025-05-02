@@ -265,7 +265,6 @@ func ParseEphemeralEmbeddingEvents(parseContent bool, events ...*Event) (map[str
 }
 
 func ParseEphemeralEmbeddingEventRef(ev *Event, parseContent bool) (key string, eventContent *Event, err error) {
-	ref := ""
 	var content Event
 	if parseContent {
 		err = content.UnmarshalJSON([]byte(ev.Content))
@@ -274,12 +273,6 @@ func ParseEphemeralEmbeddingEventRef(ev *Event, parseContent bool) (key string, 
 		}
 		eventContent = &content
 	}
-	if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
-		ref = eTag.Value()
-	} else if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
-		ref = aTag.Value()
-	} else {
-		return "", nil, errors.Errorf("malformed %v event, none of e/a tags passed: %v", CustomIONKindEphemeralEmbeddding, ev)
-	}
+	ref := cmp.Or(ev.GetTag("e").Value(), ev.GetTag("a").Value())
 	return ref, eventContent, nil
 }

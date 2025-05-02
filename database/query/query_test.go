@@ -621,9 +621,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			var repost model.Event
 			repost.Kind = nostr.KindRepost
 			repost.CreatedAt = 4
-			contentBytes, err := originalPost.MarshalJSON()
-			require.NoError(t, err)
-			repost.Content = string(contentBytes)
+			repost.Content = originalPost.String()
 			privKey, pubKey := model.GenerateKeyPair()
 			repost.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, otherUserMasterPubkey}}
 			require.NoError(t, repost.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))

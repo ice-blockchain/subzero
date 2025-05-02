@@ -50,9 +50,7 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
 	validation.MustInit()
-	addr, release := query.NewTestDatabase(serverCtx)
-	log.Println(addr)
-	closeFuncs := []func() error{release}
+	closeFuncs := []func() error{}
 	dvm.MustInit(serverCtx)
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
@@ -114,7 +112,6 @@ func TestMain(m *testing.M) {
 
 func helperCreateWsInstance(serverCtx context.Context, globalConfig *globalCfg, wsPort, consensusPort uint16, consensusKey, consensusStorage string) (*fixture.MockService, func() error) {
 	addr, release := query.NewTestDatabase(serverCtx)
-	log.Println(addr)
 	hdl := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort))
 	srv := fixture.NewTestServer(serverCtx, &Config{
 		Port:      wsPort,

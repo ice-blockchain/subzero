@@ -1071,11 +1071,7 @@ func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, eve
 		if !allowed {
 			return model.ErrOnBehalfAccessDenied
 		}
-		dbEvent, err := toDatabaseEvent(ephemeralAttestationEvent)
-		if err != nil {
-			return err
-		}
-		req.InsertOrReplace = append([]databaseEvent{*dbEvent}, req.InsertOrReplace...)
+		return req.Save(ephemeralAttestationEvent)
 	}
 	return nil
 }
@@ -1089,14 +1085,14 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 			return true
 		}
 		refTags := []string{"q", "Q", "a", "p"}
-		haveAnyOfQorPorA := false
+		hasRefTags := false
 		for _, tagName := range refTags {
 			if tag := event.GetTag(tagName); tag != nil && tag.Value() != "" {
-				haveAnyOfQorPorA = true
+				hasRefTags = true
 				break
 			}
 		}
-		return haveAnyOfQorPorA
+		return hasRefTags
 	case nostr.KindFollowList:
 		return true
 	case nostr.KindReaction:
