@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip44"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -210,8 +211,11 @@ func MustInit() {
 			opts = append(opts, pn.WithCredentialsFile(config.FCMCredentialsFile))
 		}
 	}
-
-	opts = append(opts, pn.WithPrivateKey(config.PrivateKey))
+	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(config.PrivateKey)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to convert ed25519 private key to x25519: %v", err))
+	}
+	opts = append(opts, pn.WithX25519PrivateKey(privKeyX25519))
 
 	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {

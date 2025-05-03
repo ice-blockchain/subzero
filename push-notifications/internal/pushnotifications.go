@@ -88,7 +88,7 @@ func WithCredentialsJSON(jsonStr string) Option {
 	}
 }
 
-func WithPrivateKey(privateKey string) Option {
+func WithX25519PrivateKey(privateKey string) Option {
 	return func(o *options) {
 		o.privateKey = privateKey
 	}
@@ -260,11 +260,7 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 	if token == nil {
 		return "", nil
 	}
-	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to convert ed25519 private key to x25519")
-	}
-	conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, ev.PubKey)
+	conversationKey, err := nip44.GenerateConversationKeyX25519(privateKey, ev.PubKey)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate conversation key")
 	}
