@@ -198,7 +198,7 @@ func MustInit() {
 		panic("FCM credentials not provided")
 	}
 	if config.PrivateKey == "" {
-		panic("Database private key is empty")
+		panic("private key is empty")
 	}
 	var opts []pn.Option
 	if strings.HasPrefix(strings.TrimSpace(config.FCMCredentialsFile), "{") {
