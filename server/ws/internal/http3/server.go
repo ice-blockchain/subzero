@@ -18,7 +18,7 @@ import (
 )
 
 func New(cfg *config.Config, router http.Handler) Server {
-	s := &srv{cfg: cfg}
+	s := &srv{cfg: cfg, shutdownCh: make(chan struct{})}
 	s.router = router
 
 	return s
@@ -32,7 +32,9 @@ func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 			Handler: s.router,
 			ConnContext: func(connCtx context.Context, c quic.Connection) context.Context {
 				wsserver := ctx.Value(adapters.CtxKeyServer)
-				return context.WithValue(connCtx, adapters.CtxKeyServer, wsserver)
+				ctx = context.WithValue(connCtx, adapters.CtxKeyServer, wsserver)
+				ctx = context.WithValue(ctx, "serverPort", s.cfg.Port)
+				return ctx
 			},
 			QUICConfig: &quic.Config{
 				HandshakeIdleTimeout:  acceptStreamTimeout,
@@ -94,5 +96,6 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 }
 
 func (s *srv) Shutdown(_ context.Context) error {
+	close(s.shutdownCh)
 	return errors.Wrap(s.server.Close(), "failed to close http3 server")
 }

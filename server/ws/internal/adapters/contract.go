@@ -71,6 +71,7 @@ type (
 	customCancelContext struct {
 		context.Context //nolint:containedctx // Custom implementation.
 		ch              <-chan struct{}
+		shutdownCh      <-chan struct{}
 	}
 	wsWrite struct {
 		data   []byte

@@ -90,6 +90,7 @@ func TestEventCounters(t *testing.T) {
 			ev.Content = "content"
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 		})
+		quotes := []*model.Event{}
 		t.Run("Do", func(t *testing.T) {
 			for i := range 3 {
 				var q model.Event
@@ -99,9 +100,9 @@ func TestEventCounters(t *testing.T) {
 				q.PubKey = "pubkey" + strconv.Itoa(i)
 				q.CreatedAt = model.Timestamp(i)
 				q.Tags = model.Tags{{"q", "1"}}
-
-				require.NoError(t, db.AcceptEvents(t.Context(), &q))
+				quotes = append(quotes, &q)
 			}
+			require.NoError(t, db.AcceptEvents(t.Context(), quotes...))
 			helperMustBePrecalculatedCount(t, db, 3, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "1")})
 		})
 		t.Run("Delete", func(t *testing.T) {
@@ -117,6 +118,14 @@ func TestEventCounters(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, int64(13), c) // 11 posts, 2 quotes.
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "1")})
+		})
+		t.Run("Rollback", func(t *testing.T) {
+			require.NoError(t, db.RollbackEvents(t.Context(), quotes...))
+
+			c, err := db.CountEvents(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, int64(11), c) // 11 posts, 2 quotes.
+			helperMustBePrecalculatedCount(t, db, 0, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("q", "1")})
 		})
 		t.Run("Non existent", func(t *testing.T) {
 			var q model.Event
@@ -240,18 +249,23 @@ func TestEventCounters(t *testing.T) {
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 		})
+		var delEv1, delEv2 model.Event
 		t.Run("Delete", func(t *testing.T) {
-			var ev model.Event
-			ev.Kind = nostr.KindDeletion
-			ev.PubKey = "pubkeyr2"
-			ev.Tags = model.Tags{{"e", "2r"}}
-			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+			delEv1.Kind = nostr.KindDeletion
+			delEv1.PubKey = "pubkeyr2"
+			delEv1.Tags = model.Tags{{"e", "2r"}}
+			require.NoError(t, db.AcceptEvents(t.Context(), &delEv1))
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
-
-			ev.PubKey = "pubkeyr3"
-			ev.Tags = model.Tags{{"e", "3r"}}
-			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+			delEv2 = delEv1
+			delEv2.PubKey = "pubkeyr3"
+			delEv2.Tags = model.Tags{{"e", "3r"}}
+			require.NoError(t, db.AcceptEvents(t.Context(), &delEv2))
 			helperMustBePrecalculatedCount(t, db, 0, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
+		})
+		t.Run("RollbackDelete", func(t *testing.T) {
+			require.NoError(t, db.RollbackEvents(t.Context(), &delEv1))
+			require.NoError(t, db.RollbackEvents(t.Context(), &delEv2))
+			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", "1r")})
 		})
 	})
 	t.Run("Reply", func(t *testing.T) {

@@ -22,9 +22,10 @@ type (
 )
 type (
 	srv struct {
-		server *webtransport.Server
-		router http.Handler
-		cfg    *config.Config
+		server     *webtransport.Server
+		router     http.Handler
+		cfg        *config.Config
+		shutdownCh chan struct{}
 	}
 )
 

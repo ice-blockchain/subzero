@@ -31,7 +31,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
-	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout)
+	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout, s.shutdownCh)
 	go s.ping(ctx, conn)
 
 	return wsocket, ctx, nil
@@ -54,6 +54,8 @@ func (s *srv) ping(ctx context.Context, conn net.Conn) {
 				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send ping message"))
 			}
 		case <-ctx.Done():
+			return
+		case <-s.shutdownCh:
 			return
 		}
 	}

@@ -21,8 +21,12 @@ type (
 	Event struct {
 		nostr.Event
 	}
-	EventSignAlg string
-	EventKeyAlg  string
+	EventSignAlg            string
+	EventKeyAlg             string
+	EphemeralEmbeddingEvent struct {
+		ContentEvent *Event
+		*Event
+	}
 )
 
 const (
@@ -244,3 +248,34 @@ func SplitBatch[T any](slice []T, batchSize int) (batches [][]T) {
 }
 
 func PointerOf[T any](v T) *T { return &v }
+
+func ParseEphemeralEmbeddingEvents(parseContent bool, events ...*Event) (map[string][]*EphemeralEmbeddingEvent, error) {
+	ephemeralEmbeddingEventsByAddr := make(map[string][]*EphemeralEmbeddingEvent, len(events))
+	for _, ev := range events {
+		if ev.Kind != CustomIONKindEphemeralEmbeddding {
+			continue
+		}
+		ref, content, aErr := ParseEphemeralEmbeddingEventRef(ev, parseContent)
+		if aErr != nil {
+			return nil, errors.Wrapf(aErr, "malformed 21750: %v", ev.Content)
+		}
+		ephemeralEmbeddingEventsByAddr[ref] = append(ephemeralEmbeddingEventsByAddr[ref], &EphemeralEmbeddingEvent{ContentEvent: content, Event: ev})
+	}
+	return ephemeralEmbeddingEventsByAddr, nil
+}
+
+func ParseEphemeralEmbeddingEventRef(ev *Event, parseContent bool) (key string, eventContent *Event, err error) {
+	var content Event
+	if parseContent {
+		err = content.UnmarshalJSON([]byte(ev.Content))
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "malformed %v event, incorrect content %v", CustomIONKindEphemeralEmbeddding, ev.Content)
+		}
+		eventContent = &content
+	}
+	ref := cmp.Or(ev.GetTag("e").Value(), ev.GetTag("a").Value())
+	if ref == "" {
+		return "", nil, errors.Errorf("malformed ephemeral embedding, missing a / e tag: %+v", ev)
+	}
+	return ref, eventContent, nil
+}

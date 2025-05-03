@@ -3,6 +3,7 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	_ "embed"
@@ -13,15 +14,19 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
+	"github.com/puzpuzpuz/xsync/v4"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
 	dbClient struct {
 		*sqlx.DB
-		relayPrivateKey string
-		relayURL        string
-		stmtCacheMx     *sync.RWMutex
-		stmtCache       map[string]*sqlx.NamedStmt
+		relayPrivateKey    string
+		relayURL           string
+		stmtCacheMx        *sync.RWMutex
+		stmtCache          map[string]*sqlx.NamedStmt
+		rollbackableEvents *xsync.Map[string, *databaseRollbackRequest]
 	}
 )
 
@@ -32,9 +37,10 @@ var (
 
 func openDatabase(target string, runDDL bool) *dbClient {
 	client := &dbClient{
-		DB:          sqlx.MustConnect("pgx", target),
-		stmtCacheMx: new(sync.RWMutex),
-		stmtCache:   make(map[string]*sqlx.NamedStmt),
+		DB:                 sqlx.MustConnect("pgx", target),
+		stmtCacheMx:        new(sync.RWMutex),
+		stmtCache:          make(map[string]*sqlx.NamedStmt),
+		rollbackableEvents: xsync.NewMap[string, *databaseRollbackRequest](),
 	}
 	client.Mapper = reflectx.NewMapperFunc("subzero", func(in string) (out string) {
 		n := strings.ToLower(in)
@@ -129,6 +135,17 @@ func (db *dbClient) prepare(ctx context.Context, sql, hash string) (stmt *sqlx.N
 
 func hashSQL(sql string) (hash string) {
 	sum := sha256.Sum256([]byte(sql))
+
+	return string(sum[:])
+}
+
+func hashEvents(events ...*model.Event) (hash string) {
+	var buf bytes.Buffer
+
+	for _, e := range events {
+		buf.WriteString(e.String())
+	}
+	sum := sha256.Sum256(buf.Bytes())
 
 	return string(sum[:])
 }

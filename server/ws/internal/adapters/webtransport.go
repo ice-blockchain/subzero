@@ -13,7 +13,7 @@ import (
 	"github.com/quic-go/webtransport-go"
 )
 
-func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, stream webtransport.Stream, readTimeout, writeTimeout time.Duration) (WSWithWriter, context.Context) {
+func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, stream webtransport.Stream, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
 	wt := &WebtransportAdapter{
 		stream:       stream,
 		session:      session,
@@ -24,7 +24,7 @@ func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, 
 		writeTimeout: writeTimeout,
 	}
 
-	return wt, NewCustomCancelContext(ctx, wt.closeChannel)
+	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
 }
 
 func (w *WebtransportAdapter) WriteMessage(_ int, data []byte) (err error) {

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: ice License 1.0
 
+//go:build test
+
 package fixture
 
 import (
@@ -59,7 +61,7 @@ func (m *MockService) Read(ctx context.Context, w internal.WS, cfg *config.Confi
 			m.handlersMx.Lock()
 			m.Handlers[w] = struct{}{}
 			m.handlersMx.Unlock()
-			m.processingFunc(ctx, w, msg, cfg)
+			go m.processingFunc(ctx, w, msg, cfg)
 		}
 	}
 }

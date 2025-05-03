@@ -37,6 +37,7 @@ var (
 	ErrOnBehalfAccessDenied      = model.ErrOnBehalfAccessDenied
 	ErrRepostOfDeletedPost       = errors.New("repost of deleted post")
 	ErrInvalidEvent              = errors.New("invalid event")
+	ErrRaceCondition             = errors.New("race condition")
 
 	errEventIteratorInterrupted = errors.New("interrupted")
 
@@ -46,34 +47,42 @@ var (
 type (
 	databaseEvent struct {
 		model.Event
-		SystemKind   sql.NullInt64
-		ReferenceID  sql.NullString
-		Jtags        string
-		SigAlg       string
-		KeyAlg       string
-		MasterPubKey string
-		Dtag         string
-		Htag         string
-		AddressValue string
-		Lookup       string
-		TagID        int64
-		Deleted      bool
-		HasImages    bool
-		HasVideos    bool
+		SystemKind      sql.NullInt64
+		ReferenceID     sql.NullString
+		Jtags           string
+		SigAlg          string
+		KeyAlg          string
+		MasterPubKey    string
+		Dtag            string
+		Htag            string
+		AddressValue    string
+		Lookup          string
+		TagID           int64
+		Deleted         bool
+		HasImages       bool
+		HasVideos       bool
+		SaveMergeAction string
 	}
 	databaseEventAddress struct {
 		Kind   int
 		Pubkey string
 		Dtag   string
 	}
+	databaseRollbackRequest struct {
+		databaseBatchRequest
+		ReplaceableEvents map[string]bool
+	}
 )
 
 type databaseBatchRequest struct {
+	EventsHash *string
 	// Events to store or replace.
 	InsertOrReplace []databaseEvent
 
 	// Events to delete.
 	Delete []databaseFilterDelete
+	// IDs of replaceable events to rollback update
+	Rollback map[string]bool
 }
 
 func detectImagesVideos(tags model.Tags) (images, videos bool) {
@@ -199,12 +208,20 @@ func (req *databaseBatchRequest) Remove(e *model.Event) error {
 }
 
 func (req *databaseBatchRequest) Empty() bool {
-	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0
+	return len(req.InsertOrReplace) == 0 && len(req.Delete) == 0 && len(req.Rollback) == 0
 }
 
-func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) error {
+func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 	var req databaseBatchRequest
-
+	eventsHash := hashEvents(events...)
+	req.EventsHash = &eventsHash
+	if _, accepted := db.rollbackableEvents.Load(eventsHash); accepted {
+		return nil
+	}
+	var ephemeralEmbeddings map[string][]*model.EphemeralEmbeddingEvent
+	if ephemeralEmbeddings, err = model.ParseEphemeralEmbeddingEvents(true, events...); err != nil {
+		return errors.Wrapf(err, "malformed embeddings")
+	}
 	for i := range events {
 		if events[i].IsEphemeral() {
 			continue
@@ -223,10 +240,20 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 
 				continue
 			}
+			if embeddings, hasEmbeddings := ephemeralEmbeddings[events[i].Address()]; hasEmbeddings && eventValidForEphemeralAttestation(events[i]) {
+				if err = verifyEphemeralAttestation(embeddings, events[i], &req); err != nil {
+					return err
+				}
+			}
 			if err := req.Remove(events[i]); err != nil {
 				return err
 			}
 		} else {
+			if embeddings, hasEmbeddings := ephemeralEmbeddings[events[i].Address()]; hasEmbeddings && eventValidForEphemeralAttestation(events[i]) {
+				if err = verifyEphemeralAttestation(embeddings, events[i], &req); err != nil {
+					return err
+				}
+			}
 			if err := req.Save(events[i]); err != nil {
 				return err
 			}
@@ -234,6 +261,37 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) er
 	}
 
 	return db.executeBatch(ctx, &req)
+}
+
+func (db *dbClient) CommitEvents(ctx context.Context, events ...*model.Event) error {
+	eventsHash := hashEvents(events...)
+	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.LoadAndDelete(eventsHash); !hasEventsToRollback {
+		return nil
+	} else {
+		if val := ctx.Value(model.ConsensusReplayCtxKey); val != nil && val.(bool) {
+			return nil
+		}
+		if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents); err != nil {
+			return errors.Wrap(err, "failed to delete tmp replaceableEvents")
+		}
+		return nil
+	}
+}
+
+func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) error {
+	eventsHash := hashEvents(events...)
+	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.Load(eventsHash); !hasEventsToRollback {
+		return nil
+	} else {
+		if err := db.executeBatch(ctx, &databaseBatchRequest{
+			InsertOrReplace: eventsToRollback.InsertOrReplace,
+			Delete:          eventsToRollback.Delete,
+			Rollback:        eventsToRollback.ReplaceableEvents,
+		}); err != nil {
+			return errors.Wrap(err, "failed to perform rollback")
+		}
+		return nil
+	}
 }
 
 func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
@@ -245,7 +303,7 @@ func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
 	return string(sAlg), string(kAlg), nil
 }
 
-func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCheck bool, filters []databaseFilterDelete) (deletedCount int, dependencies []databaseFilterDelete, err error) {
+func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCheck bool, filters []databaseFilterDelete) (deletedEvents []*model.Event, dependencies []databaseFilterDelete, err error) {
 	var (
 		where  string
 		params map[string]any
@@ -285,7 +343,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		where, params, err = builder.BuildSingleWhere(genericFilters...)
 	}
 	if err != nil {
-		return 0, nil, errors.Wrap(err, "failed to generate events where clause")
+		return nil, nil, errors.Wrap(err, "failed to generate events where clause")
 	}
 
 	stmt := `delete from events as e where ` + where + ` returning
@@ -300,16 +358,14 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	h_tag,
 	tags
 `
-
-	var deletedEvents []*model.Event
 	for ev, err := range db.newReadEventIterator(ctx, stmt, params) {
 		if err != nil {
-			return 0, nil, errors.Wrap(db.handleError(err), "failed to exec delete event sql")
+			return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
 		}
 		deletedEvents = append(deletedEvents, ev)
 	}
 	if len(deletedEvents) == 0 {
-		return 0, nil, nil
+		return nil, nil, nil
 	}
 
 	for _, ev := range deletedEvents {
@@ -329,21 +385,64 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		dependencies = append(dependencies, f)
 	}
 
-	return len(deletedEvents), dependencies, nil
+	return deletedEvents, dependencies, nil
 }
 
-func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDelete) error {
-	_, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filters)
+func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool) error {
+	if len(replaceableEventsToDelete) == 0 {
+		return nil
+	}
+	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToDelete))
+	for evID := range replaceableEventsToDelete {
+		replaceableEventsIDs = append(replaceableEventsIDs, evID)
+	}
+	sqlQuery := `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY(:ids)`
+	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
+	params := map[string]any{
+		"ids": replaceableEventsIDs,
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
+	}
+	res, err := stmt.ExecContext(ctx, params)
+	if err != nil {
+		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql")
+	}
+	actual, err := res.RowsAffected()
+	if err != nil {
+		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql (rows)")
+	}
+	if actual != int64(len(replaceableEventsToDelete)) {
+		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), actual)
+	}
+	return nil
+}
+
+func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequest, eventsToRollback *databaseRollbackRequest) error {
+	deleted, filtersToDelete, err := db.deleteEventsWithDependencies(ctx, true, filters.Delete)
 	if err != nil {
 		return err
 	}
-
+	if filters.EventsHash != nil {
+		for _, e := range deleted {
+			if err = eventsToRollback.Save(e); err != nil {
+				return errors.Wrapf(err, "failed to convert event to dbEvent: %v", e.String())
+			}
+		}
+	}
 	for len(filtersToDelete) > 0 && err == nil {
 		var dependencies []databaseFilterDelete
 		for _, batch := range model.SplitBatch(filtersToDelete, 100) {
-			_, batchDeps, err := db.deleteEventsWithDependencies(ctx, false, batch)
+			batchDelete, batchDeps, err := db.deleteEventsWithDependencies(ctx, false, batch)
 			if err != nil {
 				break
+			}
+			if filters.EventsHash != nil {
+				for _, e := range batchDelete {
+					if err = eventsToRollback.Save(e); err != nil {
+						return errors.Wrapf(err, "failed to convert event to dbEvent: %v", e.String())
+					}
+				}
 			}
 			dependencies = append(dependencies, batchDeps...)
 		}
@@ -353,42 +452,66 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters []databaseFilterDe
 	return err
 }
 
-func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) error {
+func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, replaceableEventsToRollback map[string]bool) *eventIterator {
 	var stmt string
-	params := []any{}
 	values := []string{}
-
-	idx := 1
+	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
+	if len(replaceableEventsToRollback) > 0 {
+		for evID := range replaceableEventsToRollback {
+			replaceableEventsIDs = append(replaceableEventsIDs, evID)
+		}
+	}
+	params := []any{replaceableEventsIDs}
+	idx := 2
 	for _, ev := range events {
 		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
 			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
 			ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos,
 			ev.Lookup,
 		)
+		isReplay := ""
+		if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+			isReplay = model.ConsensusReplayCtxKey
+		}
 		values = append(values, fmt.Sprintf(
 			`($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint),
 			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
 			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
-			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text))`,
+			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text),
+			'%[18]v')`, // replaced_by_id to match replaceable_events_before_update schema,
+			// we use it also to detect if save come from consensus.ReplayTx.
+			// In this case it should not trigger trigger_events_store_replaceable_data_before_update
+			// as data already committed and we want to avoid extra insert / delete to that table
+			// of rollbackable replaceable events.
 			idx, idx+1, idx+2,
 			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
+			isReplay,
 		))
 		idx += 17
 	}
-
-	stmt = `MERGE INTO events AS target
-				USING (VALUES
-					` + strings.Join(values, ",") + `
+	valuesStr := ""
+	if len(values) > 0 {
+		valuesStr = "UNION ALL VALUES " + strings.Join(values, ",")
+	}
+	stmt = `
+				WITH replaced AS (DELETE FROM replaceable_events_before_update
+										WHERE replaced_by_id = ANY($1)
+										RETURNING *)
+				MERGE INTO events AS target
+				USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
+					has_images, has_videos, lookup, replaced_by_id FROM replaced 
+						` + valuesStr + `
 				) AS source (
 					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
 					has_images,
 					has_videos,
-					lookup
+					lookup, replaced_by_id
 				)
 				ON (
 					target.id = source.id
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
+					OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `')
 				)
 			WHEN MATCHED AND
 				target.master_pubkey = source.master_pubkey
@@ -409,15 +532,22 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					lookup = source.lookup,
 					deleted = source.deleted,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+					-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
+                    reference_id = CASE 
+									WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+									ELSE NULL
+                                   END
 			WHEN MATCHED AND
 				target.master_pubkey = source.master_pubkey
 				AND target.kind = source.kind
 				AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
 				UPDATE SET
 					id = source.id,
+					kind = source.kind,
 					system_kind = source.system_kind,
 					d_tag = source.d_tag,
+					master_pubkey = source.master_pubkey,
 					sig = source.sig,
 					sig_alg = source.sig_alg,
 					key_alg = source.key_alg,
@@ -427,9 +557,31 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					lookup = source.lookup,
 					tags = source.tags,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+					-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
+                    reference_id = CASE 
+									WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+									ELSE NULL
+                                   END
 			WHEN MATCHED AND target.id = source.id THEN
 				UPDATE SET
+					kind = source.kind,
+					system_kind = source.system_kind,
+					master_pubkey = source.master_pubkey,
+					d_tag = source.d_tag,
+					created_at = source.created_at,
+					pubkey = source.pubkey,
+					sig = source.sig,
+					sig_alg = source.sig_alg,
+					key_alg = source.key_alg,
+					lookup = source.lookup,
+					content = source.content,
+					tags = source.tags,
+					has_images = source.has_images,
+					has_videos = source.has_videos
+			WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
+				UPDATE SET
+					id = source.id,
 					kind = source.kind,
 					system_kind = source.system_kind,
 					master_pubkey = source.master_pubkey,
@@ -460,30 +612,127 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent) erro
 					source.h_tag, source.deleted,
 					source.has_images, source.has_videos,
 					source.lookup
-				);`
+				)
+				RETURNING
+					target.kind,
+					target.created_at,
+					target.id,
+					target.pubkey,
+					target.master_pubkey,
+					target.sig,
+					target.content,
+					target.d_tag,
+					target.h_tag,
+					target.lookup,
+					target.tags,
+					merge_action() as savemergeaction;`
 
-	_, err := db.ExecContext(ctx, stmt, params...)
+	it := &eventIterator{
+		Map: nil,
+		Fetch: func() (*sqlx.Rows, error) {
+			result, err := db.QueryxContext(ctx, stmt, params...)
+			if err != nil {
+				err = errors.Wrap(handleError(err), "failed to exec insert event sql")
+				if errors.Is(err, ErrRaceCondition) {
+					result, err = db.QueryxContext(ctx, stmt, params...)
+					if err != nil {
+						err = errors.Wrap(handleError(err), "failed to exec insert event sql")
+					}
+				}
+			}
+			return result, err
+		}}
 
-	return db.handleError(err)
+	return it
+}
+
+func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) (replaceableEvents map[string]bool, inserted []databaseFilterDelete, err error) {
+	if len(req.InsertOrReplace) == 0 && len(req.Rollback) == 0 {
+		return map[string]bool{}, []databaseFilterDelete{}, nil
+	}
+	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace, req.Rollback)
+	events := []*model.Event{}
+	replaceableEvents = map[string]bool{}
+	sErr := insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
+		if dbEvent.Event.IsReplaceable() || nostr.IsAddressableKind(dbEvent.Event.Kind) {
+			replaceableEvents[dbEvent.ID] = dbEvent.SaveMergeAction == "INSERT"
+		}
+		events = append(events, &dbEvent.Event)
+
+		return nil
+	})
+	if sErr != nil {
+		sErr = errors.Wrap(handleError(sErr), "failed to exec insert event sql")
+	}
+	if len(replaceableEvents) > 0 {
+		keepOnlyInsertedEvents := func(event *model.Event) bool {
+			if insert, wasUpdatedReplaceableEvent := replaceableEvents[event.ID]; wasUpdatedReplaceableEvent {
+				if !insert {
+					return true
+				}
+				delete(replaceableEvents, event.ID)
+				return false
+			}
+			return false
+		}
+		events = slices.DeleteFunc(events, keepOnlyInsertedEvents)
+	}
+	expectedRows := len(req.InsertOrReplace) + len(req.Rollback)
+	if actual := len(events) + len(replaceableEvents); sErr == nil && actual != expectedRows {
+		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expectedRows, actual)
+	}
+	if sErr == nil && req.EventsHash != nil && len(events) > 0 {
+		for _, ev := range events {
+			var f databaseFilterDelete
+
+			f.Author = ev.PubKey
+			switch {
+			case ev.IsReplaceable():
+				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
+
+			case ev.IsAddressable():
+				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
+
+			case ev.IsRegular():
+				f.IDs = append(f.IDs, ev.ID)
+			}
+			inserted = append(inserted, f)
+		}
+	}
+	if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+		replaceableEvents = map[string]bool{}
+	}
+	return replaceableEvents, inserted, errors.Wrap(sErr, "failed to save events")
 }
 
 func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest) (err error) {
 	if req.Empty() {
 		return nil
 	}
-
-	if len(req.InsertOrReplace) > 0 {
-		err = errors.Join(err, errors.Wrap(db.saveEvents(ctx, req.InsertOrReplace), "failed to save events"))
-	}
-
-	if len(req.Delete) > 0 {
-		deleteErr := db.deleteEvents(ctx, req.Delete)
-		if errors.Is(deleteErr, ErrUnexpectedRowsAffected) && len(req.InsertOrReplace) > 0 {
-			deleteErr = nil
+	var eventsToRollback databaseRollbackRequest
+	if req.EventsHash != nil {
+		replacedEvents, toRollbackDeleteOp, sErr := db.executeSave(ctx, req)
+		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
+		eventsToRollback.ReplaceableEvents = replacedEvents
+		err = errors.Join(err, errors.Wrap(sErr, "failed to save events"))
+		if len(req.Delete) > 0 {
+			if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
+				err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
+			}
 		}
-		err = errors.Join(err, errors.Wrap(deleteErr, "failed to delete events"))
+	} else {
+		if len(req.Delete) > 0 {
+			if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
+				err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
+			}
+		}
+		_, toRollbackDeleteOp, sErr := db.executeSave(ctx, req)
+		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
+		err = errors.Join(err, errors.Wrap(sErr, "failed to save events"))
 	}
-
+	if err == nil && (!eventsToRollback.Empty() || len(eventsToRollback.ReplaceableEvents) > 0) {
+		db.rollbackableEvents.Store(*req.EventsHash, &eventsToRollback)
+	}
 	return err
 }
 
@@ -574,7 +823,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 	}
 }
 
-func (db *dbClient) handleError(err error) error {
+func handleError(err error) error {
 	var sqlError *pgconn.PgError
 
 	if err == nil {
@@ -594,6 +843,8 @@ func (db *dbClient) handleError(err error) error {
 			}
 		} else if sqlError.SQLState() == "22021" {
 			return ErrInvalidEvent
+		} else if sqlError.SQLState() == "23505" && sqlError.ConstraintName == "events_pkey" {
+			return ErrRaceCondition
 		}
 	}
 
@@ -686,7 +937,7 @@ func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []s
 		},
 	) {
 		if err != nil {
-			return nil, errors.Wrapf(db.handleError(err), "failed to fetch all keys of %v", pubkey)
+			return nil, errors.Wrapf(handleError(err), "failed to fetch all keys of %v", pubkey)
 		}
 
 		entries, err := model.ParseAttestationTags(ev.Tags)
@@ -818,7 +1069,7 @@ func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingE
 	filters = make([]databaseFilterDelete, 0)
 	for ev, err := range db.SelectEvents(ctx, selectFilter) {
 		if err != nil {
-			return nil, errors.Wrap(db.handleError(err), "failed to select community events for deletion")
+			return nil, errors.Wrap(handleError(err), "failed to select community events for deletion")
 		}
 		filters = append(filters, databaseFilterDelete{
 			Author: ev.GetMasterPublicKey(),
@@ -827,4 +1078,68 @@ func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingE
 	}
 
 	return filters, nil
+}
+
+func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, event *model.Event, req *databaseBatchRequest) error {
+	var ephemeralAttestationEvent *model.Event
+	for _, embedding := range embeddings {
+		if embedding.ContentEvent.Kind == model.CustomIONKindAttestation && event.GetMasterPublicKey() == embedding.ContentEvent.GetMasterPublicKey() {
+			ephemeralAttestationEvent = embedding.ContentEvent
+			break
+		}
+	}
+	if ephemeralAttestationEvent != nil {
+		allowed, err := model.OnBehalfIsAccessAllowed(ephemeralAttestationEvent.Tags, event.PubKey, event.Kind, time.Now().Unix())
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse attestation event")
+		}
+		if !allowed {
+			return model.ErrOnBehalfAccessDenied
+		}
+		return req.Save(ephemeralAttestationEvent)
+	}
+	return nil
+}
+
+func eventValidForEphemeralAttestation(event *model.Event) bool {
+	switch event.Kind {
+	case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
+		// reply, quote or mention
+		eTag := event.GetTag("e")
+		if eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
+			return true
+		}
+		refTags := []string{"q", "Q", "a", "p"}
+		hasRefTags := false
+		for _, tagName := range refTags {
+			if tag := event.GetTag(tagName); tag != nil && tag.Value() != "" {
+				hasRefTags = true
+				break
+			}
+		}
+		return hasRefTags
+	case nostr.KindFollowList:
+		return true
+	case nostr.KindReaction:
+		return true
+	case nostr.KindGenericRepost, nostr.KindRepost:
+		return true
+	case nostr.KindDeletion:
+		if kTag := event.GetTag("k"); kTag != nil {
+			kValue, err := strconv.Atoi(kTag.Value())
+			if err != nil {
+				return false
+			}
+			switch kValue {
+			case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle,
+				nostr.KindFollowList, nostr.KindReaction, nostr.KindGenericRepost, nostr.KindRepost:
+				return true
+			default:
+				return false
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }

@@ -28,7 +28,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h3
 
 		return
 	}
-	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout)
+	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout, s.shutdownCh)
 
 	return wsocket, ctx, nil
 }

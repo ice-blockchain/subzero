@@ -82,7 +82,7 @@ func helperRegisterWSSubscriptionListenerWithStorage(t *testing.T, storedEvents 
 	})
 }
 
-func helperMustNewRelay(t *testing.T, service *fixture.MockService) *nostrRelay {
+func helperMustNewRelay(t testing.TB, service *fixture.MockService) *nostrRelay {
 	t.Helper()
 
 	service.Reset()
@@ -99,7 +99,7 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 	if relay != nil {
 		err := relay.Close()
 		if err != nil {
-			if !strings.Contains(err.Error(), "relay not connected") {
+			if !(strings.Contains(err.Error(), "relay not connected") || strings.Contains(err.Error(), "relay already closed")) {
 				require.NoError(t, err)
 			}
 		}
@@ -2002,7 +2002,7 @@ func TestCountEvents(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
-func helperSignWithMinLeadingZeroBits(t *testing.T, event *model.Event, privkey string) {
+func helperSignWithMinLeadingZeroBits(t testing.TB, event *model.Event, privkey string) {
 	t.Helper()
 	require.NoError(t, event.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, event.GenerateNIP13(t.Context(), NIP13MinLeadingZeroBits))

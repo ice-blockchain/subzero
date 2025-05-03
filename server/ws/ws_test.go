@@ -4,6 +4,7 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -18,11 +19,13 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 const (
@@ -37,21 +40,18 @@ var (
 	pubsubServers []*fixture.MockService
 )
 
+type globalCfg struct {
+	TLSCert string `yaml:"tls-cert"`
+	TLSKey  string `yaml:"tls-key"`
+}
+
 func TestMain(m *testing.M) {
-	type globalCfg struct {
-		TLSCert string `yaml:"tls-cert"`
-		TLSKey  string `yaml:"tls-key"`
-	}
 	globalConfig := cfg.MustGet[globalCfg]()
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer serverCancel()
-
-	addr, release := query.NewTestDatabase(serverCtx)
-	query.MustInit(serverCtx, query.WithConfig(&query.Config{
-		URL: addr,
-	}))
+	validation.MustInit()
+	closeFuncs := []func() error{}
 	dvm.MustInit(serverCtx)
-
 	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
 		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 			log.Panic(wErr)
@@ -69,35 +69,39 @@ func TestMain(m *testing.M) {
 		map[string]gin.HandlerFunc{},
 	)
 
-	hdl := newHandler("wss://localhost:9998")
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
-		&Config{
-			Port:                    9998,
-			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-		},
-		hdl.Handle,
-		nil,
-		map[string]gin.HandlerFunc{},
-	))
+	server, release := helperCreateWsInstance(serverCtx, globalConfig,
+		9988, 19988,
+		"./../database/command/.testdata/node_key.json",
+		"../../.cometbft",
+	)
+	pubsubServers = append(pubsubServers, server)
+	closeFuncs = append(closeFuncs, release)
 
-	hdl2 := newHandler("wss://localhost:9997")
-	pubsubServers = append(pubsubServers, fixture.NewTestServer(serverCtx,
-		&Config{
-			Port:                    9997,
-			NIP13MinLeadingZeroBits: NIP13MinLeadingZeroBits,
-			TLSConfig:               LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-		},
-		hdl2.Handle,
-		nil,
-		map[string]gin.HandlerFunc{},
-	))
+	server2, release2 := helperCreateWsInstance(serverCtx, globalConfig,
+		9977, 19977,
+		"./../database/command/.testdata/node_key2.json",
+		"../../.cometbft2",
+	)
+	pubsubServers = append(pubsubServers, server2)
+	closeFuncs = append(closeFuncs, release2)
 
+	server3, release3 := helperCreateWsInstance(serverCtx, globalConfig,
+		9966, 19966,
+		"./../database/command/.testdata/node_key3.json",
+		"../../.cometbft3",
+	)
+	pubsubServers = append(pubsubServers, server3)
+	closeFuncs = append(closeFuncs, release3)
 	code := m.Run()
 	serverCancel()
-	release()
-
+	for _, closeDb := range closeFuncs {
+		closeDb()
+	}
+	os.RemoveAll("../../.cometbft")
+	os.RemoveAll("../../.cometbft2")
+	os.RemoveAll("../../.cometbft3")
 	if code == 0 {
+		time.Sleep(1 * time.Second)
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
 			code = 1
@@ -105,6 +109,25 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(code)
+}
+
+func helperCreateWsInstance(serverCtx context.Context, globalConfig *globalCfg, wsPort, consensusPort uint16, consensusKey, consensusStorage string) (*fixture.MockService, func() error) {
+	addr, release := query.NewTestDatabase(serverCtx)
+	hdl := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort))
+	srv := fixture.NewTestServer(serverCtx, &Config{
+		Port:      wsPort,
+		TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+	}, hdl.Handle, nil, map[string]gin.HandlerFunc{})
+	srv.DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
+		URL: addr,
+	}))
+
+	srv.Consensus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
+		AbsoluteRootPath:           consensusStorage,
+		AbsoluteNodePrivateKeyPath: consensusKey,
+		DiscoveryPort:              consensusPort,
+	}))
+	return srv, release
 }
 
 func TestSimpleEchoDifferentTransports(t *testing.T) {

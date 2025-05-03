@@ -2,6 +2,7 @@
 
 validation:
   max-wrapped-event-expiration: 720h
+  nip13MinLeadingZeroBits: 0
   max-content-sizes:
     30023: 65535
     30175: 65535

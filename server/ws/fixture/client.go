@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: ice License 1.0
 
+//go:build test
+
 package fixture
 
 import (
@@ -44,7 +46,7 @@ func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open webtransport stream to %v", url)
 	}
-	wt, closectx := adapters.NewWebTransportAdapter(ctx, conn, stream, 0, 0)
+	wt, closectx := adapters.NewWebTransportAdapter(ctx, conn, stream, 0, 0, ctx.Done())
 	go wt.Write(closectx)
 	c := &wtransportClient{
 		wt:            wt.(*adapters.WebtransportAdapter),
@@ -166,7 +168,7 @@ func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, err
 	}
 	conn := newHTTP2ClientStream(bodyw, rsp)
 	stream := &http2WebtransportWrapper{conn: conn}
-	wt, closectx := adapters.NewWebTransportAdapter(ctx, nil, stream, 0, 0)
+	wt, closectx := adapters.NewWebTransportAdapter(ctx, nil, stream, 0, 0, ctx.Done())
 	go wt.Write(closectx)
 	c := &wtransportClient{
 		wt:            wt.(*adapters.WebtransportAdapter),
@@ -304,7 +306,7 @@ func clientWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, wri
 		inputMessages: make(chan []byte),
 	}
 
-	return wt, adapters.NewCustomCancelContext(ctx, wt.closeChannel)
+	return wt, adapters.NewCustomCancelContext(ctx, wt.closeChannel, ctx.Done())
 }
 
 func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) error {
