@@ -888,3 +888,87 @@ func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessEventWithReaction(t *testing.T) {
+	t.Parallel()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+	recipientPubKey := "recipient_master_pubkey"
+	deviceID := "device1"
+	devicePubKey := "device_pubkey"
+	senderPubKey := "sender_pubkey"
+
+	filterJSON := `[{"kinds":[7],"#p":["recipient_master_pubkey"]}]`
+	var filters nostr.Filters
+	require.NoError(t, json.Unmarshal([]byte(filterJSON), &filters))
+
+	deviceTags := nostr.Tags{
+		{"t", "ios"},
+		{"d", deviceID},
+		{"relay", "wss://relay.example.com"},
+		{"token", "token1"},
+	}
+
+	deviceEvent := &model.Event{
+		Event: nostr.Event{
+			ID:      "test_id_" + deviceID,
+			PubKey:  devicePubKey,
+			Kind:    model.CustomIONKindDeviceRegistration,
+			Content: filterJSON,
+			Tags:    deviceTags,
+		},
+	}
+
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+
+	pm.deviceMutex.Lock()
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	require.True(t, ok, "Device should exist in userDevicesMap")
+
+	if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
+		pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+	}
+	pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.deviceMutex.Unlock()
+
+	event := &model.Event{
+		Event: nostr.Event{
+			ID:      "reaction-event-id",
+			Kind:    nostr.KindReaction,
+			PubKey:  senderPubKey,
+			Content: "+",
+			Tags: nostr.Tags{
+				{"p", recipientPubKey},
+				{"e", "original-note-id"},
+			},
+		},
+	}
+
+	match := filters.Match(&event.Event)
+	require.True(t, match, "Event should match filter")
+
+	notifications := pm.handleEventWithPublicKey(event)
+	require.NotNil(t, notifications, "Notifications should not be nil when calling handleEventWithPublicKey directly")
+	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
+
+	notification := notifications[0]
+	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notification.Body, "Body should match")
+	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
+	require.Contains(t, notification.Data, "event", "Data should contain event")
+	require.Equal(t, event.String(), notification.Data["event"], "Event in data should match original event")
+
+	notificationsFromProcessEvent, err := pm.processEvent(t.Context(), event)
+	require.NoError(t, err)
+	require.NotNil(t, notificationsFromProcessEvent, "Notifications should not be nil")
+	require.Len(t, notificationsFromProcessEvent, 1, "Should create one notification")
+
+	notificationFromProcessEvent := notificationsFromProcessEvent[0]
+	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), notificationFromProcessEvent.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notificationFromProcessEvent.Body, "Body should match")
+	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")
+	require.Contains(t, notificationFromProcessEvent.Data, "event", "Data should contain event")
+	require.Equal(t, event.String(), notificationFromProcessEvent.Data["event"], "Event in data should match original event")
+}

@@ -44,10 +44,10 @@ func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*p
 	if recipientMasterPubKey == "" || recipientMasterPubKey == event.GetMasterPublicKey() {
 		return nil, nil
 	}
-	if len(pTag) <= 2 {
+	if len(pTag) < 4 {
 		return nil, nil
 	}
-	devicePubKey := pTag[2]
+	devicePubKey := pTag[3]
 	if devicePubKey == "" {
 		return nil, nil
 	}

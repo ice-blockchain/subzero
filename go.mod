@@ -4,7 +4,7 @@ go 1.24.2
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
-	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250501135515-dfa5ad0b914f
+	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250503123812-e7621ca90490
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.11.1
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250325160150-e1bb11d2b23c
 )
@@ -49,7 +49,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.12.0
-	github.com/xssnick/tonutils-storage v0.8.4
+	github.com/xssnick/tonutils-storage v0.8.6
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.39.0
 	google.golang.org/api v0.231.0
@@ -71,6 +71,7 @@ require (
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.53.0 // indirect
 	dario.cat/mergo v1.0.1 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0 // indirect

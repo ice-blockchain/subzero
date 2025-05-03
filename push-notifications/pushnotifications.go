@@ -191,22 +191,28 @@ func MustInit() {
 	var pnClient pn.Client
 	var err error
 
-	cfg := cfg.MustGet[config]()
+	config := cfg.MustGet[config]()
+	queryConfig := cfg.MustGet[query.Config]()
 
-	if cfg.FCMCredentialsFile == "" {
+	if config.FCMCredentialsFile == "" {
 		panic("FCM credentials not provided")
 	}
 
+	if queryConfig.PrivateKey == "" {
+		panic("Database private key is empty")
+	}
 	var opts []pn.Option
-	if strings.HasPrefix(strings.TrimSpace(cfg.FCMCredentialsFile), "{") {
-		opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsFile))
+	if strings.HasPrefix(strings.TrimSpace(config.FCMCredentialsFile), "{") {
+		opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
 	} else {
-		if _, err := os.Stat(cfg.FCMCredentialsFile); err != nil {
-			opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsFile))
+		if _, err := os.Stat(config.FCMCredentialsFile); err != nil {
+			opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
 		} else {
-			opts = append(opts, pn.WithCredentialsFile(cfg.FCMCredentialsFile))
+			opts = append(opts, pn.WithCredentialsFile(config.FCMCredentialsFile))
 		}
 	}
+
+	opts = append(opts, pn.WithPrivateKey(queryConfig.PrivateKey))
 
 	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {
@@ -355,6 +361,8 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		}
 
 		return pm.handleMentionReplyEvent(event, relatedEvents...), nil
+	case nostr.KindReaction:
+		return pm.handleEventWithPublicKey(event, relatedEvents...), nil
 	case nostr.KindGiftWrap:
 		notifications, err := pm.handleGiftWrapEvent(event)
 		if err != nil {

@@ -84,7 +84,7 @@ func TestNIP11(t *testing.T) {
 
 	require.Equal(t, "subzero", info.Name)
 	require.Equal(t, "subzero", info.Description)
-	require.Equal(t, "~", info.PubKey)
+	require.Equal(t, "b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e", info.PubKey)
 	require.Equal(t, "~", info.Contact)
 	require.Equal(t, "subzero", info.Software)
 	require.Equal(t, minLeadingZeroBits, info.Limitation.MinPowDifficulty)
