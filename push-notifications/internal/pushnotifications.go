@@ -12,10 +12,10 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr/nip44"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/nbd-wtf/go-nostr/nip44"
 )
 
 const (
