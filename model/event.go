@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
-	"github.com/nbd-wtf/go-nostr/nip44"
 )
 
 type (
@@ -223,27 +222,6 @@ func (e *Event) Address() string {
 	}
 
 	return e.ID
-}
-
-func (e *Event) DecryptToken(privateKey string) (string, error) {
-	token := e.GetTag("token")
-	if token == nil {
-		return "", nil
-	}
-	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to convert ed25519 private key to x25519")
-	}
-	conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, e.PubKey)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to generate conversation key")
-	}
-	decryptedToken, err := nip44.DecryptX25519(token.Value(), conversationKey)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to decrypt token for event: %s", e.ID)
-	}
-
-	return decryptedToken, nil
 }
 
 func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {

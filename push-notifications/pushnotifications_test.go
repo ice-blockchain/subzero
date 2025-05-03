@@ -155,7 +155,7 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			},
 		}
 
-		notifications := pm.handleEventWithPublicKey(event)
+		notifications := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
 		require.Nil(t, notifications)
 	})
 
@@ -171,7 +171,7 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			},
 		}
 
-		notifications := pm.handleEventWithPublicKey(event)
+		notifications := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
 		require.Nil(t, notifications)
 	})
 }
@@ -949,13 +949,13 @@ func TestProcessEventWithReaction(t *testing.T) {
 	match := filters.Match(&event.Event)
 	require.True(t, match, "Event should match filter")
 
-	notifications := pm.handleEventWithPublicKey(event)
+	notifications := pm.handleEventWithPublicKey(event, NotificationTypeReaction)
 	require.NotNil(t, notifications, "Notifications should not be nil when calling handleEventWithPublicKey directly")
 	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), notification.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notification.Body, "Body should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body, "Body should match")
 	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Equal(t, event.String(), notification.Data["event"], "Event in data should match original event")
@@ -966,8 +966,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Len(t, notificationsFromProcessEvent, 1, "Should create one notification")
 
 	notificationFromProcessEvent := notificationsFromProcessEvent[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), notificationFromProcessEvent.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notificationFromProcessEvent.Body, "Body should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notificationFromProcessEvent.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notificationFromProcessEvent.Body, "Body should match")
 	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")
 	require.Contains(t, notificationFromProcessEvent.Data, "event", "Data should contain event")
 	require.Equal(t, event.String(), notificationFromProcessEvent.Data["event"], "Event in data should match original event")

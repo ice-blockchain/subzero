@@ -49,6 +49,7 @@ type (
 		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
 		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
 		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
+		PrivateKey         string   `yaml:"private-key"`
 	}
 	notificationCollections struct {
 		single []*pn.Notification[*DeviceRegistrationEvent]
@@ -192,13 +193,11 @@ func MustInit() {
 	var err error
 
 	config := cfg.MustGet[config]()
-	queryConfig := cfg.MustGet[query.Config]()
 
 	if config.FCMCredentialsFile == "" {
 		panic("FCM credentials not provided")
 	}
-
-	if queryConfig.PrivateKey == "" {
+	if config.PrivateKey == "" {
 		panic("Database private key is empty")
 	}
 	var opts []pn.Option
@@ -212,7 +211,7 @@ func MustInit() {
 		}
 	}
 
-	opts = append(opts, pn.WithPrivateKey(queryConfig.PrivateKey))
+	opts = append(opts, pn.WithPrivateKey(config.PrivateKey))
 
 	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {
@@ -357,12 +356,12 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		}
 		if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
 			event.Kind == nostr.KindGenericRepost {
-			return pm.handleEventWithPublicKey(event, relatedEvents...), nil
+			return pm.handleEventWithPublicKey(event, NotificationTypeRepost, relatedEvents...), nil
 		}
 
 		return pm.handleMentionReplyEvent(event, relatedEvents...), nil
 	case nostr.KindReaction:
-		return pm.handleEventWithPublicKey(event, relatedEvents...), nil
+		return pm.handleEventWithPublicKey(event, NotificationTypeReaction, relatedEvents...), nil
 	case nostr.KindGiftWrap:
 		notifications, err := pm.handleGiftWrapEvent(event)
 		if err != nil {
@@ -537,14 +536,14 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	return devices
 }
 
-func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil
 	}
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
-	return pm.createNotifications(deviceEvents, NotificationTypeRepost, event, relatedEvents...)
+	return pm.createNotifications(deviceEvents, notificationType, event, relatedEvents...)
 }
 
 func getDisplayNameFromRelatedEvents(events []*model.Event) string {

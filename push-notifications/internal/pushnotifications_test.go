@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/stretchr/testify/require"
 
@@ -176,4 +177,79 @@ func TestCreateTopicMessage(t *testing.T) {
 	require.Equal(t, testTopic, message3.Topic)
 	require.Nil(t, message3.Notification)
 	require.Contains(t, message3.Data, "deeplink")
+}
+
+func TestDecryptToken(t *testing.T) {
+	t.Parallel()
+
+	privKey, pubKey := model.GenerateKeyPair()
+
+	t.Run("successful decryption of token", func(t *testing.T) {
+		t.Parallel()
+		ev := &model.Event{}
+		ev.Kind = nostr.KindTextNote
+		ev.PubKey = pubKey
+
+		privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privKey)
+		require.NoError(t, err)
+
+		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKey)
+		require.NoError(t, err)
+
+		originalToken := "test-device-token-123456"
+		encryptedToken, err := nip44.EncryptX25519(originalToken, conversationKey, nil)
+		require.NoError(t, err)
+
+		ev.Tags = nostr.Tags{{"token", encryptedToken}}
+
+		decryptedToken, err := DecryptToken(ev, privKey)
+		require.NoError(t, err)
+		require.Equal(t, originalToken, decryptedToken)
+	})
+
+	t.Run("token is missing", func(t *testing.T) {
+		t.Parallel()
+		ev := &model.Event{}
+		ev.Kind = nostr.KindTextNote
+		ev.PubKey = pubKey
+
+		decryptedToken, err := DecryptToken(ev, privKey)
+		require.NoError(t, err)
+		require.Empty(t, decryptedToken)
+	})
+
+	t.Run("wrong private key", func(t *testing.T) {
+		t.Parallel()
+		ev := &model.Event{}
+		ev.Kind = nostr.KindTextNote
+		ev.PubKey = pubKey
+
+		privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privKey)
+		require.NoError(t, err)
+
+		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKey)
+		require.NoError(t, err)
+
+		originalToken := "test-device-token-123456"
+		encryptedToken, err := nip44.EncryptX25519(originalToken, conversationKey, nil)
+		require.NoError(t, err)
+
+		ev.Tags = nostr.Tags{{"token", encryptedToken}}
+		wrongPrivKey, _ := model.GenerateKeyPair()
+
+		_, err = DecryptToken(ev, wrongPrivKey)
+		require.Error(t, err)
+	})
+
+	t.Run("wrong token format", func(t *testing.T) {
+		t.Parallel()
+		ev := &model.Event{}
+		ev.Kind = nostr.KindTextNote
+		ev.PubKey = pubKey
+
+		ev.Tags = nostr.Tags{{"token", "not-a-valid-encrypted-token"}}
+
+		_, err := DecryptToken(ev, privKey)
+		require.Error(t, err)
+	})
 }

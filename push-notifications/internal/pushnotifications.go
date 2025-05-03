@@ -15,6 +15,7 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/nbd-wtf/go-nostr/nip44"
 )
 
 const (
@@ -160,7 +161,7 @@ func (s *notificationClient) createSingleMessage(notification *Notification[*Dev
 	if tokenTag == nil || tokenTag.Value() == "" {
 		return nil, nil
 	}
-	decryptedToken, err := notification.Target.DecryptToken(s.privateKey)
+	decryptedToken, err := DecryptToken(notification.Target, s.privateKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to decrypt token for device registration event: %s", notification.Target.ID)
 	}
@@ -252,4 +253,25 @@ func retry(ctx context.Context, op func() error) error {
 		func(e error, next time.Duration) {
 			log.Printf("FCM call failed. retrying in %v... Error: %v", next, e)
 		})
+}
+
+func DecryptToken(ev *model.Event, privateKey string) (string, error) {
+	token := ev.GetTag("token")
+	if token == nil {
+		return "", nil
+	}
+	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to convert ed25519 private key to x25519")
+	}
+	conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, ev.PubKey)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to generate conversation key")
+	}
+	decryptedToken, err := nip44.DecryptX25519(token.Value(), conversationKey)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to decrypt token for event: %s", ev.ID)
+	}
+
+	return decryptedToken, nil
 }

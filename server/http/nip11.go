@@ -10,8 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr/nip11"
 
-	"github.com/ice-blockchain/subzero/cfg"
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -34,6 +32,7 @@ type (
 		FCMAndroidConfigs  []string
 		FCMIOSConfigs      []string
 		FCMWebConfigs      []string
+		PrivateKey         string
 	}
 	nip11handler struct {
 		cfg *Config
@@ -105,10 +104,9 @@ func (n *nip11handler) info() RelayInformationDocument {
 	}
 
 	pubKey := "~"
-	dbConfig := cfg.MustGet[query.Config]()
-	if dbConfig.PrivateKey != "" {
+	if n.cfg.PrivateKey != "" {
 		var err error
-		pubKey, err = model.GetPublicKey(dbConfig.PrivateKey)
+		pubKey, err = model.GetPublicKey(n.cfg.PrivateKey)
 		if err != nil {
 			log.Printf("ERROR: failed to get public key from private key: %v", err)
 		}

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,80 +201,5 @@ func TestSplitBatch(t *testing.T) {
 		require.Equal(t, []int{1, 2, 3}, result[0])
 		require.Equal(t, []int{4, 5, 6}, result[1])
 		require.Equal(t, []int{7}, result[2])
-	})
-}
-
-func TestDecryptToken(t *testing.T) {
-	t.Parallel()
-
-	privKey, pubKey := GenerateKeyPair()
-
-	t.Run("successful decryption of token", func(t *testing.T) {
-		t.Parallel()
-		var ev Event
-		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
-
-		privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privKey)
-		require.NoError(t, err)
-
-		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKey)
-		require.NoError(t, err)
-
-		originalToken := "test-device-token-123456"
-		encryptedToken, err := nip44.EncryptX25519(originalToken, conversationKey, nil)
-		require.NoError(t, err)
-
-		ev.Tags = Tags{{"token", encryptedToken}}
-
-		decryptedToken, err := ev.DecryptToken(privKey)
-		require.NoError(t, err)
-		require.Equal(t, originalToken, decryptedToken)
-	})
-
-	t.Run("token is missing", func(t *testing.T) {
-		t.Parallel()
-		var ev Event
-		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
-
-		decryptedToken, err := ev.DecryptToken(privKey)
-		require.NoError(t, err)
-		require.Empty(t, decryptedToken)
-	})
-
-	t.Run("wrong private key", func(t *testing.T) {
-		t.Parallel()
-		var ev Event
-		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
-
-		privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privKey)
-		require.NoError(t, err)
-
-		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKey)
-		require.NoError(t, err)
-
-		originalToken := "test-device-token-123456"
-		encryptedToken, err := nip44.EncryptX25519(originalToken, conversationKey, nil)
-		require.NoError(t, err)
-
-		ev.Tags = Tags{{"token", encryptedToken}}
-		wrongPrivKey := GeneratePrivateKey()
-
-		_, err = ev.DecryptToken(wrongPrivKey)
-		require.Error(t, err)
-	})
-
-	t.Run("wrong token format", func(t *testing.T) {
-		t.Parallel()
-		var ev Event
-		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
-
-		ev.Tags = Tags{{"token", "not-a-valid-encrypted-token"}}
-
-		_, err := ev.DecryptToken(privKey)
-		require.Error(t, err)
 	})
 }
