@@ -128,6 +128,10 @@ const (
 	JobFeedbackStatusPartial         JobFeedbackStatus = "partial"
 )
 
+const (
+	ConsensusReplayCtxKey = "replay"
+)
+
 type (
 	JobFeedbackStatus      = string
 	Role                   string

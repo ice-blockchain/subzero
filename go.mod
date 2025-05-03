@@ -14,7 +14,7 @@ require (
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.23.0
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/cockroachdb/errors v1.11.3
+	github.com/cockroachdb/errors v1.12.0
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -36,7 +36,7 @@ require (
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.51.10
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
-	github.com/puzpuzpuz/xsync/v4 v4.0.0
+	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.51.0
 	github.com/quic-go/webtransport-go v0.8.1-0.20250328130601-2671ef85124d
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
@@ -69,7 +69,7 @@ require (
 	cloud.google.com/go/iam v1.5.2 // indirect
 	cloud.google.com/go/longrunning v0.6.7 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
-	cloud.google.com/go/storage v1.52.0 // indirect
+	cloud.google.com/go/storage v1.53.0 // indirect
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect

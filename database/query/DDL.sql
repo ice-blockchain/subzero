@@ -385,6 +385,10 @@ CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_
 CREATE OR REPLACE FUNCTION events_store_replaceable_data_before_update()
     RETURNS TRIGGER AS $$
 BEGIN
+    IF NEW.reference_id = NEW.id THEN
+        NEW.reference_id = NULL;
+        RETURN NEW; -- dont insert into replaceable_events_before_update, its replay
+    END IF;
     insert into replaceable_events_before_update (
         created_at,
         kind,

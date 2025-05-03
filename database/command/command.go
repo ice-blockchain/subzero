@@ -99,6 +99,7 @@ func (c *consensus) ReplayBroadcastTxBatch(ctx context.Context, transactions ...
 		events = append(events, evs...)
 	}
 	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	ctx = context.WithValue(ctx, model.ConsensusReplayCtxKey, true)
 	if consensusEventListener != nil && len(events) > 0 {
 		err := consensusEventListener(ctx, events...)
 		if err != nil {

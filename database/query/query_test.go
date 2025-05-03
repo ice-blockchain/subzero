@@ -182,6 +182,23 @@ func TestReplaceableEvents(t *testing.T) {
 		})
 		require.Len(t, stored, 1)
 		require.Equal(t, ev1, stored[0], "event 1")
+
+		// Replaceable event is not rollbackable if called from consensus replay (as already committed).
+		// Overwrite once again
+		replayCtx := context.WithValue(t.Context(), model.ConsensusReplayCtxKey, true)
+		require.NoError(t, db.AcceptEvents(replayCtx, ev2))
+
+		stored = helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindFollowList},
+		})
+		require.Len(t, stored, 1)
+		require.Equal(t, ev2, stored[0], "event 2")
+		require.NoError(t, db.RollbackEvents(t.Context(), ev2)) // No-op.
+		stored = helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindFollowList},
+		})
+		require.Len(t, stored, 1)
+		require.Equal(t, ev2, stored[0], "event 2")
 	})
 }
 

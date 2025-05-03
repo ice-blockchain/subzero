@@ -268,6 +268,9 @@ func (db *dbClient) CommitEvents(ctx context.Context, events ...*model.Event) er
 	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.LoadAndDelete(eventsHash); !hasEventsToRollback {
 		return nil
 	} else {
+		if val := ctx.Value(model.ConsensusReplayCtxKey); val != nil && val.(bool) {
+			return nil
+		}
 		if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents); err != nil {
 			return errors.Wrap(err, "failed to delete tmp replaceableEvents")
 		}
@@ -466,14 +469,23 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 			ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos,
 			ev.Lookup,
 		)
+		isReplay := ""
+		if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+			isReplay = model.ConsensusReplayCtxKey
+		}
 		values = append(values, fmt.Sprintf(
 			`($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint),
 			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
 			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
 			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text),
-			'')`, // replaced_by_id to match replaceable_events_before_update schema.
+			'%[18]v')`, // replaced_by_id to match replaceable_events_before_update schema,
+			// we use it also to detect if save come from consensus.ReplayTx.
+			// In this case it should not trigger trigger_events_store_replaceable_data_before_update
+			// as data already committed and we want to avoid extra insert / delete to that table
+			// of rollbackable replaceable events.
 			idx, idx+1, idx+2,
 			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
+			isReplay,
 		))
 		idx += 17
 	}
@@ -499,7 +511,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 					target.id = source.id
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
 					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
-					OR (target.id = source.replaced_by_id AND source.replaced_by_id != '')
+					OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `')
 				)
 			WHEN MATCHED AND
 				target.master_pubkey = source.master_pubkey
@@ -520,7 +532,12 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 					lookup = source.lookup,
 					deleted = source.deleted,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+					-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
+                    reference_id = CASE 
+									WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+									ELSE NULL
+                                   END
 			WHEN MATCHED AND
 				target.master_pubkey = source.master_pubkey
 				AND target.kind = source.kind
@@ -540,7 +557,12 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 					lookup = source.lookup,
 					tags = source.tags,
 					has_images = source.has_images,
-					has_videos = source.has_videos
+					has_videos = source.has_videos,
+					-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
+                    reference_id = CASE 
+									WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+									ELSE NULL
+                                   END
 			WHEN MATCHED AND target.id = source.id THEN
 				UPDATE SET
 					kind = source.kind,
@@ -557,7 +579,7 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 					tags = source.tags,
 					has_images = source.has_images,
 					has_videos = source.has_videos
-			WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' THEN
+			WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
 				UPDATE SET
 					id = source.id,
 					kind = source.kind,
@@ -676,6 +698,9 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 			}
 			inserted = append(inserted, f)
 		}
+	}
+	if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+		replaceableEvents = map[string]bool{}
 	}
 	return replaceableEvents, inserted, errors.Wrap(sErr, "failed to save events")
 }
