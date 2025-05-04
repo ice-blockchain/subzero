@@ -357,9 +357,9 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 			}
 
 			return notifications, nil
-		}
-		if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
-			event.Kind == nostr.KindGenericRepost {
+		} else if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) {
+			return pm.handleQuoteEvent(event, relatedEvents...), nil
+		} else if event.Kind == nostr.KindGenericRepost {
 			return pm.handleEventWithPublicKey(event, NotificationTypeRepost, relatedEvents...), nil
 		}
 
@@ -548,6 +548,25 @@ func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, 
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
 	return pm.createNotifications(deviceEvents, notificationType, event, relatedEvents...)
+}
+
+func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+	qLowerTag := event.GetTag("q")
+	qUpperTag := event.GetTag("Q")
+	var referencePubkey string
+	if len(qLowerTag) >= 4 && qLowerTag[3] != "" {
+		referencePubkey = qLowerTag[3]
+	} else if len(qUpperTag) >= 4 && qUpperTag[3] != "" {
+		referencePubkey = qUpperTag[3]
+	} else {
+		return nil
+	}
+	devices := pm.collectUserValidDevices(referencePubkey, event)
+	if len(devices) == 0 {
+		return nil
+	}
+
+	return pm.createNotifications(devices, NotificationTypeRepost, event, relatedEvents...)
 }
 
 func getDisplayNameFromRelatedEvents(events []*model.Event) string {
