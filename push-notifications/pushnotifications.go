@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip44"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -49,6 +50,7 @@ type (
 		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
 		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
 		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
+		PrivateKey         string   `yaml:"private-key"`
 	}
 	notificationCollections struct {
 		single []*pn.Notification[*DeviceRegistrationEvent]
@@ -191,22 +193,29 @@ func MustInit() {
 	var pnClient pn.Client
 	var err error
 
-	cfg := cfg.MustGet[config]()
+	config := cfg.MustGet[config]()
 
-	if cfg.FCMCredentialsFile == "" {
+	if config.FCMCredentialsFile == "" {
 		panic("FCM credentials not provided")
 	}
-
+	if config.PrivateKey == "" {
+		panic("private key is empty")
+	}
 	var opts []pn.Option
-	if strings.HasPrefix(strings.TrimSpace(cfg.FCMCredentialsFile), "{") {
-		opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsFile))
+	if strings.HasPrefix(strings.TrimSpace(config.FCMCredentialsFile), "{") {
+		opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
 	} else {
-		if _, err := os.Stat(cfg.FCMCredentialsFile); err != nil {
-			opts = append(opts, pn.WithCredentialsJSON(cfg.FCMCredentialsFile))
+		if _, err := os.Stat(config.FCMCredentialsFile); err != nil {
+			opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
 		} else {
-			opts = append(opts, pn.WithCredentialsFile(cfg.FCMCredentialsFile))
+			opts = append(opts, pn.WithCredentialsFile(config.FCMCredentialsFile))
 		}
 	}
+	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(config.PrivateKey)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to convert ed25519 private key to x25519: %v", err))
+	}
+	opts = append(opts, pn.WithX25519PrivateKey(privKeyX25519))
 
 	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {
@@ -351,10 +360,12 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		}
 		if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) ||
 			event.Kind == nostr.KindGenericRepost {
-			return pm.handleEventWithPublicKey(event, relatedEvents...), nil
+			return pm.handleEventWithPublicKey(event, NotificationTypeRepost, relatedEvents...), nil
 		}
 
 		return pm.handleMentionReplyEvent(event, relatedEvents...), nil
+	case nostr.KindReaction:
+		return pm.handleEventWithPublicKey(event, NotificationTypeReaction, relatedEvents...), nil
 	case nostr.KindGiftWrap:
 		notifications, err := pm.handleGiftWrapEvent(event)
 		if err != nil {
@@ -529,14 +540,14 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	return devices
 }
 
-func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil
 	}
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
-	return pm.createNotifications(deviceEvents, NotificationTypeRepost, event, relatedEvents...)
+	return pm.createNotifications(deviceEvents, notificationType, event, relatedEvents...)
 }
 
 func getDisplayNameFromRelatedEvents(events []*model.Event) string {

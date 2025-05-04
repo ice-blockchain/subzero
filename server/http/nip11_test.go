@@ -19,6 +19,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
@@ -30,7 +31,8 @@ const (
 )
 
 var (
-	pubsubServer *fixture.MockService
+	pubsubServer    *fixture.MockService
+	privKey, pubKey = model.GenerateKeyPair()
 )
 
 func TestMain(m *testing.M) {
@@ -60,7 +62,7 @@ func initServer(serverCtx context.Context, port uint16) {
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,
-	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits}), map[string]gin.HandlerFunc{
+	}, nil, NewNIP11Handler(&Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),
 		"GET /files/:file":    uploader.Download(),
@@ -84,7 +86,7 @@ func TestNIP11(t *testing.T) {
 
 	require.Equal(t, "subzero", info.Name)
 	require.Equal(t, "subzero", info.Description)
-	require.Equal(t, "~", info.PubKey)
+	require.Equal(t, pubKey, info.PubKey)
 	require.Equal(t, "~", info.Contact)
 	require.Equal(t, "subzero", info.Software)
 	require.Equal(t, minLeadingZeroBits, info.Limitation.MinPowDifficulty)

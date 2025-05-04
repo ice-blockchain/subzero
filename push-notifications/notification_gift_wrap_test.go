@@ -3,6 +3,7 @@
 package pushnotifications
 
 import (
+	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tags nostr.Tags) *model.Event {
@@ -72,7 +74,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			"sender_pubkey",
 			nostr.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
-				{"p", "sender_pubkey", devicePubKey},
+				{"p", "sender_pubkey", "", devicePubKey},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 			},
 		)
@@ -89,7 +91,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			"sender_pubkey",
 			nostr.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
-				{"p", recipientMasterPubKey},
+				{"p", recipientMasterPubKey, ""},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 			},
 		)
@@ -106,7 +108,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			"sender_pubkey",
 			nostr.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
-				{"p", recipientMasterPubKey, "unknown_device_pubkey"},
+				{"p", recipientMasterPubKey, "", "unknown_device_pubkey"},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 			},
 		)
@@ -180,7 +182,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 				senderPubKey,
 				nostr.Tags{
 					{"k", strconv.Itoa(tc.kind)},
-					{"p", recipientMasterPubKey, devicePubKey},
+					{"p", recipientMasterPubKey, "", devicePubKey},
 					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 				},
 			)
@@ -232,7 +234,8 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 
 			filters := nostr.Filters{
 				{
-					Kinds: []int{nostr.KindGiftWrap, nostr.KindDirectMessage},
+					Kinds: []int{nostr.KindGiftWrap},
+					Tags:  nostr.TagMap{}.SetLiterals("k", strconv.Itoa(nostr.KindDirectMessage)),
 				},
 			}
 
@@ -262,7 +265,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 				senderPubKey,
 				nostr.Tags{
 					{"k", strconv.Itoa(nostr.KindDirectMessage)},
-					{"p", recipientMasterPubKey, device.pubKey},
+					{"p", recipientMasterPubKey, "", device.pubKey},
 					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 				},
 			)
@@ -274,7 +277,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 
 			notification := notifications[0]
 
-			if device.platform == "android" {
+			if device.platform == validation.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android")
 				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title(), notification.Data["title"],
@@ -307,7 +310,8 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 
 	filters := nostr.Filters{
 		{
-			Kinds: []int{nostr.KindGiftWrap, nostr.KindReaction},
+			Kinds: []int{nostr.KindGiftWrap},
+			Tags:  nostr.TagMap{}.SetLiterals("k", strconv.Itoa(nostr.KindReaction)),
 		},
 	}
 
@@ -338,7 +342,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 			"sender_pubkey",
 			nostr.Tags{
 				{"k", strconv.Itoa(nostr.KindReaction)},
-				{"p", recipientMasterPubKey, devicePubKey},
+				{"p", recipientMasterPubKey, "", devicePubKey},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
 			},
 		)
@@ -354,5 +358,69 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL, "Image URL should match")
 		require.Equal(t, deviceEvent, notification.Target)
 		require.Contains(t, notification.Data["event"], event.String())
+	})
+}
+
+func TestGiftWrapWithJsonTagFilter(t *testing.T) {
+	t.Parallel()
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	jsonContent := `[{"kinds":[1059],"#k":["1756"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175,30023],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[16],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"],"#k":["30175","30023"]},{"kinds":[6],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175],"#Q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[1],"#q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[7],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["7"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[3],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["30014","14"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["1755"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]}]`
+
+	t.Run("Tests JSON filter in device registration", func(t *testing.T) {
+		userPubKey := "58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"
+		devicePubKey := "9e58d6f86dce97b32a86dc7544f21471a4c25506ec9f0c340184b3b6e11980a5"
+		deviceID := "019680b4-4d0c-7c99-884d-64f81d3f8358"
+
+		registrationEvent := &model.Event{
+			Event: nostr.Event{
+				ID:      "registration-event-id",
+				Kind:    model.CustomIONKindDeviceRegistration,
+				Content: jsonContent,
+				PubKey:  devicePubKey,
+				Tags: nostr.Tags{
+					nostr.Tag{"b", userPubKey},
+					nostr.Tag{"d", deviceID},
+					nostr.Tag{"token", "test-token"},
+					nostr.Tag{"t", "ios"},
+				},
+			},
+		}
+
+		var filters nostr.Filters
+		require.NoError(t, json.Unmarshal([]byte(jsonContent), &filters))
+
+		deviceInfo := DeviceInfo{
+			Filters:  filters,
+			Event:    registrationEvent,
+			DeviceID: DeviceID(deviceID),
+		}
+
+		if _, ok := pm.userDevicesMap[userPubKey]; !ok {
+			pm.userDevicesMap[userPubKey] = make(map[DeviceID]DeviceInfo)
+		}
+		pm.userDevicesMap[userPubKey][DeviceID(deviceID)] = deviceInfo
+
+		ev := &model.Event{
+			Event: nostr.Event{
+				ID:     "gift-wrap-event-id",
+				Kind:   nostr.KindGiftWrap,
+				PubKey: "author-pubkey",
+				Tags: nostr.Tags{
+					nostr.Tag{"k", "14"},
+					nostr.Tag{"p", userPubKey, "", devicePubKey},
+				},
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), ev)
+		require.NoError(t, err)
+		require.NotNil(t, notifications, "Notifications should not be nil")
+		require.Len(t, notifications, 1, "Should create one notification")
+		require.Equal(t, notifications[0].Target, registrationEvent, "Target should be the registration event")
+		require.Contains(t, notifications[0].Data, "event", "Data should contain event")
+		require.Contains(t, notifications[0].Data["event"], ev.String(), "Event in data should match original event")
 	})
 }

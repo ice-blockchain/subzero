@@ -12,6 +12,7 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr/nip44"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -34,8 +35,9 @@ type (
 		SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error
 	}
 	notificationClient struct {
-		client *messaging.Client
-		retry  RetryConfig
+		client     *messaging.Client
+		retry      RetryConfig
+		privateKey string
 	}
 	Notification[TARGET SubscriptionTopic | *DeviceRegistrationEvent] struct {
 		Data     map[string]interface{} `json:"data,omitempty"`
@@ -55,6 +57,7 @@ type (
 		credentialsFile string
 		credentialsJSON []byte
 		retryConfig     RetryConfig
+		privateKey      string
 	}
 )
 
@@ -82,6 +85,12 @@ func WithCredentialsFile(filePath string) Option {
 func WithCredentialsJSON(jsonStr string) Option {
 	return func(o *options) {
 		o.credentialsJSON = []byte(jsonStr)
+	}
+}
+
+func WithX25519PrivateKey(privateKey string) Option {
+	return func(o *options) {
+		o.privateKey = privateKey
 	}
 }
 
@@ -121,8 +130,9 @@ func New(ctx context.Context, opts ...Option) (Client, error) {
 	}
 
 	s := &notificationClient{
-		client: fcmClient,
-		retry:  options.retryConfig,
+		client:     fcmClient,
+		retry:      options.retryConfig,
+		privateKey: options.privateKey,
 	}
 
 	return s, nil
@@ -146,11 +156,16 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 	return id, nil
 }
 
-func (s *notificationClient) SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error {
-	token := notification.Target.GetTag("token")
-	if token == nil || token.Value() == "" {
-		return nil
+func (s *notificationClient) createSingleMessage(notification *Notification[*DeviceRegistrationEvent]) (*messaging.Message, error) {
+	tokenTag := notification.Target.GetTag("token")
+	if tokenTag == nil || tokenTag.Value() == "" {
+		return nil, nil
 	}
+	decryptedToken, err := DecryptToken(notification.Target, s.privateKey)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to decrypt token for device registration event: %s", notification.Target.ID)
+	}
+
 	data := make(map[string]string)
 	for k, v := range notification.Data {
 		if str, ok := v.(string); ok {
@@ -159,8 +174,9 @@ func (s *notificationClient) SendSingle(ctx context.Context, notification *Notif
 			data[k] = fmt.Sprintf("%v", v)
 		}
 	}
+
 	message := &messaging.Message{
-		Token: token.Value(),
+		Token: decryptedToken,
 		Data:  data,
 	}
 
@@ -172,7 +188,18 @@ func (s *notificationClient) SendSingle(ctx context.Context, notification *Notif
 		}
 	}
 
-	_, err := s.sendWithRetry(ctx, message)
+	return message, nil
+}
+
+func (s *notificationClient) SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error {
+	message, err := s.createSingleMessage(notification)
+	if err != nil {
+		return err
+	}
+	if message == nil {
+		return nil
+	}
+	_, err = s.sendWithRetry(ctx, message)
 	if err != nil {
 		return err
 	}
@@ -180,7 +207,7 @@ func (s *notificationClient) SendSingle(ctx context.Context, notification *Notif
 	return nil
 }
 
-func (s *notificationClient) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
+func (s *notificationClient) createTopicMessage(notification *Notification[SubscriptionTopic]) *messaging.Message {
 	data := make(map[string]string)
 	for k, v := range notification.Data {
 		if str, ok := v.(string); ok {
@@ -189,12 +216,10 @@ func (s *notificationClient) SendTopic(ctx context.Context, notification *Notifi
 			data[k] = fmt.Sprintf("%v", v)
 		}
 	}
-
 	message := &messaging.Message{
 		Topic: string(notification.Target),
 		Data:  data,
 	}
-
 	if notification.Title != "" || notification.Body != "" || notification.ImageURL != "" {
 		message.Notification = &messaging.Notification{
 			Title:    notification.Title,
@@ -203,6 +228,11 @@ func (s *notificationClient) SendTopic(ctx context.Context, notification *Notifi
 		}
 	}
 
+	return message
+}
+
+func (s *notificationClient) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
+	message := s.createTopicMessage(notification)
 	_, err := s.sendWithRetry(ctx, message)
 
 	return errors.Wrap(err, "failed to send topic notification")
@@ -223,4 +253,21 @@ func retry(ctx context.Context, op func() error) error {
 		func(e error, next time.Duration) {
 			log.Printf("FCM call failed. retrying in %v... Error: %v", next, e)
 		})
+}
+
+func DecryptToken(ev *model.Event, privateKey string) (string, error) {
+	token := ev.GetTag("token")
+	if token == nil {
+		return "", nil
+	}
+	conversationKey, err := nip44.GenerateConversationKeyX25519(privateKey, ev.PubKey)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to generate conversation key")
+	}
+	decryptedToken, err := nip44.DecryptX25519(token.Value(), conversationKey)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to decrypt token for event: %s", ev.ID)
+	}
+
+	return decryptedToken, nil
 }
