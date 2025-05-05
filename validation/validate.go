@@ -153,8 +153,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       tagsTable("d", "name", "image", "description", "thumb"),
-		nostr.KindArticle:               tagsTable("a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDraftArticle:          tagsTable("a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindArticle:               tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
@@ -185,7 +185,7 @@ var (
 		model.CustomIONKindCommunityChangeDefinition:      tagsTable(model.CustomIONTagCommunity, "name", "description", "public", "private", "open", "closed", "p"),
 
 		model.CustomIONKindEditableTextNote: newKindValidatorBuilder().
-			Optional("a", "e", "d", "p", "q",
+			Optional("a", "e", "d", "p", "q", "p",
 				"editing_ended_at",
 				model.CustomIONTagPoll,
 				model.CustomIONTagCommunity,
