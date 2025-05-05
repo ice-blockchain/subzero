@@ -67,13 +67,19 @@ server:
 
 database:
   query:
-    url: /var/lib/subzero_ion_connect/data/db/query.db
+    url: postgresql://postgres:postgres@localhost:5432/subzero
     private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
     relay-url: *self
-
+  command:
+    absolute-node-private-key-path: /var/lib/subzero_ion_connect/data/cometbft/node_key.json
+    absolute-root-path: /var/lib/subzero_ion_connect/data/cometbft/
+    debug: true
+    discovery-port: 14443
+    external-address: tcp://127.0.0.1:14444
+    relay-url: *self
 storage:
   private-key: *pk
-  ion-storage-config-url: https://ton.org/testnet-global.config.json
+  ion-storage-config-url: https://cdn.ice.io/testnet/global.config.json
   absolute-root-storage-path: /var/lib/subzero_ion_connect/data/file_storage
   external-adnl-address: 127.0.0.1
   external-adnl-port: 12345
@@ -84,3 +90,6 @@ dvm:
   tls-key: *tls-key
   private-key: *pk
   relay-url: *self
+push-notifications:
+  fcm_android_configs: []
+  fcm-credentials-file: ./bogus.json
