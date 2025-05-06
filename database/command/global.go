@@ -5,6 +5,7 @@ package command
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -111,7 +112,10 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 		logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
 		logger = logger.With("port", globalCfg.DiscoveryPort)
 	}
-	_, err := p2p.LoadOrGenNodeKey(serverCfg.NodeKeyFile())
+	if err := os.MkdirAll(filepath.Dir(serverCfg.NodeKeyFile()), 0666); err != nil {
+		panic(errors.Wrapf(err, "failed to create consensus dir"))
+	}
+	_, err = p2p.LoadOrGenNodeKey(serverCfg.NodeKeyFile())
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
