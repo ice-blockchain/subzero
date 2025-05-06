@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -32,24 +31,24 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
 	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout, s.shutdownCh)
-	go s.ping(ctx, conn)
+	go s.ping(ctx, wsocket)
 
 	return wsocket, ctx, nil
 }
 
-func (s *srv) ping(ctx context.Context, conn net.Conn) {
+func (s *srv) ping(ctx context.Context, writer adapters.WSWithWriter) {
 	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		writer.Close()
+	}()
 	for {
 		select {
 		case <-ticker.C:
 			var dErr error
-			if (s.cfg.WriteTimeout) > 0 {
-				dErr = conn.SetWriteDeadline(time.Now().Add(s.cfg.WriteTimeout))
-			}
 			if err := multierror.Append(
 				dErr,
-				wsutil.WriteServerMessage(conn, ws.OpPing, nil),
+				writer.WriteMessage(int(ws.OpPing), nil),
 			).ErrorOrNil(); err != nil {
 				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send ping message"))
 			}

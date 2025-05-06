@@ -77,14 +77,30 @@ func TestRollBackOnTxError(t *testing.T) {
 	})
 	consensusClient := fixture.NewErrornousClient()
 	privKeyOfOriginalNote := model.GeneratePrivateKey()
+	masterPrivKey, masterPubkey := model.GenerateKeyPair()
 	originalEvent := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
 		Kind:      nostr.KindTextNote,
 		Content:   "validEvent",
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+		},
 	}}
+	relaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+			[]string{"r", "wss://localhost:9988"},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, originalEvent.SignWithAlg(privKeyOfOriginalNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	c.client = consensusClient
-	require.Error(t, c.broadcastUserEvents(t.Context(), originalEvent))
+	err := c.broadcastUserEvents(t.Context(), relaysList, originalEvent)
+	t.Logf("%v", err)
+	require.Error(t, err)
 	require.True(t, rolledBack)
 }
 
@@ -98,6 +114,16 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
 		},
 	}}
+	relaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+			[]string{"r", "wss://localhost:9988"},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	profileEvent := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -106,7 +132,7 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 		Content:   "{\"name\": \"bogus\", \"about\":\"bogus\", \"picture\": \"https://bogus.com/pic.jpg\"}",
 	}}
 	require.NoError(t, profileEvent.SignWithAlg(delegatedPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent, profileEvent))
+	require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent, relaysList, profileEvent))
 	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Accept should not be called")
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
