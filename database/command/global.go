@@ -138,7 +138,7 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	return errors.Wrapf(globalConsensus.Consensus.AcceptEvents(ctx, events...), "errors occured while broadcasting events")
+	return errors.Wrapf(globalConsensus.Consensus.AcceptEvents(ctx, events...), "errors occured while broadcasting events on %v", globalConsensus.Consensus.cfg.RelayUrl)
 }
 
 func (c *consensus) AcceptEvents(ctx context.Context, events ...*model.Event) error {

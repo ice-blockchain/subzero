@@ -170,12 +170,12 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 		return errors.Wrapf(err, "failed to transform user key to address")
 	}
 	c.client.BroadcastTx(broadcastCtx, userAddr, c.convertRelaysToBroadcastEndpoints(relays...), notifier, txs...)
-	err = c.rollbackIfErr(ctx, userMasterKey, notifier, events...)
+	err = c.rollbackIfErr(ctx, userMasterKey, userAddr, notifier, txs, events...)
 
 	return errors.Wrapf(err, "failed to broadcast user events for %v to %#v", userMasterKey, relays)
 }
 
-func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey string, notifier <-chan client.BroadcastStatus, events ...*model.Event) error {
+func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey, userAddr string, notifier <-chan client.BroadcastStatus, txs []client.Transaction, events ...*model.Event) error {
 	var err error
 	rollbackContext, rollbackCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	rollbackContext = context.WithValue(rollbackContext, "consensusPort", c.cfg.DiscoveryPort)
@@ -183,7 +183,13 @@ func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey string, not
 	select {
 	case res := <-notifier:
 		if res.Error != nil {
-			err = errors.Wrapf(res.Error, "failed to broadcast txs for %v", userMasterKey)
+			err = errors.Wrapf(res.Error, "failed to broadcast txs for %v (%v)  (%v)", userMasterKey, userAddr, strings.Join(func() []string {
+				logging := make([]string, 0, len(txs))
+				for _, tx := range txs {
+					logging = append(logging, fmt.Sprintf("%v = %X", string(tx.Data), client.TransactionToRawTx(tx).Hash()))
+				}
+				return logging
+			}(), ", "))
 			rErr := errors.Wrapf(rollback(rollbackContext, events...), "failed to rollback changes due to failed consensus")
 			if rErr != nil {
 				err = errors.Join(err, rErr)
@@ -191,7 +197,13 @@ func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey string, not
 			return err
 		}
 	case <-ctx.Done():
-		err = context.Canceled
+		err = errors.Wrapf(context.Canceled, "failed to broadcast txs for %v (%v)  (%#v)", userMasterKey, userAddr, strings.Join(func() []string {
+			logging := make([]string, 0, len(txs))
+			for _, tx := range txs {
+				logging = append(logging, fmt.Sprintf("%v = %X,", string(tx.Data), client.TransactionToRawTx(tx).Hash()))
+			}
+			return logging
+		}(), ", "))
 		rErr := errors.Wrapf(rollback(rollbackContext, events...), "failed to rollback changes due to failed consensus")
 		if rErr != nil {
 			err = errors.Join(err, rErr)
