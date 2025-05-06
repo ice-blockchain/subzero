@@ -70,6 +70,7 @@ where kind = 31750;
 -- Order by:
 --   created_at DESC
 CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
+CREATE INDEX IF NOT EXISTS idx_events_address ON events(address) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_id_created_at ON events(id, created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_kind_created_at ON events(kind, created_at DESC) WHERE hidden = FALSE;
@@ -1061,6 +1062,26 @@ EXECUTE FUNCTION trigger_events_after_insert_score_add();
 CREATE OR REPLACE FUNCTION trigger_events_after_delete_score_dec()
 RETURNS TRIGGER AS $$
 BEGIN
+    with affected_events as (
+        select
+            e.id AS event_id
+        from events e
+        join lateral jsonb_array_elements(OLD.tags) je on true
+        where
+            je->>0 IN ('a', 'e', 'q', 'Q')
+            and e.address = je->>1
+            and e.hidden = false
+            and e.deleted = false
+            and e.created_at > to_timestamp(0)
+            and e.kind IN (1, 30023, 30175)
+            and (OLD.system_kind IS NULL or OLD.system_kind != 3)
+            and (OLD.system_kind IS NULL or case
+                when OLD.system_kind = 2 then je->>3 = 'root'
+                when OLD.system_kind = 3 then false
+                else true
+            end)
+            limit 1
+    )
     update ranked_events
     set
         points = points - case
@@ -1077,27 +1098,10 @@ BEGIN
             when OLD.system_kind is not null and OLD.system_kind = 2 then 2
             else 0
         end, event_created_at)
-    where exists (
-        select 1
-        from jsonb_array_elements(OLD.tags) je
-        where
-        je->>0 in ('a', 'e', 'q', 'Q')
-        and event_id in (
-            select e.id
-            from events e
-            where e.address = je->>1
-            and e.hidden = false
-            and e.deleted = false
-            and e.created_at > to_timestamp(0)
-            and e.kind in (1, 30023, 30175)
-            and (OLD.system_kind is null or OLD.system_kind != 3)
-            and (OLD.system_kind is null or case
-                when OLD.system_kind = 2 then je->>3 = 'root'
-                when OLD.system_kind = 3 then false
-                else true
-            end)
-        )
-    );
+    from
+        affected_events
+    where
+        ranked_events.event_id = affected_events.event_id;
     delete from ranked_events where points <= 0;
     return OLD;
 END;
