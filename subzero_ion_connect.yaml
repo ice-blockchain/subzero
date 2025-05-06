@@ -7,6 +7,8 @@ server:
   port: 4443
   debug: false
   ion-liberty-disabled: true
+  http:
+    private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
   tls-cert: &tls-cert |
     -----BEGIN CERTIFICATE-----
     MIID0TCCArmgAwIBAgIUJ66CoEOD8Ud1CJpgmxdw+zgx+uEwDQYJKoZIhvcNAQEL
@@ -64,7 +66,7 @@ server:
 database:
   query:
     url: postgresql://postgres:postgres@localhost:5432/subzero
-    private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
+    private-key: *pk
     relay-url: *self
   command:
     absolute-node-private-key-path: /var/lib/subzero_ion_connect/data/cometbft/node_key.json
@@ -89,7 +91,7 @@ dvm:
   private-key: *pk
   relay-url: *self
 push-notifications:
-  fcm_android_configs: []
+  fcm-android-configs: []
   fcm-ios-configs: []
   fcm-web-configs: []
   private-key: *pk
@@ -98,6 +100,7 @@ validation:
   max-wrapped-event-expiration: 720h
   nip13MinLeadingZeroBits: 0
   relay-url: *self
+  private-key: *pk
   max-content-sizes:
     30023: 65535
     30175: 65535
