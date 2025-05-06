@@ -115,7 +115,7 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 	if err := os.MkdirAll(filepath.Dir(serverCfg.NodeKeyFile()), 0666); err != nil {
 		panic(errors.Wrapf(err, "failed to create consensus dir"))
 	}
-	_, err = p2p.LoadOrGenNodeKey(serverCfg.NodeKeyFile())
+	_, err := p2p.LoadOrGenNodeKey(serverCfg.NodeKeyFile())
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
