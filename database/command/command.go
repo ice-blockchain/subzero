@@ -143,6 +143,9 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	if userMasterKey == "" {
 		return nil
 	}
+	if len(relays) == 0 {
+		return ErrUserIsNotPresentedOnRelay
+	}
 	broadcastCtx, broadcastCancel := context.WithTimeout(ctx, consensusTimeout)
 	defer broadcastCancel()
 	notifier := make(chan client.BroadcastStatus, 1)

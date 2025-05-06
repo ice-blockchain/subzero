@@ -1,16 +1,12 @@
 # SPDX-License-Identifier: ice License 1.0
 
-validation:
-  max-wrapped-event-expiration: 720h
-  max-content-sizes:
-    30023: 65535
-    30175: 65535
-
 server:
   relay-url: &self "wss://example.com"
   acme:
     api-key: foo
   port: 4443
+  debug: false
+  ion-liberty-disabled: true
   tls-cert: &tls-cert |
     -----BEGIN CERTIFICATE-----
     MIID0TCCArmgAwIBAgIUJ66CoEOD8Ud1CJpgmxdw+zgx+uEwDQYJKoZIhvcNAQEL
@@ -79,10 +75,12 @@ database:
     relay-url: *self
 storage:
   private-key: *pk
+  relay-url: *self
   ion-storage-config-url: https://cdn.ice.io/testnet/global.config.json
   absolute-root-storage-path: /var/lib/subzero_ion_connect/data/file_storage
   external-adnl-address: 127.0.0.1
   external-adnl-port: 12345
+  ion-liberty-disabled: true
   debug: true
 
 dvm:
@@ -92,4 +90,14 @@ dvm:
   relay-url: *self
 push-notifications:
   fcm_android_configs: []
+  fcm-ios-configs: []
+  fcm-web-configs: []
+  private-key: *pk
   fcm-credentials-file: ./bogus.json
+validation:
+  max-wrapped-event-expiration: 720h
+  nip13MinLeadingZeroBits: 0
+  relay-url: *self
+  max-content-sizes:
+    30023: 65535
+    30175: 65535
