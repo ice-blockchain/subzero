@@ -31,9 +31,6 @@ import (
 )
 
 func TestConsensusEvents(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.Skip("skipping heavy test on CI")
-	}
 	privkey, pk := model.GenerateKeyPair()
 	mapPort := func(ctx context.Context) *fixture.MockService {
 		var port, consensusPort uint16

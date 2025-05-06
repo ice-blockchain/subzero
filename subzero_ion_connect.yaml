@@ -1,16 +1,14 @@
 # SPDX-License-Identifier: ice License 1.0
 
-validation:
-  max-wrapped-event-expiration: 720h
-  max-content-sizes:
-    30023: 65535
-    30175: 65535
-
 server:
   relay-url: &self "wss://example.com"
   acme:
     api-key: foo
   port: 4443
+  debug: false
+  ion-liberty-disabled: true
+  http:
+    private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
   tls-cert: &tls-cert |
     -----BEGIN CERTIFICATE-----
     MIID0TCCArmgAwIBAgIUJ66CoEOD8Ud1CJpgmxdw+zgx+uEwDQYJKoZIhvcNAQEL
@@ -67,16 +65,24 @@ server:
 
 database:
   query:
-    url: /var/lib/subzero_ion_connect/data/db/query.db
-    private-key: &pk 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
+    url: postgresql://postgres:postgres@localhost:5432/subzero
+    private-key: *pk
     relay-url: *self
-
+  command:
+    absolute-node-private-key-path: /var/lib/subzero_ion_connect/data/cometbft/node_key.json
+    absolute-root-path: /var/lib/subzero_ion_connect/data/cometbft/
+    debug: true
+    discovery-port: 14443
+    external-address: tcp://127.0.0.1:14444
+    relay-url: *self
 storage:
   private-key: *pk
-  ion-storage-config-url: https://ton.org/testnet-global.config.json
+  relay-url: *self
+  ion-storage-config-url: https://cdn.ice.io/testnet/global.config.json
   absolute-root-storage-path: /var/lib/subzero_ion_connect/data/file_storage
   external-adnl-address: 127.0.0.1
   external-adnl-port: 12345
+  ion-liberty-disabled: true
   debug: true
 
 dvm:
@@ -84,3 +90,17 @@ dvm:
   tls-key: *tls-key
   private-key: *pk
   relay-url: *self
+push-notifications:
+  fcm-android-configs: []
+  fcm-ios-configs: []
+  fcm-web-configs: []
+  private-key: *pk
+  fcm-credentials-file: ./bogus.json
+validation:
+  max-wrapped-event-expiration: 720h
+  nip13MinLeadingZeroBits: 0
+  relay-url: *self
+  private-key: *pk
+  max-content-sizes:
+    30023: 65535
+    30175: 65535
