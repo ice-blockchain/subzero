@@ -19,6 +19,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
+	hashtagssender "github.com/ice-blockchain/subzero/hashtags-sender"
 	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server"
@@ -46,6 +47,7 @@ var (
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
 			pushnotifications.MustInit()
+			hashtagssender.MustInit(cmd.Context())
 			server.MustListenAndServe(cmd.Context())
 		},
 	}
@@ -137,6 +139,11 @@ func init() {
 		go func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%#v): %v", events, err)
+			}
+		}()
+		go func() {
+			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
+				log.Printf("failed to hashtagssender.AcceptEvents(%#v): %v", events, err)
 			}
 		}()
 

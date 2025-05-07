@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: ice License 1.0
+
+hashtags-sender:
+  base-url: https://localhost:8001/
+  request-timeout: 30s
+  max-events-queue-size: 1000
+  send-interval: 1h
