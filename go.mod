@@ -25,7 +25,7 @@ require (
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250506141758-e88b79f5bfa4
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250507095857-02f69f62e502
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
@@ -52,7 +52,7 @@ require (
 	github.com/xssnick/tonutils-storage v0.8.7
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.40.0
-	google.golang.org/api v0.231.0
+	google.golang.org/api v0.232.0
 	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
 )
 
@@ -146,7 +146,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250506141758-e88b79f5bfa4 // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250507095857-02f69f62e502 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
