@@ -28,7 +28,7 @@ type (
 	eventsData struct {
 		Events []*model.Event `json:"events"`
 	}
-	hashtagsSender struct {
+	sender struct {
 		eventsToSend chan []*model.Event
 		mu           sync.Mutex
 		lastSent     time.Time
@@ -40,7 +40,7 @@ type (
 
 var (
 	globalSender struct {
-		*hashtagsSender
+		*sender
 		Once sync.Once
 	}
 
@@ -59,7 +59,7 @@ func MustInit(ctx context.Context) {
 		if config.SendInterval <= 0 {
 			config.SendInterval = time.Hour
 		}
-		globalSender.hashtagsSender = &hashtagsSender{
+		globalSender.sender = &sender{
 			eventsToSend: make(chan []*model.Event, config.MaxEventsQueueSize),
 			mu:           sync.Mutex{},
 			lastSent:     time.Now(),
@@ -67,19 +67,19 @@ func MustInit(ctx context.Context) {
 			client:       req.C().SetBaseURL(config.BaseURL),
 			eventsQueue:  make([]*model.Event, 0, config.MaxEventsQueueSize),
 		}
-		go globalSender.hashtagsSender.startSender(ctx)
+		go globalSender.sender.startSender(ctx)
 	})
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	if globalSender.hashtagsSender == nil {
+	if globalSender.sender == nil {
 		panic("hashtags sender not initialized")
 	}
 
-	return globalSender.hashtagsSender.processEvents(events...)
+	return globalSender.sender.processEvents(events...)
 }
 
-func (p *hashtagsSender) processEvents(events ...*model.Event) error {
+func (p *sender) processEvents(events ...*model.Event) error {
 	validEvents := make([]*model.Event, 0, len(events))
 	for _, event := range events {
 		if event.Kind != nostr.KindTextNote && event.Kind != model.CustomIONKindEditableTextNote && event.Kind != nostr.KindArticle {
@@ -122,7 +122,7 @@ func (p *hashtagsSender) processEvents(events ...*model.Event) error {
 	}
 }
 
-func (p *hashtagsSender) startSender(ctx context.Context) {
+func (p *sender) startSender(ctx context.Context) {
 	for {
 		select {
 		case events, ok := <-p.eventsToSend:
@@ -138,7 +138,7 @@ func (p *hashtagsSender) startSender(ctx context.Context) {
 	}
 }
 
-func (p *hashtagsSender) sendEvents(ctx context.Context, events []*model.Event) error {
+func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
 	if len(events) == 0 {
 		return nil
 	}

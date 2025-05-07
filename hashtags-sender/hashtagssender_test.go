@@ -16,7 +16,7 @@ import (
 
 func TestRealEndpointIntegration(t *testing.T) {
 	t.Skip("skipping as it requires heimdall real endpoint")
-	processor := &hashtagsSender{
+	processor := &sender{
 		eventsQueue:  make([]*model.Event, 0, 1000),
 		eventsToSend: make(chan []*model.Event, 10),
 		config: &Config{
@@ -60,7 +60,7 @@ func TestTimeoutTriggeredIntegration(t *testing.T) {
 	sentEventsCount := 0
 	sentEventsCh := make(chan int, 10)
 
-	processor := &hashtagsSender{
+	processor := &sender{
 		eventsQueue:  make([]*model.Event, 0, 100),
 		eventsToSend: make(chan []*model.Event, 10),
 		config: &Config{
