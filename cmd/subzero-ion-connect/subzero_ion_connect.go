@@ -47,7 +47,7 @@ var (
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
 			pushnotifications.MustInit()
-			hashtagssender.MustInit()
+			hashtagssender.MustInit(cmd.Context())
 			server.MustListenAndServe(cmd.Context())
 		},
 	}

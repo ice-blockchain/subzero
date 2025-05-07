@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
@@ -21,24 +21,31 @@ import (
 
 type (
 	Config struct {
-		BaseURL        string        `yaml:"base-url"`
-		RequestTimeout time.Duration `yaml:"request-timeout"`
-		BatchSize      int           `yaml:"batch-size"`
-		SendInterval   time.Duration `yaml:"send-interval"`
+		BaseURL            string        `yaml:"base-url" validate:"required"`
+		RequestTimeout     time.Duration `yaml:"request-timeout"`
+		MaxEventsQueueSize int           `yaml:"max-events-queue-size"`
+		SendInterval       time.Duration `yaml:"send-interval"`
 	}
 	eventsData struct {
 		Events []*model.Event `json:"events"`
 	}
 	hashtagsSender struct {
-		events   []*model.Event
-		mu       sync.Mutex
-		lastSent time.Time
-		config   *Config
+		eventsToSend chan []*model.Event
+		mu           sync.Mutex
+		lastSent     time.Time
+		config       *Config
+		req          *req.Client
+		eventsQueue  []*model.Event
 	}
 )
 
 var (
-	globalSender *hashtagsSender
+	globalSender struct {
+		*hashtagsSender
+		Once sync.Once
+	}
+
+	hashtagRegex = regexp.MustCompile(`#[a-zA-Z0-9_]+`)
 )
 
 func init() {
@@ -47,72 +54,95 @@ func init() {
 	req.DefaultClient().GetClient().Timeout = 30 * time.Second
 }
 
-func MustInit() {
-	config := cfg.MustGet[Config]()
-	if config.BaseURL == "" {
-		panic("Base URL not provided, hashtags processor will not be initialized")
-	}
-	if config.RequestTimeout <= 0 {
-		config.RequestTimeout = 30 * time.Second
-	}
-	if config.BatchSize <= 0 {
-		config.BatchSize = 1000
-	}
-	if config.SendInterval <= 0 {
-		config.SendInterval = time.Hour
-	}
-
-	globalSender = &hashtagsSender{
-		events:   make([]*model.Event, 0, config.BatchSize),
-		lastSent: time.Now(),
-		config:   config,
-	}
+func MustInit(ctx context.Context) {
+	globalSender.Once.Do(func() {
+		config := cfg.MustGet[Config]()
+		if config.RequestTimeout <= 0 {
+			config.RequestTimeout = 30 * time.Second
+		}
+		if config.MaxEventsQueueSize <= 0 {
+			config.MaxEventsQueueSize = 1000
+		}
+		if config.SendInterval <= 0 {
+			config.SendInterval = time.Hour
+		}
+		globalSender.hashtagsSender = &hashtagsSender{
+			eventsToSend: make(chan []*model.Event, config.MaxEventsQueueSize),
+			mu:           sync.Mutex{},
+			lastSent:     time.Now(),
+			config:       config,
+			req:          req.C().SetBaseURL(config.BaseURL),
+			eventsQueue:  make([]*model.Event, 0, config.MaxEventsQueueSize),
+		}
+		go globalSender.hashtagsSender.startSender(ctx)
+	})
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	if globalSender == nil {
-		return nil
+	if globalSender.hashtagsSender == nil {
+		panic("hashtags sender not initialized")
 	}
 
-	return globalSender.processEvents(ctx, events...)
+	return globalSender.hashtagsSender.processEvents(events...)
 }
 
-func (p *hashtagsSender) processEvents(ctx context.Context, events ...*model.Event) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *hashtagsSender) processEvents(events ...*model.Event) error {
+	validEvents := make([]*model.Event, 0, len(events))
 	for _, event := range events {
-		if event.Kind == nostr.KindTextNote || event.Kind == model.CustomIONKindEditableTextNote || event.Kind == nostr.KindArticle {
-			p.events = append(p.events, event)
+		if event.Kind != nostr.KindTextNote && event.Kind != model.CustomIONKindEditableTextNote && event.Kind != nostr.KindArticle {
+			continue
 		}
+		matched := hashtagRegex.FindString(event.Content)
+		if matched == "" {
+			continue
+		}
+
+		validEvents = append(validEvents, event)
 	}
-	if len(p.events) < p.config.BatchSize && time.Since(p.lastSent) < p.config.SendInterval {
+
+	if len(validEvents) == 0 {
 		return nil
 	}
 
-	var batches [][]*model.Event
-	eventsCount := len(p.events)
-	for i := 0; i < eventsCount; i += p.config.BatchSize {
-		end := i + p.config.BatchSize
-		if end > eventsCount {
-			end = eventsCount
+	p.mu.Lock()
+	p.eventsQueue = append(p.eventsQueue, validEvents...)
+	if len(p.eventsQueue) < p.config.MaxEventsQueueSize && time.Since(p.lastSent) < p.config.SendInterval {
+		p.mu.Unlock()
+
+		return nil
+	}
+
+	eventsToSend := make([]*model.Event, len(p.eventsQueue))
+	copy(eventsToSend, p.eventsQueue)
+	p.eventsQueue = make([]*model.Event, 0, p.config.MaxEventsQueueSize)
+	p.mu.Unlock()
+
+	select {
+	case p.eventsToSend <- eventsToSend:
+		p.mu.Lock()
+		p.lastSent = time.Now()
+		p.mu.Unlock()
+
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (p *hashtagsSender) startSender(ctx context.Context) {
+	for {
+		select {
+		case events, ok := <-p.eventsToSend:
+			if !ok {
+				return
+			}
+			if err := p.sendEvents(ctx, events); err != nil {
+				log.Printf("failed to send events: %v", err)
+			}
+		case <-ctx.Done():
+			return
 		}
-
-		batch := make([]*model.Event, end-i)
-		copy(batch, p.events[i:end])
-		batches = append(batches, batch)
 	}
-	p.events = make([]*model.Event, 0, p.config.BatchSize)
-	p.lastSent = time.Now()
-	g, ctx := errgroup.WithContext(ctx)
-	for ix, batch := range batches {
-		batchIndex := ix
-		batchData := batch
-		g.Go(func() error {
-			return errors.Wrapf(p.sendEvents(ctx, batchData), "failed to send hashtags events batch %d", batchIndex)
-		})
-	}
-
-	return errors.Wrap(g.Wait(), "failed to send hashtags events")
 }
 
 func (p *hashtagsSender) sendEvents(ctx context.Context, events []*model.Event) error {
@@ -122,10 +152,10 @@ func (p *hashtagsSender) sendEvents(ctx context.Context, events []*model.Event) 
 	data := eventsData{
 		Events: events,
 	}
-	client := req.C()
-	resp, err := client.R().
+
+	resp, err := p.req.R().
 		SetContext(ctx).
-		SetRetryCount(25).
+		SetRetryCount(5).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
 			switch {
 			case attempt <= 1:
@@ -152,7 +182,7 @@ func (p *hashtagsSender) sendEvents(ctx context.Context, events []*model.Event) 
 		SetHeader("Pragma", "no-cache").
 		SetHeader("Expires", "0").
 		SetBody(data).
-		Post(p.config.BaseURL + "/v1/statistics/hashtags")
+		Post("/v1/statistics/hashtags")
 
 	if err != nil {
 		return errors.Wrap(err, "failed to send hashtags data")
