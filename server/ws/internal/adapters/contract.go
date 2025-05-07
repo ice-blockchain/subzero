@@ -11,13 +11,11 @@ import (
 	stdlibtime "time"
 
 	"github.com/quic-go/webtransport-go"
-
-	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
 type (
 	WSHandler interface {
-		Read(ctx context.Context, reader WS, cfg *config.Config)
+		Read(ctx context.Context, reader WS)
 	}
 	WSReader interface {
 		ReadMessage() (messageType int, p []byte, err error)

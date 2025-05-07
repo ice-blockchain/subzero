@@ -83,8 +83,8 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 				}
 
 			}()
-			go ws.Write(ctx)               //nolint:contextcheck // It is new context.
-			wsHandler.Read(ctx, ws, s.cfg) //nolint:contextcheck // It is new context.
+			go ws.Write(ctx)        //nolint:contextcheck // It is new context.
+			wsHandler.Read(ctx, ws) //nolint:contextcheck // It is new context.
 		}()
 		return
 	} else if handler != nil {

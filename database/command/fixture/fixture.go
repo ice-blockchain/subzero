@@ -45,7 +45,7 @@ func (e *errClient) BroadcastTx(ctx context.Context, userAddress string, relays 
 
 func (e *errClient) BroadcastTxRemoval(ctx context.Context, userAddress string, relays []string, notifier chan<- client.BroadcastStatus, transactions ...client.Transaction) {
 	notifier <- client.BroadcastStatus{
-		Error:    errors.New("error"),
+		Error:    errors.New("error from errClient"),
 		TxHashes: nil,
 	}
 }

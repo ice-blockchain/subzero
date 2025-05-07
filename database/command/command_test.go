@@ -5,8 +5,6 @@ package command
 import (
 	"context"
 	"encoding/hex"
-	"log"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -15,54 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/ice-blockchain/cometbft/config"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
-	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command/fixture"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
-var c, c2 *consensus
-
 func TestMain(m *testing.M) {
-	serverCtx, serverCancel := context.WithTimeout(context.Background(), 180*time.Second)
-	defer serverCancel()
-	conn, closeDb := query.NewTestDatabase(serverCtx)
-	query.MustInit(serverCtx, query.WithConfig(&query.Config{
-		URL: conn,
-	}))
-	c = mustInit(serverCtx, config.DefaultConfig()).(*consensus)
-	defer func() {
-		if err := os.RemoveAll(globalCfg.AbsoluteRootPath); err != nil {
-			log.Panic(err)
-		}
-	}()
-	cfg.MustInit("./.testdata/application2.yaml")
-	c2 = mustInit(serverCtx, config.DefaultConfig()).(*consensus)
-	code := m.Run()
-	serverCancel()
-	closeDb()
-	defer func() {
-		if err := os.RemoveAll(globalCfg.AbsoluteRootPath); err != nil {
-			log.Panic(err)
-		}
-	}()
-	if code == 0 {
-		if err := goleak.Find(); err != nil {
-			log.Printf("goleak: %v", err)
-			code = 1
-		}
-	}
-	defer func() {
-		if err := os.RemoveAll("../../.cometbft"); err != nil {
-			log.Printf("err cleanup: %v", err)
-		}
-		if err := os.RemoveAll("../../.cometbft2"); err != nil {
-			log.Printf("err cleanup: %v", err)
-		}
-	}()
-	os.Exit(code)
+	goleak.VerifyTestMain(m)
 }
 
 func TestRollBackOnTxError(t *testing.T) {
@@ -75,30 +33,30 @@ func TestRollBackOnTxError(t *testing.T) {
 		require.Fail(t, "Should not be called")
 		return nil
 	})
-	consensusClient := fixture.NewErrornousClient()
 	privKeyOfOriginalNote := model.GeneratePrivateKey()
 	masterPrivKey, masterPubkey := model.GenerateKeyPair()
 	originalEvent := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindTextNote,
 		Content:   "validEvent",
-		Tags: nostr.Tags{
-			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
+		Tags: model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPubkey},
 		},
 	}}
 	relaysList := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindRelayListMetadata,
-		Tags: nostr.Tags{
-			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-			[]string{"r", "wss://localhost:9988"},
-			[]string{"r", "wss://localhost:9977"},
+		Tags: model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPubkey},
+			{"r", "wss://localhost:9988"},
+			{"r", "wss://localhost:9977"},
 		},
 	}}
 	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, originalEvent.SignWithAlg(privKeyOfOriginalNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	c.client = consensusClient
-	err := c.broadcastUserEvents(t.Context(), relaysList, originalEvent)
+	node, release := newConsensusNode(t.Context(), nil, 19999, WithClient(fixture.NewErrornousClient()))
+	defer release()
+	err := node.broadcastUserEvents(t.Context(), relaysList, originalEvent)
 	t.Logf("%v", err)
 	require.Error(t, err)
 	require.True(t, rolledBack)
@@ -109,69 +67,75 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 	delegatedPrivKey, pk := model.GenerateKeyPair()
 	attestationEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindAttestation,
-		CreatedAt: 3,
+		CreatedAt: nostr.Now(),
 		Tags: model.Tags{
-			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":1"},
 		},
 	}}
 	relaysList := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindRelayListMetadata,
-		Tags: nostr.Tags{
-			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-			[]string{"r", "wss://localhost:9988"},
-			[]string{"r", "wss://localhost:9977"},
+		Tags: model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPubkey},
+			{"r", "wss://localhost:9988"},
+			{"r", "wss://localhost:9977"},
 		},
 	}}
 	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	profileEvent := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindProfileMetadata,
-		Tags:      nostr.Tags{}.AppendUnique(nostr.Tag{"b", masterPubkey}),
+		Tags:      model.Tags{}.AppendUnique(model.Tag{model.CustomIONTagOnBehalfOf, masterPubkey}),
 		Content:   "{\"name\": \"bogus\", \"about\":\"bogus\", \"picture\": \"https://bogus.com/pic.jpg\"}",
 	}}
 	require.NoError(t, profileEvent.SignWithAlg(delegatedPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent, relaysList, profileEvent))
+	var memdb query.MemDB
+	require.NoError(t, memdb.AcceptEvents(t.Context(), attestationEvent, relaysList, profileEvent))
 	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Accept should not be called")
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Equal(t, masterPubkey, userAddress)
 	})
-	c.client = consensusClient
+	node, release := newConsensusNode(t.Context(), nil, 19999,
+		WithClient(consensusClient),
+		WithQuery(memdb.SelectEvents),
+	)
+	defer release()
 	deletionProfile := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindDeletion,
-		Tags:      nostr.Tags{},
+		Tags:      model.Tags{},
 		PubKey:    masterPubkey,
 	}}
 	require.NoError(t, profileEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, c.broadcastUserEvents(t.Context(), deletionProfile))
+	require.NoError(t, node.broadcastUserEvents(t.Context(), deletionProfile))
 }
 
 func TestBroadcastLinkedEvent(t *testing.T) {
+	var memdb query.MemDB
 	masterPrivKey, masterPubkey := model.GenerateKeyPair()
 	priv, pk := model.GenerateKeyPair()
 	attestationEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindAttestation,
 		CreatedAt: 1,
 		Tags: model.Tags{
-			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+			{model.TagAttestationName, pk, "", model.CustomIONAttestationKindActive + ":1"},
 		},
 	}}
 	require.NoError(t, attestationEvent.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	relaysList := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindRelayListMetadata,
-		Tags: nostr.Tags{
-			[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-			[]string{"r", "wss://localhost:9988"},
-			[]string{"r", "wss://localhost:9977"},
+		Tags: model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPubkey},
+			{"r", "wss://localhost:9988"},
+			{"r", "wss://localhost:9977"},
 		},
 	}}
 	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent, relaysList))
+	require.NoError(t, memdb.AcceptEvents(t.Context(), attestationEvent, relaysList))
 
 	privkeyOfRepostedNote, pubKeyOfRepostedNote := model.GenerateKeyPair()
 	masterPrivKeyOfRepostedNote, masterPubkeyOfRepostedNote := model.GenerateKeyPair()
@@ -202,93 +166,110 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Rollback should not be called")
 	})
-	c.client = consensusClient
+	node, release := newConsensusNode(t.Context(), nil, 19999,
+		WithClient(consensusClient),
+		WithQuery(memdb.SelectEvents),
+	)
+	defer release()
 
 	t.Run("repost", func(t *testing.T) {
 		otherUserAttestation := &model.Event{Event: nostr.Event{
 			Kind:      model.CustomIONKindAttestation,
 			CreatedAt: 1,
 			Tags: model.Tags{
-				{model.TagAttestationName, pubKeyOfRepostedNote, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+				{model.TagAttestationName, pubKeyOfRepostedNote, "", model.CustomIONAttestationKindActive + ":1"},
 			},
 		}}
 		require.NoError(t, otherUserAttestation.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		otherUserRelaysList := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRelayListMetadata,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
-				[]string{"r", "wss://localhost:9988"},
-				[]string{"r", "wss://localhost:9977"},
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
+				{"r", "wss://localhost:9988"},
+				{"r", "wss://localhost:9977"},
 			},
 		}}
 		require.NoError(t, otherUserRelaysList.SignWithAlg(masterPrivKeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(t.Context(), otherUserAttestation, otherUserRelaysList))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), otherUserAttestation, otherUserRelaysList))
 
 		repostedEvent := model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
 			},
 		}}
 		require.NoError(t, repostedEvent.SignWithAlg(privkeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		repostEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindRepost,
-			Tags: nostr.Tags{
-				[]string{"e", repostedEvent.ID, "relay"},
-				[]string{"p", repostedEvent.GetMasterPublicKey()},
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+			Tags: model.Tags{
+				{"e", repostedEvent.ID, "relay"},
+				{"p", repostedEvent.GetMasterPublicKey()},
+				{model.CustomIONTagOnBehalfOf, masterPubkey}},
 			Content: repostedEvent.String(),
 		}}
 		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		ack := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEphemeralEmbeddding,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-				[]string{"e", repostEvent.ID},
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, masterPubkey},
+				{"e", repostEvent.ID},
 			},
 			Content: relaysList.String(),
 		}}
 		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(t.Context(), repostEvent, ack))
-		require.NoError(t, c.broadcastUserEvents(t.Context(), repostEvent, ack))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), repostEvent, ack))
+		require.NoError(t, node.broadcastUserEvents(t.Context(), repostEvent, ack))
 	})
 
 	t.Run("reaction", func(t *testing.T) {
 		originalEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, masterPubkeyOfRepostedNote},
 			},
 			Content: "validEvent",
 		}}
 		require.NoError(t, originalEvent.SignWithAlg(privkeyOfRepostedNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(t.Context(), originalEvent))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), originalEvent))
 		reactionEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindReaction,
-			Tags: nostr.Tags{
-				[]string{"e", originalEvent.ID},
-				[]string{"k", strconv.Itoa(originalEvent.Kind)},
-				[]string{"p", originalEvent.PubKey},
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey}},
+			Tags: model.Tags{
+				{"e", originalEvent.ID},
+				{"k", strconv.Itoa(originalEvent.Kind)},
+				{"p", originalEvent.PubKey},
+				{model.CustomIONTagOnBehalfOf, masterPubkey}},
 			Content: "+",
 		}}
 		require.NoError(t, reactionEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		ack := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEphemeralEmbeddding,
-			Tags: nostr.Tags{
-				[]string{model.CustomIONTagOnBehalfOf, masterPubkey},
-				[]string{"e", reactionEvent.ID}},
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, masterPubkey},
+				{"e", reactionEvent.ID}},
 			Content: relaysList.String(),
 		}}
 		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, c.broadcastUserEvents(t.Context(), reactionEvent, ack))
+		require.NoError(t, node.broadcastUserEvents(t.Context(), reactionEvent, ack))
 	})
+}
+
+func TestServerRestart(t *testing.T) {
+	t.Parallel()
+
+	var memdb query.MemDB
+	node, release := newConsensusNode(t.Context(), nil, 13999, WithQuery(memdb.SelectEvents))
+	defer release()
+
+	for range 5 {
+		require.NoError(t, node.Stop(t.Context(), time.Second))
+		node.Start(t.Context())
+	}
 }

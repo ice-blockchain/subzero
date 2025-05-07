@@ -15,18 +15,22 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/cometbft/config"
+	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
 	"github.com/ice-blockchain/cometbft/multiplex/server"
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
 	consensus struct {
-		server     server.Server
-		client     client.Client
-		cfg        *Config
-		shutdownCh chan struct{}
+		Server       server.Server
+		Client       client.Client
+		Logger       cmtlog.Logger
+		ServerConfig *config.Config
+		Config       *Config
+		Query        QueryFunc
+		ShutdownCh   chan chan<- error
 	}
 )
 
@@ -35,6 +39,28 @@ const consensusTimeout = time.Second * 25
 var (
 	ErrMultipleMasterKeys = errors.New("cannot broadcast single batch to multiple master keys")
 )
+
+func (c *consensus) waitForStop(ctx context.Context) {
+	var ch chan<- error
+
+	select {
+	case <-ctx.Done():
+		c.Logger.Debug("received shutdown signal from context")
+	case ch = <-c.ShutdownCh:
+		c.Logger.Debug("received shutdown signal from shutdown channel")
+	}
+
+	var err error
+	if c.Server != nil {
+		c.Logger.Debug("stopping consensus server")
+		err = c.Server.Close()
+		c.Logger.Debug("stopped consensus server")
+	}
+	if ch != nil {
+		ch <- err
+	}
+	c.Server = nil
+}
 
 func (c *consensus) CommitBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
@@ -45,7 +71,7 @@ func (c *consensus) CommitBroadcastTx(ctx context.Context, transactions ...clien
 		}
 		events = append(events, evs...)
 	}
-	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	ctx = context.WithValue(ctx, "consensusPort", c.Config.DiscoveryPort)
 	if commitEventListener != nil && len(events) > 0 {
 		err := commitEventListener(ctx, events...)
 		if err != nil {
@@ -73,7 +99,7 @@ func (c *consensus) AcceptBroadcastTx(ctx context.Context, transactions ...clien
 		}
 		events = append(events, evs...)
 	}
-	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	ctx = context.WithValue(ctx, "consensusPort", c.Config.DiscoveryPort)
 	if consensusEventListener != nil && len(events) > 0 {
 		err := consensusEventListener(ctx, events...)
 		if err != nil {
@@ -98,7 +124,7 @@ func (c *consensus) ReplayBroadcastTxBatch(ctx context.Context, transactions ...
 		}
 		events = append(events, evs...)
 	}
-	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	ctx = context.WithValue(ctx, "consensusPort", c.Config.DiscoveryPort)
 	ctx = context.WithValue(ctx, model.ConsensusReplayCtxKey, true)
 	if consensusEventListener != nil && len(events) > 0 {
 		err := consensusEventListener(ctx, events...)
@@ -124,7 +150,7 @@ func (c *consensus) RollbackTx(ctx context.Context, transactions ...client.Trans
 		}
 		events = append(events, evs...)
 	}
-	ctx = context.WithValue(ctx, "consensusPort", c.cfg.DiscoveryPort)
+	ctx = context.WithValue(ctx, "consensusPort", c.Config.DiscoveryPort)
 	return errors.Wrapf(rollback(ctx, events...), "failed to rollback non-accepted txs")
 }
 
@@ -150,7 +176,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	defer broadcastCancel()
 	notifier := make(chan client.BroadcastStatus, 1)
 	if isProfileDeletion {
-		c.client.BroadcastTxRemoval(broadcastCtx, userMasterKey, c.convertRelaysToBroadcastEndpoints(relays...), notifier)
+		c.Client.BroadcastTxRemoval(broadcastCtx, userMasterKey, c.convertRelaysToBroadcastEndpoints(relays...), notifier)
 		res := <-notifier
 		return errors.Wrapf(res.Error, "failed to delete chains for user deletion %v", userMasterKey)
 	}
@@ -169,7 +195,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 	if err != nil {
 		return errors.Wrapf(err, "failed to transform user key to address")
 	}
-	c.client.BroadcastTx(broadcastCtx, userAddr, c.convertRelaysToBroadcastEndpoints(relays...), notifier, txs...)
+	c.Client.BroadcastTx(broadcastCtx, userAddr, c.convertRelaysToBroadcastEndpoints(relays...), notifier, txs...)
 	err = c.rollbackIfErr(ctx, userMasterKey, userAddr, notifier, txs, events...)
 
 	return errors.Wrapf(err, "failed to broadcast user events for %v to %#v", userMasterKey, relays)
@@ -178,7 +204,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey, userAddr string, notifier <-chan client.BroadcastStatus, txs []client.Transaction, events ...*model.Event) error {
 	var err error
 	rollbackContext, rollbackCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	rollbackContext = context.WithValue(rollbackContext, "consensusPort", c.cfg.DiscoveryPort)
+	rollbackContext = context.WithValue(rollbackContext, "consensusPort", c.Config.DiscoveryPort)
 	defer rollbackCancel()
 	select {
 	case res := <-notifier:
@@ -213,11 +239,12 @@ func (c *consensus) rollbackIfErr(ctx context.Context, userMasterKey, userAddr s
 }
 
 func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (relays []string, err error) {
-	evIt := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: model.Filters{
-			model.Filter{Authors: []string{userMasterKey}, Kinds: []int{nostr.KindRelayListMetadata}},
+	evIt := c.Query(ctx,
+		model.Filter{
+			Authors: []string{userMasterKey},
+			Kinds:   []int{nostr.KindRelayListMetadata},
 		},
-	})
+	)
 	for ev, iErr := range evIt {
 		if iErr != nil {
 			return nil, errors.Wrapf(err, "failed to fetch user's relays for user %v", userMasterKey)
@@ -260,7 +287,7 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 		return "", nil, nil, false, nil
 	}
 	var userMasterKey string
-	for userKey, _ := range userMasterKeys {
+	for userKey := range userMasterKeys {
 		userMasterKey = userKey
 		break
 	}
@@ -358,9 +385,7 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 }
 
 func (c *consensus) getEvent(ctx context.Context, address string) (event *model.Event, masterKey string, err error) {
-	it := query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{
-		model.Filter{Addresses: []string{address}},
-	}})
+	it := c.Query(ctx, model.Filter{Addresses: []string{address}})
 	for e, iErr := range it {
 		if iErr != nil {
 			return nil, "", errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", address)

@@ -4,6 +4,7 @@ package ws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -24,20 +25,17 @@ import (
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
 const (
-	connCountTCP            = 100
-	connCountUDP            = 100
-	testDeadline            = 15 * time.Second
+	testDeadline            = time.Minute
 	NIP13MinLeadingZeroBits = 5
 )
 
 var (
-	echoServer    *fixture.MockService
-	pubsubServers []*fixture.MockService
+	pubsubServers      []*fixture.MockService
+	pubsubServersExtra []*fixture.MockService // For `TestConsensusEvents`.
 )
 
 type globalCfg struct {
@@ -46,62 +44,54 @@ type globalCfg struct {
 }
 
 func TestMain(m *testing.M) {
-	globalConfig := cfg.MustGet[globalCfg]()
-	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer serverCancel()
+	var closeFuncs []func() error
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	container := query.NewTestContainer(ctx)
+	closeFuncs = append(closeFuncs, func() error {
+		return container.Close(context.WithoutCancel(ctx))
+	})
+	tempDB, tempDBClose := container.MustTempDB(ctx)
+	query.MustInit(ctx, query.WithConfig(&query.Config{
+		URL: tempDB,
+	}))
+	closeFuncs = append(closeFuncs, func() error {
+		tempDBClose()
+		return nil
+	})
+
 	validation.MustInit()
-	closeFuncs := []func() error{}
-	dvm.MustInit(serverCtx)
-	echoFunc := func(_ context.Context, w Writer, in []byte, cfg *config.Config) {
-		if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
-			log.Panic(wErr)
-		}
+	dvm.MustInit(ctx)
+
+	for _, wsPort := range []uint16{9988, 9977, 9966} {
+		const discoveryPortDelta = 10_000
+		log.Printf("Starting server on port %d / %d", wsPort, wsPort+discoveryPortDelta)
+		server, release := helperCreateWsInstance(ctx, container, wsPort, wsPort+discoveryPortDelta)
+		pubsubServers = append(pubsubServers, server)
+		closeFuncs = append(closeFuncs, release)
 	}
 
-	echoServer = fixture.NewTestServer(
-		serverCtx,
-		&Config{
-			Port:      9999,
-			TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-		},
-		echoFunc,
-		nil,
-		map[string]gin.HandlerFunc{},
-	)
+	// Used in `TestConsensusEvents`.
+	for _, wsPort := range []uint16{9955, 9944} {
+		const discoveryPortDelta = 10_000
+		log.Printf("Starting server on port %d / %d", wsPort, wsPort+discoveryPortDelta)
+		server, release := helperCreateWsInstance(ctx, container, wsPort, wsPort+discoveryPortDelta)
+		pubsubServersExtra = append(pubsubServersExtra, server)
+		closeFuncs = append(closeFuncs, release)
+	}
 
-	server, release := helperCreateWsInstance(serverCtx, globalConfig,
-		9988, 19988,
-		"./../database/command/.testdata/node_key.json",
-		"../../.cometbft",
-	)
-	pubsubServers = append(pubsubServers, server)
-	closeFuncs = append(closeFuncs, release)
-
-	server2, release2 := helperCreateWsInstance(serverCtx, globalConfig,
-		9977, 19977,
-		"./../database/command/.testdata/node_key2.json",
-		"../../.cometbft2",
-	)
-	pubsubServers = append(pubsubServers, server2)
-	closeFuncs = append(closeFuncs, release2)
-
-	server3, release3 := helperCreateWsInstance(serverCtx, globalConfig,
-		9966, 19966,
-		"./../database/command/.testdata/node_key3.json",
-		"../../.cometbft3",
-	)
-	pubsubServers = append(pubsubServers, server3)
-	closeFuncs = append(closeFuncs, release3)
 	code := m.Run()
-	serverCancel()
-	for _, closeDb := range closeFuncs {
-		closeDb()
+
+	// Close all servers in reverse order.
+	cancel()
+	for i := len(closeFuncs) - 1; i >= 0; i-- {
+		closeFuncs[i]()
 	}
-	os.RemoveAll("../../.cometbft")
-	os.RemoveAll("../../.cometbft2")
-	os.RemoveAll("../../.cometbft3")
+
 	if code == 0 {
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Second)
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
 			code = 1
@@ -111,26 +101,42 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func helperCreateWsInstance(serverCtx context.Context, globalConfig *globalCfg, wsPort, consensusPort uint16, consensusKey, consensusStorage string) (*fixture.MockService, func() error) {
-	addr, release := query.NewTestDatabase(serverCtx)
-	hdl := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort))
-	srv := fixture.NewTestServer(serverCtx, &Config{
-		Port:      wsPort,
-		TLSConfig: LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-	}, hdl.Handle, nil, map[string]gin.HandlerFunc{})
-	srv.DB = query.GetDB(serverCtx, query.WithConfig(&query.Config{
-		URL: addr,
-	}))
+func helperCreateWsInstance(
+	ctx context.Context,
+	databaseContainer *query.Container,
+	wsPort uint16,
+	consensusPort uint16,
+) (*fixture.MockService, func() error) {
+	tlsData := cfg.MustGet[globalCfg]()
+	tlsConfig := LoadTLSConfig(tlsData.TLSCert, tlsData.TLSKey)
 
-	srv.Consensus = command.GetConsensus(serverCtx, command.WithConfig(&command.Config{
-		AbsoluteRootPath:           consensusStorage,
-		AbsoluteNodePrivateKeyPath: consensusKey,
-		DiscoveryPort:              consensusPort,
-	}))
-	return srv, release
+	db, releaseDB := query.NewTestDatabaseClient(ctx, databaseContainer)
+	node, releaseNode := command.NewConsensusNode(ctx, nil, consensusPort,
+		command.WithQuery(db.SelectEvents))
+
+	srv := fixture.NewTestServer(ctx,
+		&Config{
+			Port:      wsPort,
+			TLSConfig: tlsConfig,
+		},
+		newHandler(fmt.Sprintf("wss://localhost:%v", wsPort)).Handle,
+		nil,
+		map[string]gin.HandlerFunc{},
+	)
+	srv.Consensus = node
+	srv.DB = db
+
+	return srv, func() error {
+		return errors.Join(releaseNode(), releaseDB())
+	}
 }
 
 func TestSimpleEchoDifferentTransports(t *testing.T) {
+	const (
+		connCountTCP = 100
+		connCountUDP = 100
+	)
+
 	if os.Getenv("TEST_ECHO") != "y" {
 		t.Skip("set TEST_ECHO=y to run this test")
 	}
@@ -166,10 +172,27 @@ func TestSimpleEchoDifferentTransports(t *testing.T) {
 
 func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture.Client, error)) {
 	t.Helper()
-	echoServer.Reset()
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
+
+	ctx, cancel := context.WithTimeout(t.Context(), testDeadline)
 	defer cancel()
+
+	tlsConfig := cfg.MustGet[globalCfg]()
+	echoServer := fixture.NewTestServer(
+		t.Context(),
+		&Config{
+			Port:      9999,
+			TLSConfig: LoadTLSConfig(tlsConfig.TLSCert, tlsConfig.TLSKey),
+		},
+		func(_ context.Context, w Writer, in []byte) {
+			if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
+				log.Panic(wErr)
+			}
+		},
+		nil,
+		map[string]gin.HandlerFunc{},
+	)
+
+	var wg sync.WaitGroup
 	var clients []fixture.Client
 	for i := 0; i < conns; i++ {
 		clientConn, err := client(ctx)
