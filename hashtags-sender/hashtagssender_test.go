@@ -26,7 +26,7 @@ func TestRealEndpointIntegration(t *testing.T) {
 			SendInterval:       1 * time.Hour,
 		},
 		lastSent: time.Now(),
-		req:      req.C().SetBaseURL("https://localhost:8001").EnableInsecureSkipVerify(),
+		client:   req.C().SetBaseURL("https://localhost:8001").EnableInsecureSkipVerify(),
 	}
 
 	go processor.startSender(t.Context())
@@ -70,7 +70,7 @@ func TestTimeoutTriggeredIntegration(t *testing.T) {
 			SendInterval:       1 * time.Minute,
 		},
 		lastSent: time.Now(),
-		req:      req.C().SetBaseURL("https://localhost:8001").EnableInsecureSkipVerify(),
+		client:   req.C().SetBaseURL("https://localhost:8001").EnableInsecureSkipVerify(),
 	}
 
 	go func() {

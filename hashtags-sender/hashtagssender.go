@@ -4,7 +4,6 @@ package hashtagssender
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"regexp"
@@ -21,7 +20,7 @@ import (
 
 type (
 	Config struct {
-		BaseURL            string        `yaml:"base-url" validate:"required"`
+		BaseURL            string        `yaml:"base-url" validate:"required,url"`
 		RequestTimeout     time.Duration `yaml:"request-timeout"`
 		MaxEventsQueueSize int           `yaml:"max-events-queue-size"`
 		SendInterval       time.Duration `yaml:"send-interval"`
@@ -34,7 +33,7 @@ type (
 		mu           sync.Mutex
 		lastSent     time.Time
 		config       *Config
-		req          *req.Client
+		client       *req.Client
 		eventsQueue  []*model.Event
 	}
 )
@@ -47,12 +46,6 @@ var (
 
 	hashtagRegex = regexp.MustCompile(`#[a-zA-Z0-9_]+`)
 )
-
-func init() {
-	req.DefaultClient().SetJsonMarshal(json.Marshal)
-	req.DefaultClient().SetJsonUnmarshal(json.Unmarshal)
-	req.DefaultClient().GetClient().Timeout = 30 * time.Second
-}
 
 func MustInit(ctx context.Context) {
 	globalSender.Once.Do(func() {
@@ -71,7 +64,7 @@ func MustInit(ctx context.Context) {
 			mu:           sync.Mutex{},
 			lastSent:     time.Now(),
 			config:       config,
-			req:          req.C().SetBaseURL(config.BaseURL),
+			client:       req.C().SetBaseURL(config.BaseURL),
 			eventsQueue:  make([]*model.Event, 0, config.MaxEventsQueueSize),
 		}
 		go globalSender.hashtagsSender.startSender(ctx)
@@ -153,7 +146,7 @@ func (p *hashtagsSender) sendEvents(ctx context.Context, events []*model.Event) 
 		Events: events,
 	}
 
-	resp, err := p.req.R().
+	resp, err := p.client.R().
 		SetContext(ctx).
 		SetRetryCount(5).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
