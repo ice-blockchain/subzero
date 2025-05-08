@@ -335,10 +335,10 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
-github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250508055825-26d7ade35492 h1:5pqSMwCWA2A92wxaWHgtOIf+0cJ71Tj10t/ZPaLLUF0=
-github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250508055825-26d7ade35492/go.mod h1:dwzHaH3QIqaURglnWJgEXMej84Z2I/dYt8H510ngT3w=
-github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250508055825-26d7ade35492 h1:S/tgWNOhFUQZII1Il9Au4N2p5I6BTtaYqViC7bWvxeM=
-github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250508055825-26d7ade35492/go.mod h1:2CYWOH6Lxdb1DeMpvCXsArRzLV1CwTj781meNNiAu6I=
+github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250508140333-89327af17ec7 h1:fB8VnENVgp98hW7YffL3ToRp46WYUisKNWp/58lnl8U=
+github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250508140333-89327af17ec7/go.mod h1:dwzHaH3QIqaURglnWJgEXMej84Z2I/dYt8H510ngT3w=
+github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250508140333-89327af17ec7 h1:ksfqiYo6k1/xtw+frOWRS6oRvh4gSZnSDProao3t2aU=
+github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250508140333-89327af17ec7/go.mod h1:2CYWOH6Lxdb1DeMpvCXsArRzLV1CwTj781meNNiAu6I=
 github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513 h1:lb0RRUW6qO690J2nufHeQ3jFsx2deSb45Evhz/qRmAc=
 github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513/go.mod h1:vpbHQsGy3Ydvfu/oouSL/+mJvkym/ArDwr2eoJGso3w=
 github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd h1:SY8V7ujSDgEYEdtMk26DEaiq8qvCTEZ7XlojacrWZj4=
@@ -501,8 +501,8 @@ github.com/panjf2000/ants/v2 v2.4.2/go.mod h1:f6F0NZVFsGCp5A7QW/Zj/m92atWwOkY0OI
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
-github.com/petermattis/goid v0.0.0-20250319124200-ccd6737f222a h1:S+AGcmAESQ0pXCUNnRH7V+bOUIgkSX5qVt2cNKCrm0Q=
-github.com/petermattis/goid v0.0.0-20250319124200-ccd6737f222a/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
+github.com/petermattis/goid v0.0.0-20250508124226-395b08cebbdb h1:3PrKuO92dUTMrQ9dx0YNejC6U/Si6jqKmyQ9vWjwqR4=
+github.com/petermattis/goid v0.0.0-20250508124226-395b08cebbdb/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
 github.com/pingcap/errors v0.11.4 h1:lFuQV/oaUMGcD2tqt+01ROSmJs75VG1ToEOkZIZ4nE4=
 github.com/pingcap/errors v0.11.4/go.mod h1:Oi8TUi2kEtXXLMJk9l1cGmz20kV3TaQ0usTwv5KuLY8=
 github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
