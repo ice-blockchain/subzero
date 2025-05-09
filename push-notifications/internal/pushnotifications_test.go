@@ -40,8 +40,11 @@ func TestCreateSingleMessage(t *testing.T) {
 	t.Parallel()
 
 	privateKey, publicKey := model.GenerateKeyPair()
+	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
+	require.NoError(t, err)
+
 	client := &notificationClient{
-		privateKey: privateKey,
+		privateKey: privKeyX25519,
 	}
 
 	validToken := "valid-test-token-" + uuid.NewString()
@@ -202,7 +205,7 @@ func TestDecryptToken(t *testing.T) {
 
 		ev.Tags = nostr.Tags{{"token", encryptedToken}}
 
-		decryptedToken, err := DecryptToken(ev, privKey)
+		decryptedToken, err := DecryptToken(ev, privKeyX25519)
 		require.NoError(t, err)
 		require.Equal(t, originalToken, decryptedToken)
 	})

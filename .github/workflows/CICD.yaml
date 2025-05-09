@@ -178,7 +178,7 @@ jobs:
     name: Test
     strategy:
       matrix:
-        package: [ "cfg", "database/query", "database/command", "server/http", "server/ws", "dvm", "validation", "push-notifications" ]
+        package: [ "cfg", "database/query", "database/command", "server/http", "server/ws", "dvm", "validation", "push-notifications", "push-notifications/internal" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
     runs-on: ubuntu-22.04
     steps:
@@ -220,7 +220,7 @@ jobs:
     name: Benchmark
     strategy:
       matrix:
-        package: [ "database/query", "database/command", "server/http", "server/ws", "dvm", "validation", "push-notifications" ]
+        package: [ "database/query", "database/command", "server/http", "server/ws", "dvm", "validation", "push-notifications", "push-notifications/internal" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
     runs-on: ubuntu-22.04
     steps:

@@ -549,13 +549,13 @@ func TestShouldProcessGenericRepostEvent(t *testing.T) {
 	})
 }
 
-func TestGetTranslationWithRelatedInfo(t *testing.T) {
+func TestGetTranslationWithRelevantInfo(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
-	t.Run("Returns default translation when no related events", func(t *testing.T) {
-		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction)
+	t.Run("Returns default translation when no relevant events", func(t *testing.T) {
+		translation := pm.getTranslationWithRelevantInfo(NotificationTypeReaction)
 
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
@@ -581,7 +581,7 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 			},
 		}
 
-		translation := pm.getTranslationWithRelatedInfo(NotificationTypeMentionReply, profileEvent)
+		translation := pm.getTranslationWithRelevantInfo(NotificationTypeMentionReply, profileEvent)
 
 		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), translation.Title)
 		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), translation.Body)
@@ -606,7 +606,7 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 			},
 		}
 
-		translation := pm.getTranslationWithRelatedInfo(NotificationTypeNewFollower, profileEvent)
+		translation := pm.getTranslationWithRelevantInfo(NotificationTypeNewFollower, profileEvent)
 
 		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), translation.Title)
 		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(profileEvent), translation.Body)
@@ -629,7 +629,7 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 			},
 		}
 
-		translation := pm.getTranslationWithRelatedInfo(NotificationTypeRepost, profileEvent)
+		translation := pm.getTranslationWithRelevantInfo(NotificationTypeRepost, profileEvent)
 
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), translation.Title)
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), translation.Body)
@@ -644,7 +644,7 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 			},
 		}
 
-		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction, profileEvent)
+		translation := pm.getTranslationWithRelevantInfo(NotificationTypeReaction, profileEvent)
 
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
@@ -692,7 +692,7 @@ func TestGetTranslationWithRelatedInfo(t *testing.T) {
 			},
 		}
 
-		translation := pm.getTranslationWithRelatedInfo(NotificationTypeReaction, otherEvent, profileEvent1, profileEvent2)
+		translation := pm.getTranslationWithRelevantInfo(NotificationTypeReaction, otherEvent, profileEvent1, profileEvent2)
 
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(profileEvent1), translation.Body)
