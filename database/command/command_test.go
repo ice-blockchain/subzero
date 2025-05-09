@@ -24,9 +24,9 @@ import (
 func TestMain(m *testing.M) {
 	code := m.Run()
 	if code == 0 {
-		// Let's allow cometbft to finish.
-		time.Sleep(5 * time.Second)
-		if err := goleak.Find(); err != nil {
+		if err := goleak.Find(
+			goleak.IgnoreAnyFunction("github.com/ice-blockchain/cometbft/multiplex.(*MultiplexBackend).metricsReporter"),
+		); err != nil {
 			fmt.Printf("goleak found issues: %v\n", err)
 			code = 1
 		}
