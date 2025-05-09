@@ -90,7 +90,7 @@ var (
 				return "New repost"
 			},
 			Body: func(events ...*model.Event) string {
-				return fmt.Sprintf("%s reposted your post", getDisplayNameFromRelatedEvents(events))
+				return fmt.Sprintf("%s reposted your post", getDisplayNameFromRelevantEvents(events))
 			},
 			ImageURL: func(events ...*model.Event) string {
 				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
@@ -101,7 +101,7 @@ var (
 				return "New mention/reply"
 			},
 			Body: func(events ...*model.Event) string {
-				return fmt.Sprintf("%s mentioned/replied you", getDisplayNameFromRelatedEvents(events))
+				return fmt.Sprintf("%s mentioned/replied you", getDisplayNameFromRelevantEvents(events))
 			},
 			ImageURL: func(events ...*model.Event) string {
 				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
@@ -178,7 +178,7 @@ var (
 				return "New follower"
 			},
 			Body: func(events ...*model.Event) string {
-				return fmt.Sprintf("%s is now following you", getDisplayNameFromRelatedEvents(events))
+				return fmt.Sprintf("%s is now following you", getDisplayNameFromRelevantEvents(events))
 			},
 			ImageURL: func(events ...*model.Event) string {
 				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
@@ -276,14 +276,14 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 				topicNotifications = append(topicNotifications, notifications...)
 			}
 		}
-		var relatedEvents []*model.Event
+		var relevantEvents []*model.Event
 		if !shouldSkipEphemeralEvent(event) {
 			if evs, ok := ephemeralEvents[event.ID]; ok {
-				relatedEvents = evs
+				relevantEvents = evs
 			}
 		}
 
-		notifications, err := pm.processEvent(ctx, event, relatedEvents...)
+		notifications, err := pm.processEvent(ctx, event, relevantEvents...)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to process event")
 		}
@@ -337,7 +337,7 @@ func shouldSkipEphemeralEvent(event *model.Event) bool {
 	return event.Kind == nostr.KindGiftWrap || event.Kind == model.CustomIONSystemMessage
 }
 
-func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relatedEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	if event.Kind == nostr.KindGenericRepost {
 		shouldProcess, err := shouldProcessGenericRepostEvent(event)
 		if err != nil {
@@ -351,21 +351,21 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	switch event.Kind {
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost:
 		if hTag := event.GetHTag(); hTag != "" && hTag != event.ID {
-			notifications, err := pm.handleCommunityMessageEvent(ctx, event, relatedEvents...)
+			notifications, err := pm.handleCommunityMessageEvent(ctx, event, relevantEvents...)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to handle community message event")
 			}
 
 			return notifications, nil
 		} else if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) {
-			return pm.handleQuoteEvent(event, relatedEvents...), nil
+			return pm.handleQuoteEvent(event, relevantEvents...), nil
 		} else if event.Kind == nostr.KindGenericRepost {
-			return pm.handleEventWithPublicKey(event, NotificationTypeRepost, relatedEvents...), nil
+			return pm.handleEventWithPublicKey(event, NotificationTypeRepost, relevantEvents...), nil
 		}
 
-		return pm.handleMentionReplyEvent(event, relatedEvents...), nil
+		return pm.handleMentionReplyEvent(event, relevantEvents...), nil
 	case nostr.KindReaction:
-		return pm.handleEventWithPublicKey(event, NotificationTypeReaction, relatedEvents...), nil
+		return pm.handleEventWithPublicKey(event, NotificationTypeReaction, relevantEvents...), nil
 	case nostr.KindGiftWrap:
 		notifications, err := pm.handleGiftWrapEvent(event)
 		if err != nil {
@@ -475,26 +475,32 @@ func (pm *PushNotificationManager) createNotifications(
 	deviceRegistrationEvents []*DeviceRegistrationEvent,
 	notificationType NotificationType,
 	incomingEvent *model.Event,
-	relatedEvents ...*model.Event,
+	relevantEvents ...*model.Event,
 ) []*pn.Notification[*DeviceRegistrationEvent] {
 	if len(deviceRegistrationEvents) == 0 {
 		return nil
 	}
 
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
-	defaultTranslation := pm.getTranslationWithRelatedInfo(notificationType, relatedEvents...)
+	defaultTranslation := pm.getTranslationWithRelevantInfo(notificationType, relevantEvents...)
 
 	for _, event := range deviceRegistrationEvents {
 		data := map[string]interface{}{
 			"event": incomingEvent.String(),
 		}
 
-		if len(relatedEvents) > 0 {
-			relatedEventsStrings := make([]string, 0, len(relatedEvents))
-			for _, relatedEvent := range relatedEvents {
-				relatedEventsStrings = append(relatedEventsStrings, relatedEvent.String())
+		if len(relevantEvents) > 0 {
+			relevantEventsStrings := make([]string, 0, len(relevantEvents))
+			for _, relevantEvent := range relevantEvents {
+				relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 			}
-			data["related_events"] = relatedEventsStrings
+			jsonData, err := json.Marshal(relevantEventsStrings)
+			if err != nil {
+				log.Printf("failed to marshal relevant events: %v", err)
+
+				continue
+			}
+			data["relevant_events"] = jsonData
 		}
 
 		switch event.GetTag("t").Value() {
@@ -540,17 +546,17 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	return devices
 }
 
-func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil
 	}
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
-	return pm.createNotifications(deviceEvents, notificationType, event, relatedEvents...)
+	return pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
 }
 
-func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relatedEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevantEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
 	qLowerTag := event.GetTag("q")
 	qUpperTag := event.GetTag("Q")
 	var referencePubkey string
@@ -566,10 +572,10 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relatedE
 		return nil
 	}
 
-	return pm.createNotifications(devices, NotificationTypeRepost, event, relatedEvents...)
+	return pm.createNotifications(devices, NotificationTypeRepost, event, relevantEvents...)
 }
 
-func getDisplayNameFromRelatedEvents(events []*model.Event) string {
+func getDisplayNameFromRelevantEvents(events []*model.Event) string {
 	const defaultDisplayName = "Someone"
 	if len(events) == 0 {
 		return defaultDisplayName
@@ -599,7 +605,7 @@ func getDisplayNameFromRelatedEvents(events []*model.Event) string {
 	return defaultDisplayName
 }
 
-func (pm *PushNotificationManager) getTranslationWithRelatedInfo(notificationType NotificationType, relatedEvents ...*model.Event) NotificationTranslation {
+func (pm *PushNotificationManager) getTranslationWithRelevantInfo(notificationType NotificationType, relevantEvents ...*model.Event) NotificationTranslation {
 	translationTemplate, ok := DefaultTranslations[notificationType]
 	if !ok {
 		log.Printf("missing translation for notification type: %s", notificationType)
@@ -612,8 +618,8 @@ func (pm *PushNotificationManager) getTranslationWithRelatedInfo(notificationTyp
 	}
 
 	return NotificationTranslation{
-		Title:    translationTemplate.Title(relatedEvents...),
-		Body:     translationTemplate.Body(relatedEvents...),
-		ImageURL: translationTemplate.ImageURL(relatedEvents...),
+		Title:    translationTemplate.Title(relevantEvents...),
+		Body:     translationTemplate.Body(relevantEvents...),
+		ImageURL: translationTemplate.ImageURL(relevantEvents...),
 	}
 }

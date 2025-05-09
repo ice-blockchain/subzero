@@ -511,7 +511,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 	})
 }
 
-func TestHandleCommunityMessageEventWithRelatedEvents(t *testing.T) {
+func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
@@ -599,10 +599,14 @@ func TestHandleCommunityMessageEventWithRelatedEvents(t *testing.T) {
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
-	require.Contains(t, notification.Data, "related_events", "Data should contain related events")
+	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relatedEvents, ok := notification.Data["related_events"].([]string)
-	require.True(t, ok, "related_events should be a string slice")
-	require.Len(t, relatedEvents, 1, "Should have one related event")
-	require.Contains(t, relatedEvents[0], profileEvent.ID, "Related event should match profile event")
+	jsonBytes, ok := notification.Data["relevant_events"].([]byte)
+	require.True(t, ok, "relevant_events should be a JSON byte array")
+
+	var relevantEvents []string
+	err = json.Unmarshal(jsonBytes, &relevantEvents)
+	require.NoError(t, err, "Should be able to unmarshal relevant_events")
+	require.Len(t, relevantEvents, 1, "Should have one relevant event")
+	require.Contains(t, relevantEvents[0], string(profileJSON), "Relevant event should contain profile event content")
 }
