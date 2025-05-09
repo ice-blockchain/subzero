@@ -88,7 +88,7 @@ func WithCredentialsJSON(jsonStr string) Option {
 	}
 }
 
-func WithX25519PrivateKey(privateKey string) Option {
+func WithPrivateKey(privateKey string) Option {
 	return func(o *options) {
 		o.privateKey = privateKey
 	}
@@ -128,11 +128,15 @@ func New(ctx context.Context, opts ...Option) (Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	x25519PrivateKey, err := nip44.ConvertEd25519PrivateKeyToX25519(options.privateKey)
+	if err != nil {
+		panic("failed to convert private key to x25519: " + err.Error())
+	}
 
 	s := &notificationClient{
 		client:     fcmClient,
 		retry:      options.retryConfig,
-		privateKey: options.privateKey,
+		privateKey: x25519PrivateKey,
 	}
 
 	return s, nil

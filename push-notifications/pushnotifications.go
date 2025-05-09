@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/nbd-wtf/go-nostr/nip44"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -211,11 +210,7 @@ func MustInit() {
 			opts = append(opts, pn.WithCredentialsFile(config.FCMCredentialsFile))
 		}
 	}
-	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(config.PrivateKey)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to convert ed25519 private key to x25519: %v", err))
-	}
-	opts = append(opts, pn.WithX25519PrivateKey(privKeyX25519))
+	opts = append(opts, pn.WithPrivateKey(config.PrivateKey))
 
 	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {
@@ -494,13 +489,7 @@ func (pm *PushNotificationManager) createNotifications(
 			for _, relevantEvent := range relevantEvents {
 				relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 			}
-			jsonData, err := json.Marshal(relevantEventsStrings)
-			if err != nil {
-				log.Printf("failed to marshal relevant events: %v", err)
-
-				continue
-			}
-			data["relevant_events"] = jsonData
+			data["relevant_events"] = relevantEventsStrings
 		}
 
 		switch event.GetTag("t").Value() {

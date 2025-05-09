@@ -601,12 +601,8 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	jsonBytes, ok := notification.Data["relevant_events"].([]byte)
-	require.True(t, ok, "relevant_events should be a JSON byte array")
-
-	var relevantEvents []string
-	err = json.Unmarshal(jsonBytes, &relevantEvents)
-	require.NoError(t, err, "Should be able to unmarshal relevant_events")
+	relevantEvents, ok := notification.Data["relevant_events"].([]string)
+	require.True(t, ok, "relevant_events should be a string slice")
 	require.Len(t, relevantEvents, 1, "Should have one relevant event")
-	require.Contains(t, relevantEvents[0], string(profileJSON), "Relevant event should contain profile event content")
+	require.Equal(t, relevantEvents[0], profileEvent.Content, "Relevant event should contain profile event content")
 }
