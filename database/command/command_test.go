@@ -5,6 +5,8 @@ package command
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -20,7 +22,16 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	code := m.Run()
+	if code == 0 {
+		// Let's allow cometbft to finish.
+		time.Sleep(1 * time.Second)
+		if err := goleak.Find(); err != nil {
+			fmt.Printf("goleak found issues: %v\n", err)
+			code = 1
+		}
+	}
+	os.Exit(code)
 }
 
 func TestRollBackOnTxError(t *testing.T) {
