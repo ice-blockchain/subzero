@@ -21,11 +21,10 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
 type (
-	MockCallback func(ctx context.Context, w adapters.WSWriter, in []byte, cfg *config.Config)
+	MockCallback func(ctx context.Context, w adapters.WSWriter, in []byte)
 	TestDB       interface {
 		AcceptEvents(ctx context.Context, events ...*model.Event) error
 		RollbackEvents(ctx context.Context, events ...*model.Event) error

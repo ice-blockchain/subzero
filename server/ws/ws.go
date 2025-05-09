@@ -69,7 +69,7 @@ func newHandler(relayURL string) *handler {
 	}
 }
 
-func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
+func (h *handler) Read(ctx context.Context, stream internal.WS) {
 	for ctx.Err() == nil {
 		t, msgBytes, err := stream.ReadMessage()
 		if err != nil {
@@ -87,7 +87,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS, cfg *Config) {
 			break
 		}
 		if len(msgBytes) > 0 && ws.OpCode(t) == ws.OpText {
-			go h.Handle(ctx, stream, msgBytes, cfg)
+			go h.Handle(ctx, stream, msgBytes)
 		}
 	}
 	h.unlinkSubscription(stream, nil)
@@ -100,7 +100,7 @@ func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWri
 	return ctx
 }
 
-func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte, cfg *Config) {
+func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte) {
 	input, err := nostr.ParseMessage(msgBytes)
 	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
@@ -115,7 +115,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		for i := range e.Events {
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
-		err = h.handleEvents(h.populateContext(ctx, respWriter), respWriter, events, cfg)
+		err = h.handleEvents(h.populateContext(ctx, respWriter), respWriter, events)
 		if errors.Is(err, ErrNotifyFailed) {
 			// Not critical, just log it.
 			log.Printf("WARN: notification failed: %v", err)

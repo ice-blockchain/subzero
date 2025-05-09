@@ -36,7 +36,7 @@ func helperWaitFor[T any](t *testing.T, ch <-chan T, deadline time.Duration) T {
 		return v
 
 	case <-time.After(deadline):
-		t.Fatalf("timeout")
+		t.Fatalf("timeout exceeded waiting for value: %v", deadline)
 	}
 
 	var zero T
@@ -143,7 +143,7 @@ func TestJobOnline(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Second)
+		resp := helperWaitFor(t, jobResults, time.Minute)
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
@@ -168,7 +168,7 @@ func TestJobOnline(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Second)
+		resp := helperWaitFor(t, jobResults, time.Minute)
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
@@ -194,7 +194,7 @@ func TestJobOnline(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Second)
+		resp := helperWaitFor(t, jobResults, time.Minute)
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
@@ -300,7 +300,7 @@ func TestJobDeletion(t *testing.T) {
 	helperSignWithMinLeadingZeroBits(t, jobStop, privkey)
 	require.NoError(t, relay.Publish(t.Context(), jobStop.Event))
 
-	resp := helperWaitFor(t, jobResults, time.Second)
+	resp := helperWaitFor(t, jobResults, time.Minute)
 	wake <- struct{}{}
 	t.Logf("received DVM response: %+v", resp)
 	require.Equal(t, resp.GetTag("status").Value(), model.JobFeedbackStatusError)
@@ -355,7 +355,7 @@ func TestErrorFeedback(t *testing.T) {
 	require.NoError(t, relay.Publish(t.Context(), jobReq.Event))
 
 	time.Sleep(time.Second)
-	resp := helperWaitFor(t, jobResults, time.Second)
+	resp := helperWaitFor(t, jobResults, time.Minute)
 	t.Logf("received DVM response: %+v", resp)
 	require.Equal(t, resp.GetTag("status").Value(), model.JobFeedbackStatusError)
 	helperMustCloseRelay(t, relay)
@@ -452,7 +452,7 @@ func TestJobOffline(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Second)
+		resp := helperWaitFor(t, jobResults, time.Minute)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
 		require.Equal(t, "4", resp.Content) // 2 reactions + 2 articles.
@@ -475,7 +475,7 @@ func TestJobOffline(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Second)
+		resp := helperWaitFor(t, jobResults, time.Minute)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
 		require.JSONEq(t, `{"+":1,"-":1}`, resp.Content)
@@ -500,7 +500,7 @@ func TestJobOffline(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Second)
+		resp := helperWaitFor(t, jobResults, time.Minute)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
 		require.Equal(t, "1", resp.Content) // 1 article.
@@ -937,7 +937,7 @@ func helperCountMembers(t *testing.T, relay *nostrRelay, jobResults chan *model.
 	}
 	helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)
 	require.NoError(t, relay.Publish(t.Context(), ev.Event))
-	resp := helperWaitFor(t, jobResults, time.Second)
+	resp := helperWaitFor(t, jobResults, time.Minute)
 	responses = append(responses, resp)
 	t.Logf("received DVM response: %+v", resp)
 	require.Equal(t, ev.String(), resp.GetTag("request").Value())

@@ -13,14 +13,19 @@ import (
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex"
+	"github.com/ice-blockchain/cometbft/multiplex/client"
 	"github.com/ice-blockchain/cometbft/p2p"
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
-type CallbackFunc func(context.Context, ...*model.Event) error
+type (
+	CallbackFunc func(context.Context, ...*model.Event) error
+	QueryFunc    func(context.Context, ...model.Filter) query.EventIterator
+)
 
 func RegisterRollbackListener(listen CallbackFunc) {
 	rollback = listen
@@ -41,7 +46,6 @@ var (
 		Consensus *consensus
 		Once      sync.Once
 	}
-	globalCfg              *Config
 	consensusEventListener CallbackFunc
 	commitEventListener    CallbackFunc
 	rollback               CallbackFunc
@@ -56,61 +60,82 @@ type Config struct {
 	RelayUrl                   string `yaml:"relay-url"`
 }
 
-type Option func(cfg *Config)
+type Option func(*consensus)
 
 func WithConfig(cfg *Config) Option {
-	return func(in *Config) {
+	return func(c *consensus) {
 		if cfg == nil {
 			return
 		}
 		if cfg.AbsoluteNodePrivateKeyPath != "" {
-			in.AbsoluteNodePrivateKeyPath = cfg.AbsoluteNodePrivateKeyPath
+			c.Config.AbsoluteNodePrivateKeyPath = cfg.AbsoluteNodePrivateKeyPath
 		}
 		if cfg.AbsoluteRootPath != "" {
-			in.AbsoluteRootPath = cfg.AbsoluteRootPath
+			c.Config.AbsoluteRootPath = cfg.AbsoluteRootPath
 		}
 		if cfg.DiscoveryPort != 0 {
-			in.DiscoveryPort = cfg.DiscoveryPort
+			c.Config.DiscoveryPort = cfg.DiscoveryPort
+		}
+	}
+}
+
+func WithQuery(fn QueryFunc) Option {
+	return func(c *consensus) {
+		if fn == nil {
+			return
+		}
+		c.Query = fn
+	}
+}
+
+func WithClient(client client.Client) Option {
+	return func(c *consensus) {
+		if client != nil {
+			c.Client = client
 		}
 	}
 }
 
 func MustInit(ctx context.Context, opts ...Option) {
 	globalConsensus.Once.Do(func() {
-		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...).(*consensus)
+		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...)
 	})
 
 }
 
-func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Consensus {
-	globalCfg = cfg.MustGet[Config]()
-	for _, o := range opts {
-		o(globalCfg)
+func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *consensus {
+	var c = &consensus{
+		ServerConfig: serverCfg,
+		Logger:       cmtlog.NewFilter(cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout)), cmtlog.AllowError()),
+		Config:       cfg.MustGet[Config](),
+		Query: func(ctx context.Context, f ...model.Filter) query.EventIterator {
+			return query.GetStoredEvents(ctx, &model.Subscription{Filters: f})
+		},
+		ShutdownCh: make(chan chan<- error, 1),
 	}
-	c := &consensus{
-		cfg:        globalCfg,
-		shutdownCh: make(chan struct{}),
+
+	for _, fn := range opts {
+		fn(c)
 	}
-	serverCfg.SetRoot(globalCfg.AbsoluteRootPath)
-	serverCfg.NodeKey = globalCfg.AbsoluteNodePrivateKeyPath
+
+	serverCfg.SetRoot(c.Config.AbsoluteRootPath)
+	serverCfg.NodeKey = c.Config.AbsoluteNodePrivateKeyPath
 	serverCfg.MultiplexConfig = config.MultiplexBaseConfig(
 		map[string]string{},
 		map[string][]string{},
 	).MultiplexConfig
 	serverCfg.P2P.MaxPacketMsgPayloadSize = 100 * 1024 * 1024
 	serverCfg.DBBackend = "goleveldb"
-	serverCfg.DiscoveryPort = globalCfg.DiscoveryPort
-	if globalCfg.ExternalAddress != "" {
-		serverCfg.P2P.ExternalAddress = globalCfg.ExternalAddress
-		serverCfg.RPC.ListenAddress = globalCfg.ExternalAddress
+	serverCfg.DiscoveryPort = c.Config.DiscoveryPort
+	if c.Config.ExternalAddress != "" {
+		serverCfg.P2P.ExternalAddress = c.Config.ExternalAddress
+		serverCfg.RPC.ListenAddress = c.Config.ExternalAddress
 	}
-	logger := cmtlog.NewFilter(cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout)), cmtlog.AllowError())
-
-	if globalCfg.Debug {
+	if c.Config.Debug {
 		serverCfg.P2P.AllowDuplicateIP = true
 		serverCfg.P2P.AddrBookStrict = false
-		logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
-		logger = logger.With("port", globalCfg.DiscoveryPort)
+		c.Logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
+		c.Logger = c.Logger.With("port", c.Config.DiscoveryPort)
 	}
 	if err := os.MkdirAll(filepath.Dir(serverCfg.NodeKeyFile()), 0666); err != nil {
 		panic(errors.Wrapf(err, "failed to create consensus dir"))
@@ -119,26 +144,26 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) Con
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
-	cometbftServer, err := multiplex.NewServer(c, serverCfg, logger)
+	cometbftServer, err := multiplex.NewServer(c, serverCfg, c.Logger)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}
-	c.server = cometbftServer
-	c.server.MustStart()
-	c.client = multiplex.NewClient(multiplex.WithBackend(cometbftServer))
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-c.shutdownCh:
-			break
-		}
-		c.server.Close()
-	}()
+	cometbftServer.MustStart()
+	c.Server = cometbftServer
+
+	if c.Client == nil {
+		c.Client = multiplex.NewClient(multiplex.WithBackend(cometbftServer))
+	}
+	go c.waitForStop(ctx)
+
 	return c
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	return errors.Wrapf(globalConsensus.Consensus.AcceptEvents(ctx, events...), "errors occured while broadcasting events on %v", globalConsensus.Consensus.cfg.RelayUrl)
+	return errors.Wrapf(
+		globalConsensus.Consensus.AcceptEvents(ctx, events...),
+		"errors occured while broadcasting events on %v",
+		globalConsensus.Consensus.Config.RelayUrl)
 }
 
 func (c *consensus) AcceptEvents(ctx context.Context, events ...*model.Event) error {
