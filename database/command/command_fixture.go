@@ -76,6 +76,7 @@ func NewConsensusNode(ctx context.Context, nodeCfg *config.Config, port uint16, 
 func newConsensusNode(ctx context.Context, nodeCfg *config.Config, port uint16, opts ...Option) (*consensus, func() error) {
 	if nodeCfg == nil {
 		nodeCfg = config.DefaultConfig()
+		nodeCfg.Instrumentation.Prometheus = false
 	}
 
 	pattern := "cometbft-" + strconv.Itoa(int(port))
