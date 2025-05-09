@@ -362,7 +362,10 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 				}
 			}
 		}
-
+	case nostr.KindBadgeAward:
+		if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
+			masterKey = pTag.Value()
+		}
 	default:
 		masterKey = ev.GetMasterPublicKey()
 	}

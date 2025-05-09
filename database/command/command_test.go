@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"testing"
@@ -272,6 +273,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 	})
 }
 
+
 func TestServerRestart(t *testing.T) {
 	t.Parallel()
 
@@ -283,4 +285,116 @@ func TestServerRestart(t *testing.T) {
 		require.NoError(t, node.Stop(t.Context(), time.Second))
 		node.Start(t.Context())
 	}
+
+func TestBroadcastLinkedEventBadges(t *testing.T) {
+	heimdallPrivKey, heimdallPubkey := model.GenerateKeyPair()
+	relaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+			[]string{"r", "wss://localhost:9988"},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, relaysList.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), relaysList))
+	consensusHeimClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
+		for _, tx := range transactions {
+			evs, err := mapTxToEvent(tx)
+			require.NoError(t, err)
+			unhex, err := hex.DecodeString(heimdallPubkey)
+			require.NoError(t, err)
+			addr, err := client.PubKeyToAddress(string(unhex))
+			require.NoError(t, err)
+			expected := map[int]string{
+				nostr.KindBadgeAward: addr,
+			}
+			hasEphemeralAck := false
+			for _, ev := range evs {
+				if ev.Kind == model.CustomIONKindEphemeralEmbeddding {
+					hasEphemeralAck = true
+					continue
+				}
+				require.Equal(t, expected[ev.Kind], userAddress)
+			}
+			require.True(t, hasEphemeralAck)
+		}
+	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
+		require.Fail(t, "Rollback should not be called")
+	})
+	c.client = consensusHeimClient
+
+	t.Run("badge", func(t *testing.T) {
+		attestationForHeimdall := &model.Event{Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: 1,
+			Tags: model.Tags{
+				{model.TagAttestationName, heimdallPubkey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(time.Now().Unix()-10))},
+			},
+		}}
+		require.NoError(t, attestationForHeimdall.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		heimdallRelaysList := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+				[]string{"r", "wss://localhost:9988"},
+				[]string{"r", "wss://localhost:9977"},
+			},
+		}}
+		require.NoError(t, heimdallRelaysList.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		badgeEvent := &model.Event{
+			Event: nostr.Event{
+				PubKey:    heimdallPubkey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindBadgeDefinition,
+				Tags: nostr.Tags{
+					{"d", "verified"},
+					{"name", "verified"},
+					{"description", "verified"},
+					{"image", "https://bogus.com/pic.jpg", "1024x1024"},
+					{"thumb", "https://bogus.com/pic.jpg", "256x256"},
+					[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+				},
+			},
+		}
+		require.NoError(t, badgeEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		badgeAwardEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+				[]string{"a", fmt.Sprintf("30009:%v:verified", heimdallPubkey)},
+				[]string{"p", heimdallPubkey},
+			},
+		}}
+		require.NoError(t, badgeAwardEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		heimdalProfileMetadataEvt := &model.Event{
+			Event: nostr.Event{
+				PubKey:    heimdallPubkey,
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindProfileMetadata,
+				Content:   `{"name":"heimdall","display_name":"heimdall"}`,
+			},
+		}
+		require.NoError(t, heimdalProfileMetadataEvt.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		ack := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+					[]string{"e", badgeAwardEvent.ID},
+					[]string{"e", badgeEvent.ID},
+				},
+				Content: heimdalProfileMetadataEvt.String(),
+			}}
+		require.NoError(t, ack.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(t.Context(), attestationForHeimdall, heimdallRelaysList, badgeAwardEvent, badgeEvent, ack))
+		require.NoError(t, c.broadcastUserEvents(t.Context(), badgeAwardEvent, ack))
+	})
 }
