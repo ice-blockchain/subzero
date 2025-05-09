@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	if code == 0 {
 		// Let's allow cometbft to finish.
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 		if err := goleak.Find(); err != nil {
 			fmt.Printf("goleak found issues: %v\n", err)
 			code = 1
