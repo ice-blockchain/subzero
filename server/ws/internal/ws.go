@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -22,7 +23,11 @@ import (
 func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s := &Srv{cfg: cfg, routesSetup: router}
 	gin.SetMode(gin.ReleaseMode)
+
 	s.router = gin.Default()
+	if cfg.Debug {
+		pprof.Register(s.router, "subzero/pprof")
+	}
 	s.router.Use(gin.Recovery())
 	s.router.RemoteIPHeaders = []string{"cf-connecting-ip", "X-Real-IP", "X-Forwarded-For"}
 	s.router.TrustedPlatform = gin.PlatformCloudflare
