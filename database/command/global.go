@@ -134,6 +134,10 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 	if c.Config.Debug {
 		serverCfg.P2P.AllowDuplicateIP = true
 		serverCfg.P2P.AddrBookStrict = false
+		serverCfg.Instrumentation.Prometheus = true
+		if c.Config.ExternalAddress != "" {
+			serverCfg.Instrumentation.PrometheusListenAddr = c.Config.ExternalAddress
+		}
 		c.Logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
 		c.Logger = c.Logger.With("port", c.Config.DiscoveryPort)
 	}
