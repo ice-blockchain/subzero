@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -137,6 +138,8 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 		serverCfg.Instrumentation.Prometheus = true
 		if c.Config.ExternalAddress != "" {
 			serverCfg.Instrumentation.PrometheusListenAddr = c.Config.ExternalAddress
+		} else {
+			serverCfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf("htp://0.0.0.0:%v", c.Config.DiscoveryPort+3)
 		}
 		c.Logger = cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout))
 		c.Logger = c.Logger.With("port", c.Config.DiscoveryPort)
