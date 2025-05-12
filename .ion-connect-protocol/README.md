@@ -18,4 +18,5 @@
 | ICIP-8000  | Addition     | Inspired from [1528](https://github.com/nostr-protocol/nips/pull/1528) | Inspired from [NIP-97](https://github.com/nostr-protocol/nips/blob/master/97.md)   |
 | ICIP-51    | Modification |                                                                        | an extension of [NIP-51](https://github.com/nostr-protocol/nips/blob/master/51.md) |
 | ICIP-01    | Modification |                                                                        | an extension of [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) |
+| ICIP-11    | Modification |                                                                        | an extension of [NIP-11](https://github.com/nostr-protocol/nips/blob/master/11.md) |
 | ICIP-17    | Modification |                                                                        | an extension of [NIP-17](https://github.com/nostr-protocol/nips/blob/master/17.md) |

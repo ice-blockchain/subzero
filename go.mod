@@ -37,7 +37,7 @@ require (
 	github.com/libdns/cloudflare v0.2.1
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.51.10
+	github.com/nbd-wtf/go-nostr v0.51.11
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.51.0
 	github.com/quic-go/webtransport-go v0.8.1-0.20250328130601-2671ef85124d
