@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -25,6 +26,7 @@ const (
 	pgImage    = "postgres:17-alpine"
 	pgPass     = "postgres"
 	pgDatabase = "postgres"
+	dbPort     = "5432/tcp"
 )
 
 type (
@@ -61,7 +63,19 @@ func New(ctx context.Context, opts ...Option) *Container {
 	customizers = append(customizers,
 		postgres.WithDatabase(pgDatabase),
 		postgres.WithPassword(pgPass),
-		testcontainers.WithWaitStrategyAndDeadline(time.Minute, wait.ForExposedPort()),
+		testcontainers.WithWaitStrategyAndDeadline(
+			time.Minute,
+			wait.ForExposedPort(),
+			wait.ForSQL(nat.Port(dbPort), "pgx", func(host string, port nat.Port) string {
+				u := url.URL{
+					Scheme: "postgres",
+					User:   url.UserPassword("postgres", pgPass),
+					Host:   net.JoinHostPort(host, port.Port()),
+					Path:   pgDatabase,
+				}
+				return u.String()
+			}),
+		),
 	)
 
 	if internal.Config != "" {
@@ -84,7 +98,7 @@ func New(ctx context.Context, opts ...Option) *Container {
 }
 
 func (c *Container) ConnectionString(ctx context.Context, dbName string) string {
-	containerPort, err := c.container.MappedPort(ctx, "5432/tcp")
+	containerPort, err := c.container.MappedPort(ctx, dbPort)
 	if err != nil {
 		log.Panicf("failed to get mapped port: %v", err)
 	}
