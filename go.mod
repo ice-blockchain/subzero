@@ -6,7 +6,7 @@ replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.11.1
-	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250325160150-e1bb11d2b23c
+	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250513081714-d1d804c72d0b
 )
 
 require (
@@ -71,7 +71,7 @@ require (
 	cloud.google.com/go/iam v1.5.2 // indirect
 	cloud.google.com/go/longrunning v0.6.7 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
-	cloud.google.com/go/storage v1.53.0 // indirect
+	cloud.google.com/go/storage v1.54.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
@@ -264,9 +264,9 @@ require (
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
 	google.golang.org/appengine/v2 v2.0.6 // indirect
-	google.golang.org/genproto v0.0.0-20250505200425-f936aa4a68b2 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250505200425-f936aa4a68b2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250505200425-f936aa4a68b2 // indirect
+	google.golang.org/genproto v0.0.0-20250512202823-5a2f75b736a9 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
 	google.golang.org/grpc v1.72.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/dnaeon/go-priorityqueue.v1 v1.1.1 // indirect

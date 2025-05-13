@@ -23,6 +23,8 @@ import (
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
+const Disabled = true
+
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
 	QueryFunc    func(context.Context, ...model.Filter) query.EventIterator
@@ -98,6 +100,9 @@ func WithClient(client client.Client) Option {
 }
 
 func MustInit(ctx context.Context, opts ...Option) {
+	if Disabled {
+		return
+	}
 	globalConsensus.Once.Do(func() {
 		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...)
 	})
@@ -167,6 +172,9 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
+	if Disabled {
+		return nil
+	}
 	return errors.Wrapf(
 		globalConsensus.Consensus.AcceptEvents(ctx, events...),
 		"errors occured while broadcasting events on %v",
