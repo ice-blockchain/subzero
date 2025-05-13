@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -22,6 +23,8 @@ import (
 )
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
+
+var disabled = false
 
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
@@ -98,6 +101,11 @@ func WithClient(client client.Client) Option {
 }
 
 func MustInit(ctx context.Context, opts ...Option) {
+	conf := cfg.MustGet[Config]()
+	if strings.Contains(conf.RelayUrl, ".testnet.") || (conf.RelayUrl == "" && conf.AbsoluteRootPath == "" && conf.DiscoveryPort == 0) {
+		disabled = true
+		return
+	}
 	globalConsensus.Once.Do(func() {
 		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...)
 	})
@@ -167,6 +175,9 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
+	if disabled {
+		return nil
+	}
 	return errors.Wrapf(
 		globalConsensus.Consensus.AcceptEvents(ctx, events...),
 		"errors occured while broadcasting events on %v",
