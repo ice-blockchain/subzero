@@ -29,9 +29,6 @@ import (
 )
 
 func TestConsensusEvents(t *testing.T) {
-	if command.Disabled {
-		t.Skip("Skipped due to disabled consensus")
-	}
 	privkey, pk := model.GenerateKeyPair()
 	mapPort := func(ctx context.Context) *fixture.MockService {
 		var port, consensusPort uint16
