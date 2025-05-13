@@ -32,6 +32,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/storage/statistics"
+	adnlAddress "github.com/xssnick/tonutils-go/adnl/address"
 )
 
 var (
@@ -185,7 +186,7 @@ func mustInit(ctx context.Context) *client {
 			}
 		}
 	}
-	storage.DownloadThreads = threadsPerBagForDownloading
+	storage.DownloadPrefetch = threadsPerBagForDownloading
 	adnl.Logger = func(v ...any) {}
 	var lsCfg *liteclient.GlobalConfig
 	u, err := url.Parse(globalConfig.IONStorageConfigURL)
@@ -214,7 +215,12 @@ func mustInit(ctx context.Context) *client {
 	if ip == nil {
 		log.Panic(errors.Errorf("invalid external-adnl-address: %v", globalConfig.ExternalADNLAddress))
 	}
-	gate.SetExternalIP(ip)
+	gate.SetAddressList([]*adnlAddress.UDP{
+		{
+			IP:   ip,
+			Port: int32(globalConfig.ExternalADNLPort),
+		},
+	})
 	if err = gate.StartServer(fmt.Sprintf(":%v", globalConfig.ExternalADNLPort)); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start adnl gateway"))
 	}
@@ -227,7 +233,7 @@ func mustInit(ctx context.Context) *client {
 	if err != nil {
 		log.Panic(errors.Wrapf(err, "failed to create dht client"))
 	}
-	srv := storage.NewServer(dhtClient, gate, privateKey, true)
+	srv := storage.NewServer(dhtClient, gate, privateKey, true, runtime.NumCPU())
 	conn := storage.NewConnector(srv)
 	fStorage, err := ldbstorage.OpenFile(filepath.Join(globalConfig.AbsoluteRootStoragePath, "db"), false)
 	if err != nil {
@@ -289,7 +295,7 @@ func mustInit(ctx context.Context) *client {
 			}
 		}
 	}()
-	progressStorage, err := db.NewStorage(progressDb, conn, false, true, loadMonitoringCh)
+	progressStorage, err := db.NewStorage(progressDb, conn, 0, false, true, true, loadMonitoringCh)
 	if err != nil {
 		log.Panic(errors.Wrapf(err, "failed to open storage"))
 	}

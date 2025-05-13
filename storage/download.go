@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/xssnick/tonutils-go/adnl"
 	"log"
 	"strconv"
 	"strings"
@@ -187,7 +188,8 @@ func (c *client) connectToBootstrap(ctx context.Context, torrent *storage.Torren
 		if err != nil {
 			return errors.Wrapf(err, "failed to decode bootstrap %v, invalid pubkey %v", string(b64), string(pk))
 		}
-		if err = c.server.ConnectToNode(ctx, torrent, bs.Overlay, bs.DHT.AddrList, pubKey); err != nil {
+		bs.Overlay.ID = adnl.PublicKeyED25519{Key: pubKey}
+		if err = c.server.ConnectToNode(ctx, torrent, bs.Overlay, bs.DHT.AddrList); err != nil {
 			return errors.Wrapf(err, "failed to connect to bootstrap node %#v", bs.DHT.AddrList.Addresses[0])
 		}
 	}
