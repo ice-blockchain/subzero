@@ -235,14 +235,12 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	}
 
 	var userdata connAuthData
-	if !strings.Contains(h.relayURL, ".testnet.") {
-		if e.PubKey != e.GetMasterPublicKey() {
-			var err error
-			if userdata.Kinds, err = validateOnBehalfAccess(ctx, e); err != nil {
-				resp.Reason = "failed to validate on-behalf access: " + err.Error()
+	if e.PubKey != e.GetMasterPublicKey() {
+		var err error
+		if userdata.Kinds, err = validateOnBehalfAccess(ctx, e); err != nil {
+			resp.Reason = "failed to validate on-behalf access: " + err.Error()
 
-				return &resp
-			}
+			return &resp
 		}
 	}
 	userdata.Challenge = state.Challenge

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -23,7 +24,7 @@ import (
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
-const Disabled = true
+var Disabled = false
 
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
@@ -100,7 +101,9 @@ func WithClient(client client.Client) Option {
 }
 
 func MustInit(ctx context.Context, opts ...Option) {
-	if Disabled {
+	conf := cfg.MustGet[Config]()
+	if strings.Contains(conf.RelayUrl, ".testnet.") || (conf.RelayUrl == "" && conf.AbsoluteRootPath == "" && conf.DiscoveryPort == 0) {
+		Disabled = true
 		return
 	}
 	globalConsensus.Once.Do(func() {
