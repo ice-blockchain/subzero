@@ -5,8 +5,7 @@ go 1.24.3
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513
-	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.11.1
-	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250513081714-d1d804c72d0b
+	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250514104422-4322ed03ab7c
 )
 
 require (
@@ -50,7 +49,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
-	github.com/xssnick/tonutils-go v1.12.0
+	github.com/xssnick/tonutils-go v1.12.1-0.20250508133817-83128a4c7520
 	github.com/xssnick/tonutils-storage v1.0.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.40.0
@@ -269,6 +268,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
 	google.golang.org/grpc v1.72.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
-	gopkg.in/dnaeon/go-priorityqueue.v1 v1.1.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
