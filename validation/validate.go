@@ -292,7 +292,7 @@ var (
 		"size":     tagStateOptional,
 		"dim":      tagStateOptional,
 		"magnet":   tagStateOptional,
-		"i":        tagStateRequired,
+		"i":        tagStateOptional,
 		"blurhash": tagStateOptional,
 		"thumb":    tagStateOptional,
 		"image":    tagStateOptional,
@@ -620,6 +620,9 @@ func Validate(ctx context.Context, e *model.Event) error {
 	case nostr.KindBadgeDefinition:
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+		if richText := e.GetTag(model.CustomIONTagRichText); richText != nil && len(e.Content) > 0 {
+			return errors.Wrap(ErrWrongEventParams, "rich text tag is set, but content is not empty")
+		}
 		if len(e.Content) < 1 {
 			pubAt := e.GetTag("published_at").Value()
 			if val, err := strconv.ParseInt(pubAt, 10, 64); err != nil || val == int64(e.CreatedAt) {
