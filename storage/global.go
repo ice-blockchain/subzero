@@ -23,6 +23,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	ldbstorage "github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/xssnick/tonutils-go/adnl"
+	adnlAddress "github.com/xssnick/tonutils-go/adnl/address"
 	"github.com/xssnick/tonutils-go/adnl/dht"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-storage/db"
@@ -32,7 +33,6 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/storage/statistics"
-	adnlAddress "github.com/xssnick/tonutils-go/adnl/address"
 )
 
 var (
