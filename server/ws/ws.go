@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
@@ -20,6 +21,10 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+)
+
+const (
+	operationLogThreshold = time.Millisecond * 150
 )
 
 type (
@@ -100,6 +105,15 @@ func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWri
 	return ctx
 }
 
+func logOperation(duration time.Duration, msg string, args ...any) {
+	if duration < operationLogThreshold {
+		return
+	}
+
+	prefix := "[WS]: stats: duration: [" + duration.String() + "]: "
+	log.Printf(prefix+msg, args...)
+}
+
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte) {
 	input, err := nostr.ParseMessage(msgBytes)
 	if err != nil {
@@ -109,9 +123,10 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		return
 	}
 
+	start := time.Now()
 	switch e := input.(type) {
 	case *nostr.EventEnvelope:
-		var events []*model.Event
+		events := make([]*model.Event, 0, len(e.Events))
 		for i := range e.Events {
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
@@ -121,6 +136,8 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			log.Printf("WARN: notification failed: %v", err)
 			err = nil
 		}
+		logOperation(time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
+		sendStart := time.Now()
 		for i := range e.Events {
 			resp := &nostr.OKEnvelope{
 				EventID: e.Events[i].ID,
@@ -136,14 +153,20 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			if wErr != nil {
 				log.Printf("ERROR: write event response %v: %v", i, wErr)
 
-				return
+				break
 			}
 		}
+		logOperation(time.Since(sendStart), "events: send [%d] responses", len(events))
 		return
 	case *nostr.AuthEnvelope:
-		err = h.writeResponse(respWriter, h.handleAuth(ctx, respWriter, &model.Event{Event: e.Event}))
+		ev := &model.Event{Event: e.Event}
+		err = h.writeResponse(respWriter, h.handleAuth(ctx, respWriter, ev))
+		logOperation(time.Since(start), "auth: [device %s] / [master %s]", ev.PubKey, ev.GetMasterPublicKey())
 	case *nostr.ReqEnvelope:
 		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
+		logOperation(time.Since(start), "req: %s: handle [%d] filters: %v: [%v]",
+			e.SubscriptionID, len(e.Filters), string(msgBytes),
+			err)
 	case *nostr.CountEnvelope:
 		err = h.handleCount(h.populateContext(ctx, respWriter), e)
 		if err != nil {
@@ -159,6 +182,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		}
 	case *nostr.CloseEnvelope:
 		h.unlinkSubscription(respWriter, (*string)(e))
+		logOperation(time.Since(start), "req: close: %s", (*string)(e))
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
