@@ -389,7 +389,7 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 		refTags := []string{"q", "Q", "a"}
 		for _, tagName := range refTags {
 			if tag := ev.GetTag(tagName); tag != nil && tag.Value() != "" {
-				linkedEvent, masterKey, err := c.getEvent(ctx, tag.Value())
+				linkedEvent, masterKey, err = c.getEvent(ctx, tag.Value())
 				if err != nil {
 					return "", errors.Wrapf(err, "failed to get referenced event")
 				}
