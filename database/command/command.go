@@ -270,7 +270,7 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0) && ev.PubKey == ev.GetMasterPublicKey() {
 			profileDeletion = ev
 		}
-		masterKey, err = c.broadcastMasterKey(ctx, ev, matchingEphemeralAckEvents)
+		masterKey, err = c.broadcastMasterKey(ctx, ev, matchingEphemeralAckEvents, events)
 		if err != nil {
 			if errors.Is(err, ErrUserIsNotPresentedOnRelay) {
 				continue
@@ -301,19 +301,48 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 	return userMasterKey, userMasterKeys[userMasterKey], matchingEphemeralAckEvents, profileDeletion != nil, nil
 }
 
-func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent) (masterKey string, err error) {
+func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent, incomingEvents []*model.Event) (masterKey string, err error) {
 	var acks []*model.EphemeralEmbeddingEvent
 	hasAck := false
 	if acks, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck || len(acks) == 0 {
-		if ev.Kind == nostr.KindGiftWrap {
+		switch ev.Kind {
+		case nostr.KindGiftWrap:
 			if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
 				return pTag.Value(), nil
 			}
-		} else if ev.Kind == nostr.KindBadgeDefinition {
-			if acks, hasAck = ephemeralAckEvents[ev.ID]; !hasAck || len(acks) == 0 {
-				return ev.GetMasterPublicKey(), nil
+		case nostr.KindBadgeAward:
+			hasBadgeDefinition := false
+			for _, evt := range incomingEvents {
+				if evt.Kind == nostr.KindBadgeDefinition {
+					hasBadgeDefinition = true
+
+					break
+				}
 			}
-		} else {
+			if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
+				masterKey = pTag.Value()
+			}
+			if masterKey == "" || !hasBadgeDefinition {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge definition found in events or no p tag %v", ev.ID)
+			}
+
+			return masterKey, nil
+		case nostr.KindBadgeDefinition:
+			for _, evt := range incomingEvents {
+				if evt.Kind == nostr.KindBadgeAward {
+					if pTag := evt.GetTag("p"); pTag != nil && pTag.Value() != "" {
+						masterKey = pTag.Value()
+
+						break
+					}
+				}
+			}
+			if masterKey == "" {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or no p tag %v", ev.ID)
+			}
+
+			return masterKey, nil
+		default:
 			return ev.GetMasterPublicKey(), nil
 		}
 	}
@@ -333,23 +362,15 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 		}
 	case nostr.KindReaction:
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" {
-			linkedEvents, err := c.getEventsByAddresses(ctx, []string{eTag.Value()})
+			linkedEvent, masterKey, err = c.getEvent(ctx, eTag.Value())
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to get referenced event")
-			}
-			if len(linkedEvents) > 0 {
-				linkedEvent = linkedEvents[0]
-				masterKey = linkedEvent.GetMasterPublicKey()
 			}
 		}
 		if aTag := ev.GetTag("a"); aTag != nil && aTag.Value() != "" {
-			linkedEvents, err := c.getEventsByAddresses(ctx, []string{aTag.Value()})
+			linkedEvent, masterKey, err = c.getEvent(ctx, aTag.Value())
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to get referenced event")
-			}
-			if len(linkedEvents) > 0 {
-				linkedEvent = linkedEvents[0]
-				masterKey = linkedEvent.GetMasterPublicKey()
 			}
 		}
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
@@ -360,58 +381,21 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 		}
 		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
-			linkedEvents, err := c.getEventsByAddresses(ctx, []string{eTag.Value()})
+			linkedEvent, masterKey, err = c.getEvent(ctx, eTag.Value())
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to get referenced event")
-			}
-			if len(linkedEvents) > 0 {
-				linkedEvent = linkedEvents[0]
-				masterKey = linkedEvent.GetMasterPublicKey()
 			}
 		}
 		refTags := []string{"q", "Q", "a"}
 		for _, tagName := range refTags {
 			if tag := ev.GetTag(tagName); tag != nil && tag.Value() != "" {
-				linkedEvents, err := c.getEventsByAddresses(ctx, []string{tag.Value()})
+				linkedEvent, masterKey, err := c.getEvent(ctx, tag.Value())
 				if err != nil {
 					return "", errors.Wrapf(err, "failed to get referenced event")
-				}
-				if len(linkedEvents) > 0 {
-					linkedEvent = linkedEvents[0]
-					masterKey = linkedEvent.GetMasterPublicKey()
 				}
 				if linkedEvent != nil && masterKey != "" {
 					break
 				}
-			}
-		}
-	case nostr.KindBadgeAward:
-		if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
-			masterKey = pTag.Value()
-		}
-	case nostr.KindBadgeDefinition:
-		eTags := acks[0].GetTags("e")
-		if len(eTags) == 0 {
-			return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "21750 was not provided with kind %v", ev.Kind)
-		}
-		var eTagValues []string
-		for _, eTag := range eTags {
-			if eTag.Key() == "e" {
-				eTagValues = append(eTagValues, eTag.Value())
-			}
-		}
-		if len(eTagValues) == 0 {
-			return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no e tag found in ephemeral ack %v", acks[0].ID)
-		}
-		linkedEvents, err := c.getEventsByAddresses(ctx, eTagValues)
-		if err != nil {
-			return "", errors.Wrapf(err, "failed to get referenced event")
-		}
-		for _, linkedEvent := range linkedEvents {
-			if linkedEvent.Kind == nostr.KindBadgeAward && linkedEvent.GetTag("p") != nil && linkedEvent.GetTag("p").Value() != "" {
-				masterKey = linkedEvent.GetTag("p").Value()
-
-				break
 			}
 		}
 	default:
@@ -437,16 +421,21 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 	return masterKey, nil
 }
 
-func (c *consensus) getEventsByAddresses(ctx context.Context, addresses []string) (events []*model.Event, err error) {
-	it := c.Query(ctx, model.Filter{Addresses: addresses})
+func (c *consensus) getEvent(ctx context.Context, address string) (event *model.Event, masterKey string, err error) {
+	it := c.Query(ctx, model.Filter{Addresses: []string{address}})
 	for e, iErr := range it {
 		if iErr != nil {
-			return nil, errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", addresses)
+			return nil, "", errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", address)
 		}
-		events = append(events, e)
+		event = e
+
+		break
+	}
+	if event != nil {
+		masterKey = event.GetMasterPublicKey()
 	}
 
-	return events, nil
+	return event, masterKey, nil
 }
 
 func collectRelaysFromRelayEvent(ev *model.Event) []string {
@@ -480,7 +469,7 @@ func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string, err
 			}
 		}
 		return "", errors.Errorf("malformed %v event, no k tag", nostr.KindGiftWrap)
-	case nostr.KindBadgeAward, nostr.KindBadgeDefinition:
+	case nostr.KindBadgeDefinition, nostr.KindBadgeAward:
 		return client.GetFingerprint(fmt.Sprintf("%v", nostr.KindBadgeAward)), nil
 	default:
 		kTagValue := ""

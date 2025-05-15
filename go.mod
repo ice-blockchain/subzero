@@ -49,7 +49,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
-	github.com/xssnick/tonutils-go v1.12.0
+	github.com/xssnick/tonutils-go v1.13.0
 	github.com/xssnick/tonutils-storage v1.0.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.40.0
@@ -118,7 +118,7 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
-	github.com/getsentry/sentry-go v0.32.0 // indirect
+	github.com/getsentry/sentry-go v0.33.0 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
@@ -200,7 +200,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.63.0 // indirect
+	github.com/prometheus/common v0.64.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/pterm/pterm v0.12.80 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
