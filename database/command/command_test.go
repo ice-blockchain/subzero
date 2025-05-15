@@ -323,15 +323,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				nostr.KindBadgeDefinition: addr,
 				nostr.KindBadgeAward:      addr,
 			}
-			hasEphemeralAck := false
-			for _, ev := range evs {
-				if ev.Kind == model.CustomIONKindEphemeralEmbeddding {
-					hasEphemeralAck = true
-					continue
-				}
-				require.Equal(t, expected[ev.Kind], userAddress)
-			}
-			require.True(t, hasEphemeralAck)
+			require.Equal(t, expected[evs[0].Kind], userAddress)
 		}
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Rollback should not be called")
@@ -370,27 +362,6 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 		}}
 		require.NoError(t, badgeAwardEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeAwardEvent))
-
-		userProfileMetadataEvt := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      nostr.KindProfileMetadata,
-				Content:   `{"name":"user","display_name":"user"}`,
-			},
-		}
-		require.NoError(t, userProfileMetadataEvt.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		ack := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
-				Tags: nostr.Tags{
-					[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-					[]string{"e", badgeDefinitionEvent.ID},
-					[]string{"e", badgeAwardEvent.ID},
-				},
-				Content: userProfileMetadataEvt.String(),
-			}}
-		require.NoError(t, ack.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, node.broadcastUserEvents(t.Context(), badgeDefinitionEvent, badgeAwardEvent, ack))
+		require.NoError(t, node.broadcastUserEvents(t.Context(), badgeDefinitionEvent, badgeAwardEvent))
 	})
 }
