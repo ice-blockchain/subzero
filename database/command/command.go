@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -311,31 +312,30 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 				return pTag.Value(), nil
 			}
 		case nostr.KindBadgeAward:
-			hasBadgeDefinition := false
-			for _, evt := range incomingEvents {
-				if evt.Kind == nostr.KindBadgeDefinition {
-					hasBadgeDefinition = true
-
-					break
-				}
+			badgeDefinitionIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+				return e.Kind == nostr.KindBadgeDefinition
+			})
+			if badgeDefinitionIndex == -1 {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge definition found in events or no p tag %v", ev.ID)
 			}
 			if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
 				masterKey = pTag.Value()
 			}
-			if masterKey == "" || !hasBadgeDefinition {
+			if masterKey == "" {
 				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge definition found in events or no p tag %v", ev.ID)
 			}
 
 			return masterKey, nil
 		case nostr.KindBadgeDefinition:
-			for _, evt := range incomingEvents {
-				if evt.Kind == nostr.KindBadgeAward {
-					if pTag := evt.GetTag("p"); pTag != nil && pTag.Value() != "" {
-						masterKey = pTag.Value()
-
-						break
-					}
-				}
+			badgeAwardIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+				return e.Kind == nostr.KindBadgeAward
+			})
+			if badgeAwardIndex == -1 {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or no p tag %v", ev.ID)
+			}
+			badgeAward := incomingEvents[badgeAwardIndex]
+			if pTag := badgeAward.GetTag("p"); pTag != nil && pTag.Value() != "" {
+				masterKey = pTag.Value()
 			}
 			if masterKey == "" {
 				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or no p tag %v", ev.ID)
