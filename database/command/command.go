@@ -472,7 +472,7 @@ func mapEventsToTXs(events []*model.Event, ackEvents map[string][]*model.Ephemer
 		mappedEphemeralEvents := ackEvents[ev.Address()]
 		ackEphepheralEvents := make([]*nostr.Event, 0, len(mappedEphemeralEvents))
 		for _, e := range mappedEphemeralEvents {
-			if e.ContentEvent != nil && e.ContentEvent.Kind == model.CustomIONKindAttestation {
+			if e.ContentEvent != nil && (e.ContentEvent.Kind == model.CustomIONKindAttestation || e.ContentEvent.Kind == nostr.KindProfileMetadata) {
 				ackEphepheralEvents = append(ackEphepheralEvents, &e.Event.Event)
 			}
 		}
