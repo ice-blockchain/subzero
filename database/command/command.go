@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -170,7 +171,7 @@ func (c *consensus) broadcastUserEvents(ctx context.Context, events ...*model.Ev
 		return nil
 	}
 	if len(relays) == 0 {
-		return ErrUserIsNotPresentedOnRelay
+		return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no relays found for user %v", userMasterKey)
 	}
 	broadcastCtx, broadcastCancel := context.WithTimeout(ctx, consensusTimeout)
 	defer broadcastCancel()
@@ -270,7 +271,7 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0) && ev.PubKey == ev.GetMasterPublicKey() {
 			profileDeletion = ev
 		}
-		masterKey, err = c.broadcastMasterKey(ctx, ev, matchingEphemeralAckEvents)
+		masterKey, err = c.broadcastMasterKey(ctx, ev, matchingEphemeralAckEvents, events)
 		if err != nil {
 			if errors.Is(err, ErrUserIsNotPresentedOnRelay) {
 				continue
@@ -281,6 +282,7 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 			userMasterKeys[masterKey] = relays
 		}
 	}
+
 	if len(userMasterKeys) > 1 {
 		return "", nil, nil, false, ErrMultipleMasterKeys
 	} else if len(userMasterKeys) == 0 {
@@ -296,19 +298,53 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 			return "", nil, nil, false, errors.Wrapf(err, "failed to get relay list for user %v", userMasterKey)
 		}
 	}
+
 	return userMasterKey, userMasterKeys[userMasterKey], matchingEphemeralAckEvents, profileDeletion != nil, nil
 }
 
-func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent) (masterKey string, err error) {
+func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, ephemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent, incomingEvents []*model.Event) (masterKey string, err error) {
 	var acks []*model.EphemeralEmbeddingEvent
 	hasAck := false
 	if acks, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck || len(acks) == 0 {
-		if ev.Kind == nostr.KindGiftWrap {
+		switch ev.Kind {
+		case nostr.KindGiftWrap:
 			if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
 				return pTag.Value(), nil
 			}
+		case nostr.KindBadgeAward:
+			badgeDefinitionIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+				return e.Kind == nostr.KindBadgeDefinition
+			})
+			if badgeDefinitionIndex == -1 {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge definition found in events or no p tag %v", ev.ID)
+			}
+			if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
+				masterKey = pTag.Value()
+			}
+			if masterKey == "" {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge definition found in events or no p tag %v", ev.ID)
+			}
+
+			return masterKey, nil
+		case nostr.KindBadgeDefinition:
+			badgeAwardIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+				return e.Kind == nostr.KindBadgeAward
+			})
+			if badgeAwardIndex == -1 {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or no p tag %v", ev.ID)
+			}
+			badgeAward := incomingEvents[badgeAwardIndex]
+			if pTag := badgeAward.GetTag("p"); pTag != nil && pTag.Value() != "" {
+				masterKey = pTag.Value()
+			}
+			if masterKey == "" {
+				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or no p tag %v", ev.ID)
+			}
+
+			return masterKey, nil
+		default:
+			return ev.GetMasterPublicKey(), nil
 		}
-		return ev.GetMasterPublicKey(), nil
 	}
 	var linkedEvent *model.Event
 	switch ev.Kind {
@@ -362,12 +398,11 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 				}
 			}
 		}
-
 	default:
 		masterKey = ev.GetMasterPublicKey()
 	}
 	if linkedEvent == nil && masterKey == "" {
-		return "", ErrUserIsNotPresentedOnRelay
+		return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no linked event and master key %v", ev.ID)
 	}
 	foundMatchingMasterKey := true
 	mismatchedMasterKey := ""
@@ -375,12 +410,14 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 		if ev.GetMasterPublicKey() != e.GetMasterPublicKey() {
 			foundMatchingMasterKey = false
 			mismatchedMasterKey = e.GetMasterPublicKey()
+
 			break
 		}
 	}
 	if !foundMatchingMasterKey {
 		return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "21750 was not provided with kind %v or b tag mismatch (%v %v)", ev.Kind, linkedEvent.GetMasterPublicKey(), mismatchedMasterKey)
 	}
+
 	return masterKey, nil
 }
 
@@ -391,11 +428,13 @@ func (c *consensus) getEvent(ctx context.Context, address string) (event *model.
 			return nil, "", errors.Wrapf(iErr, "failed to fetch linked event for by filter %v ", address)
 		}
 		event = e
+
 		break
 	}
 	if event != nil {
 		masterKey = event.GetMasterPublicKey()
 	}
+
 	return event, masterKey, nil
 }
 
@@ -430,6 +469,8 @@ func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string, err
 			}
 		}
 		return "", errors.Errorf("malformed %v event, no k tag", nostr.KindGiftWrap)
+	case nostr.KindBadgeDefinition, nostr.KindBadgeAward:
+		return client.GetFingerprint(fmt.Sprintf("%v", nostr.KindBadgeAward)), nil
 	default:
 		kTagValue := ""
 		if kTag := event.GetTag("k"); kTag != nil {

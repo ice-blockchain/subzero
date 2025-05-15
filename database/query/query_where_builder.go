@@ -342,6 +342,7 @@ func isFilterEmpty(filter *databaseFilterSearch) bool {
 		len(filter.Authors) == 0 &&
 		len(filter.Tags) == 0 &&
 		len(filter.TagMarkers) == 0 &&
+		len(filter.Addresses) == 0 &&
 		filter.Since == nil &&
 		filter.Until == nil &&
 		filter.Expiration == nil &&
