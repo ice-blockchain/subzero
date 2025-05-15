@@ -230,7 +230,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 				{model.CustomIONTagOnBehalfOf, masterPubkey},
 				{"e", repostEvent.ID},
 			},
-			Content: relaysList.String(),
+			Content: attestationEvent.String(),
 		}}
 		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, memdb.AcceptEvents(t.Context(), repostEvent, ack))
@@ -265,7 +265,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 			Tags: model.Tags{
 				{model.CustomIONTagOnBehalfOf, masterPubkey},
 				{"e", reactionEvent.ID}},
-			Content: relaysList.String(),
+			Content: attestationEvent.String(),
 		}}
 		require.NoError(t, ack.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, node.broadcastUserEvents(t.Context(), reactionEvent, ack))
