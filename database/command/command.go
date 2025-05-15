@@ -258,7 +258,7 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...*model.Event) (masterKey string, relays []string, matchingEphemeralAckEvents map[string][]*model.EphemeralEmbeddingEvent, isProfileDeletion bool, err error) {
 	userMasterKeys := map[string][]string{}
 	var profileDeletion *model.Event
-	matchingEphemeralAckEvents, err = model.ParseEphemeralEmbeddingEvents(false, events...)
+	matchingEphemeralAckEvents, err = model.ParseEphemeralEmbeddingEvents(true, events...)
 
 	for _, ev := range events {
 		if ev.IsEphemeral() || ev.IsJobResponse() || ev.IsJobRequest() {
@@ -472,7 +472,9 @@ func mapEventsToTXs(events []*model.Event, ackEvents map[string][]*model.Ephemer
 		mappedEphemeralEvents := ackEvents[ev.Address()]
 		ackEphepheralEvents := make([]*nostr.Event, 0, len(mappedEphemeralEvents))
 		for _, e := range mappedEphemeralEvents {
-			ackEphepheralEvents = append(ackEphepheralEvents, &e.Event.Event)
+			if e.ContentEvent != nil && e.ContentEvent.Kind == model.CustomIONKindAttestation {
+				ackEphepheralEvents = append(ackEphepheralEvents, &e.Event.Event)
+			}
 		}
 		if len(ackEphepheralEvents) > 0 {
 			env.Events = append(env.Events, ackEphepheralEvents...)

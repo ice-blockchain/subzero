@@ -215,9 +215,6 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) (e
 	var req databaseBatchRequest
 	eventsHash := hashEvents(events...)
 	req.EventsHash = &eventsHash
-	if _, accepted := db.rollbackableEvents.Load(eventsHash); accepted {
-		return nil
-	}
 	var ephemeralEmbeddings map[string][]*model.EphemeralEmbeddingEvent
 	if ephemeralEmbeddings, err = model.ParseEphemeralEmbeddingEvents(true, events...); err != nil {
 		return errors.Wrapf(err, "malformed embeddings")
