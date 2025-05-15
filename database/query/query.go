@@ -491,138 +491,145 @@ func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, repl
 		valuesStr = "UNION ALL VALUES " + strings.Join(values, ",")
 	}
 	stmt = `
-				WITH replaced AS (DELETE FROM replaceable_events_before_update
-										WHERE replaced_by_id = ANY($1)
-										RETURNING *)
-				MERGE INTO events AS target
-				USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-					has_images, has_videos, lookup, replaced_by_id FROM replaced 
-						` + valuesStr + `
-				) AS source (
-					kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-					has_images,
-					has_videos,
-					lookup, replaced_by_id
-				)
-				ON (
-					target.id = source.id
-					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
-					OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
-					OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `')
-				)
-			WHEN MATCHED AND
-				target.master_pubkey = source.master_pubkey
-				AND target.kind = source.kind
-				AND target.d_tag = source.d_tag
-				AND (30000 <= source.kind AND source.kind < 40000) THEN
-				UPDATE SET
-					id = source.id,
-					system_kind = source.system_kind,
-					created_at = source.created_at,
-					pubkey = source.pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					content = source.content,
-					tags = source.tags,
-					h_tag = source.h_tag,
-					lookup = source.lookup,
-					deleted = source.deleted,
-					has_images = source.has_images,
-					has_videos = source.has_videos,
-					-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
-                    reference_id = CASE 
-									WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
-									ELSE NULL
-                                   END
-			WHEN MATCHED AND
-				target.master_pubkey = source.master_pubkey
-				AND target.kind = source.kind
-				AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
-				UPDATE SET
-					id = source.id,
-					kind = source.kind,
-					system_kind = source.system_kind,
-					d_tag = source.d_tag,
-					master_pubkey = source.master_pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					pubkey = source.pubkey,
-					created_at = source.created_at,
-					content = source.content,
-					lookup = source.lookup,
-					tags = source.tags,
-					has_images = source.has_images,
-					has_videos = source.has_videos,
-					-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
-                    reference_id = CASE 
-									WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
-									ELSE NULL
-                                   END
-			WHEN MATCHED AND target.id = source.id THEN
-				UPDATE SET
-					kind = source.kind,
-					system_kind = source.system_kind,
-					master_pubkey = source.master_pubkey,
-					d_tag = source.d_tag,
-					created_at = source.created_at,
-					pubkey = source.pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					lookup = source.lookup,
-					content = source.content,
-					tags = source.tags,
-					has_images = source.has_images,
-					has_videos = source.has_videos
-			WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
-				UPDATE SET
-					id = source.id,
-					kind = source.kind,
-					system_kind = source.system_kind,
-					master_pubkey = source.master_pubkey,
-					d_tag = source.d_tag,
-					created_at = source.created_at,
-					pubkey = source.pubkey,
-					sig = source.sig,
-					sig_alg = source.sig_alg,
-					key_alg = source.key_alg,
-					lookup = source.lookup,
-					content = source.content,
-					tags = source.tags,
-					has_images = source.has_images,
-					has_videos = source.has_videos
-			WHEN NOT MATCHED THEN
-				INSERT (
-					id, kind, system_kind, created_at, pubkey, master_pubkey,
-					sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
-					deleted,
-					has_images,
-					has_videos,
-					lookup
-				)
-				VALUES (
-					source.id, source.kind, source.system_kind, source.created_at,
-					source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
-					source.key_alg, source.content, source.tags, source.d_tag,
-					source.h_tag, source.deleted,
-					source.has_images, source.has_videos,
-					source.lookup
-				)
-				RETURNING
-					target.kind,
-					target.created_at,
-					target.id,
-					target.pubkey,
-					target.master_pubkey,
-					target.sig,
-					target.content,
-					target.d_tag,
-					target.h_tag,
-					target.lookup,
-					target.tags,
-					merge_action() as savemergeaction;`
+WITH replaced AS (
+	DELETE FROM replaceable_events_before_update
+	WHERE
+		replaced_by_id = ANY($1)
+	RETURNING *
+)
+MERGE INTO events AS target
+	USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
+		has_images, has_videos, lookup, replaced_by_id FROM replaced 
+			` + valuesStr + `
+	) AS source (
+		kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
+		has_images,
+		has_videos,
+		lookup, replaced_by_id
+	)
+	ON (
+		target.id = source.id
+		OR (((target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
+		OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
+		OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `'))
+		AND hidden=false)
+	)
+WHEN MATCHED AND
+	target.master_pubkey = source.master_pubkey
+	AND target.kind = source.kind
+	AND target.d_tag = source.d_tag
+	AND (30000 <= source.kind AND source.kind < 40000) THEN
+	UPDATE SET
+		id = source.id,
+		system_kind = source.system_kind,
+		created_at = source.created_at,
+		pubkey = source.pubkey,
+		sig = source.sig,
+		sig_alg = source.sig_alg,
+		key_alg = source.key_alg,
+		content = source.content,
+		tags = source.tags,
+		h_tag = source.h_tag,
+		lookup = source.lookup,
+		deleted = source.deleted,
+		has_images = source.has_images,
+		has_videos = source.has_videos,
+		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
+		reference_id = CASE 
+							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+							ELSE NULL
+						END
+WHEN MATCHED AND
+	target.master_pubkey = source.master_pubkey
+	AND target.kind = source.kind
+	AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
+	UPDATE SET
+		id = source.id,
+		kind = source.kind,
+		system_kind = source.system_kind,
+		d_tag = source.d_tag,
+		master_pubkey = source.master_pubkey,
+		sig = source.sig,
+		sig_alg = source.sig_alg,
+		key_alg = source.key_alg,
+		pubkey = source.pubkey,
+		created_at = source.created_at,
+		content = source.content,
+		lookup = source.lookup,
+		tags = source.tags,
+		has_images = source.has_images,
+		has_videos = source.has_videos,
+		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
+		reference_id = CASE 
+							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+							ELSE NULL
+						END
+WHEN MATCHED AND target.id = source.id THEN
+	UPDATE SET
+		kind = source.kind,
+		system_kind = source.system_kind,
+		master_pubkey = source.master_pubkey,
+		d_tag = source.d_tag,
+		created_at = source.created_at,
+		pubkey = source.pubkey,
+		sig = source.sig,
+		sig_alg = source.sig_alg,
+		key_alg = source.key_alg,
+		lookup = source.lookup,
+		content = source.content,
+		tags = source.tags,
+		has_images = source.has_images,
+		has_videos = source.has_videos,
+		hidden = false
+WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
+	UPDATE SET
+		id = source.id,
+		kind = source.kind,
+		system_kind = source.system_kind,
+		master_pubkey = source.master_pubkey,
+		d_tag = source.d_tag,
+		created_at = source.created_at,
+		pubkey = source.pubkey,
+		sig = source.sig,
+		sig_alg = source.sig_alg,
+		key_alg = source.key_alg,
+		lookup = source.lookup,
+		content = source.content,
+		tags = source.tags,
+		has_images = source.has_images,
+		has_videos = source.has_videos,
+		hidden = false
+WHEN NOT MATCHED THEN
+	INSERT (
+		id, kind, system_kind, created_at, pubkey, master_pubkey,
+		sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
+		deleted,
+		has_images,
+		has_videos,
+		lookup
+	)
+	VALUES (
+		source.id, source.kind, source.system_kind, source.created_at,
+		source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
+		source.key_alg, source.content, source.tags, source.d_tag,
+		source.h_tag, source.deleted,
+		source.has_images, source.has_videos,
+		source.lookup
+	)
+	RETURNING
+		target.kind,
+		target.created_at,
+		target.id,
+		target.pubkey,
+		target.master_pubkey,
+		target.sig,
+		target.content,
+		target.d_tag,
+		target.h_tag,
+		target.lookup,
+		target.tags,
+		merge_action() as savemergeaction;
+`
 
 	it := &eventIterator{
 		Map: nil,
