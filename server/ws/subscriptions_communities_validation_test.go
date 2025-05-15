@@ -51,10 +51,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -81,10 +79,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -111,10 +107,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -140,10 +134,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -172,10 +164,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -204,10 +194,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -237,10 +225,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -269,10 +255,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -302,10 +286,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -335,10 +317,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -367,10 +347,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -399,10 +377,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -453,10 +429,8 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -638,10 +612,8 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 
@@ -777,10 +749,8 @@ func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 

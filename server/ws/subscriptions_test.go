@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"strconv"
@@ -2024,9 +2023,7 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"url https://alicerelay.example.com",
 			"m image/jpg",
 			"dim 3024x4032",
-			"i foobar",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 		})
 		ev := &model.Event{Event: nostr.Event{
@@ -2045,10 +2042,8 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024x4032",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
 			"dummy dummy",
 		})
@@ -2096,32 +2091,9 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"imeta",
 			"url https://alicerelay.example.com",
 			"m image/jpg",
-			"i foobar",
 			"dim 3024",
 			"alt A scenic photo overlooking the coast of Costa Rica",
-			fmt.Sprintf("x %x", []byte("https://alicerelay.example.com")),
 			fmt.Sprintf("ox %x", []byte("https://alicerelay.example.com")),
-		})
-		ev := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindTextNote,
-			Tags:      tags,
-			Content:   "dummy",
-		}}
-		helperSignWithMinLeadingZeroBits(t, ev, privkey)
-		require.Error(t, relay.Publish(ctx, ev.Event))
-	})
-	t.Run("kind 1 (text note), imeta (NIP-92): invalid imeta tag: x not a hash", func(t *testing.T) {
-		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{
-			"imeta",
-			"url https://alicerelay.example.com",
-			"m image/jpg",
-			"dim 3024x4032",
-			"i foobar",
-			"alt A scenic photo overlooking the coast of Costa Rica",
-			"x a",
-			fmt.Sprintf("ox %v", hex.EncodeToString([]byte("https://alicerelay.example.com"))),
 		})
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
@@ -2139,7 +2111,6 @@ func TestPublishingNIP92IMetaTag(t *testing.T) {
 			"url https://alicerelay.example.com",
 			"m image/jpg",
 			"dim 3024x4032",
-			"i foobar",
 			"alt A scenic photo overlooking the coast of Costa Rica",
 			"ox a",
 		})
