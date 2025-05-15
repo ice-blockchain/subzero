@@ -287,12 +287,10 @@ var (
 	SupportedIMetaKeys = map[string]tagState{
 		"url":      tagStateRequired,
 		"m":        tagStateRequired,
-		"x":        tagStateOptional,
 		"ox":       tagStateOptional,
 		"size":     tagStateOptional,
 		"dim":      tagStateOptional,
 		"magnet":   tagStateOptional,
-		"i":        tagStateOptional,
 		"blurhash": tagStateOptional,
 		"thumb":    tagStateOptional,
 		"image":    tagStateOptional,
@@ -621,6 +619,9 @@ func Validate(ctx context.Context, e *model.Event) error {
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 		richText := e.GetTag(model.CustomIONTagRichText)
+		if richText != nil && len(e.Content) > 0 {
+			return errors.Wrap(ErrWrongEventParams, "rich text tag is set, but content is not empty")
+		}
 		if len(e.Content) == 0 && richText == nil {
 			pubAt := e.GetTag("published_at").Value()
 			if val, err := strconv.ParseInt(pubAt, 10, 64); err != nil || val == int64(e.CreatedAt) {
