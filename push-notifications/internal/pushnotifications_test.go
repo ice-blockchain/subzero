@@ -185,18 +185,25 @@ func TestCreateTopicMessage(t *testing.T) {
 func TestDecryptToken(t *testing.T) {
 	t.Parallel()
 
-	privKey, pubKey := model.GenerateKeyPair()
+	privKeyBE, pubKeyBE := model.GenerateKeyPair()
+	privKeyFE, pubKeyFE := model.GenerateKeyPair()
+
+	privKeyX25519FE, err := nip44.ConvertEd25519PrivateKeyToX25519(privKeyFE)
+	require.NoError(t, err)
+
+	privKeyX25519BE, err := nip44.ConvertEd25519PrivateKeyToX25519(privKeyBE)
+	require.NoError(t, err)
+
+	pubKeyX25519BE, err := nip44.ConvertEd25519PublicKeyToX25519(pubKeyBE)
+	require.NoError(t, err)
 
 	t.Run("successful decryption of token", func(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
+		ev.PubKey = pubKeyFE
 
-		privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privKey)
-		require.NoError(t, err)
-
-		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKey)
+		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519FE, pubKeyX25519BE)
 		require.NoError(t, err)
 
 		originalToken := "test-device-token-123456"
@@ -205,7 +212,7 @@ func TestDecryptToken(t *testing.T) {
 
 		ev.Tags = nostr.Tags{{"token", encryptedToken}}
 
-		decryptedToken, err := DecryptToken(ev, privKeyX25519)
+		decryptedToken, err := DecryptToken(ev, privKeyX25519BE)
 		require.NoError(t, err)
 		require.Equal(t, originalToken, decryptedToken)
 	})
@@ -214,9 +221,9 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
+		ev.PubKey = pubKeyFE
 
-		decryptedToken, err := DecryptToken(ev, privKey)
+		decryptedToken, err := DecryptToken(ev, privKeyX25519FE)
 		require.NoError(t, err)
 		require.Empty(t, decryptedToken)
 	})
@@ -225,12 +232,9 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
+		ev.PubKey = pubKeyFE
 
-		privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privKey)
-		require.NoError(t, err)
-
-		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKey)
+		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519FE, pubKeyX25519BE)
 		require.NoError(t, err)
 
 		originalToken := "test-device-token-123456"
@@ -248,11 +252,11 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKey
+		ev.PubKey = pubKeyFE
 
 		ev.Tags = nostr.Tags{{"token", "not-a-valid-encrypted-token"}}
 
-		_, err := DecryptToken(ev, privKey)
+		_, err := DecryptToken(ev, privKeyX25519FE)
 		require.Error(t, err)
 	})
 }

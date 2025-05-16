@@ -264,7 +264,11 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 	if token == nil {
 		return "", nil
 	}
-	conversationKey, err := nip44.GenerateConversationKeyX25519(privateKey, ev.PubKey)
+	pubkeyX25519, err := nip44.ConvertEd25519PublicKeyToX25519(ev.PubKey)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to convert pubkey to x25519")
+	}
+	conversationKey, err := nip44.GenerateConversationKeyX25519(privateKey, pubkeyX25519)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate conversation key")
 	}
