@@ -27,7 +27,10 @@ func createEncryptedToken(t *testing.T, token, privateKey, publicKey string) str
 	privKeyX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
 	require.NoError(t, err)
 
-	conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, publicKey)
+	pubKeyX25519, err := nip44.ConvertEd25519PublicKeyToX25519(publicKey)
+	require.NoError(t, err)
+
+	conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519, pubKeyX25519)
 	require.NoError(t, err)
 
 	encryptedToken, err := nip44.EncryptX25519(token, conversationKey, nil)
@@ -51,9 +54,9 @@ func TestCreateSingleMessage(t *testing.T) {
 	encryptedValidToken := createEncryptedToken(t, validToken, privateKey, publicKey)
 
 	event1 := &model.Event{}
-	event1.PubKey = publicKey
 	event1.Tags = append(event1.Tags, model.Tag{"token", encryptedValidToken})
 	event1.Tags = append(event1.Tags, model.Tag{"deviceId", uuid.NewString()})
+	require.NoError(t, event1.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	notification1 := &Notification[*DeviceRegistrationEvent]{
 		Data: map[string]interface{}{
@@ -78,9 +81,8 @@ func TestCreateSingleMessage(t *testing.T) {
 	require.Contains(t, message1.Data["number"], "42")
 
 	event2 := &model.Event{}
-	event2.PubKey = publicKey
 	event2.Tags = append(event2.Tags, model.Tag{"deviceId", uuid.NewString()})
-
+	require.NoError(t, event2.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	notification2 := &Notification[*DeviceRegistrationEvent]{
 		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
 		Target:   event2,
@@ -114,9 +116,9 @@ func TestCreateSingleMessage(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to decrypt token")
 
 	event4 := &model.Event{}
-	event4.PubKey = publicKey
 	event4.Tags = append(event4.Tags, model.Tag{"token", encryptedValidToken})
 	event4.Tags = append(event4.Tags, model.Tag{"deviceId", uuid.NewString()})
+	require.NoError(t, event4.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	notification4 := &Notification[*DeviceRegistrationEvent]{
 		Data:   map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
@@ -186,7 +188,7 @@ func TestDecryptToken(t *testing.T) {
 	t.Parallel()
 
 	privKeyBE, pubKeyBE := model.GenerateKeyPair()
-	privKeyFE, pubKeyFE := model.GenerateKeyPair()
+	privKeyFE, _ := model.GenerateKeyPair()
 
 	privKeyX25519FE, err := nip44.ConvertEd25519PrivateKeyToX25519(privKeyFE)
 	require.NoError(t, err)
@@ -201,7 +203,7 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKeyFE
+		require.NoError(t, ev.SignWithAlg(privKeyFE, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519FE, pubKeyX25519BE)
 		require.NoError(t, err)
@@ -221,7 +223,7 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKeyFE
+		require.NoError(t, ev.SignWithAlg(privKeyFE, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		decryptedToken, err := DecryptToken(ev, privKeyX25519FE)
 		require.NoError(t, err)
@@ -232,7 +234,7 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKeyFE
+		require.NoError(t, ev.SignWithAlg(privKeyFE, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		conversationKey, err := nip44.GenerateConversationKeyX25519(privKeyX25519FE, pubKeyX25519BE)
 		require.NoError(t, err)
@@ -252,7 +254,7 @@ func TestDecryptToken(t *testing.T) {
 		t.Parallel()
 		ev := &model.Event{}
 		ev.Kind = nostr.KindTextNote
-		ev.PubKey = pubKeyFE
+		require.NoError(t, ev.SignWithAlg(privKeyFE, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		ev.Tags = nostr.Tags{{"token", "not-a-valid-encrypted-token"}}
 
