@@ -10,6 +10,10 @@ import (
 )
 
 func SelectIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
+	if pool, ok := db.(*DB); ok {
+		db = pool.replica()
+	}
+
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
