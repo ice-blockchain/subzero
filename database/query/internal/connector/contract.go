@@ -8,6 +8,7 @@ import (
 	"iter"
 	"sync/atomic"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/puzpuzpuz/xsync/v4"
 )
@@ -23,6 +24,7 @@ var (
 	ErrExclusionViolation   = errors.New("exclusion violation")
 	ErrMutexNotLocked       = errors.New("not locked")
 	ErrOperatorError        = errors.New("operator error")
+	ErrException            = errors.New("exception")
 )
 
 type (
@@ -40,6 +42,7 @@ type (
 		EnsureLocked(ctx context.Context) error
 	}
 	Iterator[T any] = iter.Seq2[T, error]
+	Error           = pgconn.PgError
 )
 
 type (

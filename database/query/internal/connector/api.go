@@ -5,7 +5,6 @@ package connector
 import (
 	"context"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -36,7 +35,7 @@ func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) erro
 
 	for ctx.Err() == nil {
 		_, err := withRetry(ctx, func() (any, error) {
-			if err := parseDBError(pgx.BeginTxFunc(ctx, db.primary(), txOptions, func(tx pgx.Tx) error { return fn(tx) })); err != nil && IsUnexpected(err) {
+			if err := parseError(pgx.BeginTxFunc(ctx, db.primary(), txOptions, func(tx pgx.Tx) error { return fn(tx) })); err != nil && IsUnexpected(err) {
 				return nil, err
 			} else {
 				return nil, retryStop(err)
@@ -71,7 +70,7 @@ func get[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, e
 	}
 	resp := new(T)
 	if err := pgxscan.Get(ctx, db, resp, sql, args...); err != nil {
-		return nil, parseDBError(err)
+		return nil, parseError(err)
 	}
 
 	return resp, nil
@@ -93,7 +92,7 @@ func selectInternal[T any](ctx context.Context, db Querier, sql string, args ...
 	}
 	var resp []*T
 	if err := pgxscan.Select(ctx, db, &resp, sql, args...); err != nil {
-		return nil, parseDBError(err)
+		return nil, parseError(err)
 	}
 
 	return resp, nil
@@ -115,7 +114,7 @@ func exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, erro
 	}
 	resp, err := db.Exec(ctx, sql, args...)
 	if err != nil {
-		return 0, parseDBError(err)
+		return 0, parseError(err)
 	}
 
 	return uint64(resp.RowsAffected()), nil
@@ -137,7 +136,7 @@ func execOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*
 	}
 	resp := new(T)
 	if err := pgxscan.Get(ctx, db, resp, sql, args...); err != nil {
-		return nil, parseDBError(err)
+		return nil, parseError(err)
 	}
 
 	return resp, nil
@@ -159,7 +158,7 @@ func execMany[T any](ctx context.Context, db Querier, sql string, args ...any) (
 	}
 	var resp []*T
 	if err := pgxscan.Select(ctx, db, &resp, sql, args...); err != nil {
-		return nil, parseDBError(err)
+		return nil, parseError(err)
 	}
 
 	return resp, nil
@@ -170,52 +169,4 @@ func IsUnexpected(err error) bool {
 	var netOpErr *net.OpError
 
 	return errors.As(err, &pgConnErr) || errors.As(err, &netOpErr)
-}
-
-func parseDBError(err error) error {
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-
-	var dbErr *pgconn.PgError
-	if errors.As(err, &dbErr) {
-		switch dbErr.SQLState() {
-		case "23505":
-			if strings.HasSuffix(dbErr.ConstraintName, "_pkey") {
-				return errors.Wrap(ErrDuplicate, dbErr.ConstraintName)
-			} else {
-				column := strings.ReplaceAll(dbErr.ConstraintName, dbErr.TableName, "")
-				column = strings.ReplaceAll(column, "_key", "")
-				column = strings.ReplaceAll(column, "_", "")
-
-				return errors.Wrap(ErrDuplicate, column)
-			}
-		case "23503":
-			column := strings.ReplaceAll(dbErr.ConstraintName, dbErr.TableName, "")
-			column = strings.ReplaceAll(column, "_fkey", "")
-			column = strings.ReplaceAll(column, "_", "")
-			if strings.Contains(dbErr.Detail, "is still referenced from table") {
-				return errors.Wrap(ErrRelationInUse, column)
-			}
-			return errors.Wrap(ErrRelationNotFound, column)
-		case "23514":
-			column := strings.ReplaceAll(dbErr.ConstraintName, dbErr.TableName, "")
-			column = strings.ReplaceAll(column, "_check", "")
-			column = strings.ReplaceAll(column, "_", "")
-
-			return errors.Wrap(ErrCheckFailed, column)
-		case "40001":
-			return ErrSerializationFailure
-		case "25P02":
-			return ErrTxAborted
-		case "42725":
-			return ErrOperatorError
-		case "42P01":
-			return errors.Wrap(ErrRelationNotFound, dbErr.TableName)
-		case "23P01":
-			return ErrExclusionViolation
-		}
-	}
-
-	return err
 }
