@@ -27,6 +27,10 @@ func TriggerExpiredEventsCleanup(ctx context.Context) error {
 	return globalDB.Client.deleteExpiredEvents(ctx)
 }
 
+func GenerateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
+	return newQueryBuilder().Build(filter...)
+}
+
 func DeleteAllEvents(ctx context.Context) error {
 	const stmt = `DELETE FROM events`
 
