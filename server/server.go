@@ -25,6 +25,7 @@ type (
 		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
 		Debug              bool   `yaml:"debug"`
 		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
+		PrivateKey         string `yaml:"private-key"`
 		ACME               struct {
 			APIKey string `yaml:"api-key"`
 		} `yaml:"acme"`
@@ -79,6 +80,7 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		FCMAndroidConfigs:  androidConfigs,
 		FCMIOSConfigs:      iosConfigs,
 		FCMWebConfigs:      webConfigs,
+		PrivateKey:         globalConfig.PrivateKey,
 	}))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
