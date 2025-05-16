@@ -9,11 +9,7 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 )
 
-func SelectIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
-	if pool, ok := db.(*DB); ok {
-		db = pool.replica()
-	}
-
+func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
@@ -34,4 +30,18 @@ func SelectIterator[T any](ctx context.Context, db Querier, sql string, args ...
 			yield(nil, errors.Wrap(err, "rows iteration error"))
 		}
 	}, nil
+}
+
+func SelectIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
+	if pool, ok := db.(*DB); ok {
+		db = pool.replica()
+	}
+	return iteratorInternal[T](ctx, db, sql, args...)
+}
+
+func ExecIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
+	if pool, ok := db.(*DB); ok {
+		db = pool.primary()
+	}
+	return iteratorInternal[T](ctx, db, sql, args...)
 }
