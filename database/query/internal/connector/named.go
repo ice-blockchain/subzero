@@ -25,6 +25,15 @@ func SelectNamedIterator[T any](ctx context.Context, db Querier, stmt string, pa
 	return SelectIterator[T](ctx, db, query, argList...)
 }
 
+func GetNamed[T any](ctx context.Context, db Querier, stmt string, params map[string]any) (*T, error) {
+	query, argList, err := bindNamed(stmt, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return Get[T](ctx, db, query, argList...)
+}
+
 func SelectNamed[T any](ctx context.Context, db Querier, stmt string, params map[string]any) ([]*T, error) {
 	query, argList, err := bindNamed(stmt, params)
 	if err != nil {

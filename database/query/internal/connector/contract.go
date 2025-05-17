@@ -8,6 +8,7 @@ import (
 	"iter"
 	"sync/atomic"
 
+	"github.com/georgysavva/scany/v2/dbscan"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/puzpuzpuz/xsync/v4"
@@ -25,6 +26,7 @@ var (
 	ErrMutexNotLocked       = errors.New("not locked")
 	ErrOperatorError        = errors.New("operator error")
 	ErrException            = errors.New("exception")
+	ErrInvalidData          = errors.New("invalid data")
 )
 
 type (
@@ -43,6 +45,7 @@ type (
 	}
 	Iterator[T any] = iter.Seq2[T, error]
 	Error           = pgconn.PgError
+	NameMapperFunc  = dbscan.NameMapperFunc
 )
 
 type (
@@ -51,8 +54,8 @@ type (
 		CurrentIndex uint64
 	}
 	advisoryLockMutex struct {
-		conn *pgxpool.Conn
-		db   *DB
-		id   int64
+		Conn *pgxpool.Conn
+		DB   *DB
+		ID   int64
 	}
 )

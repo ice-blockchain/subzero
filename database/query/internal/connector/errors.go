@@ -55,6 +55,8 @@ func parseError(err error) error {
 			return ErrExclusionViolation
 		case pgerrcode.RaiseException:
 			return errors.Join(ErrException, err)
+		case pgerrcode.CharacterNotInRepertoire:
+			return ErrInvalidData
 		}
 	}
 

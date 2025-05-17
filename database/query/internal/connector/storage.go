@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/georgysavva/scany/v2/dbscan"
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -49,6 +50,24 @@ func WithReplicas(connectionStrings []string) Option {
 func WithDDL(ddl string) Option {
 	return func(_ context.Context, db *DB) error {
 		db.ddl = ddl
+
+		return nil
+	}
+}
+
+func WithFieldNameMapper(mapper NameMapperFunc) Option {
+	return func(context.Context, *DB) error {
+		scanApi, err := pgxscan.NewDBScanAPI(dbscan.WithFieldNameMapper(mapper))
+		if err != nil {
+			return errors.Wrap(err, "cannot create db scan api")
+		}
+		api, err := pgxscan.NewAPI(scanApi)
+		if err != nil {
+			return errors.Wrap(err, "cannot create scan api")
+		}
+
+		// Override the default API with the new one with the custom field name mapper.
+		pgxscan.DefaultAPI = api
 
 		return nil
 	}

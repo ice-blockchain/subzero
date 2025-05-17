@@ -10,14 +10,21 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperGetEventPointsAndScore(t *testing.T, db *dbClient, eventID string) (points int, score float64) {
+func helperGetEventPointsAndScore(t *testing.T, client *dbClient, eventID string) (points int, score float64) {
 	t.Helper()
 
-	err := db.QueryRow("SELECT points, score FROM ranked_events WHERE event_id = $1", eventID).Scan(&points, &score)
+	data, err := connector.Get[struct {
+		Points int     `db:"points"`
+		Score  float64 `db:"score"`
+	}](t.Context(), client.db, "SELECT points, score FROM ranked_events WHERE event_id = $1", eventID)
 	require.NoError(t, err)
+	require.NotNil(t, data)
+
+	points, score = data.Points, data.Score
 
 	t.Logf("event %s: points=%d, score=%f", eventID, points, score)
 

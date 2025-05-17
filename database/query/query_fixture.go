@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/database/query/internal/postgres/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -34,7 +35,7 @@ func GenerateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql s
 func DeleteAllEvents(ctx context.Context) error {
 	const stmt = `DELETE FROM events`
 
-	_, err := globalDB.Client.ExecContext(context.WithoutCancel(ctx), stmt)
+	_, err := connector.Exec(context.WithoutCancel(ctx), globalDB.Client.db, stmt)
 
 	return errors.Wrap(err, "failed to delete all events")
 }

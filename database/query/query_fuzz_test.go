@@ -17,6 +17,7 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -268,20 +269,17 @@ func TestQueryFuzzIndexes(t *testing.T) {
 		bar := progressbar.Default(int64(len(sets)), "testing sets")
 		for i, set := range sets {
 			bar.Add(1)
-			var result string
 			filter := helperNewFilterFromElements(t, set)
 			sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
 			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
 
 			sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
-			stmt, err := db.PrepareNamedContext(t.Context(), sql)
+			result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
 			require.NoError(t, err)
-
-			err = stmt.QueryRowxContext(t.Context(), params).Scan(&result)
-			require.NoError(t, err)
+			require.NotNil(t, result)
 
 			var q []Query
-			err = json.Unmarshal([]byte(result), &q)
+			err = json.Unmarshal([]byte(*result), &q)
 			require.NoError(t, err)
 
 			results = append(results, q...)

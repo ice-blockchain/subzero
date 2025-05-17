@@ -5,7 +5,6 @@ package query
 import (
 	"context"
 	crand "crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"math/rand/v2"
@@ -19,6 +18,7 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -205,25 +205,25 @@ func helperGenerateEvent(
 	return ev
 }
 
-func helperFillDatabase(t *testing.T, db *dbClient, size int) {
+func helperFillDatabase(t *testing.T, client *dbClient, size int) {
 	t.Helper()
 
-	var eventsCount []int
-	err := db.Select(&eventsCount, "select count(*) from events")
+	eventsCount, err := connector.Get[int](t.Context(), client.db, "select count(*) from events")
 	require.NoError(t, err)
+	require.NotNil(t, eventsCount)
 
-	if eventsCount[0] >= size {
+	if *eventsCount >= size {
 		return
 	}
-	t.Logf("found %d event(s)", eventsCount[0])
+	t.Logf("found %d event(s)", *eventsCount)
 
-	need := size - eventsCount[0]
+	need := size - *eventsCount
 	t.Logf("generating %d event(s)", need)
 
 	bar := progressbar.Default(int64(need), "generating events")
 	for range need {
 		bar.Add(1) //nolint:errcheck
-		helperGenerateEvent(t, db, true)
+		helperGenerateEvent(t, client, true)
 	}
 }
 
@@ -589,18 +589,21 @@ func TestSelectQuotesReferences(t *testing.T) {
 	})
 }
 
-func helperCountExpiredEvents(t *testing.T, db *dbClient) int {
+func helperCountExpiredEvents(t *testing.T, client *dbClient) int {
 	t.Helper()
-	var count int
-	err := db.QueryRow(`select count(*) from events WHERE exists (
-		select true from event_tags et where
-			et.event_id = events.id
+
+	count, err := connector.Get[int](t.Context(), client.db,
+		`
+select count(*) from events WHERE exists (
+	select true from event_tags et where et.event_id = events.id 
 			and et.event_tag_key = 'expiration'
 			and to_timestamp(cast(et.event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
-	)`).Scan(&count)
+	)`,
+	)
 	require.NoError(t, err)
+	require.NotNil(t, count)
 
-	return count
+	return *count
 }
 
 func TestSelectEventsExpiration(t *testing.T) {
@@ -830,24 +833,25 @@ func TestSelectFilterKind6AsKind1(t *testing.T) {
 	})
 }
 
-func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...model.Filter) (counter int64) {
+func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...model.Filter) int64 {
 	t.Helper()
 
 	where, params, err := newQueryBuilder().BuildForPrecalculatedCounters(filters...)
 	require.NoError(t, err, filters)
 
-	stmt, err := db.PrepareNamed(`select coalesce(sum(value), 0) from event_counters where ` + where)
-	require.NoErrorf(t, err, "failed to prepare statement where: %v", where)
-
-	err = stmt.QueryRowx(params).Scan(&counter)
-	if errors.Is(err, sql.ErrNoRows) {
+	counter, err := connector.GetNamed[int64](t.Context(), db.db,
+		`select coalesce(sum(value), 0) from event_counters where `+where, params,
+	)
+	if errors.Is(err, connector.ErrNotFound) {
 		err = nil
+		counter = model.PointerOf[int64](0)
 	}
-	require.NoError(t, err)
+	require.NoErrorf(t, err, "failed to prepare statement where: %v", where)
+	require.NotNil(t, counter)
 
-	t.Logf("Precalculated count result:\n\tWhere: %v\n\tParams: %+v\n\tCounter: %v", where, params, counter)
+	t.Logf("Precalculated count result:\n\tWhere: %v\n\tParams: %+v\n\tCounter: %v", where, params, *counter)
 
-	return counter
+	return *counter
 }
 
 func TestWhereBuilderSyntaxForCounter(t *testing.T) {

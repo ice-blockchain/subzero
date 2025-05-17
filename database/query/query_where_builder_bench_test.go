@@ -51,10 +51,6 @@ func helperBenchEnsureDatabase(t interface {
 		t.Logf("loading test data from %q", dbPath)
 		benchData.Events = helperPreloadDataForFilter(t, db)
 		t.Logf("loaded %d event(s)", len(benchData.Events))
-
-		db.stmtCacheMx.Lock()
-		defer db.stmtCacheMx.Unlock()
-		clear(db.stmtCache)
 	})
 
 	return db
@@ -93,10 +89,6 @@ func helperBenchReportMetrics(
 	t.ReportMetric(float64(metric.Time.P95.Milliseconds()), "p95-ms/op")
 	t.ReportMetric(float64(metric.Time.Max.Milliseconds()), "max-ms/op")
 	t.ReportMetric(float64(metric.Time.Min.Milliseconds()), "min-ms/op")
-
-	db.stmtCacheMx.RLock()
-	t.ReportMetric(float64(len(db.stmtCache)), "stmt-cache-size")
-	db.stmtCacheMx.RUnlock()
 }
 
 func helperBenchPrepare(b *testing.B, f func() *dbClient) (*dbClient, *tachymeter.Tachymeter) {

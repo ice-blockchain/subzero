@@ -12,7 +12,7 @@ import (
 func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, errors.Wrap(parseError(err), "failed to execute query")
 	}
 	return func(yield func(*T, error) bool) {
 		defer rows.Close()
@@ -22,12 +22,12 @@ func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args .
 			var data T
 
 			err := scanner.Scan(&data)
-			if !yield(&data, errors.Wrap(err, "failed to scan row")) {
+			if !yield(&data, errors.Wrap(parseError(err), "failed to scan row")) {
 				return
 			}
 		}
 		if err := rows.Err(); err != nil {
-			yield(nil, errors.Wrap(err, "rows iteration error"))
+			yield(nil, errors.Wrap(parseError(err), "rows iteration error"))
 		}
 	}, nil
 }

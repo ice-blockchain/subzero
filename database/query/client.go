@@ -7,25 +7,21 @@ import (
 	"context"
 	"crypto/sha256"
 	_ "embed"
+	"errors"
 	"log"
 	"strings"
-	"sync"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/jmoiron/sqlx"
-	"github.com/jmoiron/sqlx/reflectx"
 	"github.com/puzpuzpuz/xsync/v4"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
 	dbClient struct {
-		*sqlx.DB
+		db                 *connector.DB
 		relayPrivateKey    string
 		relayURL           string
-		stmtCacheMx        *sync.RWMutex
-		stmtCache          map[string]*sqlx.NamedStmt
 		rollbackableEvents *xsync.Map[string, *databaseRollbackRequest]
 	}
 )
@@ -37,106 +33,77 @@ var (
 
 func openDatabase(target string, runDDL bool) *dbClient {
 	client := &dbClient{
-		DB:                 sqlx.MustConnect("pgx", target),
-		stmtCacheMx:        new(sync.RWMutex),
-		stmtCache:          make(map[string]*sqlx.NamedStmt),
 		rollbackableEvents: xsync.NewMap[string, *databaseRollbackRequest](),
 	}
-	client.Mapper = reflectx.NewMapperFunc("subzero", func(in string) (out string) {
-		n := strings.ToLower(in)
-		switch n {
-		case "createdat":
-			out = "created_at"
-		case "systemkind":
-			out = "system_kind"
-		case "referenceid":
-			out = "reference_id"
-		case "sigalg":
-			out = "sig_alg"
-		case "keyalg":
-			out = "key_alg"
-		case "masterpubkey":
-			out = "master_pubkey"
-		case "dtag":
-			out = "d_tag"
-		case "htag":
-			out = "h_tag"
-		case "hasimages":
-			out = "has_images"
-		case "hasvideos":
-			out = "has_videos"
-		case "addressvalue":
-			out = "address"
-		case "jtags":
-			out = "tags"
-		case "tagid":
-			out = "tag_id"
-		default:
-			out = n
-		}
-
-		return out
-	})
+	options := []connector.Option{
+		connector.WithMaster(target),
+		connector.WithFieldNameMapper(func(in string) (out string) {
+			n := strings.ToLower(in)
+			switch n {
+			case "createdat":
+				out = "created_at"
+			case "systemkind":
+				out = "system_kind"
+			case "referenceid":
+				out = "reference_id"
+			case "sigalg":
+				out = "sig_alg"
+			case "keyalg":
+				out = "key_alg"
+			case "masterpubkey":
+				out = "master_pubkey"
+			case "dtag":
+				out = "d_tag"
+			case "htag":
+				out = "h_tag"
+			case "hasimages":
+				out = "has_images"
+			case "hasvideos":
+				out = "has_videos"
+			case "addressvalue":
+				out = "address"
+			case "tagid":
+				out = "tag_id"
+			default:
+				out = n
+			}
+			return out
+		}),
+	}
 
 	if runDDL {
-		tx := client.MustBegin()
-		defer tx.Rollback()
-		for statement := range strings.SplitSeq(ddl, "--------") {
-			_, err := tx.Exec(statement)
-			if err != nil {
-				log.Fatalf("DDL failed:\n%s\nERROR: %s", statement, err)
-			}
-		}
-		tx.Commit()
+		options = append(options, connector.WithDDL(ddl))
 	}
+
+	db, err := connector.New(context.Background(), options...)
+	if err != nil {
+		log.Panicf("failed to open database: %v", err)
+	}
+	client.db = db
 
 	return client
 }
 
-func (db *dbClient) WithRelayURL(relayURL string) *dbClient {
-	db.relayURL = relayURL
-
-	return db
+func (client *dbClient) Close() (err error) {
+	if client.db != nil {
+		err = errors.Join(err, client.db.Close())
+	}
+	return err
 }
 
-func (db *dbClient) WithPrivateKey(privateKey string) *dbClient {
+func (client *dbClient) WithRelayURL(relayURL string) *dbClient {
+	client.relayURL = relayURL
+
+	return client
+}
+
+func (client *dbClient) WithPrivateKey(privateKey string) *dbClient {
 	if privateKey == "" {
 		panic("private key is empty")
 	}
-	db.relayPrivateKey = privateKey
+	client.relayPrivateKey = privateKey
 
-	return db
-}
-
-func (db *dbClient) prepare(ctx context.Context, sql, hash string) (stmt *sqlx.NamedStmt, err error) {
-	db.stmtCacheMx.RLock()
-	stmt, found := db.stmtCache[hash]
-	db.stmtCacheMx.RUnlock()
-	if found {
-		return stmt, nil
-	}
-
-	db.stmtCacheMx.Lock()
-	stmt, found = db.stmtCache[hash]
-	if found {
-		db.stmtCacheMx.Unlock()
-
-		return stmt, nil
-	}
-
-	stmt, err = db.PrepareNamedContext(ctx, sql)
-	if err == nil {
-		db.stmtCache[hash] = stmt
-	}
-	db.stmtCacheMx.Unlock()
-
-	return stmt, err
-}
-
-func hashSQL(sql string) (hash string) {
-	sum := sha256.Sum256([]byte(sql))
-
-	return string(sum[:])
+	return client
 }
 
 func hashEvents(events ...*model.Event) (hash string) {

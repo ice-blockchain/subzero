@@ -11,6 +11,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -280,10 +281,10 @@ func helperCreateDeviceRegistrationEvent(t *testing.T, pubKey, deviceID, tokenVa
 	return event
 }
 
-func helperAddTokenTag(t *testing.T, db *dbClient, eventID, tokenValue string) {
+func helperAddTokenTag(t *testing.T, client *dbClient, eventID, tokenValue string) {
 	t.Helper()
 
-	_, err := db.DB.ExecContext(t.Context(), `
+	_, err := connector.Exec(t.Context(), client.db, `
 		INSERT INTO event_tags (event_id, event_tag_key, event_tag_value1, event_tag_value2)
 		VALUES ($1, $2, $3, $4)
 	`, eventID, "token", tokenValue, "")
@@ -294,14 +295,13 @@ func helperAddTokenTag(t *testing.T, db *dbClient, eventID, tokenValue string) {
 func helperCheckTokenStatus(t *testing.T, db *dbClient, eventID, expectedValue string) {
 	t.Helper()
 
-	var value string
-	err := db.DB.QueryRowContext(t.Context(), `
+	value, err := connector.Get[string](t.Context(), db.db, `
 		SELECT event_tag_value2 FROM event_tags
 		WHERE event_id = $1 AND event_tag_key = 'token'
-	`, eventID).Scan(&value)
-
+	`, eventID)
 	require.NoError(t, err)
-	require.Equal(t, expectedValue, value)
+	require.NotNil(t, value)
+	require.Equal(t, expectedValue, *value)
 }
 
 func helperCreateBatchEvents(t *testing.T, db *dbClient, startIdx, count int, baseTimestamp int64) []*model.Event {
@@ -326,13 +326,14 @@ func helperCreateBatchEvents(t *testing.T, db *dbClient, startIdx, count int, ba
 	return events
 }
 
-func helperCountEvents(t *testing.T, db *dbClient, kind int) int {
+func helperCountEvents(t *testing.T, client *dbClient, kind int) int {
 	t.Helper()
 
-	var count int
-	err := db.DB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM events WHERE kind = $1`, kind).Scan(&count)
+	count, err := connector.Get[int](t.Context(), client.db, `SELECT COUNT(*) FROM events WHERE kind = $1`, kind)
 	require.NoError(t, err)
-	return count
+	require.NotNil(t, count)
+
+	return *count
 }
 
 func helperCollectAllEvents(t *testing.T, it EventIterator) []*model.Event {
