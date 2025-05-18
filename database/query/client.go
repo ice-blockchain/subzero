@@ -31,7 +31,7 @@ var (
 	ddl string
 )
 
-func openDatabase(target string, runDDL bool, replicas ...string) *dbClient {
+func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...string) *dbClient {
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[string, *databaseRollbackRequest](),
 	}
@@ -76,7 +76,7 @@ func openDatabase(target string, runDDL bool, replicas ...string) *dbClient {
 		options = append(options, connector.WithDDL(ddl))
 	}
 
-	db, err := connector.New(context.Background(), options...)
+	db, err := connector.New(ctx, options...)
 	if err != nil {
 		log.Panicf("failed to open database: %v", err)
 	}

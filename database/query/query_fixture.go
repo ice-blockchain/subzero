@@ -50,7 +50,7 @@ func NewTestDatabaseClient(ctx context.Context, container *Container) (TestDB, f
 	conf := mustLoadConfig(WithConfig(&Config{
 		URL: tempAddress,
 	}))
-	client := openDatabase(conf.URL, true).
+	client := openDatabase(ctx, conf.URL, true).
 		WithPrivateKey(conf.PrivateKey).
 		WithRelayURL(conf.RelayURL)
 

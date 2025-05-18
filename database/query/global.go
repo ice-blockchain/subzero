@@ -73,7 +73,7 @@ func mustLoadConfig(opts ...Option) *Config {
 func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
 		conf := mustLoadConfig(opts...)
-		globalDB.Client = openDatabase(conf.URL, true, conf.ReplicaURLs...).
+		globalDB.Client = openDatabase(ctx, conf.URL, true, conf.ReplicaURLs...).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
 
