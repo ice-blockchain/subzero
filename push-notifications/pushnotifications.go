@@ -489,7 +489,13 @@ func (pm *PushNotificationManager) createNotifications(
 			for _, relevantEvent := range relevantEvents {
 				relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 			}
-			data["relevant_events"] = relevantEventsStrings
+			jsonData, err := json.Marshal(relevantEventsStrings)
+			if err != nil {
+				log.Printf("failed to marshal relevant_events to JSON: %v", err)
+
+				continue
+			}
+			data["relevant_events"] = string(jsonData)
 		}
 
 		switch event.GetTag("t").Value() {

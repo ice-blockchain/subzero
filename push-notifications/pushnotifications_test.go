@@ -84,6 +84,59 @@ func TestCreateNotifications(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("Correctly serializes relevant events", func(t *testing.T) {
+		event := &model.Event{Event: nostr.Event{ID: "test-event-id", Content: "test content"}}
+
+		relevantEvents := []*model.Event{
+			{
+				Event: nostr.Event{
+					ID:      "relevant-event-1",
+					Content: `{"name":"user1","display_name":"User One"}`,
+					Kind:    nostr.KindProfileMetadata,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:      "relevant-event-2",
+					Content: `{"name":"user2","display_name":"User Two"}`,
+					Kind:    nostr.KindProfileMetadata,
+				},
+			},
+		}
+
+		deviceEvents := []*DeviceRegistrationEvent{
+			{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						nostr.Tag{"t", "ios"},
+					},
+				},
+			},
+		}
+
+		notifications := pm.createNotifications(deviceEvents, NotificationTypeMentionReply, event, relevantEvents...)
+		require.Len(t, notifications, 1)
+
+		require.Contains(t, notifications[0].Data, "relevant_events")
+		relevantEventsData, ok := notifications[0].Data["relevant_events"].(string)
+		require.True(t, ok, "relevant_events should be a string containing JSON")
+
+		var parsedRelevantEvents []string
+		err := json.Unmarshal([]byte(relevantEventsData), &parsedRelevantEvents)
+		require.NoError(t, err, "relevant_events should be a valid JSON array string")
+		require.Len(t, parsedRelevantEvents, 2)
+
+		for i, eventContent := range parsedRelevantEvents {
+			require.Equal(t, relevantEvents[i].Content, eventContent, "Content should match")
+
+			var parsedContent map[string]interface{}
+			err := json.Unmarshal([]byte(eventContent), &parsedContent)
+			require.NoError(t, err, "Content should be valid JSON")
+			require.Contains(t, parsedContent, "name")
+			require.Contains(t, parsedContent, "display_name")
+		}
+	})
 }
 
 func TestCollectUserValidDevices(t *testing.T) {

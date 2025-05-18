@@ -507,8 +507,11 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relevantEvents, ok := notification.Data["relevant_events"].([]string)
-	require.True(t, ok, "relevant_events should be a string slice")
-	require.Len(t, relevantEvents, 1, "Should contain one relevant event")
-	require.Equal(t, relevantEvents[0], string(profileJSON), "Relevant event should contain profile event content")
+	relevantEvents, ok := notification.Data["relevant_events"].(string)
+	require.True(t, ok, "relevant_events should be a string")
+
+	var eventsSlice []string
+	require.NoError(t, json.Unmarshal([]byte(relevantEvents), &eventsSlice))
+	require.Len(t, eventsSlice, 1, "Should contain one relevant event")
+	require.Equal(t, eventsSlice[0], string(profileJSON), "Relevant event should contain profile event content")
 }

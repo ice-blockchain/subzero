@@ -357,8 +357,8 @@ github.com/ice-blockchain/tonutils-storage v0.0.0-20250514104422-4322ed03ab7c h1
 github.com/ice-blockchain/tonutils-storage v0.0.0-20250514104422-4322ed03ab7c/go.mod h1:aEg5acw8rooLDbRLwrUyZhZYv0o5tw/25ZF5+HP8c1Y=
 github.com/icholy/digest v1.1.0 h1:HfGg9Irj7i+IX1o1QAmPfIBNu/Q5A5Tu3n/MED9k9H4=
 github.com/icholy/digest v1.1.0/go.mod h1:QNrsSGQ5v7v9cReDI0+eyjsXGUoRSUZQHeQ5C4XLa0Y=
-github.com/imroc/req/v3 v3.52.1 h1:JhMC+bRIDuGpsGWhGMU7GEBK6/Ql3Ggg8DxZEA16oqk=
-github.com/imroc/req/v3 v3.52.1/go.mod h1:dBGsDloOSZJcFs6PnTjZXYBJK70OXbZpizHBLNqcH2k=
+github.com/imroc/req/v3 v3.52.0 h1:NrjqsiaMqryio4sIJFejCbiph0G6KmK0JLR6B6D1SdQ=
+github.com/imroc/req/v3 v3.52.0/go.mod h1:dBGsDloOSZJcFs6PnTjZXYBJK70OXbZpizHBLNqcH2k=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438 h1:Dj0L5fhJ9F82ZJyVOmBx6msDp/kfd1t9GRfny/mfJA0=
