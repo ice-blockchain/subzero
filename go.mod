@@ -54,7 +54,6 @@ require (
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.13.0
 	github.com/xssnick/tonutils-storage v1.0.3
-	github.com/zeebo/xxh3 v1.0.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.40.0
 	google.golang.org/api v0.233.0
@@ -238,6 +237,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xssnick/raptorq v1.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	github.com/zeebo/assert v1.3.0 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect

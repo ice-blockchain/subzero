@@ -11,7 +11,6 @@ import (
 	"github.com/georgysavva/scany/v2/dbscan"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/puzpuzpuz/xsync/v4"
 )
 
 var (
@@ -32,16 +31,10 @@ var (
 type (
 	Option func(context.Context, *DB) error
 	DB     struct {
-		ddl           string
-		master        *pgxpool.Pool
-		lb            *lb
-		acquiredLocks *xsync.Map[int64, *pgxpool.Conn]
-		closed        *atomic.Bool
-	}
-	Mutex interface {
-		Lock(ctx context.Context) error
-		Unlock(ctx context.Context) error
-		EnsureLocked(ctx context.Context) error
+		ddl    string
+		master *pgxpool.Pool
+		lb     *lb
+		closed *atomic.Bool
 	}
 	Iterator[T any] = iter.Seq2[T, error]
 	Error           = pgconn.PgError
@@ -52,10 +45,5 @@ type (
 	lb struct {
 		Replicas     []*pgxpool.Pool
 		CurrentIndex uint64
-	}
-	advisoryLockMutex struct {
-		Conn *pgxpool.Conn
-		DB   *DB
-		ID   int64
 	}
 )

@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/puzpuzpuz/xsync/v4"
 )
 
 func WithMaster(connectionString string) Option {
@@ -75,9 +74,8 @@ func WithFieldNameMapper(mapper NameMapperFunc) Option {
 
 func New(ctx context.Context, opts ...Option) (*DB, error) {
 	db := &DB{
-		lb:            new(lb),
-		closed:        new(atomic.Bool),
-		acquiredLocks: xsync.NewMap[int64, *pgxpool.Conn](),
+		lb:     new(lb),
+		closed: new(atomic.Bool),
 	}
 
 	for i := range opts {
@@ -174,12 +172,6 @@ func poolDoAfterConnect(ctx context.Context, conn *pgx.Conn) error {
 
 func (db *DB) Close() error {
 	db.closed.Store(true)
-
-	db.acquiredLocks.Range(func(key int64, conn *pgxpool.Conn) bool {
-		conn.Release()
-		db.acquiredLocks.Delete(key)
-		return true
-	})
 
 	if db.master != nil {
 		db.master.Close()

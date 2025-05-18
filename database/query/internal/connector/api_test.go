@@ -56,21 +56,6 @@ func TestAPI(t *testing.T) {
 		err := conn.Ping(t.Context())
 		require.NoError(t, err)
 	})
-	t.Run("Mutex", func(t *testing.T) {
-		m := connector.NewMutex(conn, "mylock")
-		t.Run("Lock", func(t *testing.T) {
-			err := m.Lock(t.Context())
-			require.NoError(t, err)
-		})
-		t.Run("EnsureLocked", func(t *testing.T) {
-			err := m.EnsureLocked(t.Context())
-			require.NoError(t, err)
-		})
-		t.Run("Unlock", func(t *testing.T) {
-			err := m.Unlock(t.Context())
-			require.NoError(t, err)
-		})
-	})
 	t.Run("Exec", func(t *testing.T) {
 		const stmt = `INSERT INTO test (name) VALUES ($1)`
 
