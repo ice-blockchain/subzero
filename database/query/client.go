@@ -31,12 +31,13 @@ var (
 	ddl string
 )
 
-func openDatabase(target string, runDDL bool) *dbClient {
+func openDatabase(target string, runDDL bool, replicas ...string) *dbClient {
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[string, *databaseRollbackRequest](),
 	}
 	options := []connector.Option{
 		connector.WithMaster(target),
+		connector.WithReplicas(replicas),
 		connector.WithFieldNameMapper(func(in string) (out string) {
 			n := strings.ToLower(in)
 			switch n {
