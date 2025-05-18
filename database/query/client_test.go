@@ -5,8 +5,9 @@ package query
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/cfg"
 )
 
 func TestValidateConfig(t *testing.T) {
