@@ -47,13 +47,7 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*databaseEvent) error
 	return ctx.Err()
 }
 
-func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
-	it := &eventIterator{
-		Fetch: func() (internalEventIterator, error) {
-			return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
-		},
-	}
-
+func (db *dbClient) newInternalIterator(ctx context.Context, it *eventIterator) EventIterator {
 	return func(yield func(*model.Event, error) bool) {
 		err := it.Each(ctx, func(event *databaseEvent) error {
 			if !yield(&event.Event, nil) {
@@ -66,4 +60,22 @@ func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, p
 			yield(nil, errors.Wrap(err, "failed to iterate events"))
 		}
 	}
+}
+
+func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
+	it := &eventIterator{
+		Fetch: func() (internalEventIterator, error) {
+			return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
+		},
+	}
+	return db.newInternalIterator(ctx, it)
+}
+
+func (db *dbClient) newExecEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
+	it := &eventIterator{
+		Fetch: func() (internalEventIterator, error) {
+			return connector.ExecNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
+		},
+	}
+	return db.newInternalIterator(ctx, it)
 }

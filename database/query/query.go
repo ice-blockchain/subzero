@@ -346,7 +346,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	h_tag,
 	tags
 `
-	for ev, err := range db.newReadEventIterator(ctx, stmt, params) {
+	for ev, err := range db.newExecEventIterator(ctx, stmt, params) {
 		if err != nil {
 			return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
 		}
@@ -984,7 +984,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 
 	for ctx.Err() == nil {
 		var deleted int
-		it := db.newReadEventIterator(ctx, stmt, params)
+		it := db.newExecEventIterator(ctx, stmt, params)
 		for event, iterErr := range it {
 			if iterErr != nil {
 				return errors.Wrap(iterErr, "failed to exec delete expired events")
