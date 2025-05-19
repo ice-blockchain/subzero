@@ -4,6 +4,7 @@ package pushnotifications
 
 import (
 	"github.com/cockroachdb/errors"
+
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
