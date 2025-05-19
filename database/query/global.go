@@ -21,9 +21,10 @@ var (
 
 type (
 	Config struct {
-		URL        string `yaml:"url"`
-		PrivateKey string `yaml:"private-key"`
-		RelayURL   string `yaml:"relay-url" validate:"required,url"`
+		URL         string   `yaml:"url"`
+		ReplicaURLs []string `yaml:"replicas"   validate:"omitempty,dive,url"`
+		PrivateKey  string   `yaml:"private-key"`
+		RelayURL    string   `yaml:"relay-url" validate:"required,url"`
 	}
 	Option func(*Config)
 )
@@ -41,6 +42,9 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.RelayURL != "" {
 			in.RelayURL = cfg.RelayURL
+		}
+		if len(cfg.ReplicaURLs) > 0 {
+			in.ReplicaURLs = cfg.ReplicaURLs
 		}
 	}
 }
@@ -69,7 +73,7 @@ func mustLoadConfig(opts ...Option) *Config {
 func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
 		conf := mustLoadConfig(opts...)
-		globalDB.Client = openDatabase(conf.URL, true).
+		globalDB.Client = openDatabase(ctx, conf.URL, true, conf.ReplicaURLs...).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
 

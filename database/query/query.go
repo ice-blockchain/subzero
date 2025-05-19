@@ -5,7 +5,6 @@ package query
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"slices"
@@ -14,10 +13,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jmoiron/sqlx"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -49,7 +47,6 @@ type (
 		model.Event
 		SystemKind      sql.NullInt64
 		ReferenceID     sql.NullString
-		Jtags           string
 		SigAlg          string
 		KeyAlg          string
 		MasterPubKey    string
@@ -135,11 +132,6 @@ func detectSystemKind(tags model.Tags) (int64, bool) {
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	var deleted bool
 
-	jtags, err := json.Marshal(e.Tags)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal tags")
-	}
-
 	sigAlg, keyAlg, err := parseSigKeyAlg(e)
 	if err != nil {
 		return nil, err
@@ -175,7 +167,6 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		Event:        *e,
 		MasterPubKey: e.GetMasterPublicKey(),
 		SystemKind:   systemKind,
-		Jtags:        string(jtags),
 		SigAlg:       sigAlg,
 		KeyAlg:       keyAlg,
 		Dtag:         e.Tags.GetD(),
@@ -355,7 +346,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	h_tag,
 	tags
 `
-	for ev, err := range db.newReadEventIterator(ctx, stmt, params) {
+	for ev, err := range db.newExecEventIterator(ctx, stmt, params) {
 		if err != nil {
 			return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
 		}
@@ -386,6 +377,8 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 }
 
 func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool) error {
+	const sqlQuery = `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY($1)`
+
 	if len(replaceableEventsToDelete) == 0 {
 		return nil
 	}
@@ -393,23 +386,11 @@ func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replac
 	for evID := range replaceableEventsToDelete {
 		replaceableEventsIDs = append(replaceableEventsIDs, evID)
 	}
-	sqlQuery := `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY(:ids)`
-	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
-	params := map[string]any{
-		"ids": replaceableEventsIDs,
-	}
-	if err != nil {
-		return errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
-	}
-	res, err := stmt.ExecContext(ctx, params)
+
+	actual, err := connector.Exec(ctx, db.db, sqlQuery, replaceableEventsIDs)
 	if err != nil {
 		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql")
-	}
-	actual, err := res.RowsAffected()
-	if err != nil {
-		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql (rows)")
-	}
-	if actual != int64(len(replaceableEventsToDelete)) {
+	} else if actual != uint64(len(replaceableEventsToDelete)) {
 		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), actual)
 	}
 	return nil
@@ -631,23 +612,10 @@ WHEN NOT MATCHED THEN
 		merge_action() as savemergeaction;
 `
 
-	it := &eventIterator{
-		Map: nil,
-		Fetch: func() (*sqlx.Rows, error) {
-			result, err := db.QueryxContext(ctx, stmt, params...)
-			if err != nil {
-				err = errors.Wrap(handleError(err), "failed to exec insert event sql")
-				if errors.Is(err, ErrRaceCondition) {
-					result, err = db.QueryxContext(ctx, stmt, params...)
-					if err != nil {
-						err = errors.Wrap(handleError(err), "failed to exec insert event sql")
-					}
-				}
-			}
-			return result, err
+	return &eventIterator{
+		Fetch: func() (internalEventIterator, error) {
+			return connector.ExecIterator[databaseEvent](ctx, db.db, stmt, params...)
 		}}
-
-	return it
 }
 
 func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) (replaceableEvents map[string]bool, inserted []databaseFilterDelete, err error) {
@@ -718,7 +686,7 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 		replacedEvents, toRollbackDeleteOp, sErr := db.executeSave(ctx, req)
 		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
 		eventsToRollback.ReplaceableEvents = replacedEvents
-		err = errors.Join(err, errors.Wrap(sErr, "failed to save events"))
+		err = errors.Join(err, sErr)
 		if len(req.Delete) > 0 {
 			if dErr := db.deleteEvents(ctx, req, &eventsToRollback); dErr != nil {
 				err = errors.Join(err, errors.Wrap(dErr, "failed to delete events"))
@@ -732,7 +700,7 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 		}
 		_, toRollbackDeleteOp, sErr := db.executeSave(ctx, req)
 		eventsToRollback.Delete = append(eventsToRollback.Delete, toRollbackDeleteOp...)
-		err = errors.Join(err, errors.Wrap(sErr, "failed to save events"))
+		err = errors.Join(err, sErr)
 	}
 	if err == nil && (!eventsToRollback.Empty() || len(eventsToRollback.ReplaceableEvents) > 0) {
 		db.rollbackableEvents.Store(*req.EventsHash, &eventsToRollback)
@@ -792,23 +760,12 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
 	it := &eventIterator{
 		Map: db.eventTransform,
-		Fetch: func() (*sqlx.Rows, error) {
+		Fetch: func() (internalEventIterator, error) {
 			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
 			if err != nil {
 				return nil, err
 			}
-
-			stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to prepare query sql: %q with params %v", sqlQuery, params)
-			}
-
-			rows, err := stmt.QueryxContext(ctx, params)
-			if err != nil {
-				err = errors.Wrapf(err, "failed to query query events sql: %q", sqlQuery)
-			}
-
-			return rows, err
+			return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
 		},
 	}
 
@@ -828,28 +785,28 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 }
 
 func handleError(err error) error {
-	var sqlError *pgconn.PgError
+	var sqlError *connector.Error
 
 	if err == nil {
 		return err
 	}
 
-	if errors.As(err, &sqlError) {
-		if sqlError.SQLState() == "P0001" {
-			if sqlError.Message == "attestation list update must be linear" {
+	switch {
+	case errors.Is(err, connector.ErrException):
+		if errors.As(err, &sqlError) {
+			switch sqlError.Message {
+			case "attestation list update must be linear":
 				return ErrAttestationUpdateRejected
-			}
-			if sqlError.Message == "onbehalf permission denied" {
+			case "onbehalf permission denied":
 				return ErrOnBehalfAccessDenied
-			}
-			if sqlError.Message == "repost of deleted post" {
+			case "repost of deleted post":
 				return ErrRepostOfDeletedPost
 			}
-		} else if sqlError.SQLState() == "22021" {
-			return ErrInvalidEvent
-		} else if sqlError.SQLState() == "23505" && sqlError.ConstraintName == "events_pkey" {
-			return ErrRaceCondition
 		}
+	case errors.Is(err, connector.ErrInvalidData):
+		return ErrInvalidEvent
+	case errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation):
+		return ErrRaceCondition
 	}
 
 	return err
@@ -874,26 +831,23 @@ func (db *dbClient) generateEventsCountClause(ctx context.Context, filters ...mo
 	return `select count(id) from events e where ` + where, params, nil
 }
 
-func (db *dbClient) CountEvents(ctx context.Context, filters ...model.Filter) (count int64, err error) {
+func (db *dbClient) CountEvents(ctx context.Context, filters ...model.Filter) (int64, error) {
 	sqlQuery, params, err := db.generateEventsCountClause(ctx, filters...)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed to generate events where clause")
 	}
 
-	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
-	if err != nil {
-		return -1, errors.Wrapf(err, "failed to prepare query sql: %q", sqlQuery)
+	count, err := connector.GetNamed[int64](ctx, db.db, sqlQuery, params)
+	if err != nil && !errors.Is(err, connector.ErrNotFound) {
+		return -1, errors.Wrap(err, "failed to query events count")
 	}
-
-	err = errors.Wrapf(stmt.GetContext(ctx, &count, params), "failed to query events count sql: %q", sqlQuery)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
+	if count == nil {
+		return 0, nil
 	}
-
-	return count, err
+	return *count, nil
 }
 
-func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...model.Filter) (result string, err error) {
+func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...model.Filter) (string, error) {
 	var sb strings.Builder
 
 	where, params, err := newQueryBuilder().BuildForPrecalculatedCounters(filters...)
@@ -906,19 +860,15 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 	sb.WriteString(`WITH cte AS (SELECT COALESCE(NULLIF(f.reference_type, ''), '+') AS key, sum(f.value) as val from event_counters f where kind = 7 AND `)
 	sb.WriteString(where)
 	sb.WriteString(`group by reference_type) SELECT jsonb_object_agg(cte.KEY, cte.val) FROM cte`)
-	sqlQuery := sb.String()
 
-	stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to prepare query sql: %q", sqlQuery)
+	result, err := connector.GetNamed[string](ctx, db.db, sb.String(), params)
+	if err != nil && !errors.Is(err, connector.ErrNotFound) {
+		return "", errors.Wrap(err, "failed to query event reactions")
 	}
-
-	err = errors.Wrapf(stmt.GetContext(ctx, &result, params), "failed to query event reactions count sql: %q", sqlQuery)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
+	if result == nil {
+		return "", nil
 	}
-
-	return result, err
+	return *result, nil
 }
 
 func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
@@ -1034,7 +984,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 
 	for ctx.Err() == nil {
 		var deleted int
-		it := db.newReadEventIterator(ctx, stmt, params)
+		it := db.newExecEventIterator(ctx, stmt, params)
 		for event, iterErr := range it {
 			if iterErr != nil {
 				return errors.Wrap(iterErr, "failed to exec delete expired events")

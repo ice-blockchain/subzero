@@ -13,11 +13,13 @@ require (
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.23.0
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/cockroachdb/errors v1.12.0
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/docker/go-connections v0.5.0
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/pprof v1.5.3
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.26.0
@@ -28,8 +30,9 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250513232050-f21826fe0591
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
-	github.com/imroc/req/v3 v3.51.0
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/imroc/req/v3 v3.52.1
+	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
+	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
 	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/jmoiron/sqlx v1.4.0
@@ -149,6 +152,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250513232050-f21826fe0591 // indirect
+	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
@@ -164,8 +168,8 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/libdns/libdns v1.0.0 // indirect
-	github.com/linxGnu/grocksdb v1.10.0 // indirect
+	github.com/libdns/libdns v1.1.0 // indirect
+	github.com/linxGnu/grocksdb v1.10.1 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
@@ -233,6 +237,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xssnick/raptorq v1.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	github.com/zeebo/assert v1.3.0 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect

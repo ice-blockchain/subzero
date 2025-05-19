@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/database/query/internal/postgres/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -27,10 +28,14 @@ func TriggerExpiredEventsCleanup(ctx context.Context) error {
 	return globalDB.Client.deleteExpiredEvents(ctx)
 }
 
+func GenerateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
+	return newQueryBuilder().Build(filter...)
+}
+
 func DeleteAllEvents(ctx context.Context) error {
 	const stmt = `DELETE FROM events`
 
-	_, err := globalDB.Client.ExecContext(context.WithoutCancel(ctx), stmt)
+	_, err := connector.Exec(context.WithoutCancel(ctx), globalDB.Client.db, stmt)
 
 	return errors.Wrap(err, "failed to delete all events")
 }
@@ -45,7 +50,7 @@ func NewTestDatabaseClient(ctx context.Context, container *Container) (TestDB, f
 	conf := mustLoadConfig(WithConfig(&Config{
 		URL: tempAddress,
 	}))
-	client := openDatabase(conf.URL, true).
+	client := openDatabase(ctx, conf.URL, true).
 		WithPrivateKey(conf.PrivateKey).
 		WithRelayURL(conf.RelayURL)
 

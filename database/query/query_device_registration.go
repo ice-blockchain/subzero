@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jmoiron/sqlx"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -44,15 +44,8 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 			}
 
 			it := &eventIterator{
-				Fetch: func() (*sqlx.Rows, error) {
-					stmt, err := db.prepare(ctx, sqlQuery, hashSQL(sqlQuery))
-					if err != nil {
-						return nil, errors.Wrapf(err, "failed to prepare device registration events sql: %q with params %v", sqlQuery, params)
-					}
-
-					rows, err := stmt.QueryxContext(ctx, params)
-
-					return rows, errors.Wrapf(err, "failed to query device registration events sql: %q", sqlQuery)
+				Fetch: func() (internalEventIterator, error) {
+					return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
 				},
 			}
 
@@ -96,19 +89,9 @@ func (db *dbClient) markTokenAsInvalidInEventTags(ctx context.Context, events []
 		eventIDs[i] = event.ID
 	}
 
-	res, err := db.DB.ExecContext(ctx, `
-		UPDATE event_tags
-			SET event_tag_value2 = 'invalid'
-		WHERE event_id = ANY($1) AND event_tag_key = 'token'
-	`, eventIDs)
-
+	rowsAffected, err := connector.Exec(ctx, db.db, `UPDATE event_tags SET event_tag_value2 = 'invalid' WHERE event_id = ANY($1) AND event_tag_key = 'token'`, eventIDs)
 	if err != nil {
 		return errors.Wrapf(err, "failed to update token status in event_tags table for events %s", strings.Join(eventIDs, ", "))
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return errors.Wrap(err, "failed to get rows affected for batch update")
 	}
 
 	if rowsAffected == 0 {
