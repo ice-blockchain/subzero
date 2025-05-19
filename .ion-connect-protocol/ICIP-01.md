@@ -116,3 +116,13 @@ The main goal of this new ephemeral event is to provide additional runtime conte
   ... the rest of the fields
 }
 ```
+
+### Better precision for event created_at
+
+event `created_at` can have higher precision, up to nanoseconds.
+
+Relays MUST detect the precision automatically from the number of digits in the `created_at` field.
+
+If relays cannot support the specific precision the client sends, they MUST return a specific error:
+
+`["OK", <event_id>, false, "unsupported_created_at_precision:<detailed message>"]`
