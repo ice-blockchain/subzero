@@ -548,6 +548,103 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		require.Empty(t, single)
 		require.Empty(t, topic)
 	})
+
+	t.Run("Skips events that require ephemeral events when no ephemeral events exist", func(t *testing.T) {
+		recipientPubKey := "recipient-pubkey-for-skip-test"
+		devicePubKey := "device-pubkey-for-skip-test"
+		deviceID := "device-id-for-skip-test"
+		deviceTags := nostr.Tags{
+			{"d", deviceID},
+			{"t", "ios"},
+			{"token", "test-token-for-skip-test"},
+		}
+
+		deviceEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "device-event-id-for-skip-test",
+				PubKey: devicePubKey,
+				Tags:   deviceTags,
+			},
+		}
+		pm.deviceMutex.Lock()
+		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
+			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+		}
+		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
+			DeviceID: DeviceID(deviceID),
+			Event:    deviceEvent,
+			Filters: nostr.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+				},
+			},
+		}
+		pm.deviceMutex.Unlock()
+
+		mainEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   "main-event-id",
+				Kind: nostr.KindTextNote,
+				Tags: nostr.Tags{
+					nostr.Tag{"p", recipientPubKey},
+				},
+			},
+		}
+
+		events := []*model.Event{mainEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
+
+	t.Run("Processes KindGiftWrap events correctly without requiring ephemeral events", func(t *testing.T) {
+		recipientPubKey := "recipient-pubkey"
+		devicePubKey := "device-pubkey"
+		deviceID := "device-id"
+		deviceTags := nostr.Tags{
+			{"d", deviceID},
+			{"t", "ios"},
+			{"token", "test-token"},
+		}
+
+		deviceEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "device-event-id",
+				PubKey: devicePubKey,
+				Tags:   deviceTags,
+			},
+		}
+		pm.deviceMutex.Lock()
+		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
+			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+		}
+		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
+			DeviceID: DeviceID(deviceID),
+			Event:    deviceEvent,
+		}
+		pm.deviceMutex.Unlock()
+
+		giftWrapEvent := &model.Event{
+			Event: nostr.Event{
+				ID:      "gift-wrap-id",
+				Kind:    nostr.KindGiftWrap,
+				Content: "encrypted-content",
+				Tags: nostr.Tags{
+					nostr.Tag{"k", strconv.Itoa(nostr.KindDirectMessage)},
+					nostr.Tag{"p", recipientPubKey, "", devicePubKey},
+				},
+			},
+		}
+
+		events := []*model.Event{giftWrapEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.NotEmpty(t, single)
+		require.Empty(t, topic)
+	})
 }
 
 func TestShouldProcessGenericRepostEvent(t *testing.T) {
