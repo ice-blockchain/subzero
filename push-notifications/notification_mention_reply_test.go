@@ -96,8 +96,8 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 	require.Equal(t, 2, len(pm.userDevicesMap["mentioned_pubkey"]))
 
-	notifications := pm.handleMentionReplyEvent(event2)
-
+	notifications, err := pm.handleMentionReplyEvent(event2)
+	require.NoError(t, err)
 	require.Len(t, notifications, 2)
 	for _, notification := range notifications {
 		if notification.Target.GetTag("t").Value() == "ios" {
@@ -153,7 +153,8 @@ func TestMention(t *testing.T) {
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	notifications := pm.handleMentionReplyEvent(event)
+	notifications, err := pm.handleMentionReplyEvent(event)
+	require.NoError(t, err)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications, 1)
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
@@ -205,7 +206,9 @@ func TestSelfReplyNotification(t *testing.T) {
 	require.NoError(t, query.AcceptEvents(t.Context(), selfReplyEvent))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	require.Empty(t, pm.handleMentionReplyEvent(selfReplyEvent), "Self-reply should not create notifications")
+	notifications, err := pm.handleMentionReplyEvent(selfReplyEvent)
+	require.NoError(t, err)
+	require.Empty(t, notifications, "Self-reply should not create notifications")
 }
 
 func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
@@ -281,7 +284,8 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	}
 	pm.deviceMutex.Unlock()
 
-	notifications := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
+	notifications, err := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
+	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	notification := notifications[0]
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)

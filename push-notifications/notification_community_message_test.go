@@ -583,13 +583,14 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	}
 	pm.deviceMutex.Unlock()
 
-	notifications := pm.createNotifications(
+	notifications, err := pm.createNotifications(
 		[]*DeviceRegistrationEvent{deviceEvent},
 		NotificationTypeMentionReply,
 		messageEvent,
 		profileEvent,
 	)
 
+	require.NoError(t, err)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications, 1)
 

@@ -338,6 +338,9 @@ func shouldSkipEphemeralEvent(event *model.Event) bool {
 }
 
 func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+	var notifications []*pn.Notification[*DeviceRegistrationEvent]
+	var err error
+
 	if event.Kind == nostr.KindGenericRepost {
 		shouldProcess, err := shouldProcessGenericRepostEvent(event)
 		if err != nil {
@@ -351,33 +354,32 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	switch event.Kind {
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindGenericRepost:
 		if hTag := event.GetHTag(); hTag != "" && hTag != event.ID {
-			notifications, err := pm.handleCommunityMessageEvent(ctx, event, relevantEvents...)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to handle community message event")
-			}
-
-			return notifications, nil
+			notifications, err = pm.handleCommunityMessageEvent(ctx, event, relevantEvents...)
+			err = errors.Wrap(err, "failed to handle community message event")
 		} else if (event.Kind == nostr.KindTextNote && event.GetTag("q") != nil) || (event.Kind == model.CustomIONKindEditableTextNote && event.GetTag(model.CustomIONTagAddressableQ) != nil) {
-			return pm.handleQuoteEvent(event, relevantEvents...), nil
+			notifications, err = pm.handleQuoteEvent(event, relevantEvents...)
+			err = errors.Wrap(err, "failed to handle quote event")
 		} else if event.Kind == nostr.KindGenericRepost {
-			return pm.handleEventWithPublicKey(event, NotificationTypeRepost, relevantEvents...), nil
+			notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeRepost, relevantEvents...)
+			err = errors.Wrap(err, "failed to handle event for generic repost")
+		} else {
+			notifications, err = pm.handleMentionReplyEvent(event, relevantEvents...)
+			err = errors.Wrap(err, "failed to handle mention reply/mention event")
 		}
-
-		return pm.handleMentionReplyEvent(event, relevantEvents...), nil
 	case nostr.KindReaction:
-		return pm.handleEventWithPublicKey(event, NotificationTypeReaction, relevantEvents...), nil
+		notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeReaction, relevantEvents...)
+		err = errors.Wrap(err, "failed to handle event for reaction")
 	case nostr.KindGiftWrap:
-		notifications, err := pm.handleGiftWrapEvent(event)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to handle gift wrap event")
-		}
-
-		return notifications, nil
+		notifications, err = pm.handleGiftWrapEvent(event)
+		err = errors.Wrap(err, "failed to handle gift wrap event")
 	case nostr.KindFollowList:
 		return pm.handleNewFollowerEvent(ctx, event)
 	}
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, nil
+	return notifications, nil
 }
 
 func shouldProcessGenericRepostEvent(event *model.Event) (bool, error) {
@@ -476,38 +478,35 @@ func (pm *PushNotificationManager) createNotifications(
 	notificationType NotificationType,
 	incomingEvent *model.Event,
 	relevantEvents ...*model.Event,
-) []*pn.Notification[*DeviceRegistrationEvent] {
+) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	if len(deviceRegistrationEvents) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
 	defaultTranslation := pm.getTranslationWithRelevantInfo(notificationType, relevantEvents...)
 
+	compressedEvent, err := compressData([]byte(incomingEvent.String()))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to compress event data")
+	}
+	var compressedRelevantEvents string
+	if len(relevantEvents) > 0 {
+		relevantEventsStrings := make([]string, 0, len(relevantEvents))
+		for _, relevantEvent := range relevantEvents {
+			relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
+		}
+		compressedRelevantEvents, err = compressData([]byte(strings.Join(relevantEventsStrings, ",")))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to compress relevant events data")
+		}
+	}
 	for _, event := range deviceRegistrationEvents {
 		data := map[string]interface{}{
 			"compression": CompressionMethodZlib,
+			"event":       compressedEvent,
 		}
-		compressedEvent, err := compressData([]byte(incomingEvent.String()))
-		if err != nil {
-			log.Printf("failed to compress event data: %v, event.ID: %s", err, incomingEvent.ID)
-
-			continue
-		}
-
-		data["event"] = compressedEvent
-
 		if len(relevantEvents) > 0 {
-			relevantEventsStrings := make([]string, 0, len(relevantEvents))
-			for _, relevantEvent := range relevantEvents {
-				relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
-			}
-			compressedRelevantEvents, err := compressData([]byte(strings.Join(relevantEventsStrings, ",")))
-			if err != nil {
-				log.Printf("failed to compress relevant events data: %v, event.ID: %s", err, incomingEvent.ID)
-
-				continue
-			}
 			data["relevant_events"] = compressedRelevantEvents
 		}
 
@@ -531,7 +530,7 @@ func (pm *PushNotificationManager) createNotifications(
 		}
 	}
 
-	return notifications
+	return notifications, nil
 }
 
 func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, event *model.Event) (devices []*DeviceRegistrationEvent) {
@@ -554,17 +553,17 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	return devices
 }
 
-func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
-		return nil
+		return nil, nil
 	}
 	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
 	return pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
 }
 
-func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevantEvents ...*model.Event) []*pn.Notification[*DeviceRegistrationEvent] {
+func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	qLowerTag := event.GetTag("q")
 	qUpperTag := event.GetTag("Q")
 	var referencePubkey string
@@ -573,14 +572,18 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 	} else if len(qUpperTag) >= 4 && qUpperTag[3] != "" {
 		referencePubkey = qUpperTag[3]
 	} else {
-		return nil
+		return nil, nil
 	}
 	devices := pm.collectUserValidDevices(referencePubkey, event)
 	if len(devices) == 0 {
-		return nil
+		return nil, nil
+	}
+	notifications, err := pm.createNotifications(devices, NotificationTypeRepost, event, relevantEvents...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create notifications")
 	}
 
-	return pm.createNotifications(devices, NotificationTypeRepost, event, relevantEvents...)
+	return notifications, nil
 }
 
 func getDisplayNameFromRelevantEvents(events []*model.Event) string {

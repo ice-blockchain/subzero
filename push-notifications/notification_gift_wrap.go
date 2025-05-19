@@ -59,6 +59,10 @@ func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*p
 		return nil, nil
 	}
 	deviceEvents = append(deviceEvents, deviceRegistrationEvents[evIdx])
+	notifications, err := pm.createNotifications(deviceEvents, mapGiftWrapToNotificationType[kind], event)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create notifications")
+	}
 
-	return pm.createNotifications(deviceEvents, mapGiftWrapToNotificationType[kind], event), nil
+	return notifications, nil
 }

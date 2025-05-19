@@ -54,7 +54,8 @@ func TestCreateNotifications(t *testing.T) {
 	}
 
 	t.Run("Empty device list returns nil", func(t *testing.T) {
-		notifications := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
+		notifications, err := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
+		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
 
@@ -78,7 +79,8 @@ func TestCreateNotifications(t *testing.T) {
 			},
 		}
 
-		notifications := pm.createNotifications(deviceEvents, NotificationTypeReaction, event)
+		notifications, err := pm.createNotifications(deviceEvents, NotificationTypeReaction, event)
+		require.NoError(t, err)
 		require.Len(t, notifications, 2)
 
 		for _, notification := range notifications {
@@ -139,7 +141,8 @@ func TestCreateNotifications(t *testing.T) {
 			},
 		}
 
-		notifications := pm.createNotifications(deviceEvents, NotificationTypeMentionReply, event, relevantEvents...)
+		notifications, err := pm.createNotifications(deviceEvents, NotificationTypeMentionReply, event, relevantEvents...)
+		require.NoError(t, err)
 		require.Len(t, notifications, 1)
 
 		require.Contains(t, notifications[0].Data, "relevant_events")
@@ -233,7 +236,8 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			},
 		}
 
-		notifications := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
 
@@ -249,7 +253,8 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			},
 		}
 
-		notifications := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
 }
@@ -1124,7 +1129,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	match := filters.Match(&event.Event)
 	require.True(t, match, "Event should match filter")
 
-	notifications := pm.handleEventWithPublicKey(event, NotificationTypeReaction)
+	notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeReaction)
+	require.NoError(t, err)
 	require.NotNil(t, notifications, "Notifications should not be nil when calling handleEventWithPublicKey directly")
 	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
 
