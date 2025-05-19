@@ -30,7 +30,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250513232050-f21826fe0591
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
-	github.com/imroc/req/v3 v3.52.0
+	github.com/imroc/req/v3 v3.52.1
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
