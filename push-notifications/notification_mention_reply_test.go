@@ -299,6 +299,6 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	require.True(t, ok, "relevant_events should be a string")
 
 	decompressed := helperDecompressZlibData(t, relevantEventsCompressed)
-	require.Equal(t, profileEvent.Content, string(decompressed), "Decompressed content should match profile event content")
+	require.Equal(t, `[`+profileEvent.Content+`]`, string(decompressed), "Decompressed content should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

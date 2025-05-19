@@ -496,7 +496,7 @@ func (pm *PushNotificationManager) createNotifications(
 		for _, relevantEvent := range relevantEvents {
 			relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 		}
-		compressedRelevantEvents, err = compressData([]byte(strings.Join(relevantEventsStrings, ",")))
+		compressedRelevantEvents, err = compressData([]byte(`[` + strings.Join(relevantEventsStrings, ",") + `]`))
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compress relevant events data")
 		}

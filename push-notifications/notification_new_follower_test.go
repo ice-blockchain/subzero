@@ -563,6 +563,6 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.True(t, ok, "relevant_events should be a string")
 
 	decompressed := helperDecompressZlibData(t, relevantEventsCompressed)
-	require.Equal(t, string(profileJSON), string(decompressed), "Decompressed relevant event should match profile event content")
+	require.Equal(t, `[`+string(profileJSON)+`]`, string(decompressed), "Decompressed relevant event should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

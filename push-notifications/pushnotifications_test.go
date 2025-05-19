@@ -157,7 +157,7 @@ func TestCreateNotifications(t *testing.T) {
 			relevantEvents[0].Content,
 			relevantEvents[1].Content,
 		}, ",")
-		require.Equal(t, combinedContent, string(decompressedEvents), "Decompressed events should match combined content")
+		require.Equal(t, `[`+combinedContent+`]`, string(decompressedEvents), "Decompressed events should match combined content")
 		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 		decompressedStr := string(decompressedEvents)
 		require.Contains(t, decompressedStr, `"name":"user1"`)
