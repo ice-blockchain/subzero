@@ -1110,3 +1110,14 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 		return false
 	}
 }
+
+func (db *dbClient) queryDatabaseSize(ctx context.Context) (uint64, error) {
+	type size struct {
+		Size uint64 `db:"size"`
+	}
+	siz, err := connector.Get[size](ctx, db.db, `SELECT pg_database_size(current_database()) as size;`)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to query database size")
+	}
+	return siz.Size, nil
+}

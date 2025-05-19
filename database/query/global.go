@@ -17,6 +17,7 @@ var (
 		Client *dbClient
 		Once   sync.Once
 	}
+	UsedDatabaseStorage uint64
 )
 
 type (
@@ -78,6 +79,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 			WithRelayURL(conf.RelayURL)
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
+		go globalDB.Client.startCollectingUsedDatabaseStorage(ctx)
 
 		go func() {
 			<-ctx.Done()
@@ -156,6 +158,37 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 		deleteCtx, cancel := context.WithTimeout(ctx, time.Minute)
 		if err := db.deleteExpiredEvents(deleteCtx); err != nil {
 			log.Printf("failed to delete expired events: %v", err)
+		}
+		cancel()
+	}
+}
+
+func (db *dbClient) startCollectingUsedDatabaseStorage(ctx context.Context) {
+	ticks := make(chan struct{}, 1)
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		defer close(ticks)
+
+		for {
+			select {
+			case <-ticker.C:
+				select {
+				case ticks <- struct{}{}:
+				default:
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	for range ticks {
+		queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		var err error
+		if UsedDatabaseStorage, err = db.queryDatabaseSize(queryCtx); err != nil {
+			log.Printf("failed to delete events: %v", err)
 		}
 		cancel()
 	}

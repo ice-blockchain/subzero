@@ -32,6 +32,7 @@ type (
 		Download() gin.HandlerFunc
 		Delete() gin.HandlerFunc
 		ListFiles() gin.HandlerFunc
+		RootPath() string
 	}
 )
 
@@ -347,6 +348,10 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		}
 		gCtx.JSON(http.StatusOK, res)
 	}
+}
+
+func (s *storageHandler) RootPath() string {
+	return s.storageClient.RootPath()
 }
 
 func uploadErr(message string) any {

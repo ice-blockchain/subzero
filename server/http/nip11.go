@@ -3,13 +3,21 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr/nip11"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/mem"
+	"github.com/shirou/gopsutil/v4/net"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -20,12 +28,20 @@ type (
 		MessagingSenderID string `json:"messagingSenderId"`
 		ProjectID         string `json:"projectId"`
 	}
-
+	SystemMetrics struct {
+		UsedFileStorage     uint64 `json:"used_file_storage"`
+		UsedDatabaseStorage uint64 `json:"used_database_storage"`
+		UsedTotalStorage    uint64 `json:"used_total_storage"`
+		UsedMemory          uint64 `json:"used_memory"`
+		UsedCPU             uint16 `json:"used_cpu"`
+		UsedBandwidth       uint64 `json:"used_bandwidth"`
+	}
 	RelayInformationDocument struct {
 		nip11.RelayInformationDocument `json:",inline"`
-		FCMAndroidConfigs              []FCMConfig `json:"fcm_android_configs"`
-		FCMIOSConfigs                  []FCMConfig `json:"fcm_ios_configs"`
-		FCMWebConfigs                  []FCMConfig `json:"fcm_web_configs"`
+		FCMAndroidConfigs              []FCMConfig    `json:"fcm_android_configs"`
+		FCMIOSConfigs                  []FCMConfig    `json:"fcm_ios_configs"`
+		FCMWebConfigs                  []FCMConfig    `json:"fcm_web_configs"`
+		SystemMetrics                  *SystemMetrics `json:"system_metrics"`
 	}
 	Config struct {
 		MinLeadingZeroBits int
@@ -35,14 +51,26 @@ type (
 		PrivateKey         string
 	}
 	nip11handler struct {
-		cfg *Config
+		cfg                  *Config
+		storagePath          string
+		commandPath          string
+		systemMetrics        *SystemMetrics
+		lastBandwidthBytes   uint64
+		lastBandwidthBytesAt int64
 	}
 )
 
-func NewNIP11Handler(cfg *Config) http.Handler {
-	return &nip11handler{
-		cfg: cfg,
+const systemMetricsCollectionTime = 30 * time.Second
+
+func NewNIP11Handler(ctx context.Context, cfg *Config, storagePath, commandPath string) http.Handler {
+	h := &nip11handler{
+		cfg:           cfg,
+		storagePath:   storagePath,
+		commandPath:   commandPath,
+		systemMetrics: &SystemMetrics{},
 	}
+	go h.startSystemMetricsCollector(ctx)
+	return h
 }
 
 func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
@@ -127,6 +155,7 @@ func (n *nip11handler) info() RelayInformationDocument {
 		FCMAndroidConfigs: androidConfigs,
 		FCMIOSConfigs:     iosConfigs,
 		FCMWebConfigs:     webConfigs,
+		SystemMetrics:     n.systemMetrics,
 	}
 }
 
@@ -135,4 +164,74 @@ func isValidFCMConfig(config FCMConfig) bool {
 		config.AppID != "" &&
 		config.MessagingSenderID != "" &&
 		config.ProjectID != ""
+}
+
+func (n *nip11handler) startSystemMetricsCollector(ctx context.Context) {
+	for ctx.Err() == nil {
+		reqCtx, reqCancel := context.WithTimeout(ctx, systemMetricsCollectionTime)
+		cpuUsages, err := cpu.PercentWithContext(reqCtx, 0, false)
+		if err != nil {
+			log.Println(errors.Wrap(err, "failed to collect cpu usage for nip-11 system metrics"))
+			reqCancel()
+			continue
+		}
+
+		memUsage, err := mem.VirtualMemoryWithContext(reqCtx)
+		if err != nil {
+			log.Println(errors.Wrap(err, "failed to collect memory usage for nip-11 system metrics"))
+			reqCancel()
+			continue
+		}
+		fileStorageDiskUsage, err := disk.Usage(n.storagePath)
+		if err != nil {
+			log.Println(errors.Wrap(err, "failed to collect file storage usage for nip-11 system metrics"))
+			reqCancel()
+			continue
+		}
+		commandStorageUsed := uint64(0)
+		if n.commandPath != "" {
+			commandStorageDiskUsage, err := disk.Usage(n.commandPath)
+			if err != nil {
+				log.Println(errors.Wrap(err, "failed to collect command storage usage for nip-11 system metrics"))
+				reqCancel()
+				continue
+			}
+			commandStorageUsed = commandStorageDiskUsage.Used
+		}
+		bandwidthUsage, err := net.IOCountersWithContext(reqCtx, false)
+		if err != nil {
+			log.Println(errors.Wrap(err, "failed to collect bandwidth usage for nip-11 system metrics"))
+			reqCancel()
+			continue
+		}
+
+		n.systemMetrics.UsedCPU = uint16(cpuUsages[0])
+		n.systemMetrics.UsedMemory = memUsage.Used
+		n.systemMetrics.UsedFileStorage = fileStorageDiskUsage.Used
+		n.systemMetrics.UsedDatabaseStorage = query.UsedDatabaseStorage
+		n.systemMetrics.UsedTotalStorage = n.systemMetrics.UsedFileStorage + n.systemMetrics.UsedDatabaseStorage + commandStorageUsed
+		n.systemMetrics.UsedBandwidth = n.calcBandwidth(bandwidthUsage)
+		reqCancel()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(systemMetricsCollectionTime):
+		}
+	}
+}
+
+func (n *nip11handler) calcBandwidth(counters []net.IOCountersStat) uint64 {
+	now := time.Now().UnixNano()
+	rate := uint64(0)
+	for _, c := range counters {
+		if c.Name == "all" {
+			totalBytes := c.BytesRecv + c.BytesSent
+			prevBytes := atomic.SwapUint64(&n.lastBandwidthBytes, totalBytes)
+			prevUpdatedAt := atomic.SwapInt64(&n.lastBandwidthBytesAt, now)
+			rate = ((totalBytes - prevBytes) * uint64(time.Second) / uint64(now-prevUpdatedAt))
+
+			break
+		}
+	}
+	return rate
 }

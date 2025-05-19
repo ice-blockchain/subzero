@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/command"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	httpserver "github.com/ice-blockchain/subzero/server/http"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -75,13 +76,13 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	uploader := httpserver.NewUploadHandler(ctx, globalConfig.IONLibertyDisabled)
 	androidConfigs, iosConfigs, webConfigs := pushnotifications.GetFCMConfigs()
 
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(globalConfig.RelayURL), httpserver.NewNIP11Handler(&httpserver.Config{
+	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(globalConfig.RelayURL), httpserver.NewNIP11Handler(ctx, &httpserver.Config{
 		MinLeadingZeroBits: 1111,
 		FCMAndroidConfigs:  androidConfigs,
 		FCMIOSConfigs:      iosConfigs,
 		FCMWebConfigs:      webConfigs,
 		PrivateKey:         globalConfig.PrivateKey,
-	}))).
+	}, uploader.RootPath(), command.RootPath()))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).
