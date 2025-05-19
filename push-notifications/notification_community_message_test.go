@@ -601,11 +601,10 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relevantEvents, ok := notification.Data["relevant_events"].(string)
+	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")
 
-	var eventsSlice []string
-	require.NoError(t, json.Unmarshal([]byte(relevantEvents), &eventsSlice))
-	require.Len(t, eventsSlice, 1, "Should have one relevant event")
-	require.Equal(t, eventsSlice[0], profileEvent.Content, "Relevant event should contain profile event content")
+	decompressed := helperDecompressZlibData(t, relevantEventsCompressed)
+	require.Equal(t, profileEvent.Content, string(decompressed), "Decompressed content should match profile event content")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

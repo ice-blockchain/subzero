@@ -159,7 +159,13 @@ func TestMention(t *testing.T) {
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notifications[0].Body)
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notifications[0].ImageURL)
-	require.Contains(t, notifications[0].Data["event"], event.String(), "Data should contain event")
+
+	compressedEvent, ok := notifications[0].Data["event"].(string)
+	require.True(t, ok, "event should be a string")
+
+	decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+	require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 }
 
 func TestSelfReplyNotification(t *testing.T) {
@@ -285,11 +291,10 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relevantEvents, ok := notification.Data["relevant_events"].(string)
+	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")
 
-	var eventsSlice []string
-	require.NoError(t, json.Unmarshal([]byte(relevantEvents), &eventsSlice))
-	require.Len(t, eventsSlice, 1, "Should have one relevant event")
-	require.Equal(t, eventsSlice[0], profileEvent.Content, "Relevant event should contain profile event content")
+	decompressed := helperDecompressZlibData(t, relevantEventsCompressed)
+	require.Equal(t, profileEvent.Content, string(decompressed), "Decompressed content should match profile event content")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

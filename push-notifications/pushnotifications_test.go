@@ -3,10 +3,14 @@
 package pushnotifications
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -30,6 +34,18 @@ func (m *MockPushClient) SendSingle(ctx context.Context, notification *pn.Notifi
 func (m *MockPushClient) SendTopic(ctx context.Context, notification *pn.Notification[pn.SubscriptionTopic]) error {
 	args := m.Called(ctx, notification)
 	return args.Error(0)
+}
+
+func helperDecompressZlibData(t *testing.T, compressed string) []byte {
+	t.Helper()
+	zr, err := zlib.NewReader(bytes.NewReader([]byte(compressed)))
+	require.NoError(t, err, "Should create zlib reader")
+	defer zr.Close()
+
+	decompressed, err := io.ReadAll(zr)
+	require.NoError(t, err, "Should decompress zlib data")
+
+	return decompressed
 }
 
 func TestCreateNotifications(t *testing.T) {
@@ -67,7 +83,15 @@ func TestCreateNotifications(t *testing.T) {
 
 		for _, notification := range notifications {
 			require.Contains(t, notification.Data, "event")
-			require.Equal(t, event.String(), notification.Data["event"])
+			require.Contains(t, notification.Data, "compression")
+			require.Equal(t, "zlib", notification.Data["compression"])
+
+			compressedEvent, ok := notification.Data["event"].(string)
+			require.True(t, ok, "event should be a string")
+
+			decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+			require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 		}
 
 		for _, notification := range notifications {
@@ -119,23 +143,24 @@ func TestCreateNotifications(t *testing.T) {
 		require.Len(t, notifications, 1)
 
 		require.Contains(t, notifications[0].Data, "relevant_events")
-		relevantEventsData, ok := notifications[0].Data["relevant_events"].(string)
-		require.True(t, ok, "relevant_events should be a string containing JSON")
+		require.Contains(t, notifications[0].Data, "compression")
+		require.Equal(t, "zlib", notifications[0].Data["compression"])
 
-		var parsedRelevantEvents []string
-		err := json.Unmarshal([]byte(relevantEventsData), &parsedRelevantEvents)
-		require.NoError(t, err, "relevant_events should be a valid JSON array string")
-		require.Len(t, parsedRelevantEvents, 2)
+		compressedRelevantEvents, ok := notifications[0].Data["relevant_events"].(string)
+		require.True(t, ok, "relevant_events should be a string")
 
-		for i, eventContent := range parsedRelevantEvents {
-			require.Equal(t, relevantEvents[i].Content, eventContent, "Content should match")
-
-			var parsedContent map[string]interface{}
-			err := json.Unmarshal([]byte(eventContent), &parsedContent)
-			require.NoError(t, err, "Content should be valid JSON")
-			require.Contains(t, parsedContent, "name")
-			require.Contains(t, parsedContent, "display_name")
-		}
+		decompressedEvents := helperDecompressZlibData(t, compressedRelevantEvents)
+		combinedContent := strings.Join([]string{
+			relevantEvents[0].Content,
+			relevantEvents[1].Content,
+		}, ",")
+		require.Equal(t, combinedContent, string(decompressedEvents), "Decompressed events should match combined content")
+		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
+		decompressedStr := string(decompressedEvents)
+		require.Contains(t, decompressedStr, `"name":"user1"`)
+		require.Contains(t, decompressedStr, `"display_name":"User One"`)
+		require.Contains(t, decompressedStr, `"name":"user2"`)
+		require.Contains(t, decompressedStr, `"display_name":"User Two"`)
 	})
 }
 
@@ -1108,7 +1133,13 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body, "Body should match")
 	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
 	require.Contains(t, notification.Data, "event", "Data should contain event")
-	require.Equal(t, event.String(), notification.Data["event"], "Event in data should match original event")
+
+	compressedEvent, ok := notification.Data["event"].(string)
+	require.True(t, ok, "event should be a string")
+
+	decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
 	notificationsFromProcessEvent, err := pm.processEvent(t.Context(), event)
 	require.NoError(t, err)
@@ -1120,5 +1151,11 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notificationFromProcessEvent.Body, "Body should match")
 	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")
 	require.Contains(t, notificationFromProcessEvent.Data, "event", "Data should contain event")
-	require.Equal(t, event.String(), notificationFromProcessEvent.Data["event"], "Event in data should match original event")
+
+	compressedEvent, ok = notificationFromProcessEvent.Data["event"].(string)
+	require.True(t, ok, "event should be a string")
+
+	decompressedEvent = helperDecompressZlibData(t, compressedEvent)
+	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+	require.Equal(t, CompressionMethodZlib, notificationFromProcessEvent.Data["compression"], "Compression method should be zlib")
 }

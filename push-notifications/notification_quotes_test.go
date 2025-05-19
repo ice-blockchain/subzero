@@ -73,7 +73,13 @@ func TestProcessEventWithQuotes(t *testing.T) {
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notification.Body, "Body should match")
 		require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
 		require.Contains(t, notification.Data, "event", "Data should contain event")
-		require.Equal(t, event.String(), notification.Data["event"], "Event in data should match original event")
+
+		compressedEvent, ok := notification.Data["event"].(string)
+		require.True(t, ok, "event should be a string")
+
+		decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+		require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 	})
 
 	t.Run("Tests event processing with q tag in KindTextNote", func(t *testing.T) {
@@ -120,8 +126,15 @@ func TestProcessEventWithQuotes(t *testing.T) {
 		require.Len(t, notifications, 1, "Should create one notification")
 		require.Equal(t, notifications[0].Target, registrationEvent, "Target should be the registration event")
 		require.Contains(t, notifications[0].Data, "event", "Data should contain event")
-		require.Contains(t, notifications[0].Data["event"], ev.String(), "Event in data should match original event")
+
+		compressedEvent, ok := notifications[0].Data["event"].(string)
+		require.True(t, ok, "event should be a string")
+
+		decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+		require.Equal(t, ev.String(), string(decompressedEvent), "Decompressed event should match original")
+
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), notifications[0].Title, "Title should match mention notification type")
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notifications[0].Body, "Body should match mention notification type")
+		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 	})
 }

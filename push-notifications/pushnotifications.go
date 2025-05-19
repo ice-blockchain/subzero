@@ -3,6 +3,8 @@
 package pushnotifications
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -68,6 +70,8 @@ const (
 	NotificationTypePaymentReceived  NotificationType = "payment_received"
 	NotificationTypeSystem           NotificationType = "system"
 	NotificationTypeNewFollower      NotificationType = "new_follower"
+
+	CompressionMethodZlib = "zlib"
 )
 
 var (
@@ -482,21 +486,29 @@ func (pm *PushNotificationManager) createNotifications(
 
 	for _, event := range deviceRegistrationEvents {
 		data := map[string]interface{}{
-			"event": incomingEvent.String(),
+			"compression": CompressionMethodZlib,
 		}
+		compressedEvent, err := compressData([]byte(incomingEvent.String()))
+		if err != nil {
+			log.Printf("failed to compress event data: %v, event.ID: %s", err, incomingEvent.ID)
+
+			continue
+		}
+
+		data["event"] = compressedEvent
 
 		if len(relevantEvents) > 0 {
 			relevantEventsStrings := make([]string, 0, len(relevantEvents))
 			for _, relevantEvent := range relevantEvents {
 				relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 			}
-			jsonData, err := json.Marshal(relevantEventsStrings)
+			compressedRelevantEvents, err := compressData([]byte(strings.Join(relevantEventsStrings, ",")))
 			if err != nil {
-				log.Printf("failed to marshal relevant_events to JSON: %v", err)
+				log.Printf("failed to compress relevant events data: %v, event.ID: %s", err, incomingEvent.ID)
 
 				continue
 			}
-			data["relevant_events"] = string(jsonData)
+			data["relevant_events"] = compressedRelevantEvents
 		}
 
 		switch event.GetTag("t").Value() {
@@ -618,4 +630,21 @@ func (pm *PushNotificationManager) getTranslationWithRelevantInfo(notificationTy
 		Body:     translationTemplate.Body(relevantEvents...),
 		ImageURL: translationTemplate.ImageURL(relevantEvents...),
 	}
+}
+
+func compressData(data []byte) (string, error) {
+	var compressed bytes.Buffer
+	zw, err := zlib.NewWriterLevel(&compressed, zlib.BestCompression)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create zlib writer")
+	}
+	defer zw.Close()
+	if _, err := zw.Write(data); err != nil {
+		return "", errors.Wrap(err, "failed to compress data")
+	}
+	if err := zw.Close(); err != nil {
+		return "", errors.Wrap(err, "failed to close zlib writer")
+	}
+
+	return compressed.String(), nil
 }
