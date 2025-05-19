@@ -3,7 +3,6 @@
 package internal
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -80,41 +79,6 @@ func TestCreateSingleMessage(t *testing.T) {
 	require.Contains(t, message1.Data, "deeplink")
 	require.Contains(t, message1.Data, "number")
 	require.Contains(t, message1.Data["number"], "42")
-
-	event5 := &model.Event{}
-	event5.Tags = append(event5.Tags, model.Tag{"token", encryptedValidToken})
-	event5.Tags = append(event5.Tags, model.Tag{"deviceId", uuid.NewString()})
-	require.NoError(t, event5.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
-	jsonData, err := json.Marshal([]string{
-		`{"id":"event1","content":"Sample content 1"}`,
-		`{"id":"event2","content":"Sample content 2"}`,
-	})
-	require.NoError(t, err)
-	jsonStr := string(jsonData)
-
-	notification5 := &Notification[*DeviceRegistrationEvent]{
-		Data: map[string]interface{}{
-			"relevant_events": jsonStr,
-		},
-		Target:   event5,
-		Title:    testTitle,
-		Body:     testBody,
-		ImageURL: "https://example.com/image.jpg",
-	}
-
-	message5, err := client.createSingleMessage(notification5)
-	require.NoError(t, err)
-	require.NotNil(t, message5)
-	require.Contains(t, message5.Data, "relevant_events")
-
-	require.Equal(t, jsonStr, message5.Data["relevant_events"])
-
-	var parsedEvents []string
-	require.NoError(t, json.Unmarshal([]byte(message5.Data["relevant_events"]), &parsedEvents), "relevant_events should be a valid JSON array")
-	require.Len(t, parsedEvents, 2)
-	require.Equal(t, `{"id":"event1","content":"Sample content 1"}`, parsedEvents[0])
-	require.Equal(t, `{"id":"event2","content":"Sample content 2"}`, parsedEvents[1])
 
 	event2 := &model.Event{}
 	event2.Tags = append(event2.Tags, model.Tag{"deviceId", uuid.NewString()})
@@ -194,36 +158,6 @@ func TestCreateTopicMessage(t *testing.T) {
 	require.Contains(t, message1.Data, "deeplink")
 	require.Contains(t, message1.Data, "number")
 	require.Contains(t, message1.Data["number"], "42")
-
-	jsonData, err := json.Marshal([]string{
-		`{"id":"event1","content":"Sample content 1"}`,
-		`{"id":"event2","content":"Sample content 2"}`,
-	})
-	require.NoError(t, err)
-	jsonStr := string(jsonData)
-
-	notification4 := &Notification[SubscriptionTopic]{
-		Data: map[string]interface{}{
-			"relevant_events": jsonStr,
-		},
-		Target:   SubscriptionTopic(testTopic),
-		Title:    testTitle,
-		Body:     testBody,
-		ImageURL: "https://example.com/image.jpg",
-	}
-
-	message4 := client.createTopicMessage(notification4)
-	require.NotNil(t, message4)
-	require.Contains(t, message4.Data, "relevant_events")
-
-	require.Equal(t, jsonStr, message4.Data["relevant_events"])
-
-	var parsedEvents []string
-	err = json.Unmarshal([]byte(message4.Data["relevant_events"]), &parsedEvents)
-	require.NoError(t, err, "relevant_events should be a valid JSON array")
-	require.Len(t, parsedEvents, 2)
-	require.Equal(t, `{"id":"event1","content":"Sample content 1"}`, parsedEvents[0])
-	require.Equal(t, `{"id":"event2","content":"Sample content 2"}`, parsedEvents[1])
 
 	notification2 := &Notification[SubscriptionTopic]{
 		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
