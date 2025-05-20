@@ -168,7 +168,11 @@ func isValidFCMConfig(config FCMConfig) bool {
 
 func (n *nip11handler) startSystemMetricsCollector(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
-
+	metrics, err := n.collectMetrics(ctx)
+	if err != nil {
+		log.Println(errors.Wrap(err, "failed to collect system metrics"))
+	}
+	n.systemMetrics.Store(metrics)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()

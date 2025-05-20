@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -81,7 +82,7 @@ func TestNIP11(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, info)
 
-	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}}
+	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}, systemMetrics: new(atomic.Pointer[SystemMetrics])}
 	expected := handler.info()
 
 	require.Equal(t, "subzero", info.Name)
@@ -117,6 +118,7 @@ func TestNIP11(t *testing.T) {
 	require.Len(t, fullResponse.FCMAndroidConfigs, len(expected.FCMAndroidConfigs))
 	require.Len(t, fullResponse.FCMIOSConfigs, len(expected.FCMIOSConfigs))
 	require.Len(t, fullResponse.FCMWebConfigs, len(expected.FCMWebConfigs))
+	require.NotNil(t, fullResponse.SystemMetrics)
 }
 
 func TestFCMConfigParsing(t *testing.T) {
@@ -133,8 +135,9 @@ func TestFCMConfigParsing(t *testing.T) {
 			FCMIOSConfigs:      []string{iosConfig},
 			FCMWebConfigs:      []string{webConfig},
 		},
+		systemMetrics: new(atomic.Pointer[SystemMetrics]),
 	}
-
+	handler.systemMetrics.Store(&SystemMetrics{})
 	info := handler.info()
 
 	require.Len(t, info.FCMAndroidConfigs, 1)
@@ -163,8 +166,9 @@ func TestFCMConfigParsing(t *testing.T) {
 			MinLeadingZeroBits: minLeadingZeroBits,
 			FCMAndroidConfigs:  []string{`invalid json`},
 		},
+		systemMetrics: new(atomic.Pointer[SystemMetrics]),
 	}
-
+	handlerWithInvalidJSON.systemMetrics.Store(&SystemMetrics{})
 	infoWithInvalidJSON := handlerWithInvalidJSON.info()
 	require.Empty(t, infoWithInvalidJSON.FCMAndroidConfigs)
 }
