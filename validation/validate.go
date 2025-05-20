@@ -322,7 +322,6 @@ func validatePollTag(tag model.Tag) error {
 	var rules = map[string]int{
 		"type":    0,
 		"ttl":     0,
-		"title":   0,
 		"options": 0,
 	}
 	for _, part := range tag[1:] {
@@ -348,9 +347,6 @@ func validatePollTag(tag model.Tag) error {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time in the future", value)
 			}
 		case "title":
-			if value == "" {
-				return errors.Wrap(ErrWrongEventParams, "poll: title is empty")
-			}
 		case "options":
 			var options []string
 

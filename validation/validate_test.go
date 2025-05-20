@@ -78,18 +78,20 @@ func TestValidatePollTag(t *testing.T) {
 		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3000000000", "title", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
 		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3000000000", "title Test Poll", "options []"}, ErrWrongEventParams},
 		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3000000000", "title Test Poll"}, ErrWrongEventParams},
-		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3000000000", "title ", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
-		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3000000000", "options [\"Option 1\", \"Option 2\"]"}, ErrWrongEventParams},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3000000000", "title ", "options [\"Option 1\", \"Option 2\"]"}, nil},
+		{model.Tag{model.CustomIONTagPoll, "type single", "ttl 3000000000", "options [\"Option 1\", \"Option 2\"]"}, nil},
 		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3000000000", "title Test Poll", "options [\"Option 1\", \"Option 2\"]", "somekey2 someval"}, ErrWrongEventParams},
 		{model.Tag{model.CustomIONTagPoll, "type multi", "ttl 3000000000", "title Test Poll", "options [foo]"}, ErrWrongEventParams},
 	}
-	for _, c := range cases {
-		err := validatePollTag(c.Tag)
-		if c.Err != nil {
-			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
-		}
+	for i, c := range cases {
+		t.Run("test case "+strconv.Itoa(i), func(t *testing.T) {
+			err := validatePollTag(c.Tag)
+			if c.Err != nil {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 
 	t.Run("OptionsInTheEvent", func(t *testing.T) {
