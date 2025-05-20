@@ -345,8 +345,8 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
-github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250519094306-2c07fc739939 h1:MsNPfq+GAYRzgeLcSwlnilIYLFPVih3VivvMPgzLFWw=
-github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250519094306-2c07fc739939/go.mod h1:dwzHaH3QIqaURglnWJgEXMej84Z2I/dYt8H510ngT3w=
+github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250520081251-5aa5bde78215 h1:IaaZsnqX7WtJR9sYjH4LGJGDbeRfZYXdgql+7P3+SmM=
+github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250520081251-5aa5bde78215/go.mod h1:dwzHaH3QIqaURglnWJgEXMej84Z2I/dYt8H510ngT3w=
 github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250513232050-f21826fe0591 h1:gFWNhuCsPkKmOVV9GZFD08I0TL1/rOfwqr21JM6PqNc=
 github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250513232050-f21826fe0591/go.mod h1:2CYWOH6Lxdb1DeMpvCXsArRzLV1CwTj781meNNiAu6I=
 github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513 h1:lb0RRUW6qO690J2nufHeQ3jFsx2deSb45Evhz/qRmAc=
