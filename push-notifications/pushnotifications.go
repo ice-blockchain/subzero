@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -486,7 +487,7 @@ func (pm *PushNotificationManager) createNotifications(
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
 	defaultTranslation := pm.getTranslationWithRelevantInfo(notificationType, relevantEvents...)
 
-	compressedEvent, err := compressData([]byte(incomingEvent.String()))
+	compressedEvent, err := compressAndEncodeBase64(incomingEvent.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to compress event data")
 	}
@@ -496,7 +497,7 @@ func (pm *PushNotificationManager) createNotifications(
 		for _, relevantEvent := range relevantEvents {
 			relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 		}
-		compressedRelevantEvents, err = compressData([]byte(`[` + strings.Join(relevantEventsStrings, ",") + `]`))
+		compressedRelevantEvents, err = compressAndEncodeBase64(`[` + strings.Join(relevantEventsStrings, ",") + `]`)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compress relevant events data")
 		}
@@ -512,9 +513,6 @@ func (pm *PushNotificationManager) createNotifications(
 
 		switch event.GetTag("t").Value() {
 		case validation.DeviceTokenOSAndroid:
-			data["title"] = defaultTranslation.Title
-			data["body"] = defaultTranslation.Body
-			data["imageUrl"] = defaultTranslation.ImageURL
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
 				Target: event,
 				Data:   data,
@@ -635,19 +633,21 @@ func (pm *PushNotificationManager) getTranslationWithRelevantInfo(notificationTy
 	}
 }
 
-func compressData(data []byte) (string, error) {
+func compressAndEncodeBase64(data string) (string, error) {
 	var compressed bytes.Buffer
 	zw, err := zlib.NewWriterLevel(&compressed, zlib.BestCompression)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create zlib writer")
 	}
 	defer zw.Close()
-	if _, err := zw.Write(data); err != nil {
+	if _, err := zw.Write([]byte(data)); err != nil {
 		return "", errors.Wrap(err, "failed to compress data")
 	}
 	if err := zw.Close(); err != nil {
 		return "", errors.Wrap(err, "failed to close zlib writer")
 	}
 
-	return compressed.String(), nil
+	encoded := base64.StdEncoding.EncodeToString(compressed.Bytes())
+
+	return encoded, nil
 }

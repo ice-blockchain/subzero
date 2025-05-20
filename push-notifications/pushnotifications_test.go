@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,16 +37,20 @@ func (m *MockPushClient) SendTopic(ctx context.Context, notification *pn.Notific
 	return args.Error(0)
 }
 
-func helperDecompressZlibData(t *testing.T, compressed string) []byte {
+func helperDecompressZlibAndDecodeBase64(t *testing.T, compressed []byte) string {
 	t.Helper()
-	zr, err := zlib.NewReader(bytes.NewReader([]byte(compressed)))
+
+	decoded, err := base64.StdEncoding.DecodeString(string(compressed))
+	require.NoError(t, err, "Should decode base64 data")
+
+	zr, err := zlib.NewReader(bytes.NewReader(decoded))
 	require.NoError(t, err, "Should create zlib reader")
 	defer zr.Close()
 
 	decompressed, err := io.ReadAll(zr)
 	require.NoError(t, err, "Should decompress zlib data")
 
-	return decompressed
+	return string(decompressed)
 }
 
 func TestCreateNotifications(t *testing.T) {
@@ -91,7 +96,7 @@ func TestCreateNotifications(t *testing.T) {
 			compressedEvent, ok := notification.Data["event"].(string)
 			require.True(t, ok, "event should be a string")
 
-			decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
 			require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
 			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 		}
@@ -99,10 +104,9 @@ func TestCreateNotifications(t *testing.T) {
 		for _, notification := range notifications {
 			deviceType := notification.Target.GetTag("t").Value()
 			if deviceType == "android" {
-				require.Contains(t, notification.Data, "title")
-				require.Contains(t, notification.Data, "body")
-				require.Contains(t, notification.Data, "imageUrl")
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Data["body"])
+				require.Empty(t, notification.Title)
+				require.Empty(t, notification.Body)
+				require.Empty(t, notification.ImageURL)
 			} else {
 				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title)
 				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body)
@@ -152,7 +156,7 @@ func TestCreateNotifications(t *testing.T) {
 		compressedRelevantEvents, ok := notifications[0].Data["relevant_events"].(string)
 		require.True(t, ok, "relevant_events should be a string")
 
-		decompressedEvents := helperDecompressZlibData(t, compressedRelevantEvents)
+		decompressedEvents := helperDecompressZlibAndDecodeBase64(t, []byte(compressedRelevantEvents))
 		combinedContent := strings.Join([]string{
 			relevantEvents[0].Content,
 			relevantEvents[1].Content,
@@ -1143,7 +1147,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 	compressedEvent, ok := notification.Data["event"].(string)
 	require.True(t, ok, "event should be a string")
 
-	decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+	decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
 	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
@@ -1161,7 +1165,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 	compressedEvent, ok = notificationFromProcessEvent.Data["event"].(string)
 	require.True(t, ok, "event should be a string")
 
-	decompressedEvent = helperDecompressZlibData(t, compressedEvent)
+	decompressedEvent = helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
 	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
 	require.Equal(t, CompressionMethodZlib, notificationFromProcessEvent.Data["compression"], "Compression method should be zlib")
 }

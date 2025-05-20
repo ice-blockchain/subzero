@@ -504,8 +504,6 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			} else if platform == validation.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android devices")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android devices")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Data["title"], "Title in data should match")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Data["body"], "Body in data should match")
 			}
 		}
 	})
@@ -605,7 +603,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")
 
-	decompressed := helperDecompressZlibData(t, relevantEventsCompressed)
-	require.Equal(t, `[`+profileEvent.Content+`]`, string(decompressed), "Decompressed content should match profile event content")
+	decompressed := helperDecompressZlibAndDecodeBase64(t, []byte(relevantEventsCompressed))
+	require.Equal(t, `[`+profileEvent.Content+`]`, decompressed, "Decompressed content should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

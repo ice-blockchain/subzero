@@ -282,7 +282,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		compressedEvent, ok := notification.Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
-		decompressedEvent := helperDecompressZlibData(t, compressedEvent)
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
 		require.Equal(t, followListEvent.String(), string(decompressedEvent), "Decompressed event should match original")
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
@@ -294,9 +294,6 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
 			require.Equal(t, "", notification.ImageURL, "Image URL should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Data["title"], "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Data["body"], "Body should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.Data["imageUrl"], "Image URL should match")
 		}
 	}
 
@@ -562,7 +559,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")
 
-	decompressed := helperDecompressZlibData(t, relevantEventsCompressed)
+	decompressed := helperDecompressZlibAndDecodeBase64(t, []byte(relevantEventsCompressed))
 	require.Equal(t, `[`+string(profileJSON)+`]`, string(decompressed), "Decompressed relevant event should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }
