@@ -79,6 +79,21 @@ var (
 	}
 
 	parserKnownSequences = []filterSequence{
+		// kindXXX>kind30008+profile_badges>kind30009>kind8.
+		{
+			Tokens: []token{
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenCondDetail,
+				tokenLiteralProfileBadges,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenizer.TokenUndef,
+			},
+		},
 		// kind30008+profile_badges>kind30009>kind8.
 		{
 			Tokens: []token{

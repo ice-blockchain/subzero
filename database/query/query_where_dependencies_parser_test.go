@@ -23,6 +23,30 @@ func TestParseDepRequest(t *testing.T) {
 		Err      error
 	}{
 		{
+			Input: "kind30175>kind30008+profile_badges>kind30009>kind8",
+			Expected: filterDependency{
+				Start: filterDependencyStart{
+					Kind:          30175,
+					ProfileBadges: true,
+				},
+				Reduce: filterDependencyReduce{
+					Kinds: []int{30008, 30009, 8},
+				},
+			},
+		},
+		{
+			Input: "kind1>kind30008+profile_badges>kind30009>kind8",
+			Expected: filterDependency{
+				Start: filterDependencyStart{
+					Kind:          1,
+					ProfileBadges: true,
+				},
+				Reduce: filterDependencyReduce{
+					Kinds: []int{30008, 30009, 8},
+				},
+			},
+		},
+		{
 			Input: "kind30008+profile_badges>kind30009>kind8",
 			Expected: filterDependency{
 				Start: filterDependencyStart{
@@ -1531,5 +1555,93 @@ func TestDependencyWithMasterAndAddress(t *testing.T) {
 		ok, err := events[i].CheckSignature()
 		require.NoError(t, err)
 		require.True(t, ok)
+	}
+}
+
+func TestGenericKindWithProfileBadgeLookup(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	user1Priv := model.GeneratePrivateKey()
+	user2Priv, user2Pub := model.GenerateKeyPair()
+
+	t.Run("Create text notes", func(t *testing.T) {
+		var note, article, editableNote model.Event
+
+		note.Kind, editableNote.Kind = nostr.KindTextNote, model.CustomIONKindEditableTextNote
+		note.CreatedAt, editableNote.CreatedAt = 1, 2
+		note.Content, editableNote.Content = "note", "editable note"
+		editableNote.Tags = model.Tags{{"d", "editable note"}}
+
+		require.NoError(t, note.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, editableNote.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &note, &editableNote))
+
+		article.Kind = nostr.KindArticle
+		article.CreatedAt = 3
+		article.Content = "article"
+		article.Tags = model.Tags{{"d", "article"}}
+		require.NoError(t, article.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &article))
+	})
+
+	var badgeDef, badgeAward, profileBadge model.Event
+	t.Run("Create badge definition", func(t *testing.T) {
+		badgeDef.Kind = nostr.KindBadgeDefinition
+		badgeDef.CreatedAt = 4
+		badgeDef.Tags = model.Tags{
+			{"d", "testbadge"},
+			{"name", "Test Badge"},
+		}
+		require.NoError(t, badgeDef.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &badgeDef))
+	})
+	t.Run("Create badge award", func(t *testing.T) {
+		badgeAward.Kind = nostr.KindBadgeAward
+		badgeAward.CreatedAt = 5
+		badgeAward.Tags = model.Tags{
+			{"a", badgeDef.Address()},
+			{"p", user2Pub},
+		}
+		require.NoError(t, badgeAward.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &badgeAward))
+	})
+	t.Run("Create profile badges of user2", func(t *testing.T) {
+		profileBadge.Kind = nostr.KindProfileBadges
+		profileBadge.CreatedAt = 6
+		profileBadge.Tags = model.Tags{
+			{"d", "profile_badges"},
+			{"a", badgeAward.GetTag("a").Value()},
+			{"e", badgeAward.ID},
+		}
+		require.NoError(t, profileBadge.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &profileBadge))
+	})
+
+	kinds := []int{nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote}
+	notes := helperSelectEvents(t, db, model.Filter{Kinds: kinds})
+	require.Len(t, notes, 3)
+
+	for _, kind := range kinds {
+		t.Run("Check kind "+strconv.Itoa(kind), func(t *testing.T) {
+			events := helperSelectEvents(t, db, model.Filter{
+				Kinds:  []int{kind},
+				Search: "include:dependencies:kind" + strconv.Itoa(kind) + ">kind30008+profile_badges>kind30009>kind8",
+			})
+			switch kind {
+			case nostr.KindTextNote, nostr.KindArticle:
+				require.Len(t, events, 1)
+				require.Equal(t, kind, events[0].Kind)
+			case model.CustomIONKindEditableTextNote:
+				require.Len(t, events, 4) // 1 editable note, 1 badge definition, 1 badge award, 1 profile badge.
+				for i, expectedKind := range []int{nostr.KindProfileBadges, nostr.KindBadgeAward, nostr.KindBadgeDefinition, model.CustomIONKindEditableTextNote} {
+					require.Equal(t, expectedKind, events[i].Kind)
+				}
+			default:
+				t.Fatalf("unexpected kind: %d", kind)
+			}
+		})
 	}
 }

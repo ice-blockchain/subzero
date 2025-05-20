@@ -5,6 +5,7 @@ package query
 import (
 	"cmp"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -729,6 +730,44 @@ AND `)
 			}
 		}
 		b.WriteString(` LIMIT 1) FROM ` + cteName + ` em) AND e.hidden = FALSE`)
+
+	case nostr.KindProfileBadges:
+		// kindXXX>kind30008+profile_badges>kind30009>kind8.
+		if current.Start.ProfileBadges &&
+			slices.Equal(
+				current.Reduce.Kinds,
+				[]int{nostr.KindProfileBadges, nostr.KindBadgeDefinition, nostr.KindBadgeAward},
+			) {
+
+			usersWithBadges := `e.kind = 30008 AND e.d_tag='profile_badges'
+AND (
+	(e.master_pubkey IN (select distinct (master_pubkey) from ` + cteName + `) and e.hidden=false)
+	OR     (e.pubkey IN (select distinct (pubkey)        from ` + cteName + `) and e.hidden=false)
+)
+AND e.hidden=false`
+			b.WriteString(usersWithBadges)
+			b.WriteString(` union select `)
+			for i, f := range b.fieldsNames("en") {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				b.WriteString(f)
+			}
+			b.WriteString(`
+from
+	events en
+where
+	en.kind in (8, 30009)
+	AND en.address in (
+			select
+				et.event_tag_value1
+			from
+				event_tags et
+			where
+				et.event_id in (select e.id from events e where ` + usersWithBadges + `)
+				AND et.event_tag_key in ('e', 'a')
+	) and en.hidden=false`)
+		}
 
 	case nostr.KindBadgeDefinition:
 		startFilter := b.BuildQueryForDependencyStart(filterID, cteName, "id", &current.Start)
