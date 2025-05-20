@@ -166,13 +166,7 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 
 func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
-	queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	if usedDatabaseStorage, err := db.queryDatabaseSize(queryCtx); err != nil {
-		log.Printf("failed to query database size: %v", err)
-	} else {
-		UsedDatabaseStorage.Store(usedDatabaseStorage)
-	}
-	cancel()
+	ticks <- struct{}{}
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
