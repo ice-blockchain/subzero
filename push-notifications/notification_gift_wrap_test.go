@@ -202,7 +202,13 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			}
 			require.Equal(t, deviceEvent, notification.Target, "Target should match for "+tc.description)
 			require.Contains(t, notification.Data, "event", "Data should contain event for "+tc.description)
-			require.Equal(t, event.String(), notification.Data["event"], "Event should match for "+tc.description)
+
+			compressedEvent, ok := notification.Data["event"].(string)
+			require.True(t, ok, "event should be a string for "+tc.description)
+
+			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+			require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original for "+tc.description)
+			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib for "+tc.description)
 		})
 	}
 }
@@ -280,10 +286,6 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			if device.platform == validation.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android")
-				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title(), notification.Data["title"],
-					"Title in data should match for Android")
-				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Body(), notification.Data["body"],
-					"Body in data should match for Android")
 			} else {
 				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title(), notification.Title,
 					"Title should match for "+device.platform)
@@ -292,7 +294,13 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			}
 
 			require.Contains(t, notification.Data, "event", "Data should contain event")
-			require.Equal(t, event.String(), notification.Data["event"], "Event should match")
+
+			compressedEvent, ok := notification.Data["event"].(string)
+			require.True(t, ok, "event should be a string")
+
+			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+			require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 		})
 	}
 }
@@ -357,7 +365,14 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body, "Body should match for reaction")
 		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL, "Image URL should match")
 		require.Equal(t, deviceEvent, notification.Target)
-		require.Contains(t, notification.Data["event"], event.String())
+
+		require.Contains(t, notification.Data, "event", "Data should contain event")
+		compressedEvent, ok := notification.Data["event"].(string)
+		require.True(t, ok, "event should be a string")
+
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original")
+		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 	})
 }
 
@@ -420,7 +435,13 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 		require.NotNil(t, notifications, "Notifications should not be nil")
 		require.Len(t, notifications, 1, "Should create one notification")
 		require.Equal(t, notifications[0].Target, registrationEvent, "Target should be the registration event")
+
 		require.Contains(t, notifications[0].Data, "event", "Data should contain event")
-		require.Contains(t, notifications[0].Data["event"], ev.String(), "Event in data should match original event")
+		compressedEvent, ok := notifications[0].Data["event"].(string)
+		require.True(t, ok, "event should be a string")
+
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, ev.String(), decompressedEvent, "Decompressed event should match original")
+		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 	})
 }

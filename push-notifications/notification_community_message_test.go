@@ -504,8 +504,6 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			} else if platform == validation.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android devices")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android devices")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Data["title"], "Title in data should match")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Data["body"], "Body in data should match")
 			}
 		}
 	})
@@ -583,13 +581,14 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	}
 	pm.deviceMutex.Unlock()
 
-	notifications := pm.createNotifications(
+	notifications, err := pm.createNotifications(
 		[]*DeviceRegistrationEvent{deviceEvent},
 		NotificationTypeMentionReply,
 		messageEvent,
 		profileEvent,
 	)
 
+	require.NoError(t, err)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications, 1)
 
@@ -601,8 +600,10 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relevantEvents, ok := notification.Data["relevant_events"].([]string)
-	require.True(t, ok, "relevant_events should be a string slice")
-	require.Len(t, relevantEvents, 1, "Should have one relevant event")
-	require.Equal(t, relevantEvents[0], profileEvent.Content, "Relevant event should contain profile event content")
+	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
+	require.True(t, ok, "relevant_events should be a string")
+
+	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsCompressed)
+	require.Equal(t, `[`+profileEvent.Content+`]`, decompressed, "Decompressed content should match profile event content")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

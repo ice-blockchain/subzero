@@ -96,8 +96,8 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 	require.Equal(t, 2, len(pm.userDevicesMap["mentioned_pubkey"]))
 
-	notifications := pm.handleMentionReplyEvent(event2)
-
+	notifications, err := pm.handleMentionReplyEvent(event2)
+	require.NoError(t, err)
 	require.Len(t, notifications, 2)
 	for _, notification := range notifications {
 		if notification.Target.GetTag("t").Value() == "ios" {
@@ -153,13 +153,20 @@ func TestMention(t *testing.T) {
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	notifications := pm.handleMentionReplyEvent(event)
+	notifications, err := pm.handleMentionReplyEvent(event)
+	require.NoError(t, err)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications, 1)
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notifications[0].Body)
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notifications[0].ImageURL)
-	require.Contains(t, notifications[0].Data["event"], event.String(), "Data should contain event")
+
+	compressedEvent, ok := notifications[0].Data["event"].(string)
+	require.True(t, ok, "event should be a string")
+
+	decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+	require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original")
+	require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 }
 
 func TestSelfReplyNotification(t *testing.T) {
@@ -199,7 +206,9 @@ func TestSelfReplyNotification(t *testing.T) {
 	require.NoError(t, query.AcceptEvents(t.Context(), selfReplyEvent))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	require.Empty(t, pm.handleMentionReplyEvent(selfReplyEvent), "Self-reply should not create notifications")
+	notifications, err := pm.handleMentionReplyEvent(selfReplyEvent)
+	require.NoError(t, err)
+	require.Empty(t, notifications, "Self-reply should not create notifications")
 }
 
 func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
@@ -275,7 +284,8 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	}
 	pm.deviceMutex.Unlock()
 
-	notifications := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
+	notifications, err := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
+	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	notification := notifications[0]
 	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
@@ -285,8 +295,10 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relevantEvents, ok := notification.Data["relevant_events"].([]string)
-	require.True(t, ok, "relevant_events should be a string slice")
-	require.Len(t, relevantEvents, 1, "Should have one relevant event")
-	require.Equal(t, relevantEvents[0], profileEvent.Content, "Relevant event should contain profile event content")
+	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
+	require.True(t, ok, "relevant_events should be a string")
+
+	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsCompressed)
+	require.Equal(t, `[`+profileEvent.Content+`]`, decompressed, "Decompressed content should match profile event content")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

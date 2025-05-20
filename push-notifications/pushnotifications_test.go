@@ -3,10 +3,15 @@
 package pushnotifications
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -32,13 +37,30 @@ func (m *MockPushClient) SendTopic(ctx context.Context, notification *pn.Notific
 	return args.Error(0)
 }
 
+func helperDecompressZlibAndDecodeBase64(t *testing.T, compressed string) string {
+	t.Helper()
+
+	decoded, err := base64.StdEncoding.DecodeString(compressed)
+	require.NoError(t, err, "Should decode base64 data")
+
+	zr, err := zlib.NewReader(bytes.NewReader(decoded))
+	require.NoError(t, err, "Should create zlib reader")
+	defer zr.Close()
+
+	decompressed, err := io.ReadAll(zr)
+	require.NoError(t, err, "Should decompress zlib data")
+
+	return string(decompressed)
+}
+
 func TestCreateNotifications(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
 	t.Run("Empty device list returns nil", func(t *testing.T) {
-		notifications := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
+		notifications, err := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
+		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
 
@@ -62,27 +84,90 @@ func TestCreateNotifications(t *testing.T) {
 			},
 		}
 
-		notifications := pm.createNotifications(deviceEvents, NotificationTypeReaction, event)
+		notifications, err := pm.createNotifications(deviceEvents, NotificationTypeReaction, event)
+		require.NoError(t, err)
 		require.Len(t, notifications, 2)
 
 		for _, notification := range notifications {
 			require.Contains(t, notification.Data, "event")
-			require.Equal(t, event.String(), notification.Data["event"])
+			require.Contains(t, notification.Data, "compression")
+			require.Equal(t, "zlib", notification.Data["compression"])
+
+			compressedEvent, ok := notification.Data["event"].(string)
+			require.True(t, ok, "event should be a string")
+
+			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+			require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 		}
 
 		for _, notification := range notifications {
 			deviceType := notification.Target.GetTag("t").Value()
 			if deviceType == "android" {
-				require.Contains(t, notification.Data, "title")
-				require.Contains(t, notification.Data, "body")
-				require.Contains(t, notification.Data, "imageUrl")
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Data["body"])
+				require.Empty(t, notification.Title)
+				require.Empty(t, notification.Body)
+				require.Empty(t, notification.ImageURL)
 			} else {
 				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title)
 				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body)
 				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL)
 			}
 		}
+	})
+
+	t.Run("Correctly serializes relevant events", func(t *testing.T) {
+		event := &model.Event{Event: nostr.Event{ID: "test-event-id", Content: "test content"}}
+
+		relevantEvents := []*model.Event{
+			{
+				Event: nostr.Event{
+					ID:      "relevant-event-1",
+					Content: `{"name":"user1","display_name":"User One"}`,
+					Kind:    nostr.KindProfileMetadata,
+				},
+			},
+			{
+				Event: nostr.Event{
+					ID:      "relevant-event-2",
+					Content: `{"name":"user2","display_name":"User Two"}`,
+					Kind:    nostr.KindProfileMetadata,
+				},
+			},
+		}
+
+		deviceEvents := []*DeviceRegistrationEvent{
+			{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						nostr.Tag{"t", "ios"},
+					},
+				},
+			},
+		}
+
+		notifications, err := pm.createNotifications(deviceEvents, NotificationTypeMentionReply, event, relevantEvents...)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1)
+
+		require.Contains(t, notifications[0].Data, "relevant_events")
+		require.Contains(t, notifications[0].Data, "compression")
+		require.Equal(t, "zlib", notifications[0].Data["compression"])
+
+		compressedRelevantEvents, ok := notifications[0].Data["relevant_events"].(string)
+		require.True(t, ok, "relevant_events should be a string")
+
+		decompressedEvents := helperDecompressZlibAndDecodeBase64(t, compressedRelevantEvents)
+		combinedContent := strings.Join([]string{
+			relevantEvents[0].Content,
+			relevantEvents[1].Content,
+		}, ",")
+		require.Equal(t, `[`+combinedContent+`]`, string(decompressedEvents), "Decompressed events should match combined content")
+		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
+		decompressedStr := string(decompressedEvents)
+		require.Contains(t, decompressedStr, `"name":"user1"`)
+		require.Contains(t, decompressedStr, `"display_name":"User One"`)
+		require.Contains(t, decompressedStr, `"name":"user2"`)
+		require.Contains(t, decompressedStr, `"display_name":"User Two"`)
 	})
 }
 
@@ -155,7 +240,8 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			},
 		}
 
-		notifications := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
 
@@ -171,7 +257,8 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			},
 		}
 
-		notifications := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeRepost)
+		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
 }
@@ -493,6 +580,103 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		single, topic, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
 		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
+
+	t.Run("Skips events that require ephemeral events when no ephemeral events exist", func(t *testing.T) {
+		recipientPubKey := "recipient-pubkey-for-skip-test"
+		devicePubKey := "device-pubkey-for-skip-test"
+		deviceID := "device-id-for-skip-test"
+		deviceTags := nostr.Tags{
+			{"d", deviceID},
+			{"t", "ios"},
+			{"token", "test-token-for-skip-test"},
+		}
+
+		deviceEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "device-event-id-for-skip-test",
+				PubKey: devicePubKey,
+				Tags:   deviceTags,
+			},
+		}
+		pm.deviceMutex.Lock()
+		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
+			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+		}
+		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
+			DeviceID: DeviceID(deviceID),
+			Event:    deviceEvent,
+			Filters: nostr.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+				},
+			},
+		}
+		pm.deviceMutex.Unlock()
+
+		mainEvent := &model.Event{
+			Event: nostr.Event{
+				ID:   "main-event-id",
+				Kind: nostr.KindTextNote,
+				Tags: nostr.Tags{
+					nostr.Tag{"p", recipientPubKey},
+				},
+			},
+		}
+
+		events := []*model.Event{mainEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
+
+	t.Run("Processes KindGiftWrap events correctly without requiring ephemeral events", func(t *testing.T) {
+		recipientPubKey := "recipient-pubkey"
+		devicePubKey := "device-pubkey"
+		deviceID := "device-id"
+		deviceTags := nostr.Tags{
+			{"d", deviceID},
+			{"t", "ios"},
+			{"token", "test-token"},
+		}
+
+		deviceEvent := &model.Event{
+			Event: nostr.Event{
+				ID:     "device-event-id",
+				PubKey: devicePubKey,
+				Tags:   deviceTags,
+			},
+		}
+		pm.deviceMutex.Lock()
+		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
+			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+		}
+		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
+			DeviceID: DeviceID(deviceID),
+			Event:    deviceEvent,
+		}
+		pm.deviceMutex.Unlock()
+
+		giftWrapEvent := &model.Event{
+			Event: nostr.Event{
+				ID:      "gift-wrap-id",
+				Kind:    nostr.KindGiftWrap,
+				Content: "encrypted-content",
+				Tags: nostr.Tags{
+					nostr.Tag{"k", strconv.Itoa(nostr.KindDirectMessage)},
+					nostr.Tag{"p", recipientPubKey, "", devicePubKey},
+				},
+			},
+		}
+
+		events := []*model.Event{giftWrapEvent}
+
+		single, topic, err := pm.collectNotifications(t.Context(), events)
+		require.NoError(t, err)
+		require.NotEmpty(t, single)
 		require.Empty(t, topic)
 	})
 }
@@ -949,7 +1133,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	match := filters.Match(&event.Event)
 	require.True(t, match, "Event should match filter")
 
-	notifications := pm.handleEventWithPublicKey(event, NotificationTypeReaction)
+	notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeReaction)
+	require.NoError(t, err)
 	require.NotNil(t, notifications, "Notifications should not be nil when calling handleEventWithPublicKey directly")
 	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
 
@@ -958,7 +1143,13 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body, "Body should match")
 	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
 	require.Contains(t, notification.Data, "event", "Data should contain event")
-	require.Equal(t, event.String(), notification.Data["event"], "Event in data should match original event")
+
+	compressedEvent, ok := notification.Data["event"].(string)
+	require.True(t, ok, "event should be a string")
+
+	decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
 	notificationsFromProcessEvent, err := pm.processEvent(t.Context(), event)
 	require.NoError(t, err)
@@ -970,5 +1161,11 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notificationFromProcessEvent.Body, "Body should match")
 	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")
 	require.Contains(t, notificationFromProcessEvent.Data, "event", "Data should contain event")
-	require.Equal(t, event.String(), notificationFromProcessEvent.Data["event"], "Event in data should match original event")
+
+	compressedEvent, ok = notificationFromProcessEvent.Data["event"].(string)
+	require.True(t, ok, "event should be a string")
+
+	decompressedEvent = helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+	require.Equal(t, CompressionMethodZlib, notificationFromProcessEvent.Data["compression"], "Compression method should be zlib")
 }

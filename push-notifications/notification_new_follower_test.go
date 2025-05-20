@@ -35,7 +35,7 @@ func helperCreateFollowListEvent(t *testing.T, id string, pubKey string, followe
 	}
 }
 
-func TestGetLastFollowerPubkey(t *testing.T) {
+func TestGetNewFollowerPubkeys(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{}
 
@@ -46,8 +46,8 @@ func TestGetLastFollowerPubkey(t *testing.T) {
 		[]string{},
 	)
 
-	recipient := pm.getLastFollowerPubkey(emptyTagsEvent, nil)
-	require.Empty(t, recipient, "Recipient should be empty when no p-tags")
+	recipients := pm.getNewFollowerPubkeys(emptyTagsEvent, nil)
+	require.Empty(t, recipients, "Recipients should be empty when no p-tags")
 
 	singleTagEvent := helperCreateFollowListEvent(
 		t,
@@ -56,8 +56,9 @@ func TestGetLastFollowerPubkey(t *testing.T) {
 		[]string{"follower_pubkey"},
 	)
 
-	recipient = pm.getLastFollowerPubkey(singleTagEvent, nil)
-	require.Equal(t, "follower_pubkey", recipient, "Recipient should be the only p-tag")
+	recipients = pm.getNewFollowerPubkeys(singleTagEvent, nil)
+	require.Len(t, recipients, 1, "Should return one recipient when there's only one p-tag and no old event")
+	require.Equal(t, "follower_pubkey", recipients[0], "Recipient should be the only p-tag")
 
 	oldEvent := helperCreateFollowListEvent(
 		t,
@@ -73,8 +74,8 @@ func TestGetLastFollowerPubkey(t *testing.T) {
 		[]string{"pubkey1", "pubkey2"},
 	)
 
-	recipient = pm.getLastFollowerPubkey(newReducedEvent, oldEvent)
-	require.Empty(t, recipient, "Recipient should be empty when follow list reduced")
+	recipients = pm.getNewFollowerPubkeys(newReducedEvent, oldEvent)
+	require.Empty(t, recipients, "Recipients should be empty when follow list reduced")
 
 	newExtendedEvent := helperCreateFollowListEvent(
 		t,
@@ -83,8 +84,21 @@ func TestGetLastFollowerPubkey(t *testing.T) {
 		[]string{"pubkey1", "pubkey2", "pubkey3", "new_pubkey"},
 	)
 
-	recipient = pm.getLastFollowerPubkey(newExtendedEvent, oldEvent)
-	require.Equal(t, "new_pubkey", recipient, "Recipient should be the last p-tag")
+	recipients = pm.getNewFollowerPubkeys(newExtendedEvent, oldEvent)
+	require.Len(t, recipients, 1, "Should return one new recipient")
+	require.Equal(t, "new_pubkey", recipients[0], "Recipient should be the new pubkey")
+
+	multipleNewEvent := helperCreateFollowListEvent(
+		t,
+		"multi_new_id",
+		"follower_pubkey",
+		[]string{"pubkey1", "new_pubkey1", "pubkey2", "new_pubkey2", "pubkey3"},
+	)
+
+	recipients = pm.getNewFollowerPubkeys(multipleNewEvent, oldEvent)
+	require.Len(t, recipients, 2, "Should return all new recipients")
+	require.Contains(t, recipients, "new_pubkey1", "Should contain first new pubkey")
+	require.Contains(t, recipients, "new_pubkey2", "Should contain second new pubkey")
 }
 
 func TestCreateNewFollowerNotification(t *testing.T) {
@@ -131,7 +145,8 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.Contains(t, pm.userDevicesMap, targetPubKey, "User should be in the device map")
 	require.Len(t, pm.userDevicesMap[targetPubKey], 1, "User should have one device")
 
-	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	require.NoError(t, err)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
 	require.Len(t, notifications, 1, "Should create one notification")
@@ -243,7 +258,8 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID2), "Device 2 should be in the map")
 	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID3), "Device 3 should be in the map")
 
-	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	require.NoError(t, err)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
 	require.Len(t, notifications, 3, "Should create three notifications")
@@ -262,7 +278,13 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	for _, platform := range []string{"ios", "android", "web"} {
 		notification := deviceTypeMap[platform]
 		require.Contains(t, notification.Data, "event", "Data should contain event")
-		require.Equal(t, followListEvent.String(), notification.Data["event"], "Event should match")
+
+		compressedEvent, ok := notification.Data["event"].(string)
+		require.True(t, ok, "event should be a string")
+
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, followListEvent.String(), decompressedEvent, "Decompressed event should match original")
+		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
 		if platform == validation.DeviceTokenOSIOS || platform == validation.DeviceTokenOSWeb {
 			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title, "Title should match")
@@ -272,9 +294,6 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
 			require.Equal(t, "", notification.ImageURL, "Image URL should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Data["title"], "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Data["body"], "Body should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.Data["imageUrl"], "Image URL should match")
 		}
 	}
 
@@ -318,7 +337,8 @@ func TestCreateNewFollowerNotificationNoDevices(t *testing.T) {
 
 	require.NoError(t, query.AcceptEvents(t.Context(), followListEvent))
 
-	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
+	require.NoError(t, err)
 
 	require.Nil(t, notifications, "Notifications should be nil when no devices")
 }
@@ -336,13 +356,14 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		}
 
 		followerPubKey := "follower_pubkey_" + testSuffix
-		targetPubKey := "target_pubkey_" + testSuffix
+		targetPubKey1 := "target_pubkey1_" + testSuffix
+		targetPubKey2 := "target_pubkey2_" + testSuffix
 
 		followListEvent := helperCreateFollowListEvent(
 			t,
 			"test_id_"+testSuffix,
 			followerPubKey,
-			[]string{"pubkey1", "pubkey2", targetPubKey},
+			[]string{"pubkey1", targetPubKey1, "pubkey2", targetPubKey2},
 		)
 
 		filters := nostr.Filters{
@@ -351,25 +372,38 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 			},
 		}
 
-		deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
-			targetPubKey,
+			targetPubKey1,
 			"device1_"+testSuffix,
 			nostr.Tags{
 				{"t", "ios"},
-				{"token", "test_token_" + testSuffix},
+				{"token", "test_token1_" + testSuffix},
 			},
 			filters,
 		)
 
-		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
+			t,
+			targetPubKey2,
+			"device2_"+testSuffix,
+			nostr.Tags{
+				{"t", "android"},
+				{"token", "test_token2_" + testSuffix},
+			},
+			filters,
+		)
+
+		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
+		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
+		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 
 		notifications, err := pm.handleNewFollowerEvent(t.Context(), followListEvent)
 
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications, 2, "Should have notifications for both targets")
 	})
 
 	t.Run("new_follower_with_old_event", func(t *testing.T) {
@@ -382,7 +416,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		}
 
 		followerPubKey := "follower_pubkey_" + testSuffix
-		targetPubKey := "target_pubkey_" + testSuffix
+		targetPubKey1 := "target_pubkey1_" + testSuffix
+		targetPubKey2 := "target_pubkey2_" + testSuffix
 
 		oldFollowListEvent := helperCreateFollowListEvent(
 			t,
@@ -395,7 +430,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 			t,
 			"new_id_"+testSuffix,
 			followerPubKey,
-			[]string{"pubkey1", "pubkey2", targetPubKey},
+			[]string{"pubkey1", "pubkey2", targetPubKey1, targetPubKey2},
 		)
 
 		filters := nostr.Filters{
@@ -404,26 +439,39 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 			},
 		}
 
-		deviceEvent := helperCreateTestDeviceRegistrationEvent(
+		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
-			targetPubKey,
+			targetPubKey1,
 			"device1_"+testSuffix,
 			nostr.Tags{
 				{"t", "ios"},
-				{"token", "test_token_" + testSuffix},
+				{"token", "test_token1_" + testSuffix},
+			},
+			filters,
+		)
+
+		deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
+			t,
+			targetPubKey2,
+			"device2_"+testSuffix,
+			nostr.Tags{
+				{"t", "android"},
+				{"token", "test_token2_" + testSuffix},
 			},
 			filters,
 		)
 
 		require.NoError(t, query.AcceptEvents(t.Context(), oldFollowListEvent))
-		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
+		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
+		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 
 		notifications, err := pm.handleNewFollowerEvent(t.Context(), newFollowListEvent)
 
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications, 2, "Should have notifications for both new targets")
 	})
 }
 
@@ -493,7 +541,8 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	}
 	pm.deviceMutex.Unlock()
 
-	notifications := pm.createNewFollowerNotification(followListEvent, targetPubKey, profileEvent)
+	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey, profileEvent)
+	require.NoError(t, err)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
 	require.Len(t, notifications, 1, "Should create one notification")
@@ -507,8 +556,10 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
 
-	relevantEvents, ok := notification.Data["relevant_events"].([]string)
-	require.True(t, ok, "relevant_events should be a string slice")
-	require.Len(t, relevantEvents, 1, "Should contain one relevant event")
-	require.Equal(t, relevantEvents[0], string(profileJSON), "Relevant event should contain profile event content")
+	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
+	require.True(t, ok, "relevant_events should be a string")
+
+	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsCompressed)
+	require.Equal(t, `[`+string(profileJSON)+`]`, decompressed, "Decompressed relevant event should match profile event content")
+	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }
