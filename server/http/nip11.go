@@ -41,7 +41,7 @@ type (
 		FCMAndroidConfigs              []FCMConfig    `json:"fcm_android_configs"`
 		FCMIOSConfigs                  []FCMConfig    `json:"fcm_ios_configs"`
 		FCMWebConfigs                  []FCMConfig    `json:"fcm_web_configs"`
-		SystemMetrics                  *SystemMetrics `json:"system_metrics"`
+		SystemMetrics                  *SystemMetrics `json:"system_metrics,omitempty"`
 	}
 	Config struct {
 		MinLeadingZeroBits int
@@ -54,7 +54,7 @@ type (
 		cfg                  *Config
 		storagePath          string
 		commandPath          string
-		systemMetrics        *SystemMetrics
+		systemMetrics        *atomic.Pointer[SystemMetrics]
 		lastBandwidthBytes   uint64
 		lastBandwidthBytesAt int64
 	}
@@ -67,7 +67,7 @@ func NewNIP11Handler(ctx context.Context, cfg *Config, storagePath, commandPath 
 		cfg:           cfg,
 		storagePath:   storagePath,
 		commandPath:   commandPath,
-		systemMetrics: &SystemMetrics{},
+		systemMetrics: new(atomic.Pointer[SystemMetrics]),
 	}
 	go h.startSystemMetricsCollector(ctx)
 	return h
@@ -155,7 +155,7 @@ func (n *nip11handler) info() RelayInformationDocument {
 		FCMAndroidConfigs: androidConfigs,
 		FCMIOSConfigs:     iosConfigs,
 		FCMWebConfigs:     webConfigs,
-		SystemMetrics:     n.systemMetrics,
+		SystemMetrics:     n.systemMetrics.Load(),
 	}
 }
 
@@ -167,57 +167,72 @@ func isValidFCMConfig(config FCMConfig) bool {
 }
 
 func (n *nip11handler) startSystemMetricsCollector(ctx context.Context) {
-	for ctx.Err() == nil {
-		reqCtx, reqCancel := context.WithTimeout(ctx, systemMetricsCollectionTime)
-		cpuUsages, err := cpu.PercentWithContext(reqCtx, 0, false)
-		if err != nil {
-			log.Println(errors.Wrap(err, "failed to collect cpu usage for nip-11 system metrics"))
-			reqCancel()
-			continue
-		}
+	ticks := make(chan struct{}, 1)
 
-		memUsage, err := mem.VirtualMemoryWithContext(reqCtx)
-		if err != nil {
-			log.Println(errors.Wrap(err, "failed to collect memory usage for nip-11 system metrics"))
-			reqCancel()
-			continue
-		}
-		fileStorageDiskUsage, err := disk.Usage(n.storagePath)
-		if err != nil {
-			log.Println(errors.Wrap(err, "failed to collect file storage usage for nip-11 system metrics"))
-			reqCancel()
-			continue
-		}
-		commandStorageUsed := uint64(0)
-		if n.commandPath != "" {
-			commandStorageDiskUsage, err := disk.Usage(n.commandPath)
-			if err != nil {
-				log.Println(errors.Wrap(err, "failed to collect command storage usage for nip-11 system metrics"))
-				reqCancel()
-				continue
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		defer close(ticks)
+
+		for {
+			select {
+			case <-ticker.C:
+				select {
+				case ticks <- struct{}{}:
+				default:
+				}
+			case <-ctx.Done():
+				return
 			}
-			commandStorageUsed = commandStorageDiskUsage.Used
 		}
-		bandwidthUsage, err := net.IOCountersWithContext(reqCtx, false)
+	}()
+	for range ticks {
+		metrics, err := n.collectMetrics(ctx)
 		if err != nil {
-			log.Println(errors.Wrap(err, "failed to collect bandwidth usage for nip-11 system metrics"))
-			reqCancel()
-			continue
+			log.Println(errors.Wrap(err, "failed to collect system metrics"))
 		}
-
-		n.systemMetrics.UsedCPU = uint16(cpuUsages[0])
-		n.systemMetrics.UsedMemory = memUsage.Used
-		n.systemMetrics.UsedFileStorage = fileStorageDiskUsage.Used
-		n.systemMetrics.UsedDatabaseStorage = query.UsedDatabaseStorage
-		n.systemMetrics.UsedTotalStorage = n.systemMetrics.UsedFileStorage + n.systemMetrics.UsedDatabaseStorage + commandStorageUsed
-		n.systemMetrics.UsedBandwidth = n.calcBandwidth(bandwidthUsage)
-		reqCancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(systemMetricsCollectionTime):
-		}
+		n.systemMetrics.Store(metrics)
 	}
+}
+
+func (n *nip11handler) collectMetrics(ctx context.Context) (*SystemMetrics, error) {
+	reqCtx, reqCancel := context.WithTimeout(ctx, systemMetricsCollectionTime)
+	defer reqCancel()
+	cpuUsages, err := cpu.PercentWithContext(reqCtx, 0, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to collect cpu usage for nip-11 system metrics")
+	}
+
+	memUsage, err := mem.VirtualMemoryWithContext(reqCtx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to collect memory usage for nip-11 system metrics")
+	}
+	fileStorageDiskUsage, err := disk.Usage(n.storagePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to collect file storage usage for nip-11 system metrics")
+	}
+	commandStorageUsed := uint64(0)
+	if n.commandPath != "" {
+		commandStorageDiskUsage, err := disk.Usage(n.commandPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to collect command storage usage for nip-11 system metrics")
+		}
+		commandStorageUsed = commandStorageDiskUsage.Used
+	}
+	bandwidthUsage, err := net.IOCountersWithContext(reqCtx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to collect bandwidth usage for nip-11 system metrics")
+	}
+	usedDatabaseStorage := query.UsedDatabaseStorage.Load()
+
+	return &SystemMetrics{
+		UsedCPU:             uint16(cpuUsages[0]),
+		UsedMemory:          memUsage.Used,
+		UsedFileStorage:     fileStorageDiskUsage.Used,
+		UsedDatabaseStorage: usedDatabaseStorage,
+		UsedTotalStorage:    fileStorageDiskUsage.Used + usedDatabaseStorage + commandStorageUsed,
+		UsedBandwidth:       n.calcBandwidth(bandwidthUsage),
+	}, nil
 }
 
 func (n *nip11handler) calcBandwidth(counters []net.IOCountersStat) uint64 {

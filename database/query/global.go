@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -17,7 +18,7 @@ var (
 		Client *dbClient
 		Once   sync.Once
 	}
-	UsedDatabaseStorage uint64
+	UsedDatabaseStorage atomic.Uint64
 )
 
 type (
@@ -79,7 +80,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 			WithRelayURL(conf.RelayURL)
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
-		go globalDB.Client.startCollectingUsedDatabaseStorage(ctx)
+		go globalDB.Client.StartCollectingUsedDatabaseStorage(ctx)
 
 		go func() {
 			<-ctx.Done()
@@ -163,7 +164,7 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	}
 }
 
-func (db *dbClient) startCollectingUsedDatabaseStorage(ctx context.Context) {
+func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
 
 	go func() {
@@ -186,9 +187,10 @@ func (db *dbClient) startCollectingUsedDatabaseStorage(ctx context.Context) {
 
 	for range ticks {
 		queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		var err error
-		if UsedDatabaseStorage, err = db.queryDatabaseSize(queryCtx); err != nil {
-			log.Printf("failed to delete events: %v", err)
+		if usedDatabaseStorage, err := db.queryDatabaseSize(queryCtx); err != nil {
+			log.Printf("failed to query database size: %v", err)
+		} else {
+			UsedDatabaseStorage.Store(usedDatabaseStorage)
 		}
 		cancel()
 	}

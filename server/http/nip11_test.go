@@ -62,7 +62,7 @@ func initServer(serverCtx context.Context, port uint16) {
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,
-	}, nil, NewNIP11Handler(serverCtx, &Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, uploader.RootPath(), "../../server/http/.testdata"), map[string]gin.HandlerFunc{
+	}, nil, NewNIP11Handler(serverCtx, &Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),
 		"GET /files/:file":    uploader.Download(),
