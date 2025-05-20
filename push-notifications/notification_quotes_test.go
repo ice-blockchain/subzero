@@ -77,8 +77,8 @@ func TestProcessEventWithQuotes(t *testing.T) {
 		compressedEvent, ok := notification.Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
-		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
-		require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original")
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 	})
 
@@ -130,8 +130,8 @@ func TestProcessEventWithQuotes(t *testing.T) {
 		compressedEvent, ok := notifications[0].Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
-		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
-		require.Equal(t, ev.String(), string(decompressedEvent), "Decompressed event should match original")
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, ev.String(), decompressedEvent, "Decompressed event should match original")
 
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), notifications[0].Title, "Title should match mention notification type")
 		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), notifications[0].Body, "Body should match mention notification type")

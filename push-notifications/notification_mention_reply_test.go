@@ -164,8 +164,8 @@ func TestMention(t *testing.T) {
 	compressedEvent, ok := notifications[0].Data["event"].(string)
 	require.True(t, ok, "event should be a string")
 
-	decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
-	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+	decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+	require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original")
 	require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 }
 
@@ -298,7 +298,7 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")
 
-	decompressed := helperDecompressZlibAndDecodeBase64(t, []byte(relevantEventsCompressed))
-	require.Equal(t, `[`+profileEvent.Content+`]`, string(decompressed), "Decompressed content should match profile event content")
+	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsCompressed)
+	require.Equal(t, `[`+profileEvent.Content+`]`, decompressed, "Decompressed content should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }

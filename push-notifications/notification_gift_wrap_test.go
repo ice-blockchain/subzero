@@ -206,8 +206,8 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			compressedEvent, ok := notification.Data["event"].(string)
 			require.True(t, ok, "event should be a string for "+tc.description)
 
-			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
-			require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original for "+tc.description)
+			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+			require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original for "+tc.description)
 			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib for "+tc.description)
 		})
 	}
@@ -298,7 +298,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			compressedEvent, ok := notification.Data["event"].(string)
 			require.True(t, ok, "event should be a string")
 
-			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
+			decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
 			require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
 			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 		})
@@ -370,8 +370,8 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 		compressedEvent, ok := notification.Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
-		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
-		require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original")
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 	})
 }
@@ -440,7 +440,7 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 		compressedEvent, ok := notifications[0].Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
-		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, []byte(compressedEvent))
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
 		require.Equal(t, ev.String(), decompressedEvent, "Decompressed event should match original")
 		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
 	})

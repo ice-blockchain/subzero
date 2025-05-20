@@ -634,20 +634,26 @@ func (pm *PushNotificationManager) getTranslationWithRelevantInfo(notificationTy
 }
 
 func compressAndEncodeBase64(data string) (string, error) {
-	var compressed bytes.Buffer
-	zw, err := zlib.NewWriterLevel(&compressed, zlib.BestCompression)
+	var buf bytes.Buffer
+	base64Encoder := base64.NewEncoder(base64.StdEncoding, &buf)
+	defer base64Encoder.Close()
+	zw, err := zlib.NewWriterLevel(base64Encoder, zlib.BestCompression)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create zlib writer")
 	}
 	defer zw.Close()
+
 	if _, err := zw.Write([]byte(data)); err != nil {
 		return "", errors.Wrap(err, "failed to compress data")
 	}
+
 	if err := zw.Close(); err != nil {
 		return "", errors.Wrap(err, "failed to close zlib writer")
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(compressed.Bytes())
+	if err := base64Encoder.Close(); err != nil {
+		return "", errors.Wrap(err, "failed to close base64 encoder")
+	}
 
-	return encoded, nil
+	return buf.String(), nil
 }

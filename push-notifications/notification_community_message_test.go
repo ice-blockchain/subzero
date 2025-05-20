@@ -603,7 +603,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	relevantEventsCompressed, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")
 
-	decompressed := helperDecompressZlibAndDecodeBase64(t, []byte(relevantEventsCompressed))
+	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsCompressed)
 	require.Equal(t, `[`+profileEvent.Content+`]`, decompressed, "Decompressed content should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }
