@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package http
+package nip96
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/server/http/nip98"
 	"github.com/ice-blockchain/subzero/storage"
 )
 
@@ -41,7 +42,7 @@ var nip96Info string
 
 type storageHandler struct {
 	storageClient      storage.StorageClient
-	auth               AuthClient
+	auth               nip98.AuthClient
 	ionLibertyDisabled bool
 }
 
@@ -94,7 +95,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := getAuthHeader(gCtx)
+		authHeader := nip98.GetAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -205,7 +206,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := getAuthHeader(gCtx)
+		authHeader := nip98.GetAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -271,7 +272,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := getAuthHeader(gCtx)
+		authHeader := nip98.GetAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -305,7 +306,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 func (s *storageHandler) ListFiles() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := getAuthHeader(gCtx)
+		authHeader := nip98.GetAuthHeader(gCtx)
 		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
@@ -359,6 +360,6 @@ func uploadErr(message string) any {
 }
 
 func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool) Uploader {
-	s := &storageHandler{storageClient: storage.Client(), auth: NewAuth(), ionLibertyDisabled: ionLibertyDisabled}
+	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled}
 	return s
 }

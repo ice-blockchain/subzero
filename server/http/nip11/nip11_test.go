@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package http
+package nip11
 
 import (
 	"context"
@@ -28,7 +28,6 @@ import (
 const (
 	testDeadline       = 30 * time.Second
 	minLeadingZeroBits = 5
-	storageRoot        = "../../.test-uploads"
 )
 
 var (
@@ -53,22 +52,15 @@ func TestMain(m *testing.M) {
 }
 
 func initServer(serverCtx context.Context, port uint16) {
-	initStorage(serverCtx)
 	type globalCfg struct {
 		TLSCert string `yaml:"tls-cert"`
 		TLSKey  string `yaml:"tls-key"`
 	}
 	globalConfig := cfg.MustGet[globalCfg]()
-	uploader := NewUploadHandler(serverCtx, false)
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,
-	}, nil, NewNIP11Handler(serverCtx, &Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
-		"POST /files":         uploader.Upload(),
-		"GET /files":          uploader.ListFiles(),
-		"GET /files/:file":    uploader.Download(),
-		"DELETE /files/:file": uploader.Delete(),
-	})
+	}, nil, NewNIP11Handler(serverCtx, &Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, os.TempDir(), os.TempDir()), map[string]gin.HandlerFunc{})
 	time.Sleep(100 * time.Millisecond)
 }
 
