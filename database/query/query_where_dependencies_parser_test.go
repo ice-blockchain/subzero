@@ -1644,4 +1644,12 @@ func TestGenericKindWithProfileBadgeLookup(t *testing.T) {
 			}
 		})
 	}
+	t.Run("by kind", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{model.CustomIONKindEditableTextNote},
+			Search: "include:dependencies:kind1>kind30008+profile_badges>kind30009>kind8",
+		})
+		require.Len(t, events, 1)
+		require.Equal(t, model.CustomIONKindEditableTextNote, events[0].Kind)
+	})
 }
