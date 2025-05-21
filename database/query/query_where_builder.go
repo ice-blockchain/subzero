@@ -739,10 +739,24 @@ AND `)
 				[]int{nostr.KindProfileBadges, nostr.KindBadgeDefinition, nostr.KindBadgeAward},
 			) {
 
+			kind := b.PushValue(filterID, "start_kind", current.Start.Kind)
 			usersWithBadges := `e.kind = 30008 AND e.d_tag='profile_badges'
 AND (
-	(e.master_pubkey IN (select distinct (master_pubkey) from ` + cteName + `) and e.hidden=false)
-	OR     (e.pubkey IN (select distinct (pubkey)        from ` + cteName + `) and e.hidden=false)
+	(e.master_pubkey IN (
+		select
+			distinct (mk.master_pubkey)
+		from ` + cteName + ` mk
+		where
+			mk.kind =:` + kind + `
+		) and e.hidden=false)
+	OR
+	(e.pubkey IN (
+		select
+			distinct (pubkey)
+		from ` + cteName + ` pk
+		where
+			pk.kind =:` + kind + `
+		) and e.hidden=false)
 )
 AND e.hidden=false`
 			b.WriteString(usersWithBadges)
