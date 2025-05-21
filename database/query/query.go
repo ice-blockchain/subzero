@@ -432,7 +432,6 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 
 func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, replaceableEventsToRollback map[string]bool) *eventIterator {
 	var stmt string
-
 	values := []string{}
 	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
 	if len(replaceableEventsToRollback) > 0 {
@@ -623,11 +622,6 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 	if len(req.InsertOrReplace) == 0 && len(req.Rollback) == 0 {
 		return map[string]bool{}, []databaseFilterDelete{}, nil
 	}
-
-	req.InsertOrReplace = model.DeduplicateSlice(req.InsertOrReplace, func(elem databaseEvent) string {
-		return elem.Address()
-	})
-
 	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace, req.Rollback)
 	events := []*model.Event{}
 	replaceableEvents = map[string]bool{}

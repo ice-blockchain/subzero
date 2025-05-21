@@ -1732,39 +1732,3 @@ func TestQueryDependencyWithReply(t *testing.T) {
 	events := helperSelectEvents(t, db, f)
 	require.ElementsMatch(t, events, []*model.Event{&replyEvent, &rootEvent}, "should return both events") // root post, and reply using the dependency.
 }
-
-func TestRaceCondition(t *testing.T) {
-	t.Parallel()
-
-	db := helperNewDatabase(t)
-	defer db.Close()
-
-	pk := model.GeneratePrivateKey()
-
-	t.Run("single event, then duplicate in a batch", func(t *testing.T) {
-		var ev1 model.Event
-		ev1.Kind = model.CustomIONKindEditableTextNote
-		ev1.CreatedAt = nostr.Now()
-		ev1.Content = "hello world"
-		ev1.Tags = model.Tags{{"d", "mynote"}}
-		require.NoError(t, ev1.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev1))
-
-		var ev2 model.Event
-		ev2.Kind = nostr.KindTextNote
-		ev2.CreatedAt = nostr.Now()
-		ev2.Content = "hello world 2"
-		require.NoError(t, ev2.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev1, &ev2))
-	})
-	t.Run("duplicate events in a batch", func(t *testing.T) {
-		var ev1 model.Event
-		ev1.Kind = model.CustomIONKindEditableTextNote
-		ev1.CreatedAt = nostr.Now()
-		ev1.Content = "hello world"
-		ev1.Tags = model.Tags{{"d", "mynote2"}}
-		require.NoError(t, ev1.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
-		require.NoError(t, db.AcceptEvents(t.Context(), &ev1, &ev1))
-	})
-}
