@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -212,10 +214,19 @@ func (n *nip11handler) collectMetrics(ctx context.Context) (*SystemMetrics, erro
 		return nil, errors.Wrap(err, "failed to collect file storage usage for nip-11 system metrics")
 	}
 	commandStorageUsed := uint64(0)
-	if n.commandPath != "" {
+	_, err = os.Stat(n.commandPath)
+	if n.commandPath != "" && !os.IsNotExist(err) {
 		commandStorageDiskUsage, err := disk.Usage(n.commandPath)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to collect command storage usage for nip-11 system metrics")
+			if strings.Contains(err.Error(), "no such file or directory") {
+				err = nil
+				commandStorageDiskUsage = &disk.UsageStat{
+					Used: 0,
+				}
+			}
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to collect command storage usage for nip-11 system metrics")
+			}
 		}
 		commandStorageUsed = commandStorageDiskUsage.Used
 	}
