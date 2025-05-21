@@ -282,6 +282,38 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 	return sub
 }
 
+func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	sub = h.prepareSubscription(ctx, sub)
+
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	for i, getter := range wsSubscriptionListeners {
+		for event, err := range getter(ctx, sub) {
+			if err != nil {
+				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
+			}
+
+			if !canForwardEventContext(ctx, event) {
+				continue
+			} else if sub.Reduce != nil && sub.Reduce(event) {
+				continue
+			}
+
+			err := h.writeResponse(respWriter,
+				&nostr.EventEnvelope{
+					SubscriptionID: &sub.SubscriptionID,
+					Events:         []*nostr.Event{&event.Event},
+				})
+			if err != nil {
+				return errors.Wrapf(err, "failed to write event[%s]", event.String())
+			}
+		}
+	}
+
+	return nil
+}
+
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
@@ -300,30 +332,22 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 			}
 		}
 	}
+
+	var err error
 	if wsSubscriptionListeners != nil {
-		sub = h.prepareSubscription(ctx, sub)
-		fetchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		for _, listener := range wsSubscriptionListeners {
-			for event, err := range listener(fetchCtx, sub) {
-				if err != nil {
-					return errors.Wrapf(err, "failed to fetch events for subscription %+v", sub)
-				} else if !canForwardEventContext(fetchCtx, event) {
-					continue
-				} else if sub.Reduce != nil && sub.Reduce(event) {
-					continue
-				}
-				wErr := h.writeResponse(respWriter, &nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID, Events: []*nostr.Event{&event.Event}})
-				if wErr != nil {
-					return errors.Wrapf(wErr, "failed to write event[%+v]", event)
-				}
-			}
-		}
+		err = h.streamEvents(ctx, respWriter, sub)
 	} else {
 		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
 	}
 
-	err := h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
+	if err != nil {
+		return errors.Join(err, h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+			SubscriptionID: sub.SubscriptionID,
+			Reason:         err.Error(),
+		}))
+	}
+
+	err = h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
 	if err == nil {
 		if sub.OneShot {
 			err = h.writeResponse(respWriter, &nostr.ClosedEnvelope{
@@ -371,7 +395,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 	}
 
 	if err := wsEventListener(ctx, events...); err != nil {
-		return errors.Wrap(err, "failed to store events")
+		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
 
 	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {

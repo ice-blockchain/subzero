@@ -21,6 +21,7 @@ type (
 	Event struct {
 		nostr.Event
 	}
+	Events                  []*Event
 	EventSignAlg            string
 	EventKeyAlg             string
 	EphemeralEmbeddingEvent struct {
@@ -222,6 +223,17 @@ func (e *Event) Address() string {
 	}
 
 	return e.ID
+}
+
+func (events Events) String() string {
+	var sb strings.Builder
+	for i, e := range events {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(e.String())
+	}
+	return sb.String()
 }
 
 func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {

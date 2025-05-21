@@ -88,13 +88,13 @@ func init() {
 	command.RegisterRollbackListener(query.RollbackEvents)
 	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
+			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", model.Events(events).String())
 		}
 		return nil
 	})
 	command.RegisterCommitListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to process NIP-94 events")
+			return errors.Wrapf(err, "storage.AcceptEvents failed: %s", model.Events(events).String())
 		}
 		if err := query.CommitEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to delete outdated replaced events")
@@ -123,27 +123,27 @@ func init() {
 			}
 		}
 		if err := query.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
+			return errors.Wrap(err, "query.AcceptEvent failed")
 		}
 		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
-			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
+			return errors.Wrap(err, "dvm.AcceptEvent failed")
 		}
 		if err := command.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
+			return errors.Wrap(err, "command.AcceptEvent failed")
 		}
 
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to process NIP-94 events")
+			return errors.Wrap(err, "storage.AcceptEvents failed")
 		}
 
 		go func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
-				log.Printf("failed to pushnotifications.AcceptEvents(%#v): %v", events, err)
+				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		}()
 		go func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
-				log.Printf("failed to hashtagssender.AcceptEvents(%#v): %v", events, err)
+				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		}()
 
