@@ -51,6 +51,51 @@ DO $$ BEGIN
     END IF;
 END $$;
 --------
+CREATE OR REPLACE FUNCTION to_timestamp_nano(unix_time bigint)
+RETURNS bigint AS $$
+DECLARE
+    digits integer;
+BEGIN
+    digits := length(unix_time::text);
+
+    RETURN CASE
+        WHEN digits <= 10 THEN unix_time * 1000000000    -- seconds to nanoseconds.
+        WHEN digits <= 13 THEN unix_time * 1000000       -- milliseconds to nanoseconds.
+        WHEN digits <= 16 THEN unix_time * 1000          -- microseconds to nanoseconds.
+        ELSE unix_time                                   -- already in nanoseconds.
+    END;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+--------
+CREATE OR REPLACE FUNCTION get_current_timestamp_nano()
+RETURNS bigint AS $$
+BEGIN
+    RETURN (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000000000)::bigint;
+END;
+$$ LANGUAGE plpgsql;
+--------
+DO $$ BEGIN
+    -- Check if events table has created_at field of type TIMESTAMP.
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'events'
+        AND column_name = 'created_at'
+        AND data_type = 'timestamp without time zone'
+    ) THEN
+        ALTER TABLE events ADD COLUMN temp_created_at bigint;
+        UPDATE events SET
+            temp_created_at = EXTRACT(EPOCH FROM created_at)::bigint;
+
+        ALTER TABLE events DROP COLUMN created_at;
+        ALTER TABLE events RENAME COLUMN temp_created_at TO created_at;
+        ALTER TABLE events ALTER COLUMN created_at SET NOT NULL;
+
+        ALTER TABLE events ADD COLUMN lookup_created_at bigint GENERATED ALWAYS AS (to_timestamp_nano(created_at)) STORED;
+        ALTER TABLE events ALTER COLUMN lookup_created_at SET NOT NULL;
+    END IF;
+END $$;
+--------
 create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
 where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
 --------
@@ -71,18 +116,19 @@ where kind = 31750;
 --   created_at DESC
 CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
 CREATE INDEX IF NOT EXISTS idx_events_address ON events(address) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_id_created_at ON events(id, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_kind_created_at ON events(kind, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_pubkey_created_at ON events(pubkey, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_master_pubkey_created_at ON events(master_pubkey, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_created_at ON events(kind, pubkey, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_kind_master_pubkey_created_at ON events(kind, master_pubkey, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_id_kind_created_at ON events(id, kind, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_created_at ON events(id, pubkey, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_id_master_pubkey_created_at ON events(id, master_pubkey, created_at DESC) WHERE hidden = FALSE;;
-CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_created_at ON events(pubkey, master_pubkey, created_at DESC) WHERE hidden = FALSE;
-CREATE INDEX IF NOT EXISTS idx_events_h_tag_created_at  ON events(h_tag, created_at DESC) WHERE kind = 1753 AND hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_lookup_created_at ON events(lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_id_lookup_created_at ON events(id, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_kind_lookup_created_at ON events(kind, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_lookup_created_at ON events(pubkey, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_master_pubkey_lookup_created_at ON events(master_pubkey, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_kind_pubkey_lookup_created_at ON events(kind, pubkey, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_kind_master_pubkey_lookup_created_at ON events(kind, master_pubkey, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_id_kind_lookup_created_at ON events(id, kind, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_id_pubkey_lookup_created_at ON events(id, pubkey, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_id_master_pubkey_lookup_created_at ON events(id, master_pubkey, lookup_created_at DESC) WHERE hidden = FALSE;;
+CREATE INDEX IF NOT EXISTS idx_events_pubkey_master_pubkey_lookup_created_at ON events(pubkey, master_pubkey, lookup_created_at DESC) WHERE hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_h_tag_lookup_created_at  ON events(h_tag, lookup_created_at DESC) WHERE kind = 1753 AND hidden = FALSE;
+CREATE INDEX IF NOT EXISTS idx_events_has_videos_has_images_lookup_created_at ON events(has_videos, has_images, lookup_created_at DESC) WHERE hidden = FALSE;
 
 -- Special index for inserts.
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
@@ -257,7 +303,7 @@ BEGIN
     )
     SELECT
         x.kind AS kind,
-        to_timestamp(0) AS created_at,
+        0 AS created_at,
         x.id AS id,
         x.pubkey AS pubkey,
         COALESCE((SELECT value->>1 FROM jsonb_array_elements(x.tags) AS value WHERE value->>0 = 'b' LIMIT 1), '') AS master_pubkey,
@@ -381,6 +427,26 @@ DO $$ BEGIN
     end if;
     ALTER TABLE replaceable_events_before_update ALTER COLUMN replaced_by_id DROP DEFAULT;
 END $$;
+--------
+DO $$ BEGIN
+    -- Check if replaceable_events_before_update table has created_at field of type TIMESTAMP.
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'replaceable_events_before_update'
+        AND column_name = 'created_at'
+        AND data_type = 'timestamp without time zone'
+    ) THEN
+        ALTER TABLE replaceable_events_before_update ADD COLUMN temp_created_at bigint;
+        UPDATE replaceable_events_before_update SET
+            temp_created_at = EXTRACT(EPOCH FROM created_at)::bigint;
+
+        ALTER TABLE replaceable_events_before_update DROP COLUMN created_at;
+        ALTER TABLE replaceable_events_before_update RENAME COLUMN temp_created_at TO created_at;
+        ALTER TABLE replaceable_events_before_update ALTER COLUMN created_at SET NOT NULL;
+    END IF;
+END $$;
+--------
 CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_events_before_update(replaced_by_id);
 
 CREATE OR REPLACE FUNCTION events_store_replaceable_data_before_update()
@@ -991,13 +1057,51 @@ CREATE TABLE IF NOT EXISTS ranked_events
     score             real      not null
 );
 --------
+DO $$ BEGIN
+    -- Check if ranked_events table has created_at field of type TIMESTAMP.
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'ranked_events'
+        AND column_name = 'event_created_at'
+        AND data_type = 'timestamp without time zone'
+    ) THEN
+        ALTER TABLE ranked_events ADD COLUMN temp_created_at bigint;
+        UPDATE ranked_events SET
+            temp_created_at = EXTRACT(EPOCH FROM event_created_at)::bigint;
+
+        ALTER TABLE ranked_events DROP COLUMN event_created_at;
+        ALTER TABLE ranked_events RENAME COLUMN temp_created_at TO event_created_at;
+        ALTER TABLE ranked_events ALTER COLUMN event_created_at SET NOT NULL;
+    END IF;
+END $$;
+--------
 create index if not exists ranked_events_points_ix           on ranked_events(points) where points <= 0;
 create index if not exists ranked_events_score_ix            on ranked_events(score desc);
 create index if not exists ranked_events_created_at_score_ix on ranked_events(event_created_at desc, score desc);
 --------
-CREATE OR REPLACE FUNCTION event_calculate_score(p integer, created_at timestamp) RETURNS REAL AS $$
+CREATE OR REPLACE FUNCTION to_timestamp_seconds(unix_time bigint)
+RETURNS bigint AS $$
+DECLARE
+    digits integer;
 BEGIN
-    RETURN (round((p / power((1 + extract(EPOCH from (CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, created_at))) /3600.0), 0.9)), 4));
+    digits := length(unix_time::text);
+
+    RETURN CASE
+        WHEN digits <= 10 THEN unix_time                  -- already in seconds
+        WHEN digits <= 13 THEN unix_time / 1000           -- milliseconds to seconds
+        WHEN digits <= 16 THEN unix_time / 1000000        -- microseconds to seconds
+        ELSE unix_time / 1000000000                       -- nanoseconds to seconds
+    END;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+--------
+CREATE OR REPLACE FUNCTION event_calculate_score(p integer, created_at bigint) RETURNS REAL AS $$
+DECLARE
+    created_at_timestamp timestamp;
+BEGIN
+    created_at_timestamp := to_timestamp(to_timestamp_seconds(created_at));
+    RETURN (round((p / power((1 + extract(EPOCH from (CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, created_at_timestamp))) /3600.0), 0.9)), 4));
 END;
 $$ LANGUAGE plpgsql;
 --------
@@ -1042,7 +1146,7 @@ BEGIN
     where
         e.hidden = false
         and e.deleted = false
-        and e.created_at > to_timestamp(0)
+        and e.lookup_created_at > 0
         and e.kind in (1, 30023, 30175)
         and (NEW.system_kind is null or NEW.system_kind != 3)
     on conflict (event_id) do update
@@ -1072,7 +1176,7 @@ BEGIN
             and e.address = je->>1
             and e.hidden = false
             and e.deleted = false
-            and e.created_at > to_timestamp(0)
+            and e.lookup_created_at > 0
             and e.kind IN (1, 30023, 30175)
             and (OLD.system_kind IS NULL or OLD.system_kind != 3)
             and (OLD.system_kind IS NULL or case
@@ -1142,7 +1246,7 @@ BEGIN
             from events e
             where e.address = je->>1
             and e.hidden = false
-            and e.created_at > to_timestamp(0)
+            and e.lookup_created_at > 0
             and e.kind in (1, 30023, 30175)
             and (OLD.system_kind is null or OLD.system_kind != 3)
             and (OLD.system_kind is null or case
@@ -1190,7 +1294,7 @@ BEGIN
     where
         e.hidden = false
         and e.deleted = false
-        and e.created_at > to_timestamp(0)
+        and e.lookup_created_at > 0
         and e.kind in (1, 30023, 30175)
         and NEW.deleted = false
         and (NEW.system_kind is null or NEW.system_kind != 3)
