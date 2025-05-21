@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -17,6 +18,7 @@ var (
 		Client *dbClient
 		Once   sync.Once
 	}
+	UsedDatabaseStorage atomic.Uint64
 )
 
 type (
@@ -78,6 +80,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 			WithRelayURL(conf.RelayURL)
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
+		go globalDB.Client.StartCollectingUsedDatabaseStorage(ctx)
 
 		go func() {
 			<-ctx.Done()
@@ -156,6 +159,38 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 		deleteCtx, cancel := context.WithTimeout(ctx, time.Minute)
 		if err := db.deleteExpiredEvents(deleteCtx); err != nil {
 			log.Printf("failed to delete expired events: %v", err)
+		}
+		cancel()
+	}
+}
+
+func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
+	ticks := make(chan struct{}, 1)
+	ticks <- struct{}{}
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		defer close(ticks)
+
+		for {
+			select {
+			case <-ticker.C:
+				select {
+				case ticks <- struct{}{}:
+				default:
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	for range ticks {
+		queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if usedDatabaseStorage, err := db.queryDatabaseSize(queryCtx); err != nil {
+			log.Printf("failed to query database size: %v", err)
+		} else {
+			UsedDatabaseStorage.Store(usedDatabaseStorage)
 		}
 		cancel()
 	}

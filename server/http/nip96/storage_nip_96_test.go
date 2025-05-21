@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package http
+package nip96
 
 import (
 	"bytes"
@@ -25,6 +25,7 @@ import (
 	"time"
 
 	gomime "github.com/cubewise-code/go-mime"
+	"github.com/gin-gonic/gin"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip94"
@@ -36,9 +37,59 @@ import (
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/http/nip11"
+	"github.com/ice-blockchain/subzero/server/http/nip98"
+	wsserver "github.com/ice-blockchain/subzero/server/ws"
+	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/storage"
 	storagefixture "github.com/ice-blockchain/subzero/storage/fixture"
 )
+
+const (
+	minLeadingZeroBits = 5
+	storageRoot        = "../../.test-uploads"
+)
+
+var (
+	pubsubServer    *fixture.MockService
+	privKey, pubKey = model.GenerateKeyPair()
+)
+
+func TestMain(m *testing.M) {
+	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+
+	addr, release := query.NewTestDatabase(serverCtx)
+	query.MustInit(serverCtx, query.WithConfig(&query.Config{
+		URL: addr,
+	}))
+
+	initServer(serverCtx, 9996)
+	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
+	code := m.Run()
+	serverCancel()
+	release()
+	os.Exit(code)
+}
+
+func initServer(serverCtx context.Context, port uint16) {
+	initStorage(serverCtx)
+	type globalCfg struct {
+		TLSCert string `yaml:"tls-cert"`
+		TLSKey  string `yaml:"tls-key"`
+	}
+	globalConfig := cfg.MustGet[globalCfg]()
+	uploader := NewUploadHandler(serverCtx, false)
+	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
+		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		Port:      port,
+	}, nil, nip11.NewNIP11Handler(serverCtx, &nip11.Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
+		"POST /files":         uploader.Upload(),
+		"GET /files":          uploader.ListFiles(),
+		"GET /files/:file":    uploader.Download(),
+		"DELETE /files/:file": uploader.Delete(),
+	})
+	time.Sleep(100 * time.Millisecond)
+}
 
 //go:embed .testdata
 var testdata embed.FS
@@ -149,7 +200,7 @@ func TestNIP96(t *testing.T) {
 		}}
 		require.NoError(t, nip94EventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
-		cfg.MustInit("./../../server/http/.testdata/storage-2nd-instance.yaml")
+		cfg.MustInit("./../../../server/http/nip96/.testdata/storage-2nd-instance.yaml")
 		initStorage(ctx)
 		require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
 		require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
@@ -495,7 +546,7 @@ func generateAuthHeader(t *testing.T, sk, method, fileHash string, urlValue *url
 
 	event := model.Event{
 		Event: nostr.Event{
-			Kind:      nostrHttpAuthKind,
+			Kind:      nip98.NostrHttpAuthKind,
 			PubKey:    pk,
 			CreatedAt: nostr.Now(),
 			Tags: model.Tags{

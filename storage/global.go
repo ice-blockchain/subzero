@@ -329,3 +329,7 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 	}
 	return errors.Wrapf(err, "failed to delete files for expired events")
 }
+
+func (c *client) RootPath() string {
+	return c.rootStoragePath
+}

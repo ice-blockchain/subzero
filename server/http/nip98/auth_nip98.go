@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package http
+package nip98
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type (
 
 const (
 	tokenExpirationWindow = 15 * time.Minute
-	nostrHttpAuthKind     = 27235
+	NostrHttpAuthKind     = 27235
 )
 
 var (
@@ -49,7 +49,7 @@ func NewAuth() AuthClient {
 	return &authNostr{}
 }
 
-func getAuthHeader(gCtx *gin.Context) string {
+func GetAuthHeader(gCtx *gin.Context) string {
 	knownTypes := []string{"Bearer", "Nostr", "IONConnect"}
 
 	val := gCtx.GetHeader("Authorization")
@@ -78,8 +78,8 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token signature")
 	}
 
-	if event.Kind != nostrHttpAuthKind {
-		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token event kind: %d, expected: %d", event.Kind, nostrHttpAuthKind)
+	if event.Kind != NostrHttpAuthKind {
+		return nil, errors.Wrapf(ErrTokenInvalid, "invalid token event kind: %d, expected: %d", event.Kind, NostrHttpAuthKind)
 	}
 	if event.CreatedAt.Time().After(now.Add(tokenExpirationWindow)) || event.CreatedAt.Time().Before(now.Add(-tokenExpirationWindow)) {
 		return nil, ErrTokenExpired

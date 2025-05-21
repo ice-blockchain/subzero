@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package http
+package nip98
 
 import (
 	"net/http"
@@ -52,7 +52,7 @@ func TestGetAuthHeader(t *testing.T) {
 			}
 			c.Request.Header.Set("Authorization", tt.authHeader)
 
-			result := getAuthHeader(c)
+			result := GetAuthHeader(c)
 			require.Equal(t, tt.expectedResult, result)
 		})
 	}

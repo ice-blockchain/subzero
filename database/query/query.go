@@ -1110,3 +1110,11 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 		return false
 	}
 }
+
+func (db *dbClient) queryDatabaseSize(ctx context.Context) (uint64, error) {
+	sizePtr, err := connector.Get[uint64](ctx, db.db, `SELECT pg_database_size(current_database())`)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to query database size")
+	}
+	return *sizePtr, nil
+}

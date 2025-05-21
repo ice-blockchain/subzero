@@ -187,3 +187,8 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 func (c *consensus) AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	return c.broadcastUserEvents(ctx, events...)
 }
+
+func RootPath() string {
+	conf := cfg.MustGet[Config]()
+	return conf.AbsoluteRootPath
+}
