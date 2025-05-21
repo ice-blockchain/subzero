@@ -5,6 +5,7 @@ package command
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -38,7 +39,8 @@ type (
 const consensusTimeout = time.Second * 25
 
 var (
-	ErrMultipleMasterKeys = errors.New("cannot broadcast single batch to multiple master keys")
+	ErrMultipleMasterKeys             = errors.New("cannot broadcast single batch to multiple master keys")
+	ErrUsernameProofOfOwnershipFailed = errors.New("username proof of ownership failed")
 )
 
 func (c *consensus) waitForStop(ctx context.Context) {
@@ -318,6 +320,15 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			if badgeDefinitionIndex == -1 {
 				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge definition found in events or no p tag %v", ev.ID)
 			}
+			if needToCheckUsernameProofOfOwnership, username := needToCheckUsernameProofOfOwnership(ev); needToCheckUsernameProofOfOwnership {
+				pTag := ev.GetTag("p")
+				if pTag == nil || pTag.Value() == "" {
+					return "", errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "no p tag in badge award %v", ev.ID)
+				}
+				if err := checkUsernameProfileMetadata(incomingEvents, pTag.Value(), username, ev.ID); err != nil {
+					return "", errors.Wrap(err, "failed to check username proof of ownership for badge award")
+				}
+			}
 			if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
 				masterKey = pTag.Value()
 			}
@@ -334,6 +345,15 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or no p tag %v", ev.ID)
 			}
 			badgeAward := incomingEvents[badgeAwardIndex]
+			if needToCheckUsernameProofOfOwnership, username := needToCheckUsernameProofOfOwnership(ev); needToCheckUsernameProofOfOwnership {
+				pTag := badgeAward.GetTag("p")
+				if pTag == nil || pTag.Value() == "" {
+					return "", errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "no p tag in badge award for definition %v", ev.ID)
+				}
+				if err := checkUsernameProfileMetadata(incomingEvents, pTag.Value(), username, ev.ID); err != nil {
+					return "", errors.Wrapf(err, "failed to check username proof of ownership for badge award %v", ev.ID)
+				}
+			}
 			if pTag := badgeAward.GetTag("p"); pTag != nil && pTag.Value() != "" {
 				masterKey = pTag.Value()
 			}
@@ -554,4 +574,49 @@ func (c *consensus) convertRelaysToBroadcastEndpoints(relays ...string) []string
 		discoveryAddresses = append(discoveryAddresses, fmt.Sprintf("%v:%v", u.Hostname(), discoveryPort))
 	}
 	return discoveryAddresses
+}
+
+func needToCheckUsernameProofOfOwnership(ev *model.Event) (res bool, username string) {
+	const usernameProofOfOwnership = "username_proof_of_ownership"
+	if ev.Kind == nostr.KindBadgeAward {
+		if aTag := ev.GetTag("a"); aTag != nil && len(aTag) >= 2 {
+			parts := strings.Split(aTag.Value(), ":")
+			if len(parts) == 4 && parts[2] == usernameProofOfOwnership {
+				return true, parts[3]
+			}
+		}
+	} else if ev.Kind == nostr.KindBadgeDefinition {
+		if dTag := ev.GetTag("d"); dTag != nil && len(dTag) >= 2 {
+			parts := strings.Split(dTag.Value(), ":")
+			if len(parts) == 2 && parts[0] == usernameProofOfOwnership {
+				return true, parts[1]
+			}
+		}
+	}
+
+	return false, ""
+}
+
+func checkUsernameProfileMetadata(incomingEvents []*model.Event, pTagValue string, username string, eventID string) error {
+	profileMetadataIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+		if e.Kind != nostr.KindProfileMetadata {
+			return false
+		}
+		if e.GetMasterPublicKey() != pTagValue {
+			return false
+		}
+		var profileMetadata struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal([]byte(e.Content), &profileMetadata); err != nil {
+			return false
+		}
+
+		return profileMetadata.Username == username
+	})
+	if profileMetadataIndex == -1 {
+		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "no profile metadata found in events or no p tag %v", eventID)
+	}
+
+	return nil
 }

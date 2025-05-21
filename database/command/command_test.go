@@ -322,6 +322,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			expected := map[int]string{
 				nostr.KindBadgeDefinition: addr,
 				nostr.KindBadgeAward:      addr,
+				nostr.KindProfileMetadata: addr,
 			}
 			require.Equal(t, expected[evs[0].Kind], userAddress)
 		}
@@ -363,5 +364,180 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 		require.NoError(t, badgeAwardEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeAwardEvent))
 		require.NoError(t, node.broadcastUserEvents(t.Context(), badgeDefinitionEvent, badgeAwardEvent))
+	})
+
+	t.Run("username_proof_of_ownership", func(t *testing.T) {
+		username := "testuser123"
+		profileMetadata := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
+			Content:   fmt.Sprintf(`{"name":"Test User","username":"%s"}`, username),
+		}}
+		require.NoError(t, profileMetadata.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), profileMetadata))
+
+		badgeDefinitionEvent := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindBadgeDefinition,
+				Tags: nostr.Tags{
+					{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+					{"name", "Username Verification"},
+					{"description", "Proof of ownership for username"},
+					{"image", "https://bogus.com/verified.jpg", "1024x1024"},
+					{"thumb", "https://bogus.com/verified_thumb.jpg", "256x256"},
+				},
+			},
+		}
+		require.NoError(t, badgeDefinitionEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeDefinitionEvent))
+
+		badgeAwardEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, username)},
+				[]string{"p", userPubkey},
+			},
+		}}
+		require.NoError(t, badgeAwardEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeAwardEvent))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), badgeDefinitionEvent, badgeAwardEvent, profileMetadata))
+
+		wrongUsername := "wrongusername"
+		badDefinitionWrongUsername := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindBadgeDefinition,
+				Tags: nostr.Tags{
+					{"d", fmt.Sprintf("username_proof_of_ownership:%s", wrongUsername)},
+					{"name", "Wrong Username"},
+					{"description", "This should fail"},
+				},
+			},
+		}
+		require.NoError(t, badDefinitionWrongUsername.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		badgeAwardWrongUsername := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, wrongUsername)},
+				[]string{"p", userPubkey},
+			},
+		}}
+		require.NoError(t, badgeAwardWrongUsername.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		err := node.broadcastUserEvents(t.Context(), badDefinitionWrongUsername, badgeAwardWrongUsername)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no profile metadata found")
+	})
+
+	t.Run("missing_profile_metadata", func(t *testing.T) {
+		username := "verifyUsername"
+		badgeDefinitionEvent := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindBadgeDefinition,
+				Tags: nostr.Tags{
+					{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+					{"name", "Username Verification"},
+					{"description", "Proof of ownership for username without profile"},
+				},
+			},
+		}
+		require.NoError(t, badgeDefinitionEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeDefinitionEvent))
+
+		badgeAwardEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, username)},
+				[]string{"p", userPubkey},
+			},
+		}}
+		require.NoError(t, badgeAwardEvent.SignWithAlg(heimdallPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeAwardEvent))
+
+		err := node.broadcastUserEvents(t.Context(), badgeDefinitionEvent, badgeAwardEvent)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no profile metadata found")
+	})
+}
+
+func TestCheckUsernameProofOfOwnership(t *testing.T) {
+	t.Parallel()
+
+	t.Run("badge_award_with_username_proof", func(t *testing.T) {
+		username := "testuser123"
+		event := &model.Event{Event: nostr.Event{
+			Kind: nostr.KindBadgeAward,
+			Tags: model.Tags{
+				[]string{"a", fmt.Sprintf("30009:pubkey:username_proof_of_ownership:%s", username)},
+			},
+		}}
+
+		needCheck, extractedUsername := needToCheckUsernameProofOfOwnership(event)
+		require.True(t, needCheck)
+		require.Equal(t, username, extractedUsername)
+	})
+
+	t.Run("badge_definition_with_username_proof", func(t *testing.T) {
+		username := "testuser123"
+		event := &model.Event{Event: nostr.Event{
+			Kind: nostr.KindBadgeDefinition,
+			Tags: model.Tags{
+				[]string{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+			},
+		}}
+
+		needCheck, extractedUsername := needToCheckUsernameProofOfOwnership(event)
+		require.True(t, needCheck)
+		require.Equal(t, username, extractedUsername)
+	})
+
+	t.Run("badge_award_without_username_proof", func(t *testing.T) {
+		event := &model.Event{Event: nostr.Event{
+			Kind: nostr.KindBadgeAward,
+			Tags: model.Tags{
+				[]string{"a", "30009:pubkey:regular_badge"},
+			},
+		}}
+
+		needCheck, extractedUsername := needToCheckUsernameProofOfOwnership(event)
+		require.False(t, needCheck)
+		require.Empty(t, extractedUsername)
+	})
+
+	t.Run("badge_definition_without_username_proof", func(t *testing.T) {
+		event := &model.Event{Event: nostr.Event{
+			Kind: nostr.KindBadgeDefinition,
+			Tags: model.Tags{
+				[]string{"d", "regular_badge"},
+			},
+		}}
+
+		needCheck, extractedUsername := needToCheckUsernameProofOfOwnership(event)
+		require.False(t, needCheck)
+		require.Empty(t, extractedUsername)
+	})
+
+	t.Run("other_event_type", func(t *testing.T) {
+		event := &model.Event{Event: nostr.Event{
+			Kind: nostr.KindTextNote,
+			Tags: model.Tags{
+				[]string{"d", "username_proof_of_ownership:testuser"},
+			},
+		}}
+
+		needCheck, extractedUsername := needToCheckUsernameProofOfOwnership(event)
+		require.False(t, needCheck)
+		require.Empty(t, extractedUsername)
 	})
 }
