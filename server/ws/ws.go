@@ -136,6 +136,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			log.Printf("WARN: notification failed: %v", err)
 			err = nil
 		}
+		if err != nil {
+			log.Printf("ERROR: cannot process events: %v", err)
+		}
 		logOperation(time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
 		sendStart := time.Now()
 		for i := range e.Events {
@@ -144,7 +147,6 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				OK:      true,
 			}
 			if err != nil {
-				log.Printf("ERROR: failed to handle event %v: %v", e.Events[i], err)
 				resp.OK = false
 				resp.Reason = err.Error()
 			}

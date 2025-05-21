@@ -138,7 +138,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	}
 
 	// Is it a soft delete?
-	if len(e.Content) < 1 {
+	if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
 		switch e.Kind {
 		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 			val, err := strconv.ParseInt(e.GetTag("published_at").Value(), 10, 64)
@@ -633,6 +633,19 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 
 		return nil
 	})
+	if errors.Is(handleError(sErr), ErrRaceCondition) {
+		// TODO: revisit this logic after fixing MERGE statement.
+		clear(replaceableEvents)
+		clear(events)
+		sErr = insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
+			if dbEvent.Event.IsReplaceable() || nostr.IsAddressableKind(dbEvent.Event.Kind) {
+				replaceableEvents[dbEvent.ID] = dbEvent.SaveMergeAction == "INSERT"
+			}
+			events = append(events, &dbEvent.Event)
+
+			return nil
+		})
+	}
 	if sErr != nil {
 		sErr = errors.Wrap(handleError(sErr), "failed to exec insert event sql")
 	}
