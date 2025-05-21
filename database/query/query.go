@@ -138,7 +138,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	}
 
 	// Is it a soft delete?
-	if len(e.Content) < 1 {
+	if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
 		switch e.Kind {
 		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 			val, err := strconv.ParseInt(e.GetTag("published_at").Value(), 10, 64)
