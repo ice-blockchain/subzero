@@ -430,7 +430,11 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 	return err
 }
 
-func (db *dbClient) saveEvents(ctx context.Context, events []databaseEvent, replaceableEventsToRollback map[string]bool) *eventIterator {
+func (db *dbClient) saveEvents(
+	ctx context.Context,
+	events []databaseEvent,
+	replaceableEventsToRollback map[string]bool,
+) (insertedEvents []*databaseEvent, err error) {
 	var stmt string
 	values := []string{}
 	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
@@ -612,45 +616,33 @@ WHEN NOT MATCHED THEN
 		merge_action() as savemergeaction;
 `
 
-	return &eventIterator{
-		Fetch: func() (internalEventIterator, error) {
-			return connector.ExecIterator[databaseEvent](ctx, db.db, stmt, params...)
-		}}
+	return connector.ExecManyWithCustomRetry[databaseEvent](
+		ctx,
+		db.db,
+		func(err error) (doRetry bool) {
+			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation)
+		},
+		stmt,
+		params...,
+	)
 }
 
 func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) (replaceableEvents map[string]bool, inserted []databaseFilterDelete, err error) {
 	if len(req.InsertOrReplace) == 0 && len(req.Rollback) == 0 {
 		return map[string]bool{}, []databaseFilterDelete{}, nil
 	}
-	insertedEvents := db.saveEvents(ctx, req.InsertOrReplace, req.Rollback)
-	events := []*model.Event{}
-	replaceableEvents = map[string]bool{}
-	sErr := insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
-		if dbEvent.Event.IsReplaceable() || nostr.IsAddressableKind(dbEvent.Event.Kind) {
-			replaceableEvents[dbEvent.ID] = dbEvent.SaveMergeAction == "INSERT"
-		}
-		events = append(events, &dbEvent.Event)
-
-		return nil
-	})
-	if errors.Is(handleError(sErr), ErrRaceCondition) {
-		// TODO: revisit this logic after fixing MERGE statement.
-		clear(replaceableEvents)
-		clear(events)
-		sErr = insertedEvents.Each(ctx, func(dbEvent *databaseEvent) error {
-			if dbEvent.Event.IsReplaceable() || nostr.IsAddressableKind(dbEvent.Event.Kind) {
-				replaceableEvents[dbEvent.ID] = dbEvent.SaveMergeAction == "INSERT"
-			}
-			events = append(events, &dbEvent.Event)
-
-			return nil
-		})
-	}
+	events, sErr := db.saveEvents(ctx, req.InsertOrReplace, req.Rollback)
 	if sErr != nil {
 		sErr = errors.Wrap(handleError(sErr), "failed to exec insert event sql")
 	}
+	replaceableEvents = map[string]bool{}
+	for i := range events {
+		if events[i].IsReplaceable() || events[i].IsAddressable() {
+			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
+		}
+	}
 	if len(replaceableEvents) > 0 {
-		keepOnlyInsertedEvents := func(event *model.Event) bool {
+		keepOnlyInsertedEvents := func(event *databaseEvent) bool {
 			if insert, wasUpdatedReplaceableEvent := replaceableEvents[event.ID]; wasUpdatedReplaceableEvent {
 				if !insert {
 					return true

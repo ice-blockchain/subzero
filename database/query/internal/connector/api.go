@@ -152,6 +152,18 @@ func ExecMany[T any](ctx context.Context, db Querier, sql string, args ...any) (
 	})
 }
 
+func ExecManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf func(err error) bool, sql string, args ...any) ([]*T, error) {
+	return withRetry(ctx, func() ([]*T, error) {
+		resp, err := execMany[T](ctx, db, sql, args...)
+		if err == nil {
+			return resp, nil
+		} else if retryIf(err) {
+			return nil, err
+		}
+		return resp, retryStop(err)
+	})
+}
+
 func execMany[T any](ctx context.Context, db Querier, sql string, args ...any) ([]*T, error) {
 	if pool, ok := db.(*DB); ok {
 		db = pool.primary()

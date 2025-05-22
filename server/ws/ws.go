@@ -130,7 +130,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		for i := range e.Events {
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
-		err = h.handleEvents(h.populateContext(ctx, respWriter), respWriter, events)
+		err = h.handleEvents(h.populateContext(context.WithoutCancel(ctx), respWriter), respWriter, events)
 		if errors.Is(err, ErrNotifyFailed) {
 			// Not critical, just log it.
 			log.Printf("WARN: notification failed: %v", err)

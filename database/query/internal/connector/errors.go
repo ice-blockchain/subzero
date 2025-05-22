@@ -13,7 +13,9 @@ import (
 func parseError(err error) error {
 	var dbErr *Error
 
-	if errors.Is(err, pgx.ErrNoRows) {
+	if err == nil {
+		return nil
+	} else if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 
