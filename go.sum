@@ -349,8 +349,8 @@ github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250520081251-5aa5bde78215 h1:I
 github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250520081251-5aa5bde78215/go.mod h1:dwzHaH3QIqaURglnWJgEXMej84Z2I/dYt8H510ngT3w=
 github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250513232050-f21826fe0591 h1:gFWNhuCsPkKmOVV9GZFD08I0TL1/rOfwqr21JM6PqNc=
 github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250513232050-f21826fe0591/go.mod h1:2CYWOH6Lxdb1DeMpvCXsArRzLV1CwTj781meNNiAu6I=
-github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513 h1:lb0RRUW6qO690J2nufHeQ3jFsx2deSb45Evhz/qRmAc=
-github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250505144435-f4ae5a482513/go.mod h1:vpbHQsGy3Ydvfu/oouSL/+mJvkym/ArDwr2eoJGso3w=
+github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250521194235-316f325200d5 h1:sQj/eRAuZIlZQJqTTrpe7U69XZejTzTGOSKG6gOEK0M=
+github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250521194235-316f325200d5/go.mod h1:AYVl/kkuQ1gSBXlmsbVahEVYWSoTSnYYyJbHZNteO7g=
 github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd h1:SY8V7ujSDgEYEdtMk26DEaiq8qvCTEZ7XlojacrWZj4=
 github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd/go.mod h1:pVzkmaIwkLaJ5cKPHPtuKyxaXiTsa/V7kbbgLmsr4Hw=
 github.com/ice-blockchain/tonutils-storage v0.0.0-20250514104422-4322ed03ab7c h1:N2ftTRvoWgVYchpXPmhvYGCn5PsV7EQp1eeY7OYmSfw=
