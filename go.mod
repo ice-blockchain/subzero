@@ -54,10 +54,10 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.13.0
-	github.com/xssnick/tonutils-storage v1.0.3
+	github.com/xssnick/tonutils-storage v1.0.4
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.40.0
-	google.golang.org/api v0.233.0
+	google.golang.org/api v0.234.0
 	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
 )
 
@@ -66,7 +66,7 @@ require (
 	atomicgo.dev/keyboard v0.2.9 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
 	cel.dev/expr v0.24.0 // indirect
-	cloud.google.com/go v0.121.1 // indirect
+	cloud.google.com/go v0.121.2 // indirect
 	cloud.google.com/go/auth v0.16.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.7.0 // indirect

@@ -29,3 +29,23 @@ A new kind `30014` addressable event that is the modifiable version of the kind 
   "content": "<message-in-plain-text>",
 }
 ```
+
+### Blocking/Muting Users
+
+A new kind `1757` immutable event is added, that MUST be used only as a rumor. The gift wrap MUST not have any expiration set.
+
+It is meant to signal that the author of that event has blocked some user by specifying that user in the `p` tag.
+
+###### Example
+```json
+{
+  "pubkey": "<sender-pubkey, the one doing the blocking>",
+  "kind": 1757,
+  "tags": [
+    ["b", "<sender materKey>"],
+    ["p", "<receiver-pubkey/masterKey> the one being blocked"]
+  ],
+  "content": "<optional message-in-plain-text, specifying the reason of the blocking>",
+  // rest of the fields ...
+}
+```
