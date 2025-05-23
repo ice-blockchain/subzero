@@ -65,6 +65,8 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 				out = "address"
 			case "tagid":
 				out = "tag_id"
+			case "lookupcreatedat":
+				out = "lookup_created_at"
 			default:
 				out = n
 			}

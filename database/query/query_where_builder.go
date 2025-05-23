@@ -20,7 +20,7 @@ const (
 	whereBuilderDefaultWhere    = "e.hidden=false"
 	whereBuilderCommunityFilter = "(case when e.kind in (1, 30023, 30175) then NOT EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = 'h') else true end)"
 	whereBuilderNoSoftDeleted   = "e.deleted=false"
-	whereBuilderDefaultOrderBy  = "created_at DESC"
+	whereBuilderDefaultOrderBy  = "lookup_created_at DESC"
 
 	whereBuilderDefaultLimit = 300
 )
@@ -358,7 +358,7 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	if since != nil && until != nil {
 		if *since == *until {
 			b.MaybeAND()
-			b.WriteString("e.created_at = to_timestamp(:")
+			b.WriteString("e.lookup_created_at = to_timestamp_nano(:")
 			b.WriteValue(filterID, "timestamp", *since)
 			b.WriteRune(')')
 
@@ -371,7 +371,7 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	// If a filter includes the `since` property, events with `created_at` greater than or equal to since are considered to match the filter.
 	if since != nil && *since > 0 {
 		b.MaybeAND()
-		b.WriteString("e.created_at >= to_timestamp(:")
+		b.WriteString("e.lookup_created_at >= to_timestamp_nano(:")
 		b.WriteValue(filterID, "since", *since)
 		b.WriteRune(')')
 	}
@@ -379,7 +379,7 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
 	if until != nil && *until > 0 {
 		b.MaybeAND()
-		b.WriteString("e.created_at <= to_timestamp(:")
+		b.WriteString("e.lookup_created_at <= to_timestamp_nano(:")
 		b.WriteValue(filterID, "until", *until)
 		b.WriteRune(')')
 	}
@@ -414,7 +414,7 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 (select true from event_tags where
 	event_id in (e.id, e.reference_id) 
 	AND event_tag_key = 'expiration'
-	AND to_timestamp(cast(event_tag_value1 as bigint)) > CURRENT_TIMESTAMP)`)
+	AND to_timestamp_nano(cast(event_tag_value1 as bigint)) > get_current_timestamp_nano())`)
 		} else {
 			b.WriteString("NOT exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'expiration')")
 		}
@@ -552,7 +552,8 @@ func (b *queryBuilder) CountVotesOf(filterID, cteName string, filter *filterDepe
 union
 select
 	6400,
-	CURRENT_TIMESTAMP,
+	cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint) as created_at,
+	to_timestamp_nano(cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as lookup_created_at,
 	'' as id,
 	'' as address,
 	t.pubkey,
@@ -605,12 +606,13 @@ func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databas
 		b.WriteString(`
 union all
 select
-	6400,
-	CURRENT_TIMESTAMP,
+	6400 as kind,
+	cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint) as created_at,
+	to_timestamp_nano(cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as lookup_created_at,
 	'' as address,
 	case when f.kind = 3 then '' else f.reference_id end as id,
-	coalesce(evr.pubkey, ''),
-	coalesce(evr.master_pubkey, ''),
+	coalesce(evr.pubkey, '') as pubkey,
+	coalesce(evr.master_pubkey, '') as master_pubkey,
 	'',
 `)
 		if current.Reduce.Group && len(current.Reduce.Kinds) > 1 && current.Reduce.Kinds[1] == nostr.KindReaction {
@@ -805,7 +807,8 @@ where
 union all
 select
 	20002,
-	CURRENT_TIMESTAMP,
+	cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint) as created_at,
+	to_timestamp_nano(cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as lookup_created_at,
 	'' as id,
 	'' as address,
 	e.pubkey,
@@ -1004,7 +1007,20 @@ func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[st
 }
 
 func (b *queryBuilder) fieldsNames(table string) []string {
-	fields := []string{"kind", "created_at", "id", "address", "pubkey", "master_pubkey", "sig", "content", "d_tag", "h_tag", "tags"}
+	fields := []string{
+		"kind",
+		"created_at",
+		"lookup_created_at",
+		"id",
+		"address",
+		"pubkey",
+		"master_pubkey",
+		"sig",
+		"content",
+		"d_tag",
+		"h_tag",
+		"tags",
+	}
 	if table == "" {
 		return fields
 	}

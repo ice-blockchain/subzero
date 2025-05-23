@@ -259,7 +259,7 @@ func TestQueryFuzzIndexes(t *testing.T) {
 
 	db := helperNewDatabase(t)
 	defer db.Close()
-	helperFillDatabase(t, db, 3000)
+	helperFillDatabase(t, db, 11000)
 
 	op := make(map[string]int)
 	sets := helperGenFilterCombinations(t)

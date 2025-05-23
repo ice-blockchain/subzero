@@ -45,6 +45,7 @@ var (
 type (
 	databaseEvent struct {
 		model.Event
+		LookupCreatedAt int64
 		SystemKind      sql.NullInt64
 		ReferenceID     sql.NullString
 		SigAlg          string
@@ -456,7 +457,7 @@ func (db *dbClient) saveEvents(
 			isReplay = model.ConsensusReplayCtxKey
 		}
 		values = append(values, fmt.Sprintf(
-			`($%[1]v::integer, $%[2]v::integer, to_timestamp($%[3]v::bigint),
+			`($%[1]v::integer, $%[2]v::integer, $%[3]v::bigint,
 			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
 			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
 			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text),
@@ -971,8 +972,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 		INNER JOIN events e ON e.id = et.event_id 
 		WHERE
 			et.event_tag_key = 'expiration'
-		AND to_timestamp(cast(et.event_tag_value1 as bigint)) <= CURRENT_TIMESTAMP
-		ORDER BY et.id ASC
+		AND to_timestamp_nano(cast(et.event_tag_value1 as bigint)) <= get_current_timestamp_nano()
 		LIMIT :batch_size
 	)
 	DELETE FROM events
