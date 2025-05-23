@@ -291,7 +291,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 	heimdallPrivKey, heimdallPubkey := model.GenerateKeyPair()
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	relaysList := &model.Event{Event: nostr.Event{
-		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindRelayListMetadata,
 		Tags: nostr.Tags{
 			[]string{model.CustomIONTagOnBehalfOf, userPubkey},
@@ -339,7 +339,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 	t.Run("badge", func(t *testing.T) {
 		badgeDefinitionEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
 					{"d", "verified"},
@@ -354,7 +354,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 		require.NoError(t, memdb.AcceptEvents(t.Context(), badgeDefinitionEvent))
 
 		badgeAwardEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
@@ -370,7 +370,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 	t.Run("change_display_name_only", func(t *testing.T) {
 		username := "stableusername"
 		originalProfile := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix() - 3600),
+			CreatedAt: nostr.Now().Add(-time.Hour),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"Original Display Name"}`, username),
@@ -379,7 +379,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 		require.NoError(t, memdb.AcceptEvents(t.Context(), originalProfile))
 
 		updatedProfile := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"New Display Name Only"}`, username),
@@ -410,7 +410,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 		badgeUsername := "badgeusername"
 
 		profileMetadata := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"Profile User"}`, profileUsername),
@@ -420,7 +420,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 
 		badgeDefinitionEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
 					{"d", fmt.Sprintf("username_proof_of_ownership:%s", badgeUsername)},
@@ -449,7 +449,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 	t.Run("username_proof_of_ownership", func(t *testing.T) {
 		username := "testuser123"
 		profileMetadata := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"Test User"}`, username),
@@ -518,7 +518,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 		username := "verifyUsername"
 		badgeDefinitionEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
 					{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
@@ -547,7 +547,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 	t.Run("create_profile_with_proof_ownership", func(t *testing.T) {
 		username := "newusername"
 		profileMetadata := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"New User"}`, username),
@@ -581,7 +581,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 	t.Run("change_username_with_proof_ownership", func(t *testing.T) {
 		oldUsername := "oldusername"
 		originalProfile := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix() - 3600),
+			CreatedAt: nostr.Now().Add(-time.Hour),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"Old User"}`, oldUsername),
@@ -591,7 +591,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 
 		newUsername := "updatedjdoe"
 		updatedProfile := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileMetadata,
 			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
 			Content:   fmt.Sprintf(`{"name":"%s","display_name":"Updated User"}`, newUsername),
@@ -600,7 +600,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 
 		badgeDefinitionEvent := &model.Event{
 			Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
 					{"d", fmt.Sprintf("username_proof_of_ownership:%s", newUsername)},
