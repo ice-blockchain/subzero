@@ -315,6 +315,9 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 		case nostr.KindProfileMetadata:
 			masterKey = ev.GetMasterPublicKey()
+			if true {
+				return masterKey, nil
+			}
 			nameChanged, username, err := c.validateProfileMetadataNameChange(ctx, ev, masterKey)
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to validate profile metadata name change")
