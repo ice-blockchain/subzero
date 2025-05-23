@@ -83,6 +83,7 @@ DO $$ BEGIN
         AND column_name = 'created_at'
         AND data_type = 'timestamp without time zone'
     ) THEN
+        DROP INDEX IF EXISTS idx_events_kind_created_at;
         ALTER TABLE events ADD COLUMN temp_created_at bigint;
         UPDATE events SET
             temp_created_at = EXTRACT(EPOCH FROM created_at)::bigint;
@@ -188,7 +189,7 @@ create index if not exists idx_event_tags_id_key_value2               on event_t
 create index if not exists idx_event_tags_id_key_value1_value2        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2);
 create index if not exists idx_event_tags_id_key_value1_value3        on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value3);
 create index if not exists idx_event_tags_id_key_value1_value2_value3 on event_tags(event_id, event_tag_key, event_tag_value1, event_tag_value2, event_tag_value3);
-create index if not exists idx_event_tags_expired                     on event_tags(event_tag_key, to_timestamp(cast(event_tag_value1 as bigint)) desc, id asc) where
+create index if not exists idx_event_tags_expired                     on event_tags(event_tag_key, to_timestamp_nano(cast(event_tag_value1 as bigint)) desc, id asc) where
     event_tag_key = 'expiration';
 create index if not exists idx_event_tags_token_valid on event_tags(event_tag_key, event_tag_value2, id) where
     event_tag_key = 'token' AND event_tag_value2 != 'invalid';
