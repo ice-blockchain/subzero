@@ -516,6 +516,7 @@ func (pm *PushNotificationManager) createNotifications(
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
 				Target: event,
 				Data:   data,
+				Kind:   incomingEvent.Kind,
 			})
 		default:
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
@@ -524,6 +525,7 @@ func (pm *PushNotificationManager) createNotifications(
 				Body:     defaultTranslation.Body,
 				ImageURL: defaultTranslation.ImageURL,
 				Data:     data,
+				Kind:     incomingEvent.Kind,
 			})
 		}
 	}

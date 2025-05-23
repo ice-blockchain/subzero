@@ -4,8 +4,10 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -45,6 +47,7 @@ type (
 		Title    string `json:"title,omitempty"`
 		Body     string `json:"body,omitempty"`
 		ImageURL string `json:"imageUrl,omitempty"`
+		Kind     int    `json:"kind,omitempty"`
 	}
 	RetryConfig struct {
 		MaxRetries  int
@@ -63,6 +66,7 @@ type (
 
 var (
 	ErrInvalidDeviceToken = errors.New("device token is invalid")
+	ErrMessageTooLarge    = errors.New("message is too large")
 	defaultRetryConfig    = RetryConfig{
 		MaxRetries:  maxRetries,
 		InitialWait: initialBackoffInterval,
@@ -96,6 +100,10 @@ func WithPrivateKey(privateKey string) Option {
 
 func IsInvalidDeviceToken(err error) bool {
 	return errors.Is(err, ErrInvalidDeviceToken)
+}
+
+func IsMessageTooLarge(err error) bool {
+	return errors.Is(err, ErrMessageTooLarge)
 }
 
 func New(ctx context.Context, opts ...Option) (Client, error) {
@@ -142,15 +150,22 @@ func New(ctx context.Context, opts ...Option) (Client, error) {
 	return s, nil
 }
 
-func (s *notificationClient) sendWithRetry(ctx context.Context, message *messaging.Message) (string, error) {
+func (s *notificationClient) sendWithRetry(ctx context.Context, message *messaging.Message, kind int) (string, error) {
 	var id string
 	err := retry(ctx, func() error {
 		var err error
 		id, err = s.client.Send(ctx, message)
+		if err != nil && strings.Contains(err.Error(), "message is too big") {
+			return &backoff.PermanentError{Err: ErrMessageTooLarge}
+		}
+
 		return err
 	})
 
 	if err != nil {
+		if IsMessageTooLarge(err) {
+			return "", errors.Wrapf(err, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
+		}
 		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
 			return "", ErrInvalidDeviceToken
 		}
@@ -203,7 +218,7 @@ func (s *notificationClient) SendSingle(ctx context.Context, notification *Notif
 	if message == nil {
 		return nil
 	}
-	_, err = s.sendWithRetry(ctx, message)
+	_, err = s.sendWithRetry(ctx, message, notification.Kind)
 	if err != nil {
 		return err
 	}
@@ -237,7 +252,7 @@ func (s *notificationClient) createTopicMessage(notification *Notification[Subsc
 
 func (s *notificationClient) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
 	message := s.createTopicMessage(notification)
-	_, err := s.sendWithRetry(ctx, message)
+	_, err := s.sendWithRetry(ctx, message, notification.Kind)
 
 	return errors.Wrap(err, "failed to send topic notification")
 }
@@ -278,4 +293,15 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 	}
 
 	return decryptedToken, nil
+}
+
+func calculateMessageSize(message *messaging.Message) int {
+	data, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("failed to marshal message: %v", err)
+
+		return 0
+	}
+
+	return len(data)
 }
