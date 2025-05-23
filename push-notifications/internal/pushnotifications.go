@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -63,6 +64,7 @@ type (
 
 var (
 	ErrInvalidDeviceToken = errors.New("device token is invalid")
+	ErrMessageTooLarge    = errors.New("message is too large")
 	defaultRetryConfig    = RetryConfig{
 		MaxRetries:  maxRetries,
 		InitialWait: initialBackoffInterval,
@@ -96,6 +98,10 @@ func WithPrivateKey(privateKey string) Option {
 
 func IsInvalidDeviceToken(err error) bool {
 	return errors.Is(err, ErrInvalidDeviceToken)
+}
+
+func IsMessageTooLarge(err error) bool {
+	return errors.Is(err, ErrMessageTooLarge)
 }
 
 func New(ctx context.Context, opts ...Option) (Client, error) {
@@ -147,10 +153,17 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 	err := retry(ctx, func() error {
 		var err error
 		id, err = s.client.Send(ctx, message)
+		if err != nil && strings.Contains(err.Error(), "message is too big") {
+			return &backoff.PermanentError{Err: ErrMessageTooLarge}
+		}
+
 		return err
 	})
 
 	if err != nil {
+		if IsMessageTooLarge(err) {
+			return "", errors.Wrap(err, "message is too large")
+		}
 		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
 			return "", ErrInvalidDeviceToken
 		}
