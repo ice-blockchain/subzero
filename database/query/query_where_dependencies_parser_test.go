@@ -1113,23 +1113,21 @@ func TestDVMVoteResults(t *testing.T) {
 	t.Run("Vote", func(t *testing.T) {
 		cases := []struct {
 			Results map[string]int
-			ID      string
+			ID      model.Tag
 		}{
-			{results1, "poll1"},
-			{results2, "poll2"},
-			{results3, "30023:pk1:dtag3"},
+			{results1, model.Tag{"e", "poll1"}},
+			{results2, model.Tag{"e", "poll2"}},
+			{results3, model.Tag{"a", "30023:pk1:dtag3"}},
 		}
 		for _, c := range cases {
-			t.Run(c.ID, func(t *testing.T) {
+			t.Run(c.ID.Value(), func(t *testing.T) {
 				for option, count := range c.Results {
 					var events []*model.Event
 					for range count {
 						var ev model.Event
 						ev.Kind = model.CustomIONKindPollVote
 						ev.Content = `[` + option + `]`
-						ev.Tags = model.Tags{
-							{"e", c.ID},
-						}
+						ev.Tags = model.Tags{c.ID}
 						require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 						events = append(events, &ev)
 					}

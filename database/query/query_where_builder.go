@@ -577,7 +577,7 @@ from (
 		mainev.address,
 		mainev.h_tag,
 		mainev.d_tag,
-		cast(j.value as text) AS option,
+		coalesce(cast(j.value as text), '') as option,
 		COUNT(j.value) AS votes
 	from `)
 	b.WriteString(cteName)
