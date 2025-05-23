@@ -3,6 +3,7 @@
 package validation
 
 import (
+	"cmp"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -55,6 +56,7 @@ const (
 	tagStateRequiredWith
 	tagStateForbidden
 	tagStateOneOf
+	tagStateOneOfSingle
 
 	kindValidatorFlagContentRequired uint = 1 << 0
 
@@ -195,7 +197,7 @@ var (
 			Required("published_at").
 			Build(),
 
-		model.CustomIONKindPollVote: newKindValidatorBuilder().OneOf("e", "a").Forbidden("expiration").Build(),
+		model.CustomIONKindPollVote: newKindValidatorBuilder().OneOfSingle("e", "a").Forbidden("expiration").Build(),
 
 		model.CustomIONKindFundReceive: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
@@ -417,20 +419,28 @@ func extractTagValueFromPairs(tag model.Tag, key string) (value string, err erro
 }
 
 func validatePollVote(ctx context.Context, e *model.Event) error {
-	events := e.GetTags("e")
-	if len(events) != 1 {
-		return errors.Wrapf(ErrWrongEventParams, "vote: expected one e tag, but got %d", len(events))
+	pollAddress := cmp.Or(e.GetTag("e").Value(), e.GetTag("a").Value())
+	if pollAddress == "" {
+		return errors.Wrapf(ErrWrongEventParams, "vote: missing poll address")
 	}
 
 	var poll *model.Event
-	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{model.Filter{IDs: events[0]}}}) {
+	for ev, err := range query.GetStoredEvents(ctx,
+		&model.Subscription{
+			Filters: model.Filters{
+				model.Filter{
+					Addresses: []string{pollAddress},
+					Limit:     1,
+				},
+			},
+		}) {
 		if err != nil {
-			return errors.Wrap(err, "vote: failed to get poll event")
+			return errors.Wrapf(err, "vote: failed to get poll event %s", pollAddress)
 		}
 		poll = ev
 	}
 	if poll == nil {
-		return errors.Wrap(ErrWrongEventParams, "vote: poll event not found")
+		return errors.Wrapf(ErrWrongEventParams, "vote: poll event not found: %s", pollAddress)
 	}
 
 	pollTag := poll.GetTag(model.CustomIONTagPoll)
@@ -517,7 +527,7 @@ func Validate(ctx context.Context, e *model.Event) error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	}
-	if err := validateEventTags(e); err != nil {
+	if err := validateEventTags(e, KindSupportedTags); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
 	}
 	if actualSize, maxSize := len(e.Content), globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
@@ -1525,11 +1535,11 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	return nil
 }
 
-func validateEventTags(e *model.Event) error {
+func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error {
 	var bTag string
 	currentTags := make(map[string]int)
 	pTags := make(map[string]int)
-	kindValidator, known := KindSupportedTags[e.Kind]
+	kindValidator, known := rules[e.Kind]
 	for _, tag := range e.Tags {
 		if data, ok := kindValidator.Tags[tag.Key()]; known && !ok {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
@@ -1600,6 +1610,28 @@ func validateEventTags(e *model.Event) error {
 		case tagStateRequired:
 			if _, ok := currentTags[key]; !ok {
 				return errors.Wrapf(ErrWrongEventParams, "tag %q marked as required: not found", key)
+			}
+		case tagStateOneOfSingle:
+			found := map[string]int{}
+			for _, tag := range data.Tags {
+				if v, ok := currentTags[tag]; ok {
+					found[tag] = v
+				}
+			}
+			if len(found) == 0 {
+				return errors.Wrapf(ErrWrongEventParams, "one of tags %v must be present", data.Tags)
+			} else if len(found) > 1 {
+				keys := make([]string, 0, len(found))
+				for key := range maps.Keys(found) {
+					keys = append(keys, key)
+				}
+				return errors.Wrapf(ErrWrongEventParams, "only one of tags %v must be present, found %v", data.Tags, keys)
+			} else {
+				for tag, count := range found {
+					if count > 1 {
+						return errors.Wrapf(ErrWrongEventParams, "tag %q: used more than once: %v", tag, count)
+					}
+				}
 			}
 		case tagStateOneOf:
 			found := map[string]struct{}{}
@@ -1689,6 +1721,14 @@ func (t *kindValidatorBuilder) RequiredWith(root string, tags ...string) *kindVa
 
 func (t *kindValidatorBuilder) OneOf(tags ...string) *kindValidatorBuilder {
 	data := tagData{Tags: tags, State: tagStateOneOf}
+	for _, tag := range tags {
+		t.Validator.Tags[tag] = data
+	}
+	return t
+}
+
+func (t *kindValidatorBuilder) OneOfSingle(tags ...string) *kindValidatorBuilder {
+	data := tagData{Tags: tags, State: tagStateOneOfSingle}
 	for _, tag := range tags {
 		t.Validator.Tags[tag] = data
 	}

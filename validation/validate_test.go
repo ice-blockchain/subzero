@@ -986,6 +986,42 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 	}
 }
 
+func TestValidateOneOfSingle(t *testing.T) {
+	t.Parallel()
+
+	validator := newKindValidatorBuilderEmpty().OneOfSingle("e", "a").Build()
+	require.NotNil(t, validator)
+
+	rules := map[model.Kind]kindValidator{
+		nostr.KindTextNote: validator,
+	}
+
+	var cases = []struct {
+		Err   bool
+		Event *model.Event
+	}{
+		{true, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}},
+		{true, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"p", "test"}}}}},
+		{false, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"e", "test"}}}}},
+		{false, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"a", "1:aa:aa"}}}}},
+		{true, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"e", "test"}, {"a", "1:aa:aa"}}}}},
+		{true, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"e", "test"}, {"e", "test2"}}}}},
+		{true, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"a", "1:aa:aa2"}, {"a", "1:aa:aa2"}}}}},
+		{true, &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, Tags: model.Tags{{"e", "test"}, {"e", "test2"}, {"a", "1:aa:aa"}}}}},
+	}
+
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			err := validateEventTags(c.Event, rules)
+			if c.Err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateKindRepostEvent(t *testing.T) {
 	t.Parallel()
 
@@ -1258,12 +1294,12 @@ func TestValidateTagsBAndP(t *testing.T) {
 	require.Error(t, validateEventTags(&model.Event{Event: nostr.Event{Tags: model.Tags{
 		{"b", "foo"},
 		{"b", "foo"},
-	}}}))
+	}}}, KindSupportedTags))
 
 	require.Error(t, validateEventTags(&model.Event{Event: nostr.Event{Tags: model.Tags{
 		{"p", "foo"},
 		{"p", "foo"},
-	}}}))
+	}}}, KindSupportedTags))
 
 	require.Error(t, validateFollowListEvent(&model.Event{Event: nostr.Event{PubKey: "foo", Tags: model.Tags{
 		{"p", "foo"},
@@ -1272,7 +1308,7 @@ func TestValidateTagsBAndP(t *testing.T) {
 	require.NoError(t, validateEventTags(&model.Event{Event: nostr.Event{Tags: model.Tags{
 		{"b", "foo"},
 		{"p", "bar"},
-	}}}))
+	}}}, KindSupportedTags))
 }
 
 func TestValidateFundSend(t *testing.T) {
@@ -1325,7 +1361,7 @@ func TestMultipleTagsP(t *testing.T) {
 		Tags: model.Tags{
 			{"p", "foo"},
 			{"p", "foo"},
-		}}}))
+		}}}, KindSupportedTags))
 
 	require.NoError(t, validateEventTags(&model.Event{Event: nostr.Event{
 		Kind: func() int {
@@ -1337,7 +1373,7 @@ func TestMultipleTagsP(t *testing.T) {
 		Tags: model.Tags{
 			{"p", "foo"},
 			{"p", "foo"},
-		}}}))
+		}}}, KindSupportedTags))
 }
 
 func TestPostWithRichTextOnly(t *testing.T) {
