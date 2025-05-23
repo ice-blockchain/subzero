@@ -4,6 +4,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -46,6 +47,7 @@ type (
 		Title    string `json:"title,omitempty"`
 		Body     string `json:"body,omitempty"`
 		ImageURL string `json:"imageUrl,omitempty"`
+		Kind     int    `json:"kind,omitempty"`
 	}
 	RetryConfig struct {
 		MaxRetries  int
@@ -148,7 +150,7 @@ func New(ctx context.Context, opts ...Option) (Client, error) {
 	return s, nil
 }
 
-func (s *notificationClient) sendWithRetry(ctx context.Context, message *messaging.Message) (string, error) {
+func (s *notificationClient) sendWithRetry(ctx context.Context, message *messaging.Message, kind int) (string, error) {
 	var id string
 	err := retry(ctx, func() error {
 		var err error
@@ -162,7 +164,7 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 
 	if err != nil {
 		if IsMessageTooLarge(err) {
-			return "", errors.Wrap(err, "message is too large")
+			return "", errors.Wrapf(err, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
 		}
 		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
 			return "", ErrInvalidDeviceToken
@@ -216,7 +218,7 @@ func (s *notificationClient) SendSingle(ctx context.Context, notification *Notif
 	if message == nil {
 		return nil
 	}
-	_, err = s.sendWithRetry(ctx, message)
+	_, err = s.sendWithRetry(ctx, message, notification.Kind)
 	if err != nil {
 		return err
 	}
@@ -250,7 +252,7 @@ func (s *notificationClient) createTopicMessage(notification *Notification[Subsc
 
 func (s *notificationClient) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
 	message := s.createTopicMessage(notification)
-	_, err := s.sendWithRetry(ctx, message)
+	_, err := s.sendWithRetry(ctx, message, notification.Kind)
 
 	return errors.Wrap(err, "failed to send topic notification")
 }
@@ -291,4 +293,15 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 	}
 
 	return decryptedToken, nil
+}
+
+func calculateMessageSize(message *messaging.Message) int {
+	data, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("failed to marshal message: %v", err)
+
+		return 0
+	}
+
+	return len(data)
 }
