@@ -1192,24 +1192,96 @@ func TestValidateKindRepostEvent(t *testing.T) {
 func TestValidateKindGiftWrapEvent(t *testing.T) {
 	t.Parallel()
 
-	require.Error(t, validateKindGiftWrapEvent(&model.Event{
-		Event: nostr.Event{
-			Tags: model.Tags{
-				{"expiration", "foo"}},
+	var cases = []struct {
+		Event *model.Event
+		Err   bool
+	}{
+		{
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: model.Tags{
+						{"p", "test"},
+						{"k", "1"},
+					},
+				},
+			},
+			Err: true, // Missing expiration tag.
 		},
-	}))
-	require.NoError(t, validateKindGiftWrapEvent(&model.Event{
-		Event: nostr.Event{
-			Tags: model.Tags{
-				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)}},
+		{
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: model.Tags{
+						{"p", "test"},
+						{"k", "1"},
+						{"expiration", "foo"}, // Invalid expiration value.
+					},
+				},
+			},
+			Err: true,
 		},
-	}))
-	require.Error(t, validateKindGiftWrapEvent(&model.Event{
-		Event: nostr.Event{
-			Tags: model.Tags{
-				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour<<20).Unix(), 10)}},
+		{
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: model.Tags{
+						{"p", "test"},
+						{"k", "1"},
+						{"expiration", "9223372036"}, // Too far in the future.
+					},
+				},
+			},
+			Err: true,
 		},
-	}))
+		{
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: model.Tags{
+						{"p", "test"},
+						{"k", strconv.Itoa(model.CustomIONKindFundReceive)},
+						{"expiration", strconv.Itoa(int(time.Now().Add(24 * time.Hour).Unix()))},
+					},
+				},
+			},
+		},
+		{
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: model.Tags{
+						{"p", "test"},
+						{"k", "1"},
+						{"expiration", strconv.Itoa(int(time.Now().Add(24 * time.Hour).Unix()))},
+					},
+				},
+			},
+		},
+		{
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: model.Tags{
+						{"p", "test"},
+						{"k", strconv.Itoa(model.CustomIONKindFundReceive)}, // Expiration tag is not required for FundReceive.
+					},
+				},
+			},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			require.NoError(t, c.Event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			err := Validate(t.Context(), c.Event)
+			if c.Err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestValidateArticleSoftDelete(t *testing.T) {
