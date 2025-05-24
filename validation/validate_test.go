@@ -1240,7 +1240,7 @@ func TestValidateKindGiftWrapEvent(t *testing.T) {
 					Kind: nostr.KindGiftWrap,
 					Tags: model.Tags{
 						{"p", "test"},
-						{"k", strconv.Itoa(model.CustomIONKindFundReceive)},
+						{"k", strconv.Itoa(model.CustomIONKindUserBlock)},
 						{"expiration", strconv.Itoa(int(time.Now().Add(24 * time.Hour).Unix()))},
 					},
 				},
@@ -1264,7 +1264,7 @@ func TestValidateKindGiftWrapEvent(t *testing.T) {
 					Kind: nostr.KindGiftWrap,
 					Tags: model.Tags{
 						{"p", "test"},
-						{"k", strconv.Itoa(model.CustomIONKindFundReceive)}, // Expiration tag is not required for FundReceive.
+						{"k", strconv.Itoa(model.CustomIONKindUserBlock)},
 					},
 				},
 			},
