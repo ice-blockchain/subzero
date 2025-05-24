@@ -144,7 +144,9 @@ var (
 			Optional("expiration").
 			Validate(func(e *model.Event) error {
 				subkindNoExpiration := map[int]struct{}{
-					model.CustomIONKindUserBlock: {},
+					model.CustomIONKindUserBlock:      {},
+					model.CustomIONKindFundReceive:    {},
+					model.CustomIONKindFundSendNotify: {},
 				}
 				kTag := e.GetTag("k").Value()
 				subkind, err := strconv.ParseInt(kTag, 10, 64)
