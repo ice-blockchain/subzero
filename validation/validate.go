@@ -118,28 +118,58 @@ var (
 	}
 
 	KindSupportedTags = map[model.Kind]kindValidator{
-		nostr.KindProfileMetadata:       tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:              tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
-		nostr.KindDirectMessage:         tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
-		nostr.KindFollowList:            tagsTable("p"),
-		nostr.KindDeletion:              newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
-		nostr.KindRepost:                newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
-		nostr.KindReaction:              newKindValidatorBuilder().Required("p", "k").OneOf("e", "a").Build(),
-		nostr.KindBadgeAward:            tagsTable("a", "p"),
-		nostr.KindGenericRepost:         newKindValidatorBuilder().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
-		nostr.KindReactionToWebsite:     tagsTable("r"),
-		nostr.KindMuteList:              tagsTable("p", "t", "word", "e"),
-		nostr.KindPinList:               tagsTable("e"),
-		nostr.KindBookmarkList:          tagsTable("e", "a", "t", "r"),
-		nostr.KindCommunityList:         tagsTable("a"),
-		nostr.KindPublicChatList:        tagsTable("e"),
-		nostr.KindBlockedRelayList:      tagsTable("relay"),
-		nostr.KindSearchRelayList:       tagsTable("relay"),
-		nostr.KindSimpleGroupList:       tagsTable("group"),
-		nostr.KindInterestList:          tagsTable("t", "a"),
-		nostr.KindEmojiList:             tagsTable("emoji", "a"),
-		nostr.KindDMRelayList:           tagsTable("relay"),
-		nostr.KindGiftWrap:              tagsTableRequired("p", "k", "expiration"),
+		nostr.KindProfileMetadata:   tagsTable("e", "p", "a", "alt"),
+		nostr.KindTextNote:          tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
+		nostr.KindDirectMessage:     tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
+		nostr.KindFollowList:        tagsTable("p"),
+		nostr.KindDeletion:          newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
+		nostr.KindRepost:            newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
+		nostr.KindReaction:          newKindValidatorBuilder().Required("p", "k").OneOf("e", "a").Build(),
+		nostr.KindBadgeAward:        tagsTable("a", "p"),
+		nostr.KindGenericRepost:     newKindValidatorBuilder().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
+		nostr.KindReactionToWebsite: tagsTable("r"),
+		nostr.KindMuteList:          tagsTable("p", "t", "word", "e"),
+		nostr.KindPinList:           tagsTable("e"),
+		nostr.KindBookmarkList:      tagsTable("e", "a", "t", "r"),
+		nostr.KindCommunityList:     tagsTable("a"),
+		nostr.KindPublicChatList:    tagsTable("e"),
+		nostr.KindBlockedRelayList:  tagsTable("relay"),
+		nostr.KindSearchRelayList:   tagsTable("relay"),
+		nostr.KindSimpleGroupList:   tagsTable("group"),
+		nostr.KindInterestList:      tagsTable("t", "a"),
+		nostr.KindEmojiList:         tagsTable("emoji", "a"),
+		nostr.KindDMRelayList:       tagsTable("relay"),
+		nostr.KindGiftWrap: newKindValidatorBuilder().
+			Required("p", "k").
+			Optional("expiration").
+			Validate(func(e *model.Event) error {
+				subkindNoExpiration := map[int]struct{}{
+					model.CustomIONKindUserBlock:      {},
+					model.CustomIONKindFundReceive:    {},
+					model.CustomIONKindFundSendNotify: {},
+				}
+				kTag := e.GetTag("k").Value()
+				subkind, err := strconv.ParseInt(kTag, 10, 64)
+				if err != nil {
+					return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid k tag value: %q: %v", kTag, err)
+				}
+				expiresAt := e.GetTag("expiration").Value()
+				if expiresAt != "" {
+					// Always check expiresAt if it's provided.
+					ts, err := strconv.ParseInt(expiresAt, 10, 64)
+					if err != nil {
+						return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid expiration value: %q: %v", expiresAt, err)
+					}
+					if globalConfig != nil && globalConfig.MaxWrappedEventExpiration > 0 && time.Unix(ts, 0).After(time.Now().Add(globalConfig.MaxWrappedEventExpiration)) {
+						return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is too far in the future, max is %s", globalConfig.MaxWrappedEventExpiration)
+					}
+				} else if _, ok := subkindNoExpiration[int(subkind)]; !ok {
+					// If expiresAt is empty and subkind is not in the exception list, return an error.
+					return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is required for subkind %d", subkind)
+				}
+				return nil
+			}).
+			Build(),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
 		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
 		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
@@ -494,18 +524,6 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
-func validateKindGiftWrapEvent(e *model.Event) error {
-	val := e.GetTag("expiration").Value()
-	ts, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid expiration value: %q: %v", val, err)
-	}
-	if globalConfig != nil && globalConfig.MaxWrappedEventExpiration > 0 && time.Unix(ts, 0).After(time.Now().Add(globalConfig.MaxWrappedEventExpiration)) {
-		return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is too far in the future, max is %s", globalConfig.MaxWrappedEventExpiration)
-	}
-	return nil
-}
-
 func validateFollowListEvent(e *model.Event) error {
 	keys := make(map[string]struct{})
 	master := e.GetMasterPublicKey()
@@ -560,8 +578,6 @@ func Validate(ctx context.Context, e *model.Event) error {
 		if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
 			return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
 		}
-	case nostr.KindGiftWrap:
-		return validateKindGiftWrapEvent(e)
 	case model.CustomIONKindPollVote:
 		return validatePollVote(ctx, e)
 	case nostr.KindCommunityList:
@@ -1661,10 +1677,6 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 
 func tagsTable(tags ...string) kindValidator {
 	return newKindValidatorBuilder().Optional(tags...).Build()
-}
-
-func tagsTableRequired(tags ...string) kindValidator {
-	return newKindValidatorBuilder().Required(tags...).Build()
 }
 
 type kindValidatorBuilder struct {

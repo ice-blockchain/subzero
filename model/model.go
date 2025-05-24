@@ -47,6 +47,7 @@ const (
 	CustomIONKindPollVote            = 1754
 	CustomIONKindFundReceive         = 1755
 	CustomIONKindFundSendNotify      = 1756
+	CustomIONKindUserBlock           = 1757
 	CustomIONKindAttestation         = 10_100
 	CustomIONKindRelayListMetadata   = 20_002
 	CustomIONKindEphemeralEmbeddding = 21_750
