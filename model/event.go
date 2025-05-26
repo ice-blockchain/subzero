@@ -45,8 +45,8 @@ func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
 	if minLeadingZeroBits == 0 {
 		return nil
 	}
-	if err := nip13.Check(e.GetID(), minLeadingZeroBits); err != nil {
-		log.Printf("difficulty: %v < %v, id:%v", nip13.Difficulty(e.GetID()), minLeadingZeroBits, e.GetID())
+	if err := nip13.Check(e.ID, minLeadingZeroBits); err != nil {
+		log.Printf("difficulty: %v < %v, id:%v", nip13.Difficulty(e.ID), minLeadingZeroBits, e.ID)
 
 		return err
 	}
