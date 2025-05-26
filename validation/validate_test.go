@@ -781,12 +781,14 @@ func TestValidateDtag(t *testing.T) {
 	// Known event kind.
 	var ev model.Event
 	ev.Kind = nostr.KindArticle
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.Error(t, Validate(t.Context(), &ev))
 
 	// Unknown event kind, but addressable.
 	ev.Kind = nostr.KindLiveEvent
 	require.Error(t, Validate(t.Context(), &ev))
 	ev.Tags = append(ev.Tags, model.Tag{"d", "foo"})
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, Validate(t.Context(), &ev))
 }
 func TestValidateFollowListEvent(t *testing.T) {
@@ -872,6 +874,7 @@ func TestValidateFollowListEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -976,6 +979,7 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			err := Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1395,12 +1399,15 @@ func TestValidateFundSend(t *testing.T) {
 			{"asset_class", "native"},
 			{"asset_address", "localhost"},
 		}
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.Error(t, Validate(t.Context(), &ev))
 
 		ev.Tags = append(ev.Tags, model.Tag{"p", "foo"})
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.Error(t, Validate(t.Context(), &ev))
 
 		ev.Content = "foo"
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, Validate(t.Context(), &ev))
 	})
 
@@ -1415,12 +1422,15 @@ func TestValidateFundSend(t *testing.T) {
 			{"asset_address", "localhost"},
 		}
 		ev.Content = `{"to":"1234"}`
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.Error(t, Validate(t.Context(), &ev))
 
 		ev.Tags = append(ev.Tags, model.Tag{"L", "wallet.address"})
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, Validate(t.Context(), &ev))
 
 		ev.Tags = append(ev.Tags, model.Tag{"p", "bar"})
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.Error(t, Validate(t.Context(), &ev))
 	})
 }

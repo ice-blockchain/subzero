@@ -541,7 +541,7 @@ func validateFollowListEvent(e *model.Event) error {
 	return nil
 }
 
-func Validate(ctx context.Context, e *model.Event) error {
+func validate(ctx context.Context, e *model.Event) error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	}
@@ -1767,23 +1767,25 @@ func (v *kindValidator) Execute(e *model.Event) (err error) {
 	return err
 }
 
-func ValidateIncomingEvent(ctx context.Context, evt *model.Event) (err error) {
-	nip13ZeroBits := globalConfig.NIP13MinLeadingZeroBits
-	if !evt.CheckID() {
+func Validate(ctx context.Context, e *model.Event) error {
+	if !e.CheckID() {
 		return ErrEventInvalidID
 	}
 
-	var ok bool
-	if ok, err = evt.CheckSignature(); err != nil {
+	if ok, err := e.CheckSignature(); err != nil {
 		return errors.Wrap(err, "signature check failed")
 	} else if !ok {
 		return ErrEventInvalidSign
 	}
-	if vErr := Validate(ctx, evt); vErr != nil {
-		return errors.Wrap(vErr, "wrong event parameters")
+
+	if err := validate(ctx, e); err != nil {
+		return errors.Wrap(err, "validation failed")
 	}
-	if cErr := evt.CheckNIP13Difficulty(nip13ZeroBits); cErr != nil {
-		return errors.Wrap(cErr, "wrong event difficulty")
+
+	if globalConfig != nil && globalConfig.NIP13MinLeadingZeroBits > 0 {
+		if err := e.CheckNIP13Difficulty(globalConfig.NIP13MinLeadingZeroBits); err != nil {
+			return errors.Wrap(err, "wrong event difficulty")
+		}
 	}
 
 	return nil
