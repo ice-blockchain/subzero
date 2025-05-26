@@ -1060,7 +1060,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 
 	case rankTrending:
 		// 24h trending.
-		joinString = ` inner join ranked_events r on e.id = r.event_id and ((CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, e.created_at)) < interval '24 hours')`
+		joinString = ` inner join ranked_events r on e.id = r.event_id and ((get_current_timestamp_nano() - least(get_current_timestamp_nano(), e.lookup_created_at)) < 86400e9)`
 		orderBy = `score desc`
 		fields = append(fields, "r.score")
 	}

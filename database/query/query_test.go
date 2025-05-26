@@ -1506,16 +1506,22 @@ func TestSelectRankTopEvents(t *testing.T) {
 		}
 	}
 
-	// Query top ranked events
-	events := helperSelectEvents(t, db, model.Filter{
+	// Query top ranked events.
+	top := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{nostr.KindTextNote},
 		Search: "top",
 	})
 
+	trending := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindTextNote},
+		Search: "trending",
+	})
+	require.Equal(t, top, trending)
+
 	// Should return top 2 events with most reactions.
-	require.Len(t, events, 2)
-	require.Equal(t, notes[1].ID, events[0].ID)
-	require.Equal(t, notes[0].ID, events[1].ID)
+	require.Len(t, top, 2)
+	require.Equal(t, notes[1].ID, top[0].ID)
+	require.Equal(t, notes[0].ID, top[1].ID)
 
 	helperPointsScoreEqual(t, db, notes[1].ID, 22, 22.0)
 	helperPointsScoreEqual(t, db, notes[0].ID, 17, 17.0)
