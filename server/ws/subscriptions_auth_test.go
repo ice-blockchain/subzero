@@ -62,7 +62,7 @@ func TestSubscriptionReqWithAuth(t *testing.T) {
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	t.Run("Regular", func(t *testing.T) {
-		sub, err := relay.Subscribe(context.Background(), []model.Filter{
+		sub, err := relay.Subscribe(t.Context(), []model.Filter{
 			{
 				Kinds: []int{nostr.KindRepost},
 			},
@@ -71,7 +71,7 @@ func TestSubscriptionReqWithAuth(t *testing.T) {
 		helperDrainSub(t, sub)
 	})
 	t.Run("WithAuth", func(t *testing.T) {
-		sub, err := relay.Subscribe(context.Background(), []model.Filter{
+		sub, err := relay.Subscribe(t.Context(), []model.Filter{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -82,7 +82,7 @@ func TestSubscriptionReqWithAuth(t *testing.T) {
 		require.True(t, strings.HasPrefix(reason, "auth-required:"))
 		sub.Close()
 		t.Run("DoAuth", func(t *testing.T) {
-			err := relay.Auth(context.Background(), func(event *nostr.Event) error {
+			err := relay.Auth(t.Context(), func(event *nostr.Event) error {
 				event.Sig = "random-sig" // Want to see an error.
 
 				return nil
@@ -92,7 +92,7 @@ func TestSubscriptionReqWithAuth(t *testing.T) {
 			helperDoAuth(t, relay.Relay, model.GeneratePrivateKey())
 		})
 		t.Run("SubscribeAfterAuth", func(t *testing.T) {
-			sub, err := relay.Subscribe(context.Background(), []model.Filter{
+			sub, err := relay.Subscribe(t.Context(), []model.Filter{
 				{
 					Kinds: []int{nostr.KindTextNote},
 				},
@@ -154,7 +154,7 @@ func TestSubscriptionEventAuth(t *testing.T) {
 		ev.CreatedAt = 1
 		ev.Content = "test"
 		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
-		require.NoError(t, relay.Publish(context.Background(), ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 
 	})
 	t.Run("WithAuth", func(t *testing.T) {
@@ -168,7 +168,7 @@ func TestSubscriptionEventAuth(t *testing.T) {
 			{"d", "foo"},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
-		err := relay.Publish(context.Background(), ev.Event)
+		err := relay.Publish(t.Context(), ev.Event)
 		t.Logf("publish error: %v", err)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), errAuthRequired.Error())
@@ -187,9 +187,9 @@ func TestSubscriptionEventAuth(t *testing.T) {
 			{"d", "foo"},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
-		require.NoError(t, relay.Publish(context.Background(), ev.Event))
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 
-		events, err := relay.QuerySync(context.Background(), model.Filter{Kinds: []int{nostr.KindArticle}})
+		events, err := relay.QuerySync(t.Context(), model.Filter{Kinds: []int{nostr.KindArticle}})
 		require.NoError(t, err)
 		require.Len(t, events, 1)
 		require.Equal(t, ev.Event, *events[0])
@@ -207,7 +207,7 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	communityID := hVal.String()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
@@ -238,7 +238,7 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 		nonCommunityEvent.CreatedAt = nostr.Timestamp(time.Now().Add(-1 * time.Hour).Unix())
 		nonCommunityEvent.Content = "test"
 		helperSignWithMinLeadingZeroBits(t, &nonCommunityEvent, privkeyUser1)
-		require.NoError(t, relay.Publish(context.Background(), nonCommunityEvent.Event))
+		require.NoError(t, relay.Publish(t.Context(), nonCommunityEvent.Event))
 	})
 	t.Run("WithAuth", func(t *testing.T) {
 		var ev model.Event
@@ -251,7 +251,7 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 			{"d", "foo"},
 		}
 		helperSignWithMinLeadingZeroBits(t, &ev, privkeyUser1)
-		err := relay.Publish(context.Background(), ev.Event)
+		err := relay.Publish(t.Context(), ev.Event)
 		t.Logf("publish error: %v", err)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), errAuthRequired.Error())
@@ -416,4 +416,106 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 	})
 
 	helperMustCloseRelay(t, newRelay)
+}
+
+func TestSubscriptionEventAuthWithEmbeddedAttesttion(t *testing.T) {
+	var storedEvents []*model.Event
+
+	t.Cleanup(func() {
+		RegisterEventMustAuthenticate(nil)
+	})
+
+	masterPrivKey, masterPubKey := model.GenerateKeyPair()
+	privKey, pubKey := model.GenerateKeyPair()
+
+	var attestation model.Event
+	attestation.Kind = model.CustomIONKindAttestation
+	attestation.CreatedAt = nostr.Now()
+	attestation.Tags = model.Tags{
+		{model.TagAttestationName, pubKey, "", model.CustomIONAttestationKindActive + ":1"},
+	}
+	helperSignWithMinLeadingZeroBits(t, &attestation, masterPrivKey)
+
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for _, event := range events {
+			require.NotNil(t, event)
+
+			if event.IsEphemeral() {
+				continue
+			}
+
+			t.Logf("received event: %v", event)
+			storedEvents = append(storedEvents, event)
+			if event.Kind == nostr.KindArticle {
+				master, pk, authenticated, _ := model.GetUserDataFromContext(ctx)
+				t.Logf("ctx data: user=%q/%q, auth=%v", master, pk, authenticated)
+				require.True(t, authenticated)
+				require.Equal(t, pubKey, pk)
+				require.Equal(t, masterPubKey, master)
+			}
+		}
+		return nil
+	})
+
+	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
+		return helperNewIterator(t, storedEvents)
+	})
+	RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) bool {
+		for _, event := range events {
+			if event.Kind == nostr.KindArticle {
+				return true
+			}
+		}
+		return false
+	})
+
+	relay := helperMustNewRelay(t, pubsubServers[0])
+	t.Run("WithAuth", func(t *testing.T) {
+		var ev model.Event
+
+		ev.Kind = nostr.KindArticle
+		ev.CreatedAt = 1
+		ev.Content = "test"
+		ev.Tags = model.Tags{
+			{"title", "test"},
+			{"d", "foo"},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
+		err := relay.Publish(t.Context(), ev.Event)
+		t.Logf("publish error: %v", err)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), errAuthRequired.Error())
+	})
+	t.Run("DoAuth", func(t *testing.T) {
+		err := relay.Auth(t.Context(), func(event *nostr.Event) error {
+			subZeroEvent := model.Event{Event: *event}
+			subZeroEvent.Tags = append(subZeroEvent.Tags, model.Tag{model.CustomIONTagOnBehalfOf, masterPubKey})
+			subZeroEvent.Tags = append(subZeroEvent.Tags, model.Tag{"attestation", attestation.String()})
+			require.NoError(t, subZeroEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			*event = subZeroEvent.Event
+
+			return nil
+		})
+		require.NoError(t, err)
+	})
+	t.Run("PublishAfterAuth", func(t *testing.T) {
+		var ev model.Event
+
+		ev.Kind = nostr.KindArticle
+		ev.CreatedAt = 2
+		ev.Content = "test"
+		ev.Tags = model.Tags{
+			{"title", "test"},
+			{"d", "foo"},
+		}
+		helperSignWithMinLeadingZeroBits(t, &ev, privKey)
+		require.NoError(t, relay.Publish(t.Context(), ev.Event))
+
+		events, err := relay.QuerySync(t.Context(), model.Filter{Kinds: []int{nostr.KindArticle}})
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+		require.Equal(t, ev.Event, *events[0])
+	})
+	helperMustCloseRelay(t, relay)
 }
