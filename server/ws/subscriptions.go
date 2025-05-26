@@ -159,25 +159,40 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 }
 
 func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct{}, error) {
-	it := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: []model.Filter{
-			{
-				Kinds:   []int{model.CustomIONKindAttestation},
-				Authors: []string{e.GetMasterPublicKey()},
-				Tags:    model.TagMap{}.Set("p", &e.PubKey),
-				Limit:   1,
-			},
-		},
-	})
 	var attestationEvent *model.Event
-	for ev, err := range it {
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to fetch attestation event")
+
+	if val := e.GetTag("attestation").Value(); val != "" {
+		var ev model.Event
+
+		if err := ev.UnmarshalJSON([]byte(val)); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal attestation event from tag")
+		} else if err := validation.ValidateIncomingEvent(ctx, &ev); err != nil {
+			return nil, errors.Wrap(err, "failed to validate attestation event")
+		} else if ev.Kind != model.CustomIONKindAttestation {
+			return nil, errors.Wrapf(errAttestationRecordNotFound, "attestation event has unexpected kind %d", ev.Kind)
 		}
-		attestationEvent = ev
+		attestationEvent = &ev
+	} else {
+		it := query.GetStoredEvents(ctx, &model.Subscription{
+			Filters: []model.Filter{
+				{
+					Kinds:   []int{model.CustomIONKindAttestation},
+					Authors: []string{e.GetMasterPublicKey()},
+					Tags:    model.TagMap{}.Set("p", &e.PubKey),
+					Limit:   1,
+				},
+			},
+		})
+		for ev, err := range it {
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to fetch attestation event")
+			}
+			attestationEvent = ev
+		}
 	}
+
 	if attestationEvent == nil {
-		return nil, errAttestationRecordNotFound
+		return nil, errors.Wrap(errAttestationRecordNotFound, e.PubKey)
 	}
 
 	records, err := model.ParseAttestationTags(attestationEvent.Tags)
@@ -187,16 +202,16 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 
 	record, ok := records[e.PubKey]
 	if !ok {
-		return nil, errAttestationRecordNotFound
+		return nil, errors.Wrap(errAttestationRecordNotFound, e.PubKey)
 	}
 
 	now := time.Now()
 	if record.Revoked != nil && now.After(*record.Revoked) {
-		return nil, errAttestationRecordRevoked
+		return nil, errors.Wrap(errAttestationRecordRevoked, e.PubKey)
 	} else if record.End != nil && now.After(*record.End) {
-		return nil, errAttestationRecordExpired
+		return nil, errors.Wrap(errAttestationRecordExpired, e.PubKey)
 	} else if record.Start != nil && now.Before(*record.Start) {
-		return nil, errAttestationRecordIsNotActive
+		return nil, errors.Wrap(errAttestationRecordIsNotActive, e.PubKey)
 	}
 
 	kinds := make(map[int]struct{}, len(record.Kinds))

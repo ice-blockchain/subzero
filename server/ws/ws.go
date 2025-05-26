@@ -137,7 +137,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			err = nil
 		}
 		if err != nil {
-			log.Printf("ERROR: cannot process events: %v", err)
+			log.Printf("ERROR: cannot process events: %s: %v", model.Events(events).String(), err)
 		}
 		logOperation(time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
 		sendStart := time.Now()
