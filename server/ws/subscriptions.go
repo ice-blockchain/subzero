@@ -161,15 +161,18 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct{}, error) {
 	var attestationEvent *model.Event
 
+	owner := e.GetMasterPublicKey()
 	if val := e.GetTag("attestation").Value(); val != "" {
 		var ev model.Event
 
 		if err := ev.UnmarshalJSON([]byte(val)); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal attestation event from tag")
-		} else if err := validation.ValidateIncomingEvent(ctx, &ev); err != nil {
+		} else if err := validation.Validate(ctx, &ev); err != nil {
 			return nil, errors.Wrap(err, "failed to validate attestation event")
 		} else if ev.Kind != model.CustomIONKindAttestation {
 			return nil, errors.Wrapf(errAttestationRecordNotFound, "attestation event has unexpected kind %d", ev.Kind)
+		} else if ev.PubKey != owner {
+			return nil, errors.Wrapf(errAttestationRecordNotFound, "attestation event has unexpected author %q, expected %q", ev.PubKey, owner)
 		}
 		attestationEvent = &ev
 	} else {
@@ -177,7 +180,7 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 			Filters: []model.Filter{
 				{
 					Kinds:   []int{model.CustomIONKindAttestation},
-					Authors: []string{e.GetMasterPublicKey()},
+					Authors: []string{owner},
 					Tags:    model.TagMap{}.Set("p", &e.PubKey),
 					Limit:   1,
 				},
