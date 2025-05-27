@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ice-blockchain/cometbft/multiplex/client"
 	"github.com/ice-blockchain/subzero/database/command/fixture"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBroadcastLinkedEventBadges(t *testing.T) {

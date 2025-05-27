@@ -11,9 +11,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
+
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/validation"
-	"github.com/nbd-wtf/go-nostr"
 )
 
 func (c *consensus) findRootPost(ctx context.Context, ev *model.Event) (*model.Event, error) {
