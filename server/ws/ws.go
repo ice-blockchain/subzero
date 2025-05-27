@@ -105,12 +105,16 @@ func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWri
 	return ctx
 }
 
-func logOperation(duration time.Duration, msg string, args ...any) {
+func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Duration, msg string, args ...any) {
 	if duration < operationLogThreshold {
 		return
 	}
 
-	prefix := "[WS]: stats: duration: [" + duration.String() + "]: "
+	prefix := "[WS]: stats: duration: [" + duration.String() + "]"
+	if v, ok := h.connAuth.Load(respWriter); ok && v.Authenticated {
+		prefix += " master: [" + v.MasterPublicKey + "]"
+	}
+	prefix += ": "
 	log.Printf(prefix+msg, args...)
 }
 
@@ -139,7 +143,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		if err != nil {
 			log.Printf("ERROR: cannot process events: %s: %v", model.Events(events).String(), err)
 		}
-		logOperation(time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
+		h.logOperation(respWriter, time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
 		sendStart := time.Now()
 		for i := range e.Events {
 			resp := &nostr.OKEnvelope{
@@ -158,15 +162,15 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				break
 			}
 		}
-		logOperation(time.Since(sendStart), "events: send [%d] responses", len(events))
+		h.logOperation(respWriter, time.Since(sendStart), "events: send [%d] responses", len(events))
 		return
 	case *nostr.AuthEnvelope:
 		ev := &model.Event{Event: e.Event}
 		err = h.writeResponse(respWriter, h.handleAuth(ctx, respWriter, ev))
-		logOperation(time.Since(start), "auth: [device %s] / [master %s]", ev.PubKey, ev.GetMasterPublicKey())
+		h.logOperation(respWriter, time.Since(start), "auth")
 	case *nostr.ReqEnvelope:
 		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
-		logOperation(time.Since(start), "req: %s: handle [%d] filters: %v: [%v]",
+		h.logOperation(respWriter, time.Since(start), "req: %s: handle [%d] filters: %v: [%v]",
 			e.SubscriptionID, len(e.Filters), string(msgBytes),
 			err)
 	case *nostr.CountEnvelope:
@@ -184,7 +188,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		}
 	case *nostr.CloseEnvelope:
 		h.unlinkSubscription(respWriter, (*string)(e))
-		logOperation(time.Since(start), "req: close: %s", (*string)(e))
+		h.logOperation(respWriter, time.Since(start), "req: close: %s", (*string)(e))
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
