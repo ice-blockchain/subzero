@@ -160,6 +160,18 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
+			Input: "kind1234>3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183@kind1754",
+			Expected: filterDependency{
+				Start: filterDependencyStart{
+					Kind: 1234,
+				},
+				Reduce: filterDependencyReduce{
+					Kinds:  []int{1754},
+					Author: "3cfb1533dd7534bc0bbd60ad40492a4f131c2cb05ca47994d12ea530d7c40183",
+				},
+			},
+		},
+		{
 			Input: "kind1>kind6400+kind1+group+root",
 			Expected: filterDependency{
 				Start: filterDependencyStart{
