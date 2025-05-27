@@ -5,7 +5,7 @@ go 1.24.3
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250521194235-316f325200d5
-	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250514104422-4322ed03ab7c
+	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250526200347-5fdf966dbe09
 )
 
 require (
