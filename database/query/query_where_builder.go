@@ -703,7 +703,7 @@ AND `)
 	}
 
 	switch current.Reduce.Kinds[0] {
-	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
+	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote, model.CustomIONKindPollVote:
 		tag := current.Reduce.Tag // Could be "q" or "e" or "p" or empty.
 		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id ")
 		if current.Reduce.Author != "" {

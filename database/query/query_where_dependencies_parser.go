@@ -145,7 +145,7 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
-		// kind1>$logged_in_user_pubkey@kind6 / kind1>$logged_in_user_pubkey@kind7.
+		// kind1>$logged_in_user_pubkey@kind6 / kind1>$logged_in_user_pubkey@kind7 / kindXXX>$logged_in_user_pubkey@kind1754.
 		{
 			Tokens: []token{
 				tokenLiteralKind, tokenizer.TokenKeyword,
