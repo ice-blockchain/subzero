@@ -47,6 +47,7 @@ type (
 		model.Event
 		LookupCreatedAt int64
 		SystemKind      sql.NullInt64
+		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
 		SigAlg          string
 		KeyAlg          string
@@ -150,15 +151,36 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	var images, videos bool
 	images, videos = detectImagesVideos(e.Tags)
 
+	var expiration sql.NullInt64
+	if val := e.GetTag("expiration").Value(); val != "" {
+		deadline, err := strconv.ParseInt(val, 10, 64)
+		if err == nil && deadline > 0 {
+			expiration.Int64 = deadline
+			expiration.Valid = true
+		}
+	}
+
 	var lookup string
 	if e.Kind == nostr.KindRepost || e.Kind == nostr.KindGenericRepost {
 		var original model.Event
 		if err := original.UnmarshalJSON([]byte(e.Content)); err == nil {
 			images, videos = detectImagesVideos(original.Tags)
+			if val := original.GetTag("expiration").Value(); val != "" {
+				deadline, err := strconv.ParseInt(val, 10, 64)
+				if err == nil && deadline > 0 && (!expiration.Valid || deadline < expiration.Int64) {
+					// Original event has shorter expiration time, use it.
+					expiration.Int64 = deadline
+					expiration.Valid = true
+				}
+			}
 		}
 		lookup = prepareSearchContent(&original)
 	} else {
 		lookup = prepareSearchContent(e)
+	}
+
+	if expiration.Valid {
+		expiration.Int64 = nostr.Timestamp(expiration.Int64).Time().UnixNano()
 	}
 
 	var systemKind sql.NullInt64
@@ -176,6 +198,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		Deleted:      deleted,
 		HasImages:    images,
 		HasVideos:    videos,
+		Expiration:   expiration,
 	}, nil
 }
 
@@ -450,7 +473,7 @@ func (db *dbClient) saveEvents(
 		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
 			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
 			ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos,
-			ev.Lookup,
+			ev.Lookup, ev.Expiration,
 		)
 		isReplay := ""
 		if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
@@ -460,17 +483,18 @@ func (db *dbClient) saveEvents(
 			`($%[1]v::integer, $%[2]v::integer, $%[3]v::bigint,
 			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
 			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
-			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text),
-			'%[18]v')`, // replaced_by_id to match replaceable_events_before_update schema,
+			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text), $%[18]v::bigint,
+			'%[19]v')`, // replaced_by_id to match replaceable_events_before_update schema,
 			// we use it also to detect if save come from consensus.ReplayTx.
 			// In this case it should not trigger trigger_events_store_replaceable_data_before_update
 			// as data already committed and we want to avoid extra insert / delete to that table
 			// of rollbackable replaceable events.
 			idx, idx+1, idx+2,
 			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
+			idx+17,
 			isReplay,
 		))
-		idx += 17
+		idx += 18
 	}
 	valuesStr := ""
 	if len(values) > 0 {
@@ -485,13 +509,15 @@ WITH replaced AS (
 )
 MERGE INTO events AS target
 	USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-		has_images, has_videos, lookup, replaced_by_id FROM replaced 
+		has_images, has_videos, lookup, expiration, replaced_by_id FROM replaced 
 			` + valuesStr + `
 	) AS source (
 		kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
 		has_images,
 		has_videos,
-		lookup, replaced_by_id
+		lookup,
+		expiration,
+		replaced_by_id
 	)
 	ON (
 		target.id = source.id
@@ -520,6 +546,7 @@ WHEN MATCHED AND
 		deleted = source.deleted,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
+		expiration = source.expiration,
 		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
 		reference_id = CASE 
 							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
@@ -545,6 +572,7 @@ WHEN MATCHED AND
 		tags = source.tags,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
+		expiration = source.expiration,
 		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
 		reference_id = CASE 
 							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
@@ -566,6 +594,7 @@ WHEN MATCHED AND target.id = source.id THEN
 		tags = source.tags,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
+		expiration = source.expiration,
 		hidden = false
 WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
 	UPDATE SET
@@ -584,6 +613,7 @@ WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != 
 		tags = source.tags,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
+		expiration = source.expiration,
 		hidden = false
 WHEN NOT MATCHED THEN
 	INSERT (
@@ -592,7 +622,8 @@ WHEN NOT MATCHED THEN
 		deleted,
 		has_images,
 		has_videos,
-		lookup
+		lookup,
+		expiration
 	)
 	VALUES (
 		source.id, source.kind, source.system_kind, source.created_at,
@@ -600,7 +631,8 @@ WHEN NOT MATCHED THEN
 		source.key_alg, source.content, source.tags, source.d_tag,
 		source.h_tag, source.deleted,
 		source.has_images, source.has_videos,
-		source.lookup
+		source.lookup,
+		source.expiration
 	)
 	RETURNING
 		target.kind,
@@ -967,12 +999,12 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	const batchSize = 1000
 	const stmt = `
 	WITH expired_events AS (
-		SELECT e.id
-		FROM event_tags et
-		INNER JOIN events e ON e.id = et.event_id 
+		SELECT
+			id
+		FROM
+			events
 		WHERE
-			et.event_tag_key = 'expiration'
-		AND to_timestamp_nano(cast(et.event_tag_value1 as bigint)) <= get_current_timestamp_nano()
+			expiration <= get_current_timestamp_nano()
 		LIMIT :batch_size
 	)
 	DELETE FROM events

@@ -602,12 +602,7 @@ func helperCountExpiredEvents(t *testing.T, client *dbClient) int {
 	t.Helper()
 
 	count, err := connector.Get[int](t.Context(), client.db,
-		`
-select count(*) from events WHERE exists (
-	select true from event_tags et where et.event_id = events.id 
-			and et.event_tag_key = 'expiration'
-			and to_timestamp_nano(cast(et.event_tag_value1 as bigint)) <= get_current_timestamp_nano()
-	)`,
+		`select count(*) from events WHERE expiration <= get_current_timestamp_nano()`,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, count)

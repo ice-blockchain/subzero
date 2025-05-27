@@ -432,13 +432,9 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Expiration != nil {
 		b.MaybeAND()
 		if *filter.Expiration {
-			b.WriteString(`exists
-(select true from event_tags where
-	event_id in (e.id, e.reference_id) 
-	AND event_tag_key = 'expiration'
-	AND to_timestamp_nano(cast(event_tag_value1 as bigint)) > get_current_timestamp_nano())`)
+			b.WriteString(`(e.expiration > get_current_timestamp_nano())`)
 		} else {
-			b.WriteString("NOT exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'expiration')")
+			b.WriteString(`(e.expiration is null)`)
 		}
 	}
 
