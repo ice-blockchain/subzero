@@ -952,11 +952,10 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
 	if err != nil {
 		return err
 	}
-	if rootPost == nil {
+	if rootPost == nil || rootPost.GetMasterPublicKey() == e.GetMasterPublicKey() {
 		return nil
 	}
-
-	settingsTag := getLatestSettingsTag(rootPost, model.WhoCanReplySettings)
+	settingsTag := GetLatestSettingsTag(rootPost, model.WhoCanReplySettings)
 	if settingsTag == nil || (*settingsTag)[1] != model.WhoCanReplySettings {
 		return nil
 	}
@@ -976,6 +975,7 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event) error {
 	if !passed {
 		return errors.Wrapf(ErrActionForbidden, "reply can be added only by users with settings %+v for event: %v", settingsTag, e.ID)
 	}
+
 	return nil
 }
 

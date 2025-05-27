@@ -306,7 +306,7 @@ func TestGetLatestSettingsTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tag := getLatestSettingsTag(&tt.community, tt.settingsTag)
+			tag := GetLatestSettingsTag(&tt.community, tt.settingsTag)
 
 			require.EqualValues(t, tag, tt.wantTag)
 		})

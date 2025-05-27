@@ -2885,3 +2885,61 @@ func TestFiltersMatchWithMasterKey(t *testing.T) {
 		require.True(t, result)
 	})
 }
+
+func TestWhoCanReplySettings_SelfReply(t *testing.T) {
+	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyUser1, _ := model.GenerateKeyPair()
+	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+		return query.GetStoredEvents(ctx, s)
+	})
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	ctx := t.Context()
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	var post *model.Event
+	dBadgeTagVal := "verified"
+	t.Run("create post with badge restrictions by post owner", func(t *testing.T) {
+		post = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "This post has badge restrictions",
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, post.Event))
+	})
+	t.Run("post owner can reply to their own restricted post", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "I can reply to my own post",
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerRoot},
+				{"p", post.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("different user cannot reply to restricted post without badge", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "I cannot reply without badge",
+			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerRoot},
+				{"p", post.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}

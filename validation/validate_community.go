@@ -142,7 +142,7 @@ func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.
 	return errors.Wrap(ErrActionForbidden, "user is not part of the community")
 }
 
-func getLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
+func GetLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
 	var latestSettingsTag *model.Tag
 	latestTimestamp := int64(0)
 
@@ -166,7 +166,7 @@ func getLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
 }
 
 func isCommunityCommentsEnabled(event *model.Event) bool {
-	if settings := getLatestSettingsTag(event, "comments_enabled"); settings != nil && len(*settings) > 3 {
+	if settings := GetLatestSettingsTag(event, "comments_enabled"); settings != nil && len(*settings) > 3 {
 		val, err := strconv.ParseBool((*settings)[2])
 		if err != nil {
 			return false
@@ -179,7 +179,7 @@ func isCommunityCommentsEnabled(event *model.Event) bool {
 }
 
 func roleRequiredForPosting(event *model.Event) model.Role {
-	if settings := getLatestSettingsTag(event, model.RoleRequiredForPostingSettings); settings != nil && len(*settings) > 3 && (model.Role((*settings)[2]) == model.AdminRole || model.Role((*settings)[2]) == model.ModeratorRole) {
+	if settings := GetLatestSettingsTag(event, model.RoleRequiredForPostingSettings); settings != nil && len(*settings) > 3 && (model.Role((*settings)[2]) == model.AdminRole || model.Role((*settings)[2]) == model.ModeratorRole) {
 		return model.Role((*settings)[2])
 	}
 

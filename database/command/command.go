@@ -5,7 +5,6 @@ package command
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -41,6 +40,7 @@ const consensusTimeout = time.Second * 25
 var (
 	ErrMultipleMasterKeys             = errors.New("cannot broadcast single batch to multiple master keys")
 	ErrUsernameProofOfOwnershipFailed = errors.New("username proof of ownership failed")
+	ErrCommentsForbidden              = errors.New("comments forbidden")
 )
 
 func (c *consensus) waitForStop(ctx context.Context) {
@@ -376,6 +376,8 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 
 			return masterKey, nil
+		case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
+			return c.handleTextNoteWithoutAck(ctx, ev)
 		default:
 			return ev.GetMasterPublicKey(), nil
 		}
@@ -408,30 +410,7 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 		}
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
-		if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
-			relays, rErr := c.fetchUserRelays(ctx, pTag.Value()) // Mentioned user is presented on relay
-			if rErr == nil && len(relays) > 0 {
-				masterKey = pTag.Value()
-			}
-		}
-		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
-			linkedEvent, masterKey, err = c.getEvent(ctx, eTag.Value())
-			if err != nil {
-				return "", errors.Wrapf(err, "failed to get referenced event")
-			}
-		}
-		refTags := []string{"q", "Q", "a"}
-		for _, tagName := range refTags {
-			if tag := ev.GetTag(tagName); tag != nil && tag.Value() != "" {
-				linkedEvent, masterKey, err = c.getEvent(ctx, tag.Value())
-				if err != nil {
-					return "", errors.Wrapf(err, "failed to get referenced event")
-				}
-				if linkedEvent != nil && masterKey != "" {
-					break
-				}
-			}
-		}
+		return c.handleTextNoteWithAck(ctx, ev, acks)
 	default:
 		masterKey = ev.GetMasterPublicKey()
 	}
@@ -588,116 +567,4 @@ func (c *consensus) convertRelaysToBroadcastEndpoints(relays ...string) []string
 		discoveryAddresses = append(discoveryAddresses, fmt.Sprintf("%v:%v", u.Hostname(), discoveryPort))
 	}
 	return discoveryAddresses
-}
-
-func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
-	const usernameProofOfOwnership = "username_proof_of_ownership"
-	if ev.Kind == nostr.KindBadgeAward {
-		if aTag := ev.GetTag("a"); aTag != nil && len(aTag) >= 2 {
-			parts := strings.Split(aTag.Value(), ":")
-			if !strings.Contains(parts[2], usernameProofOfOwnership) {
-				return false, ""
-			}
-			if len(parts) == 3 {
-				lastPart := parts[len(parts)-1]
-				if strings.Contains(lastPart, "~") {
-					usernameParts := strings.Split(lastPart, "~")
-					if len(usernameParts) == 2 {
-						return true, usernameParts[1]
-					}
-				}
-			}
-		}
-	} else if ev.Kind == nostr.KindBadgeDefinition {
-		if dTag := ev.GetTag("d"); dTag != nil && len(dTag) >= 2 {
-			parts := strings.Split(dTag.Value(), "~")
-			if len(parts) == 2 && parts[0] == usernameProofOfOwnership {
-				return true, parts[1]
-			}
-		}
-	}
-
-	return false, ""
-}
-
-func (c *consensus) validateProfileMetadataNameChange(ctx context.Context, ev *model.Event, masterKey string) (bool, string, error) {
-	profileAddress := fmt.Sprintf("%d:%s:", nostr.KindProfileMetadata, masterKey)
-	oldProfile, _, err := c.getEvent(ctx, profileAddress)
-	if err != nil {
-		return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to get old profile metadata")
-	}
-	var oldProfileMetadata model.ProfileMetadataContent
-	var newProfileMetadata model.ProfileMetadataContent
-	oldProfileFound := oldProfile != nil && oldProfile.ID != ev.ID
-	if oldProfileFound {
-		if err := json.Unmarshal([]byte(oldProfile.Content), &oldProfileMetadata); err != nil {
-			return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to unmarshal old profile metadata")
-		}
-	}
-	if err := json.Unmarshal([]byte(ev.Content), &newProfileMetadata); err != nil {
-		return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to unmarshal new profile metadata")
-	}
-	if !oldProfileFound || oldProfileMetadata.Name != newProfileMetadata.Name {
-		return true, newProfileMetadata.Name, nil
-	}
-
-	return false, "", nil
-}
-
-func (c *consensus) findProfileEventInEventsBatch(ctx context.Context, masterKey string, username string, incomingEvents []*model.Event) bool {
-	profileIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
-		if e.Kind != nostr.KindProfileMetadata {
-			return false
-		}
-		if e.GetMasterPublicKey() != masterKey {
-			return false
-		}
-		var metadata model.ProfileMetadataContent
-		if err := json.Unmarshal([]byte(e.Content), &metadata); err != nil {
-			log.Printf("failed to unmarshal profile metadata: %v", err)
-
-			return false
-		}
-
-		return metadata.Name == username
-	})
-
-	return profileIndex != -1
-}
-
-func (c *consensus) checkProofOfOwnershipBadges(username string, masterKey string, incomingEvents []*model.Event) error {
-	badgeDefinitionIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
-		return e.Kind == nostr.KindBadgeDefinition
-	})
-	badgeAwardIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
-		return e.Kind == nostr.KindBadgeAward
-	})
-	if badgeDefinitionIndex == -1 || badgeAwardIndex == -1 {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] missing badge definition or award events for username %s", username)
-	}
-	badgeDefinition := incomingEvents[badgeDefinitionIndex]
-	_, badgeUsername := extractUsernameFromProofBadge(badgeDefinition)
-	if badgeUsername == "" {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] badge definition does not have username proof of ownership")
-	}
-	if badgeUsername != username {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] username in badge definition (%s) doesn't match username (%s)", badgeUsername, username)
-	}
-	badgeAward := incomingEvents[badgeAwardIndex]
-	_, badgeUsername = extractUsernameFromProofBadge(badgeAward)
-	if badgeUsername == "" {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] badge award does not have username proof of ownership")
-	}
-	if badgeUsername != username {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] username in badge award (%s) doesn't match username (%s)", badgeUsername, username)
-	}
-	pTag := badgeAward.GetTag("p")
-	if pTag == nil || pTag.Value() == "" {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] no p tag in badge award for username change")
-	}
-	if pTag.Value() != masterKey {
-		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] p tag in badge award doesn't point to the profile owner")
-	}
-
-	return nil
 }
