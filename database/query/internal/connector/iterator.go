@@ -18,7 +18,7 @@ func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args .
 		defer rows.Close()
 
 		scanner := pgxscan.NewRowScanner(rows)
-		for rows.Next() {
+		for rows.Next() && ctx.Err() == nil {
 			var data T
 
 			err := scanner.Scan(&data)
@@ -26,7 +26,7 @@ func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args .
 				return
 			}
 		}
-		if err := rows.Err(); err != nil {
+		if err := errors.Join(rows.Err(), ctx.Err()); err != nil {
 			yield(nil, errors.Wrap(parseError(err), "rows iteration error"))
 		}
 	}, nil
