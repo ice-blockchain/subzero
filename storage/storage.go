@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
-	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr/nip94"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/xssnick/tonutils-go/adnl"
@@ -260,21 +259,20 @@ func (c *client) FilePath(masterKey, fileHash string) (string, error) {
 	return filepath.Join(userPath, file), nil
 }
 
-func (c *client) Close() error {
-	var err *multierror.Error
+func (c *client) Close() (err error) {
 	c.server.Stop()
 	c.dht.Close()
 	if gClose := c.gateway.Close(); gClose != nil {
-		err = multierror.Append(err, errors.Wrapf(gClose, "failed to stop gateway"))
+		err = errors.Join(err, errors.Wrapf(gClose, "failed to stop gateway"))
 	}
 	if sClose := c.stats.Close(); sClose != nil {
-		err = multierror.Append(err, errors.Wrapf(sClose, "failed to close stats file"))
+		err = errors.Join(err, errors.Wrapf(sClose, "failed to close stats file"))
 	}
 	if dErr := c.db.Close(); dErr != nil {
-		err = multierror.Append(err, errors.Wrapf(dErr, "failed to close db"))
+		err = errors.Join(err, errors.Wrapf(dErr, "failed to close db"))
 	}
 	close(c.downloadQueue)
-	return err.ErrorOrNil()
+	return err
 }
 
 func (c *client) report(ctx context.Context) {

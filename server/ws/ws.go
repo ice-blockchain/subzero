@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v4"
 
@@ -122,7 +121,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	input, err := nostr.ParseMessage(msgBytes)
 	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
-		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
+		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
 
 		return
 	}
@@ -155,7 +154,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				resp.Reason = err.Error()
 			}
 
-			wErr := h.writeResponse(respWriter, resp)
+			wErr := h.writeResponse(ctx, respWriter, resp)
 			if wErr != nil {
 				log.Printf("ERROR: write event response %v: %v", i, wErr)
 
@@ -166,7 +165,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		return
 	case *nostr.AuthEnvelope:
 		ev := &model.Event{Event: e.Event}
-		err = h.writeResponse(respWriter, h.handleAuth(ctx, respWriter, ev))
+		err = h.writeResponse(ctx, respWriter, h.handleAuth(ctx, respWriter, ev))
 		h.logOperation(respWriter, time.Since(start), "auth")
 	case *nostr.ReqEnvelope:
 		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
@@ -182,9 +181,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 				SubscriptionID: e.SubscriptionID,
 				Reason:         err.Error(),
 			}
-			err = h.writeResponse(respWriter, &closedEnvelope)
+			err = h.writeResponse(ctx, respWriter, &closedEnvelope)
 		} else {
-			err = h.writeResponse(respWriter, e)
+			err = h.writeResponse(ctx, respWriter, e)
 		}
 	case *nostr.CloseEnvelope:
 		h.unlinkSubscription(respWriter, (*string)(e))
@@ -196,16 +195,16 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	if err != nil {
 		err = errors.Wrapf(err, "error: failed to handle %v %+v", input.Label(), input)
 		notice := nostr.NoticeEnvelope(err.Error())
-		log.Printf("ERROR:%v", multierror.Append(err, h.writeResponse(respWriter, &notice)).ErrorOrNil())
+		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
 	}
 }
 
-func (h *handler) writeResponse(respWriter adapters.WSWriter, envelope nostr.Envelope) error {
+func (h *handler) writeResponse(ctx context.Context, respWriter adapters.WSWriter, envelope nostr.Envelope) error {
 	b, err := envelope.MarshalJSON()
 	if err != nil {
 		return errors.Wrapf(err, "failed to serialize %+v into json", envelope)
 	}
-	return respWriter.WriteMessage(int(ws.OpText), b)
+	return respWriter.WriteMessage(ctx, int(ws.OpText), b)
 }
 
 func LoadTLSConfig(certOrFileName, keyOrFileName string) *tls.Config {

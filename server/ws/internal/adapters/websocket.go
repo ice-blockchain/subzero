@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/hashicorp/go-multierror"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 )
@@ -31,21 +30,18 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeT
 	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
 }
 
-func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte) error {
+func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte) (err error) {
+	if w.Closed() {
+		return nil
+	}
+
 	select {
 	case <-w.closeChannel:
 		return nil
 	default:
-		var err error
 		if w.writeTimeout > 0 {
-			err = multierror.Append(nil, w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout)))
+			err = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
 		}
-		w.closeMx.Lock()
-		if w.closed {
-			w.closeMx.Unlock()
-			return nil
-		}
-		w.closeMx.Unlock()
 		wErr := wsutil.WriteServerMessage(w.conn, ws.OpCode(messageType), data)
 		w.wrErrMx.Lock()
 		w.wrErr = wErr
@@ -53,9 +49,8 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 		if isConnClosedErr(wErr) {
 			wErr = nil
 		}
-		if err = multierror.Append(err,
-			wErr,
-		).ErrorOrNil(); err != nil {
+
+		if err = errors.Join(err, wErr); err != nil {
 			return errors.Wrap(err, "failed to write data to websocket")
 		}
 
@@ -67,10 +62,14 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 	}
 }
 
-func (w *WebsocketAdapter) WriteMessage(messageType int, data []byte) error {
+func (w *WebsocketAdapter) WriteMessage(ctx context.Context, messageType int, data []byte) error {
 	select {
 	case <-w.closeChannel:
 		return nil
+
+	case <-ctx.Done():
+		return ctx.Err()
+
 	default:
 		w.wrErrMx.Lock()
 		if isConnClosedErr(w.wrErr) {
@@ -78,9 +77,14 @@ func (w *WebsocketAdapter) WriteMessage(messageType int, data []byte) error {
 			return w.Close()
 		}
 		w.wrErrMx.Unlock()
-		w.out <- wsWrite{
+		select {
+		case w.out <- wsWrite{
 			opCode: messageType,
 			data:   data,
+		}:
+		case <-ctx.Done():
+			return errors.Wrapf(ctx.Err(), "cannot write message type %d with size %d to websocket",
+				messageType, len(data))
 		}
 	}
 
@@ -127,21 +131,22 @@ func (w *WebsocketAdapter) ReadMessage() (messageType int, p []byte, err error) 
 
 	return int(typ), msgBytes, err
 }
-func (w *WebsocketAdapter) Closed() bool {
-	w.closeMx.Lock()
-	defer w.closeMx.Unlock()
-	return w.closed
-}
-func (w *WebsocketAdapter) Close() error {
-	w.closeMx.Lock()
-	if w.closed {
-		w.closeMx.Unlock()
 
+func (w *WebsocketAdapter) Closed() bool {
+	return w.closed.Load()
+}
+
+func (w *WebsocketAdapter) Close() error {
+	if w.closed.Load() {
 		return nil
 	}
-	w.closed = true
+
+	if !w.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	close(w.closeChannel)
-	w.closeMx.Unlock()
+
 	var wErr error
 	if w.wrErr == nil || !isConnClosedErr(w.wrErr) {
 		wErr = wsutil.WriteServerMessage(w.conn, ws.OpClose, ws.NewCloseFrameBody(ws.StatusNormalClosure, ""))
@@ -154,10 +159,7 @@ func (w *WebsocketAdapter) Close() error {
 		clErr = nil
 	}
 
-	return multierror.Append( //nolint:wrapcheck // .
-		wErr,
-		clErr,
-	).ErrorOrNil()
+	return errors.Join(wErr, clErr)
 }
 
 func isConnClosedErr(err error) bool {

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
@@ -251,8 +250,8 @@ func (c *wtransportClient) Received() <-chan []byte {
 	return c.inputMessages
 }
 
-func (c *wtransportClient) WriteMessage(messageType int, data []byte) error {
-	err := c.wt.WriteMessageToStream(data)
+func (c *wtransportClient) WriteMessage(ctx context.Context, messageType int, data []byte) error {
+	err := c.wt.WriteMessageToStream(ctx, data)
 
 	return errors.Wrap(err, "client: webtransport writing message failed")
 }
@@ -316,7 +315,7 @@ func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) er
 	default:
 		var err error
 		if w.writeTimeout > 0 {
-			err = multierror.Append(nil, w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout)))
+			err = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
 		}
 		w.closeMx.Lock()
 		if w.closed {
@@ -328,7 +327,7 @@ func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) er
 		if isConnClosedErr(wErr) {
 			wErr = nil
 		}
-		if err = multierror.Append(err, wErr).ErrorOrNil(); err != nil {
+		if err = errors.Join(err, wErr); err != nil {
 			return errors.Wrap(err, "client: failed to write data to websocket")
 		}
 
@@ -339,10 +338,12 @@ func (w *wsocketClient) writeMessageToWebsocket(messageType int, data []byte) er
 	}
 }
 
-func (w *wsocketClient) WriteMessage(messageType int, data []byte) error {
+func (w *wsocketClient) WriteMessage(ctx context.Context, messageType int, data []byte) error {
 	select {
 	case <-w.closeChannel:
 		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 		err := w.writeMessageToWebsocket(messageType, data)
 
@@ -384,7 +385,7 @@ func (w *wsocketClient) Close() error {
 	wErr := wsutil.WriteClientMessage(w.conn, ws.OpClose, ws.NewCloseFrameBody(ws.StatusNormalClosure, ""))
 	err := w.conn.Close()
 
-	return multierror.Append(wErr, err).ErrorOrNil()
+	return errors.Join(wErr, err)
 }
 
 func newHTTP2ClientStream(w *io.PipeWriter, resp *h2ec.Response) *http2ClientStream {
@@ -411,10 +412,7 @@ func (s *http2ClientStream) WriteByte(p byte) (err error) {
 	return nil
 }
 func (s *http2ClientStream) Close() error {
-	return multierror.Append(
-		s.w.Close(),
-		s.resp.Body.Close(),
-	).ErrorOrNil()
+	return errors.Join(s.w.Close(), s.resp.Body.Close())
 }
 
 func (s *http2ClientStream) LocalAddr() net.Addr {
@@ -452,7 +450,7 @@ func (h *http2WebtransportWrapper) Close() error {
 	b = quicvarint.Append(b, uint64(0))
 	err := http3.WriteCapsule(h.conn, http3.CapsuleType(wtCapsuleCloseWebtransportSession), b)
 
-	return multierror.Append(err, h.conn.Close()).ErrorOrNil()
+	return errors.Join(err, h.conn.Close())
 }
 
 func (h *http2WebtransportWrapper) StreamID() quic.StreamID {

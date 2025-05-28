@@ -8,7 +8,8 @@ import (
 	"io"
 	"net"
 	"sync"
-	stdlibtime "time"
+	"sync/atomic"
+	"time"
 
 	"github.com/quic-go/webtransport-go"
 )
@@ -22,7 +23,7 @@ type (
 		io.Closer
 	}
 	WSWriter interface {
-		WriteMessage(messageType int, data []byte) error
+		WriteMessage(ctx context.Context, messageType int, data []byte) error
 		io.Closer
 	}
 	WS interface {
@@ -41,13 +42,12 @@ type (
 		session      *webtransport.Session
 		reader       *bufio.Reader
 		closeChannel chan struct{}
-		closed       bool
-		closeMx      sync.Mutex
+		closed       atomic.Bool
 		wrErr        error
 		wrErrMx      sync.Mutex
 		out          chan []byte
-		writeTimeout stdlibtime.Duration
-		readTimeout  stdlibtime.Duration
+		writeTimeout time.Duration
+		readTimeout  time.Duration
 	}
 
 	WebsocketAdapter struct {
@@ -56,10 +56,9 @@ type (
 		closeChannel chan struct{}
 		wrErr        error
 		wrErrMx      sync.Mutex
-		closed       bool
-		closeMx      sync.Mutex
-		writeTimeout stdlibtime.Duration
-		readTimeout  stdlibtime.Duration
+		closed       atomic.Bool
+		writeTimeout time.Duration
+		readTimeout  time.Duration
 	}
 )
 

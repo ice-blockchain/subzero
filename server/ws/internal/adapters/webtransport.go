@@ -27,14 +27,11 @@ func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, 
 	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
 }
 
-func (w *WebtransportAdapter) WriteMessage(_ int, data []byte) (err error) {
-	w.closeMx.Lock()
-	if w.closed {
-		w.closeMx.Unlock()
-
+func (w *WebtransportAdapter) WriteMessage(ctx context.Context, _ int, data []byte) error {
+	if w.Closed() {
 		return nil
 	}
-	w.closeMx.Unlock()
+
 	w.wrErrMx.Lock()
 	if isConnClosedErr(w.wrErr) {
 		w.wrErrMx.Unlock()
@@ -42,12 +39,19 @@ func (w *WebtransportAdapter) WriteMessage(_ int, data []byte) (err error) {
 		return w.Close()
 	}
 	w.wrErrMx.Unlock()
-	w.out <- data
+
+	select {
+	case w.out <- data:
+		return nil
+	case <-w.closeChannel:
+	case <-ctx.Done():
+		return errors.Wrap(ctx.Err(), "failed to write message to webtransport stream")
+	}
 
 	return nil
 }
 
-func (w *WebtransportAdapter) WriteMessageToStream(data []byte) error {
+func (w *WebtransportAdapter) WriteMessageToStream(ctx context.Context, data []byte) error {
 	if w.writeTimeout > 0 {
 		_ = w.stream.SetWriteDeadline(time.Now().Add(w.writeTimeout)) //nolint:errcheck // .
 	}
@@ -55,6 +59,8 @@ func (w *WebtransportAdapter) WriteMessageToStream(data []byte) error {
 	select {
 	case <-w.closeChannel:
 		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 		if _, err := w.stream.Write(data); err != nil {
 			w.wrErrMx.Lock()
@@ -74,31 +80,28 @@ func (w *WebtransportAdapter) Write(ctx context.Context) {
 		if ctx.Err() != nil || isConnClosedErr(w.wrErr) {
 			break
 		}
-		if err := w.WriteMessageToStream(msg); err != nil {
+		if err := w.WriteMessageToStream(ctx, msg); err != nil {
 			log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to webtransport"))
 		}
 	}
 }
 
 func (w *WebtransportAdapter) Closed() bool {
-	w.closeMx.Lock()
-	closed := w.closed
-	w.closeMx.Unlock()
-
-	return closed
+	return w.closed.Load()
 }
 
 func (w *WebtransportAdapter) Close() error {
-	w.closeMx.Lock()
-	if w.closed {
-		w.closeMx.Unlock()
-
+	if w.closed.Load() {
 		return nil
 	}
-	w.closed = true
+
+	if !w.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	w.closed.Store(true)
 	close(w.closeChannel)
 	close(w.out)
-	w.closeMx.Unlock()
 	var clErr error
 	if w.session != nil {
 		clErr = w.session.CloseWithError(0, "")
