@@ -813,9 +813,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER trigger_events_before_insert_check_onbehalf_permission
-BEFORE INSERT OR UPDATE ON events
+BEFORE INSERT ON events
 FOR EACH ROW
 WHEN (NEW.master_pubkey != NEW.pubkey AND (NEW.pubkey != '' AND NEW.master_pubkey != ''))
+EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
+
+CREATE OR REPLACE TRIGGER trigger_events_before_update_check_onbehalf_permission
+BEFORE UPDATE ON events
+FOR EACH ROW
+WHEN ((NEW.master_pubkey != NEW.pubkey AND (NEW.pubkey != '' AND NEW.master_pubkey != '')) AND (OLD.id != NEW.id))
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_attestation_update_is_allowed(
