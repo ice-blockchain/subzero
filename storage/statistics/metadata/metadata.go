@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hashicorp/go-multierror"
 )
 
 type Extractor interface {
@@ -39,16 +38,11 @@ func (e *extractor) Extract(filePath, contentType string, size uint64) (*Metadat
 	}
 	return e.generic.Extract(filePath, contentType, size)
 }
-func (e *extractor) Close() error {
-	var mErr *multierror.Error
+func (e *extractor) Close() (err error) {
 	for k, ex := range e.extractorsByFileType {
-		if clErr := ex.Close(); clErr != nil {
-			mErr = multierror.Append(mErr, errors.Wrapf(clErr, "failed to close %v meta extractor", k))
-		}
+		err = errors.Join(err, errors.Wrapf(ex.Close(), "failed to close %v meta extractor", k))
+	}
+	err = errors.Join(err, errors.Wrapf(e.generic.Close(), "failed to close generic meta extractor"))
 
-	}
-	if err := e.generic.Close(); err != nil {
-		mErr = multierror.Append(mErr, errors.Wrapf(err, "failed to close generic meta extractor"))
-	}
-	return mErr.ErrorOrNil()
+	return err
 }

@@ -115,15 +115,15 @@ func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey
 	return true
 }
 
-func (h *handler) authRequiredReq(respWriter Writer, sub *model.Subscription, challenge string) error {
-	err := h.writeResponse(respWriter, &nostr.AuthEnvelope{
+func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *model.Subscription, challenge string) error {
+	err := h.writeResponse(ctx, respWriter, &nostr.AuthEnvelope{
 		Challenge: &challenge,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to write AUTH message")
 	}
 
-	err = h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+	err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
 		SubscriptionID: sub.SubscriptionID,
 		Reason:         errAuthRequired.Error(),
 	})
@@ -318,7 +318,7 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 				continue
 			}
 
-			err := h.writeResponse(respWriter,
+			err := h.writeResponse(ctx, respWriter,
 				&nostr.EventEnvelope{
 					SubscriptionID: &sub.SubscriptionID,
 					Events:         []*nostr.Event{&event.Event},
@@ -341,9 +341,9 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 				}, false
 			})
 			if !status.Authenticated {
-				return h.authRequiredReq(respWriter, sub, status.Challenge)
+				return h.authRequiredReq(ctx, respWriter, sub, status.Challenge)
 			} else if !status.IsFilterAllowed(sub.Filters...) {
-				return h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+				return h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
 					SubscriptionID: sub.SubscriptionID,
 					Reason:         "error: not allowed to access the requested data",
 				})
@@ -359,16 +359,16 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 	}
 
 	if err != nil {
-		return errors.Join(err, h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+		return errors.Join(err, h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
 			SubscriptionID: sub.SubscriptionID,
 			Reason:         err.Error(),
 		}))
 	}
 
-	err = h.writeResponse(respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
+	err = h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
 	if err == nil {
 		if sub.OneShot {
-			err = h.writeResponse(respWriter, &nostr.ClosedEnvelope{
+			err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
 				SubscriptionID: sub.SubscriptionID,
 				Reason:         "processed: single request only subscription",
 			})
@@ -399,7 +399,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 				}, false
 			})
 			if !status.Authenticated {
-				err := h.writeResponse(respWriter, &nostr.AuthEnvelope{
+				err := h.writeResponse(ctx, respWriter, &nostr.AuthEnvelope{
 					Challenge: &status.Challenge,
 				})
 				if err != nil {
@@ -484,7 +484,7 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 					break
 				}
 
-				err := h.writeResponse(writer, &envelopes[i])
+				err := h.writeResponse(ctx, writer, &envelopes[i])
 				if err != nil {
 					ch <- errors.Wrapf(err, "failed to write events for subscription %v", envelopes[i].SubscriptionID)
 					break // Stop writing events for this writer.

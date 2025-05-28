@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
-	"github.com/hashicorp/go-multierror"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
@@ -42,14 +41,14 @@ func (s *srv) ping(ctx context.Context, writer adapters.WSWithWriter) {
 		ticker.Stop()
 		writer.Close()
 	}()
-	for {
+	for ctx.Err() == nil {
 		select {
 		case <-ticker.C:
 			var dErr error
-			if err := multierror.Append(
+			if err := errors.Join(
 				dErr,
-				writer.WriteMessage(int(ws.OpPing), nil),
-			).ErrorOrNil(); err != nil {
+				writer.WriteMessage(ctx, int(ws.OpPing), nil),
+			); err != nil {
 				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send ping message"))
 			}
 		case <-ctx.Done():

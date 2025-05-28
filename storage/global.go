@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hashicorp/go-multierror"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/syndtr/goleveldb/leveldb"
 	ldbstorage "github.com/syndtr/goleveldb/leveldb/storage"
@@ -65,26 +64,24 @@ func Client() StorageClient {
 	return globalClient
 }
 
-func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	var acceptErrors *multierror.Error
-
+func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 	for _, event := range events {
 		switch event.Kind {
 		case nostr.KindFileMetadata:
-			acceptErrors = multierror.Append(acceptErrors, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
+			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
 
 		case nostr.KindDeletion:
 			if (len(event.Tags) == 0 || (len(event.Tags) == 1 && event.GetTag("b").Value() != "")) && event.GetMasterPublicKey() != "" {
-				acceptErrors = multierror.Append(acceptErrors, errors.Wrapf(globalClient.DeleteUser(event.GetMasterPublicKey()), "failed to accept profile deletion %v", event))
+				err = errors.Join(err, errors.Wrapf(globalClient.DeleteUser(event.GetMasterPublicKey()), "failed to accept profile deletion %v", event))
 			} else if len(event.Tags) > 1 {
 				if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
-					acceptErrors = multierror.Append(acceptErrors, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
+					err = errors.Join(err, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
 				}
 			}
 		}
 	}
 
-	return acceptErrors.ErrorOrNil()
+	return err
 }
 
 func acceptDeletion(ctx context.Context, event *model.Event) error {
@@ -137,11 +134,10 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 			fileHashes = append(fileHashes, hash)
 		}
 	}
-	var mErr *multierror.Error
 	for _, fh := range fileHashes {
-		mErr = multierror.Append(mErr, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey))
+		err = errors.Join(err, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey))
 	}
-	return mErr.ErrorOrNil()
+	return err
 }
 
 func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey string) error {

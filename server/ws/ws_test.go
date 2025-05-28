@@ -183,8 +183,8 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 			Port:      9999,
 			TLSConfig: LoadTLSConfig(tlsConfig.TLSCert, tlsConfig.TLSKey),
 		},
-		func(_ context.Context, w Writer, in []byte) {
-			if wErr := w.WriteMessage(int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
+		func(ctx context.Context, w Writer, in []byte) {
+			if wErr := w.WriteMessage(ctx, int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
 				log.Panic(wErr)
 			}
 		},
@@ -221,7 +221,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 				msg := uuid.NewString()
 				sendMsgs = append(sendMsgs, msg)
 				sendMsgsTransformed = append(sendMsgsTransformed, "server reply:"+msg)
-				err := clientConn.WriteMessage(int(ws.OpText), []byte(msg))
+				err := clientConn.WriteMessage(ctx, int(ws.OpText), []byte(msg))
 				if ctx.Err() == nil {
 					require.NoError(t, err)
 				}

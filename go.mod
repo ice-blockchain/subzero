@@ -27,7 +27,6 @@ require (
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
-	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250523154412-3992bb0a17d5
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/imroc/req/v3 v3.52.2
@@ -151,6 +150,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250523154412-3992bb0a17d5 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
@@ -233,7 +233,7 @@ require (
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
-	github.com/ugorji/go/codec v1.2.13 // indirect
+	github.com/ugorji/go/codec v1.2.14 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xssnick/raptorq v1.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
