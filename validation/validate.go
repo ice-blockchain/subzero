@@ -156,11 +156,11 @@ var (
 				expiresAt := e.GetTag("expiration").Value()
 				if expiresAt != "" {
 					// Always check expiresAt if it's provided.
-					ts, err := strconv.ParseInt(expiresAt, 10, 64)
+					ts, err := parseTimestamp(expiresAt)
 					if err != nil {
 						return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid expiration value: %q: %v", expiresAt, err)
 					}
-					if globalConfig != nil && globalConfig.MaxWrappedEventExpiration > 0 && time.Unix(ts, 0).After(time.Now().Add(globalConfig.MaxWrappedEventExpiration)) {
+					if globalConfig != nil && globalConfig.MaxWrappedEventExpiration > 0 && ts.Time().After(time.Now().Add(globalConfig.MaxWrappedEventExpiration)) {
 						return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is too far in the future, max is %s", globalConfig.MaxWrappedEventExpiration)
 					}
 				} else if _, ok := subkindNoExpiration[int(subkind)]; !ok {
@@ -370,12 +370,12 @@ func validatePollTag(tag model.Tag) error {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid type value: %q, want single or multi", value)
 			}
 		case "ttl":
-			v, err := strconv.ParseInt(value, 10, 64)
+			v, err := parseTimestamp(value)
 			if err != nil {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time: %v", value, err)
 			} else if v < 0 {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time", value)
-			} else if v > 0 && time.Unix(v, 0).Before(time.Now()) {
+			} else if v > 0 && v.Time().Before(time.Now()) {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time in the future", value)
 			}
 		case "title":
@@ -479,10 +479,10 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	}
 
 	deadlineStr, _ := extractTagValueFromPairs(pollTag, "ttl")
-	deadline, err := strconv.ParseInt(deadlineStr, 10, 64)
+	deadline, err := parseTimestamp(deadlineStr)
 	if err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "vote: invalid ttl value: %q: %v", deadlineStr, err)
-	} else if time.Now().Unix() > deadline {
+	} else if deadline.Time().Before(time.Now()) {
 		return errors.Wrapf(ErrWrongEventParams, "vote: poll is expired")
 	}
 
@@ -1315,16 +1315,15 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 		if parsedContent.Kind != model.CustomIONKindCommunityJoin {
 			return errors.Wrapf(ErrWrongEventParams, "wrong authorization content kind: %+v", e)
 		}
-		expirationTag := parsedContent.GetTag("expiration")
-		if expirationTag == nil {
+		expirationTag := parsedContent.GetTag("expiration").Value()
+		if expirationTag == "" {
 			return errors.Wrapf(ErrWrongEventParams, "community join must have an expiration tag for authorization event: %+v", e)
 		}
-		expirationTime, err := strconv.ParseInt(expirationTag.Value(), 10, 64)
+		expirationTime, err := parseTimestamp(expirationTag)
 		if err != nil {
 			return errors.Wrapf(ErrWrongEventParams, "wrong expiration tag value, %v", err.Error())
 		}
-		currentTime := time.Now().Unix()
-		if currentTime > expirationTime {
+		if expirationTime.Time().Before(time.Now()) {
 			return errors.Wrapf(ErrWrongEventParams, "authorization event has expired: %v", expirationTime)
 		}
 		if ok, err := parsedContent.CheckSignature(); err != nil || !ok {
@@ -1367,8 +1366,7 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 		aTags         = e.Tags.GetAll([]string{"a"})
 		hTag          = e.GetTag(model.CustomIONTagCommunity)
 		pTags         = e.Tags.GetAll([]string{"p"})
-		expirationTag = e.GetTag("expiration")
-		currentTime   = time.Now().Unix()
+		expirationTag = e.GetTag("expiration").Value()
 	)
 	for _, aTag := range aTags {
 		if len(aTag) < 2 {
@@ -1384,14 +1382,14 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 	if len(pTags) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have at least one p tag: %+v", e)
 	}
-	if expirationTag == nil {
+	if expirationTag == "" {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have an expiration tag: %+v", e)
 	}
-	expirationTime, err := strconv.ParseInt(expirationTag.Value(), 10, 64)
+	expirationTime, err := parseTimestamp(expirationTag)
 	if err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "wrong expiration tag value: %+v", e)
 	}
-	if currentTime > expirationTime {
+	if expirationTime.Time().Before(time.Now()) {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership transferring event has expired: %+v", e)
 	}
 	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
