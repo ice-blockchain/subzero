@@ -317,10 +317,6 @@ var (
 	}
 
 	SupportedIMetaKeys = map[string]tagState{
-		// TODO: remove it later.
-		"i": tagStateOptional,
-		"x": tagStateOptional,
-
 		"url":      tagStateRequired,
 		"m":        tagStateRequired,
 		"ox":       tagStateOptional,
@@ -645,10 +641,9 @@ func validate(ctx context.Context, e *model.Event) error {
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 		richText := e.GetTag(model.CustomIONTagRichText)
-		// TODO: enable it later.
-		// if richText != nil && len(e.Content) > 0 {
-		//     return errors.Wrap(ErrWrongEventParams, "rich text tag is set, but content is not empty")
-		// }
+		if richText != nil && len(e.Content) > 0 {
+			return errors.Wrap(ErrWrongEventParams, "rich text tag is set, but content is not empty")
+		}
 		if len(e.Content) == 0 && richText == nil {
 			pubAt := e.GetTag("published_at").Value()
 			if val, err := strconv.ParseInt(pubAt, 10, 64); err != nil || val == int64(e.CreatedAt) {
