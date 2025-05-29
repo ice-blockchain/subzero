@@ -96,3 +96,5 @@ DO $$ BEGIN
             e.id = cte.event_id;
     END IF;
 END $$;
+--------
+CREATE INDEX IF NOT EXISTS idx_events_has_images_has_references_is_quote_is_reply_lookup_created_at ON events(has_images, has_references, is_quote, is_reply, lookup_created_at DESC) WHERE hidden = FALSE;

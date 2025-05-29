@@ -163,33 +163,23 @@ func (b *sliceBuilder[T]) Build(builder *queryBuilder, filterID string, name str
 
 	builder.MaybeOP(b.Op)
 	builder.WriteString(name)
+	if b.Negative {
+		builder.WriteString(" != ")
+	} else {
+		builder.WriteString(" = ")
+	}
+
 	s := model.DeduplicateSlice(b.Slice, func(elem T) T { return elem })
 	if len(s) == 1 {
-		// X = :X_name.
-		if b.Negative {
-			builder.WriteString(" != :")
-		} else {
-			builder.WriteString(" = :")
-		}
-		builder.WriteString(builder.PushValue(filterID, b.ParamName, s[0]))
-
-		return builder
-	}
-
-	// X in (:X_name0, :X_name1, ...).
-	if b.Negative {
-		builder.WriteString(" NOT IN (")
-	} else {
-		builder.WriteString(" IN (")
-	}
-	for i := range len(s) - 1 {
+		// X = :X_name0.
 		builder.WriteRune(':')
-		builder.WriteString(builder.PushValue(filterID, b.ParamName+strconv.Itoa(i), s[i]))
-		builder.WriteRune(',')
+		builder.WriteString(builder.PushValue(filterID, b.ParamName, s[0]))
+	} else {
+		// X = ANY(...).
+		builder.WriteString("ANY(:")
+		builder.WriteString(builder.PushValue(filterID, b.ParamName, s))
+		builder.WriteRune(')')
 	}
-	builder.WriteRune(':')
-	builder.WriteString(builder.PushValue(filterID, b.ParamName+strconv.Itoa(len(s)-1), s[len(s)-1]))
-	builder.WriteRune(')')
 
 	return builder
 }
