@@ -258,6 +258,15 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 		return
 	}
 
+	if v, ok := tags["d"]; ok && len(v) == 1 && len(tags) == 1 && len(v[0]) == 1 {
+		// Special case for "d" tag.
+		b.MaybeAND()
+		b.WriteString("e.d_tag = :")
+		b.WriteValue(filterID, "dtag", v[0][0])
+
+		return
+	}
+
 	var tagID, tagValue uint64
 	for tagName, tagValues := range tags {
 		tagID++

@@ -80,6 +80,16 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 		require.Len(t, params, 4)
 		helperEnsureParams(t, q, params)
 	})
+	t.Run("With d tag", func(t *testing.T) {
+		q, params, err := newQueryBuilder().Build(model.Filter{
+			IDs:  []string{generateHexString()},
+			Tags: model.TagMap{}.SetLiterals("d", "foo"),
+		})
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", q, params)
+		require.Len(t, params, 3)
+		helperEnsureParams(t, q, params)
+	})
 	t.Run("WithTimeRange", func(t *testing.T) {
 		ts1 := model.Timestamp(generateCreatedAt())
 		ts2 := model.Timestamp(generateCreatedAt())
