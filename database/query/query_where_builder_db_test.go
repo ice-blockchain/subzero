@@ -966,6 +966,11 @@ func TestFilterTagsNegative(t *testing.T) {
 		require.Len(t, events, 1)
 		require.Equal(t, "2id", events[0].ID)
 	})
+	t.Run("Find reply by marker", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Search: "emarker:reply"})
+		require.Len(t, events, 1)
+		require.Equal(t, "2id", events[0].ID)
+	})
 }
 
 func TestGetReplyTypeFromValues(t *testing.T) {

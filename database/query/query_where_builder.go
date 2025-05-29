@@ -234,14 +234,22 @@ func (b *queryBuilder) ApplyFilterTagMarkers(filterID string, markers ...databas
 
 	for id, marker := range markers {
 		b.MaybeAND()
-		if marker.Exclude {
-			b.WriteString("NOT ")
+
+		switch {
+		// Special case for [!]<e, a>marker:reply, like `!amarker:reply`.
+		case (marker.Tag == "a" || marker.Tag == "e") && marker.Marker == model.TagMarkerReply:
+			b.WriteString(`e.is_reply = :`)
+			b.WriteValue(filterID, "mtagvalue"+strconv.Itoa(id), !marker.Exclude)
+		default:
+			if marker.Exclude {
+				b.WriteString("NOT ")
+			}
+			b.WriteString("EXISTS (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = :")
+			b.WriteValue(filterID, "mtagname"+strconv.Itoa(id), marker.Tag)
+			b.WriteString(" AND event_tag_value3 = :")
+			b.WriteValue(filterID, "mtagvalue"+strconv.Itoa(id), marker.Marker)
+			b.WriteRune(')')
 		}
-		b.WriteString("EXISTS (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = :")
-		b.WriteValue(filterID, "mtagname"+strconv.Itoa(id), marker.Tag)
-		b.WriteString(" AND event_tag_value3 = :")
-		b.WriteValue(filterID, "mtagvalue"+strconv.Itoa(id), marker.Marker)
-		b.WriteRune(')')
 	}
 }
 
