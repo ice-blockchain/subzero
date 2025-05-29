@@ -423,10 +423,8 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 
 	if filter.Quotes != nil {
 		b.MaybeAND()
-		if !*filter.Quotes {
-			b.WriteString("NOT ")
-		}
-		b.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key in ('q', 'Q'))")
+		b.WriteString("e.is_quote=:")
+		b.WriteValue(filter.ID, "quote", *filter.Quotes)
 	}
 
 	if filter.Expiration != nil {
@@ -440,11 +438,9 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 
 	if filter.References != nil {
 		b.MaybeAND()
-		b.WriteString(`(case when e.reference_id is not null then true else `)
-		if !*filter.References {
-			b.WriteString("NOT ")
-		}
-		b.WriteString("exists (select true from event_tags where event_id = e.id AND event_tag_key in ('a', 'e')) end)")
+		b.WriteString(`(case when e.reference_id is not null then true else e.has_references=:`)
+		b.WriteValue(filter.ID, "references", *filter.References)
+		b.WriteString(` end)`)
 	}
 }
 

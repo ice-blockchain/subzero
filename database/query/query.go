@@ -46,6 +46,7 @@ type (
 	databaseEvent struct {
 		model.Event
 		LookupCreatedAt int64
+		TagID           int64
 		SystemKind      sql.NullInt64
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
@@ -56,11 +57,13 @@ type (
 		Htag            string
 		AddressValue    string
 		Lookup          string
-		TagID           int64
+		SaveMergeAction string
 		Deleted         bool
 		HasImages       bool
 		HasVideos       bool
-		SaveMergeAction string
+		HasReferences   bool
+		IsReply         bool
+		IsQuote         bool
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -84,122 +87,86 @@ type databaseBatchRequest struct {
 	Rollback map[string]bool
 }
 
-func detectImagesVideos(tags model.Tags) (images, videos bool) {
-	for _, tag := range tags {
-		if tag.Key() != "imeta" {
-			continue
-		}
-
-		for i := range len(tag) {
-			if strings.HasPrefix(tag[i], "m image/") {
-				images = true
-			} else if strings.HasPrefix(tag[i], "m video/") {
-				videos = true
-			}
-		}
-	}
-	return images, videos
-}
-
-func detectSystemKind(tags model.Tags) (int64, bool) {
+func (d *databaseEvent) FromTags(tags model.Tags) {
 	// Syntax: "a|e", "<address>", "", "reply|root", "<master_pubkey>".
 	var rootOf, replyOf string
-	for i := range tags {
-		switch tags[i].Key() {
-		case "a", "e":
-			if len(tags[i]) <= replyMarkerIndex {
-				continue
+	// TODO: review SystemKind and remove it.
+	for _, tag := range tags {
+		switch tag.Key() {
+		case "imeta":
+			for i := range len(tag) {
+				if strings.HasPrefix(tag[i], "m image/") {
+					d.HasImages = true
+				} else if strings.HasPrefix(tag[i], "m video/") {
+					d.HasVideos = true
+				} else if d.HasImages && d.HasVideos {
+					break // No need to check further.
+				}
 			}
-			if strings.EqualFold(tags[i][replyMarkerIndex], "reply") && replyOf == "" {
-				replyOf = tags[i].Value()
-			} else if strings.EqualFold(tags[i][replyMarkerIndex], "root") && rootOf == "" {
-				rootOf = tags[i].Value()
+		case "expiration":
+			deadline, err := strconv.ParseInt(tag.Value(), 10, 64)
+			if err == nil && deadline > 0 && (!d.Expiration.Valid || deadline < d.Expiration.Int64) {
+				d.Expiration.Int64 = deadline
+				d.Expiration.Valid = true
+			}
+		case "a", "e":
+			d.HasReferences = true
+			if len(tag) > replyMarkerIndex {
+				if strings.EqualFold(tag[replyMarkerIndex], model.TagMarkerReply) && replyOf == "" {
+					d.IsReply = true
+					replyOf = tag.Value()
+				} else if strings.EqualFold(tag[replyMarkerIndex], model.TagMarkerRoot) && rootOf == "" {
+					rootOf = tag.Value()
+				}
 			}
 		case "q", "Q":
-			return systemKindQuote, true
+			d.IsQuote = true
+			d.SystemKind = sql.NullInt64{Int64: systemKindQuote, Valid: true}
 		}
 	}
-
-	// Cover:
-	// - has both reply and root tags that points to the same event.
-	// - has only root tag.
 	if rootOf != "" && (rootOf == replyOf || replyOf == "") {
-		return systemKindCommentRoot, true
-	} else if replyOf != "" && replyOf != rootOf { // Has reply tag, and optional root tag.
-		return systemKindCommentReply, true
+		d.SystemKind = sql.NullInt64{Int64: systemKindCommentRoot, Valid: true}
+	} else if replyOf != "" && replyOf != rootOf {
+		d.SystemKind = sql.NullInt64{Int64: systemKindCommentReply, Valid: true}
 	}
-	return -1, false
 }
 
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
-	var deleted bool
+	event := databaseEvent{
+		Event:        *e,
+		MasterPubKey: e.GetMasterPublicKey(),
+		Dtag:         e.Tags.GetD(),
+		Htag:         e.GetHTag(),
+	}
 
 	sigAlg, keyAlg, err := parseSigKeyAlg(e)
 	if err != nil {
 		return nil, err
 	}
+	event.SigAlg, event.KeyAlg = sigAlg, keyAlg
+	event.Lookup = prepareSearchContent(e)
+	event.FromTags(e.Tags)
 
-	// Is it a soft delete?
-	if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
-		switch e.Kind {
-		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-			val, err := nostr.ParseTimestamp(e.GetTag("published_at").Value())
-			deleted = err == nil && e.CreatedAt.After(val)
+	switch e.Kind {
+	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+		// Is it a soft delete?
+		if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
+			val, err := strconv.ParseInt(e.GetTag("published_at").Value(), 10, 64)
+			event.Deleted = err == nil && int64(e.CreatedAt) > val
 		}
-	}
-
-	var images, videos bool
-	images, videos = detectImagesVideos(e.Tags)
-
-	var expiration sql.NullInt64
-	if val := e.GetTag("expiration").Value(); val != "" {
-		deadline, err := strconv.ParseInt(val, 10, 64)
-		if err == nil && deadline > 0 {
-			expiration.Int64 = deadline
-			expiration.Valid = true
-		}
-	}
-
-	var lookup string
-	if e.Kind == nostr.KindRepost || e.Kind == nostr.KindGenericRepost {
+	case nostr.KindRepost, nostr.KindGenericRepost:
 		var original model.Event
 		if err := original.UnmarshalJSON([]byte(e.Content)); err == nil {
-			images, videos = detectImagesVideos(original.Tags)
-			if val := original.GetTag("expiration").Value(); val != "" {
-				deadline, err := strconv.ParseInt(val, 10, 64)
-				if err == nil && deadline > 0 && (!expiration.Valid || deadline < expiration.Int64) {
-					// Original event has shorter expiration time, use it.
-					expiration.Int64 = deadline
-					expiration.Valid = true
-				}
-			}
+			event.Lookup = prepareSearchContent(&original)
+			event.FromTags(original.Tags)
 		}
-		lookup = prepareSearchContent(&original)
-	} else {
-		lookup = prepareSearchContent(e)
 	}
 
-	if expiration.Valid {
-		expiration.Int64 = nostr.Timestamp(expiration.Int64).Time().UnixNano()
+	if event.Expiration.Valid {
+		event.Expiration.Int64 = nostr.Timestamp(event.Expiration.Int64).Time().UnixNano()
 	}
 
-	var systemKind sql.NullInt64
-	systemKind.Int64, systemKind.Valid = detectSystemKind(e.Tags)
-
-	return &databaseEvent{
-		Event:        *e,
-		MasterPubKey: e.GetMasterPublicKey(),
-		SystemKind:   systemKind,
-		SigAlg:       sigAlg,
-		KeyAlg:       keyAlg,
-		Dtag:         e.Tags.GetD(),
-		Htag:         e.GetHTag(),
-		Lookup:       lookup,
-		Deleted:      deleted,
-		HasImages:    images,
-		HasVideos:    videos,
-		Expiration:   expiration,
-	}, nil
+	return &event, nil
 }
 
 func (req *databaseBatchRequest) Save(e *model.Event) error {
@@ -472,10 +439,13 @@ func (db *dbClient) saveEvents(
 	for _, ev := range events {
 		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
 			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
-			ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos,
-			ev.Lookup, ev.Expiration,
+			ev.Tags, ev.Dtag, ev.Htag,
+			ev.Deleted, ev.HasImages, ev.HasVideos,
+			ev.IsReply, ev.IsQuote, ev.HasReferences,
+			ev.Lookup,
+			ev.Expiration,
 		)
-		isReplay := ""
+		var isReplay string
 		if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
 			isReplay = model.ConsensusReplayCtxKey
 		}
@@ -483,18 +453,20 @@ func (db *dbClient) saveEvents(
 			`($%[1]v::integer, $%[2]v::integer, $%[3]v::bigint,
 			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
 			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
-			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text), $%[18]v::bigint,
-			'%[19]v')`, // replaced_by_id to match replaceable_events_before_update schema,
+			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, 
+			$%[17]v::bool, $%[18]v::bool, $%[19]v::bool,
+			to_tsvector($%[20]v::text), $%[21]v::bigint,
+			'%[22]v')`, // replaced_by_id to match replaceable_events_before_update schema,
 			// we use it also to detect if save come from consensus.ReplayTx.
 			// In this case it should not trigger trigger_events_store_replaceable_data_before_update
 			// as data already committed and we want to avoid extra insert / delete to that table
 			// of rollbackable replaceable events.
 			idx, idx+1, idx+2,
 			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
-			idx+17,
+			idx+17, idx+18, idx+19, idx+20,
 			isReplay,
 		))
-		idx += 18
+		idx += 21
 	}
 	valuesStr := ""
 	if len(values) > 0 {
@@ -509,12 +481,13 @@ WITH replaced AS (
 )
 MERGE INTO events AS target
 	USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-		has_images, has_videos, lookup, expiration, replaced_by_id FROM replaced 
+		has_images, has_videos, is_reply, is_quote, has_references, lookup, expiration, replaced_by_id FROM replaced 
 			` + valuesStr + `
 	) AS source (
 		kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
 		has_images,
 		has_videos,
+		is_reply, is_quote, has_references,
 		lookup,
 		expiration,
 		replaced_by_id
@@ -622,6 +595,7 @@ WHEN NOT MATCHED THEN
 		deleted,
 		has_images,
 		has_videos,
+		is_reply, is_quote, has_references,
 		lookup,
 		expiration
 	)
@@ -631,6 +605,7 @@ WHEN NOT MATCHED THEN
 		source.key_alg, source.content, source.tags, source.d_tag,
 		source.h_tag, source.deleted,
 		source.has_images, source.has_videos,
+		source.is_reply, source.is_quote, source.has_references,
 		source.lookup,
 		source.expiration
 	)
