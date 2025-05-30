@@ -423,7 +423,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
-					{"d", fmt.Sprintf("username_proof_of_ownership:%s", badgeUsername)},
+					{"d", fmt.Sprintf("username_proof_of_ownership~%s", badgeUsername)},
 					{"name", "Username Verification Mismatch"},
 					{"description", "This badge has a different username than the profile"},
 				},
@@ -436,7 +436,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, badgeUsername)},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership~%s", heimdallPubkey, badgeUsername)},
 				[]string{"p", userPubkey},
 			},
 		}}
@@ -462,7 +462,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
-					{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+					{"d", fmt.Sprintf("username_proof_of_ownership~%s", username)},
 					{"name", "Username Verification"},
 					{"description", "Proof of ownership for username"},
 					{"image", "https://bogus.com/verified.jpg", "1024x1024"},
@@ -478,7 +478,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, username)},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership~%s", heimdallPubkey, username)},
 				[]string{"p", userPubkey},
 			},
 		}}
@@ -493,7 +493,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
-					{"d", fmt.Sprintf("username_proof_of_ownership:%s", wrongUsername)},
+					{"d", fmt.Sprintf("username_proof_of_ownership~%s", wrongUsername)},
 					{"name", "Wrong Username"},
 					{"description", "This should fail"},
 				},
@@ -506,7 +506,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, wrongUsername)},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership~%s", heimdallPubkey, wrongUsername)},
 				[]string{"p", userPubkey},
 			},
 		}}
@@ -521,7 +521,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
-					{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+					{"d", fmt.Sprintf("username_proof_of_ownership~%s", username)},
 					{"name", "Username Verification"},
 					{"description", "Proof of ownership for username without profile"},
 				},
@@ -535,7 +535,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, username)},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership~%s", heimdallPubkey, username)},
 				[]string{"p", userPubkey},
 			},
 		}}
@@ -558,7 +558,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
-					{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+					{"d", fmt.Sprintf("username_proof_of_ownership~%s", username)},
 					{"name", "Username Verification"},
 					{"description", "Proof of ownership for username"},
 				},
@@ -570,7 +570,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, username)},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership~%s", heimdallPubkey, username)},
 				[]string{"p", userPubkey},
 			},
 		}}
@@ -603,7 +603,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeDefinition,
 				Tags: nostr.Tags{
-					{"d", fmt.Sprintf("username_proof_of_ownership:%s", newUsername)},
+					{"d", fmt.Sprintf("username_proof_of_ownership~%s", newUsername)},
 					{"name", "Username Verification"},
 					{"description", "Proof of ownership for updated username"},
 				},
@@ -616,7 +616,7 @@ func TestBroadcastLinkedEventBadges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
 				[]string{model.CustomIONTagOnBehalfOf, heimdallPubkey},
-				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership:%s", heimdallPubkey, newUsername)},
+				[]string{"a", fmt.Sprintf("30009:%v:username_proof_of_ownership~%s", heimdallPubkey, newUsername)},
 				[]string{"p", userPubkey},
 			},
 		}}
@@ -633,7 +633,7 @@ func TestExtractUsernameFromProofBadge(t *testing.T) {
 		event := &model.Event{Event: nostr.Event{
 			Kind: nostr.KindBadgeAward,
 			Tags: model.Tags{
-				[]string{"a", fmt.Sprintf("30009:pubkey:username_proof_of_ownership:%s", username)},
+				[]string{"a", fmt.Sprintf("30009:pubkey:username_proof_of_ownership~%s", username)},
 			},
 		}}
 
@@ -647,7 +647,7 @@ func TestExtractUsernameFromProofBadge(t *testing.T) {
 		event := &model.Event{Event: nostr.Event{
 			Kind: nostr.KindBadgeDefinition,
 			Tags: model.Tags{
-				[]string{"d", fmt.Sprintf("username_proof_of_ownership:%s", username)},
+				[]string{"d", fmt.Sprintf("username_proof_of_ownership~%s", username)},
 			},
 		}}
 
@@ -686,7 +686,7 @@ func TestExtractUsernameFromProofBadge(t *testing.T) {
 		event := &model.Event{Event: nostr.Event{
 			Kind: nostr.KindTextNote,
 			Tags: model.Tags{
-				[]string{"d", "username_proof_of_ownership:testuser"},
+				[]string{"d", "username_proof_of_ownership~testuser"},
 			},
 		}}
 
