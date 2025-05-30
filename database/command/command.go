@@ -598,20 +598,23 @@ func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
 	if ev.Kind == nostr.KindBadgeAward {
 		if aTag := ev.GetTag("a"); aTag != nil && len(aTag) >= 2 {
 			parts := strings.Split(aTag.Value(), ":")
-			if parts[2] != usernameProofOfOwnership {
+			if !strings.Contains(parts[2], usernameProofOfOwnership) {
 				return false, ""
 			}
-			if len(parts) == 4 {
-				return true, parts[3]
+			if len(parts) == 3 {
+				lastPart := parts[len(parts)-1]
+				if strings.Contains(lastPart, "~") {
+					usernameParts := strings.Split(lastPart, "~")
+					if len(usernameParts) == 2 {
+						return true, usernameParts[1]
+					}
+				}
 			}
 		}
 	} else if ev.Kind == nostr.KindBadgeDefinition {
 		if dTag := ev.GetTag("d"); dTag != nil && len(dTag) >= 2 {
-			parts := strings.Split(dTag.Value(), ":")
-			if parts[0] != usernameProofOfOwnership {
-				return false, ""
-			}
-			if len(parts) == 2 {
+			parts := strings.Split(dTag.Value(), "~")
+			if len(parts) == 2 && parts[0] == usernameProofOfOwnership {
 				return true, parts[1]
 			}
 		}
