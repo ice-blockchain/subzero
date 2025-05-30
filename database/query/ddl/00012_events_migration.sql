@@ -97,4 +97,13 @@ DO $$ BEGIN
     END IF;
 END $$;
 --------
-CREATE INDEX IF NOT EXISTS idx_events_has_images_has_references_is_quote_is_reply_lookup_created_at ON events(has_images, has_references, is_quote, is_reply, lookup_created_at DESC) WHERE hidden = FALSE;
+-- Feed request:
+--   kinds":[1, 30175, 6, 30023]
+--   !amarker:reply
+--   !emarker:reply
+--   references:false
+--   expiration:false
+CREATE INDEX IF NOT EXISTS
+    idx_events_kind_has_references_expiration_is_reply_lookup_created_at ON
+        events(kind, has_references, expiration, is_reply, lookup_created_at DESC)
+        WHERE is_reply = FALSE AND has_references = FALSE AND expiration is NULL AND hidden = FALSE;

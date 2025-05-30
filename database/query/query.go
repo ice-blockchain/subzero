@@ -104,9 +104,9 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 				}
 			}
 		case "expiration":
-			deadline, err := strconv.ParseInt(tag.Value(), 10, 64)
-			if err == nil && deadline > 0 && (!d.Expiration.Valid || deadline < d.Expiration.Int64) {
-				d.Expiration.Int64 = deadline
+			deadline, err := nostr.ParseTimestamp(tag.Value())
+			if err == nil && deadline > 0 && (!d.Expiration.Valid || deadline.Before(nostr.Timestamp(d.Expiration.Int64))) {
+				d.Expiration.Int64 = deadline.Time().UnixNano()
 				d.Expiration.Valid = true
 			}
 		case "a", "e":
@@ -151,8 +151,8 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 		// Is it a soft delete?
 		if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
-			val, err := strconv.ParseInt(e.GetTag("published_at").Value(), 10, 64)
-			event.Deleted = err == nil && int64(e.CreatedAt) > val
+			val, err := nostr.ParseTimestamp(e.GetTag("published_at").Value())
+			event.Deleted = err == nil && e.CreatedAt.After(val)
 		}
 	case nostr.KindRepost, nostr.KindGenericRepost:
 		var original model.Event

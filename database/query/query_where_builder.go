@@ -19,7 +19,7 @@ import (
 
 const (
 	whereBuilderDefaultWhere    = "e.hidden=false"
-	whereBuilderCommunityFilter = "(case when e.kind in (1, 30023, 30175) then NOT EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = 'h') else true end)"
+	whereBuilderCommunityFilter = "(case when e.kind in (1, 30023, 30175) then e.id = e.h_tag else true end)"
 	whereBuilderNoSoftDeleted   = "e.deleted=false"
 	whereBuilderDefaultOrderBy  = "lookup_created_at DESC"
 
@@ -258,11 +258,11 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 		return
 	}
 
-	if v, ok := tags["d"]; ok && len(v) == 1 && len(tags) == 1 && len(v[0]) == 1 {
+	if v, ok := tags["d"]; ok && len(v) == 1 && len(tags) == 1 && len(v[0]) == 1 && v[0][0] != nil {
 		// Special case for "d" tag.
 		b.MaybeAND()
 		b.WriteString("e.d_tag = :")
-		b.WriteValue(filterID, "dtag", v[0][0])
+		b.WriteValue(filterID, "dtag", *v[0][0])
 
 		return
 	}

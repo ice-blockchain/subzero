@@ -3,6 +3,7 @@
 drop index if exists idx_event_tags_key_value1_expiration;
 drop index if exists idx_event_tags_id_key_value1_value3;
 drop index if exists idx_event_tags_expired;
+drop index if exists idx_event_tags_expired_nano;
 --------
 --- TODO: optimize index size and usage.
 create index if not exists idx_event_tags_key_value1                  on event_tags(event_tag_key, event_tag_value1);
