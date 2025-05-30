@@ -156,7 +156,7 @@ var (
 				expiresAt := e.GetTag("expiration").Value()
 				if expiresAt != "" {
 					// Always check expiresAt if it's provided.
-					ts, err := parseTimestamp(expiresAt)
+					ts, err := nostr.ParseTimestamp(expiresAt)
 					if err != nil {
 						return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid expiration value: %q: %v", expiresAt, err)
 					}
@@ -366,7 +366,7 @@ func validatePollTag(tag model.Tag) error {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid type value: %q, want single or multi", value)
 			}
 		case "ttl":
-			v, err := parseTimestamp(value)
+			v, err := nostr.ParseTimestamp(value)
 			if err != nil {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time: %v", value, err)
 			} else if v < 0 {
@@ -475,7 +475,7 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	}
 
 	deadlineStr, _ := extractTagValueFromPairs(pollTag, "ttl")
-	deadline, err := parseTimestamp(deadlineStr)
+	deadline, err := nostr.ParseTimestamp(deadlineStr)
 	if err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "vote: invalid ttl value: %q: %v", deadlineStr, err)
 	} else if deadline.Time().Before(time.Now()) {
@@ -646,7 +646,7 @@ func validate(ctx context.Context, e *model.Event) error {
 		}
 		if len(e.Content) == 0 && richText == nil {
 			pubAt := e.GetTag("published_at").Value()
-			if val, err := strconv.ParseInt(pubAt, 10, 64); err != nil || val == int64(e.CreatedAt) {
+			if val, err := nostr.ParseTimestamp(pubAt); err != nil || val.Equal(e.CreatedAt) {
 				return errors.Wrap(ErrWrongEventParams, "content is empty or too short")
 			}
 			for _, tag := range e.Tags {
@@ -1314,7 +1314,7 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 		if expirationTag == "" {
 			return errors.Wrapf(ErrWrongEventParams, "community join must have an expiration tag for authorization event: %+v", e)
 		}
-		expirationTime, err := parseTimestamp(expirationTag)
+		expirationTime, err := nostr.ParseTimestamp(expirationTag)
 		if err != nil {
 			return errors.Wrapf(ErrWrongEventParams, "wrong expiration tag value, %v", err.Error())
 		}
@@ -1380,7 +1380,7 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 	if expirationTag == "" {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have an expiration tag: %+v", e)
 	}
-	expirationTime, err := parseTimestamp(expirationTag)
+	expirationTime, err := nostr.ParseTimestamp(expirationTag)
 	if err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "wrong expiration tag value: %+v", e)
 	}
@@ -1497,7 +1497,7 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	settingType := tag[1]
 	value := tag[2]
 	timestamp := tag[3]
-	if _, err := strconv.ParseInt(timestamp, 10, 64); err != nil {
+	if _, err := nostr.ParseTimestamp(timestamp); err != nil {
 		return errors.Wrapf(err, "invalid timestamp in settings tag: %+v", tag)
 	}
 	switch settingType {
@@ -1576,7 +1576,7 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 				return err
 			}
 		case "expiration", "published_at", "editing_ended_at":
-			v, err := strconv.ParseInt(tag.Value(), 10, 64)
+			v, err := nostr.ParseTimestamp(tag.Value())
 			if err != nil {
 				return errors.Wrapf(ErrWrongEventParams, "tag: %s: should be uint: %v", tag.Key(), err)
 			} else if v < 0 {
