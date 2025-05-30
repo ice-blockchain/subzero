@@ -1125,6 +1125,66 @@ func TestDeleteNestedEvents(t *testing.T) {
 	})
 }
 
+func TestSelectRepostWithSpecialKind(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var post1, post2 model.Event
+	post1.Kind = nostr.KindTextNote
+	post1.Content = "post1 content"
+	post1.CreatedAt = nostr.Now()
+	require.NoError(t, post1.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	post2.Kind = model.CustomIONKindEditableTextNote
+	post2.Content = "post2 content"
+	post2.CreatedAt = nostr.Now()
+	require.NoError(t, post2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var repost1, repost2 model.Event
+	repost1.Kind, repost2.Kind = nostr.KindGenericRepost, nostr.KindGenericRepost
+	repost1.CreatedAt, repost2.CreatedAt = nostr.Now(), nostr.Now()
+	repost1.Content, repost2.Content = post1.String(), post2.String()
+
+	repost1.Tags = model.Tags{
+		{"e", post1.ID},
+		{"k", strconv.Itoa(post1.Kind)},
+	}
+
+	repost2.Tags = model.Tags{
+		{"a", post2.Address()},
+		{"k", strconv.Itoa(post2.Kind)},
+	}
+
+	require.NoError(t, repost1.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, repost2.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	require.NoError(t, db.AcceptEvents(t.Context(), &post1, &post2))
+	require.NoError(t, db.AcceptEvents(t.Context(), &repost1, &repost2))
+	t.Run("CustomIONKindRepostOfEditableTextNote", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{model.CustomIONKindRepostOfEditableTextNote},
+		})
+		require.Len(t, events, 1)
+		require.Equal(t, repost2.ID, events[0].ID)
+	})
+	t.Run("CustomIONKindRepostOfEditableTextNote with CustomIONKindRepostOfArticle", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{model.CustomIONKindRepostOfEditableTextNote, model.CustomIONKindRepostOfArticle},
+		})
+		require.Len(t, events, 1)
+		require.Equal(t, repost2.ID, events[0].ID)
+	})
+	t.Run("Repost with CustomIONKindRepostOfEditableTextNote", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Kinds: []int{nostr.KindGenericRepost, model.CustomIONKindRepostOfEditableTextNote},
+		})
+		require.Len(t, events, 2)
+		require.ElementsMatch(t, []*model.Event{&repost1, &repost2}, events)
+	})
+}
+
 func TestEditablePostFlow(t *testing.T) {
 	t.Parallel()
 

@@ -56,6 +56,9 @@ const (
 	CustomIONKindDeviceRegistration  = 31_751
 	KindDVMCountResponse             = 6400
 
+	CustomIONKindRepostOfArticle          = 16_30023
+	CustomIONKindRepostOfEditableTextNote = 16_30175
+
 	// TODO: change to proper value.
 	CustomIONSystemMessage = 999_999
 )

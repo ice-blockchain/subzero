@@ -487,6 +487,40 @@ func (b *queryBuilder) MaybeApplyTextSearch(filter *databaseFilterSearch) {
 	b.ApplyTextSearch(filter)
 }
 
+func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []int) {
+	var repostKinds []string
+
+	kinds = make([]int, 0, len(filter.Kinds))
+	for _, kind := range filter.Kinds {
+		switch kind {
+		case nostr.KindGenericRepost:
+			// Request filter contains generic repost already, just use it as is.
+			return filter.Kinds
+
+		case model.CustomIONKindRepostOfEditableTextNote:
+			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindEditableTextNote))
+
+		case model.CustomIONKindRepostOfArticle:
+			repostKinds = append(repostKinds, strconv.Itoa(nostr.KindArticle))
+
+		default:
+			kinds = append(kinds, kind)
+		}
+	}
+
+	if len(repostKinds) > 0 {
+		kinds = append(filter.Kinds, nostr.KindGenericRepost)
+		b.MaybeAND()
+		b.WriteString(`(case when e.kind = 16
+		then
+			exists (select true from event_tags rk where event_id = e.id AND rk.event_tag_key = 'k' and `)
+		buildFromSlice(b, sqlOpCodeNONE, filter.ID, repostKinds, "rk.event_tag_value1", "repost_kind")
+		b.WriteString(`) else true end)`)
+	}
+
+	return kinds
+}
+
 func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
@@ -495,7 +529,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	b.WriteRune('(') // Begin the filter section.
 	buildFromSlice(b, sqlOpCodeNONE, filter.ID, filter.IDs, "e.id", "")
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
-	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Kinds, "e.kind", "")
+	buildFromSlice(b, sqlOpCodeAND, filter.ID, b.ApplySpecialKinds(filter), "e.kind", "")
 	b.ApplyFilterForExtensions(filter)
 	if len(filter.Authors) > 0 {
 		b.MaybeAND()
