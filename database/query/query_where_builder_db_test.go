@@ -143,6 +143,9 @@ func generateKind() int {
 		nostr.KindSimpleGroupMetadata,
 		nostr.KindSimpleGroupAdmins,
 		nostr.KindSimpleGroupMembers,
+
+		model.CustomIONKindRepostOfArticle,
+		model.CustomIONKindRepostOfEditableTextNote,
 	}
 
 	return kinds[rand.IntN(len(kinds))]
