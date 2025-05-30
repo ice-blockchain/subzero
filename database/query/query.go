@@ -142,8 +142,8 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
 		switch e.Kind {
 		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-			val, err := strconv.ParseInt(e.GetTag("published_at").Value(), 10, 64)
-			deleted = err == nil && int64(e.CreatedAt) > val
+			val, err := nostr.ParseTimestamp(e.GetTag("published_at").Value())
+			deleted = err == nil && e.CreatedAt.After(val)
 		}
 	}
 
