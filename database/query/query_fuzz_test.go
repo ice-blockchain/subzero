@@ -289,10 +289,9 @@ func TestQueryFuzzIndexes(t *testing.T) {
 					continue
 				}
 
-				t.Logf("sql: %s", sql)
-				t.Logf("------- found SCAN without INDEX -------")
-				t.Logf("params: %#v", params)
-				t.FailNow()
+				t.Errorf("sql: %s", sql)
+				t.Errorf("------- found SCAN without INDEX -------")
+				t.Errorf("params: %#v", params)
 			}
 		}
 	})

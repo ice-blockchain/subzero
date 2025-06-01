@@ -438,6 +438,7 @@ func (db *dbClient) saveEvents(
 		"system_kind",
 		"created_at",
 		"id",
+		"address",
 		"pubkey",
 		"master_pubkey",
 		"sig",
@@ -453,6 +454,7 @@ func (db *dbClient) saveEvents(
 		"is_reply",
 		"is_quote",
 		"has_references",
+		"hidden",
 		"lookup",
 		"expiration",
 		"replaced_by_id",
@@ -485,7 +487,7 @@ WITH replaced AS (
 		if i > 0 {
 			builder.WriteString(",\n")
 		}
-		builder.WriteValues(name, []queryBuilderValue{
+		builder.WriteValues(name, []queryBuilderValue{ // Keep in sync with `fields`.
 			{
 				Name:   "kind",
 				CastTo: "integer",
@@ -504,6 +506,10 @@ WITH replaced AS (
 			{
 				Name:  "id",
 				Value: events[i].ID,
+			},
+			{
+				Name:  "address",
+				Value: events[i].Address(),
 			},
 			{
 				Name:  "pubkey",
@@ -578,6 +584,11 @@ WITH replaced AS (
 				Value:  events[i].HasReferences,
 			},
 			{
+				Name:   "hidden",
+				CastTo: "bool",
+				Value:  false,
+			},
+			{
 				Name:  "lookup",
 				Func:  "to_tsvector",
 				Value: events[i].Lookup,
@@ -600,121 +611,95 @@ WITH replaced AS (
 		}
 		builder.WriteString(field)
 	}
+	builder.PushValue("model", "_consensuskey", model.ConsensusReplayCtxKey)
 	builder.WriteString(`)
 	ON (
 		target.id = source.id
-		OR (((target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
-		OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
-		OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `'))
-		AND hidden=false)
+		OR (target.address = source.address and target.hidden=false)
+		OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != :model_consensuskey and target.hidden=false)
 	)
-WHEN MATCHED AND
-	target.master_pubkey = source.master_pubkey
-	AND target.kind = source.kind
-	AND target.d_tag = source.d_tag
-	AND (30000 <= source.kind AND source.kind < 40000) THEN
+WHEN MATCHED
+	AND target.id = source.id
+	AND target.hidden = source.hidden THEN
+	-- The same event is being updated, ignore it.
+	DO NOTHING
+WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != :model_consensuskey THEN
 	UPDATE SET
 		id = source.id,
+		kind = source.kind,
 		system_kind = source.system_kind,
 		created_at = source.created_at,
 		pubkey = source.pubkey,
+		master_pubkey = source.master_pubkey,
 		sig = source.sig,
 		sig_alg = source.sig_alg,
 		key_alg = source.key_alg,
 		content = source.content,
 		tags = source.tags,
+		d_tag = source.d_tag,
 		h_tag = source.h_tag,
-		lookup = source.lookup,
 		deleted = source.deleted,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
-		expiration = source.expiration,
-		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
-		reference_id = CASE 
-							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
-							ELSE NULL
-						END
-WHEN MATCHED AND
-	target.master_pubkey = source.master_pubkey
-	AND target.kind = source.kind
-	AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
+		is_reply = source.is_reply,
+		is_quote = source.is_quote,
+		has_references = source.has_references,
+		lookup = source.lookup,
+		expiration = source.expiration
+WHEN MATCHED
+	AND (
+		(target.id = source.id AND source.hidden = false AND target.hidden = true) -- Promote hidden event to visible and update all fields.
+			OR
+		(target.address = source.address) -- Addressable event.
+	) THEN
 	UPDATE SET
 		id = source.id,
 		kind = source.kind,
 		system_kind = source.system_kind,
-		d_tag = source.d_tag,
+		created_at = source.created_at,
+		pubkey = source.pubkey,
 		master_pubkey = source.master_pubkey,
 		sig = source.sig,
 		sig_alg = source.sig_alg,
 		key_alg = source.key_alg,
-		pubkey = source.pubkey,
-		created_at = source.created_at,
 		content = source.content,
-		lookup = source.lookup,
 		tags = source.tags,
+		d_tag = source.d_tag,
+		h_tag = source.h_tag,
+		deleted = source.deleted,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
+		is_reply = source.is_reply,
+		is_quote = source.is_quote,
+		has_references = source.has_references,
+		lookup = source.lookup,
 		expiration = source.expiration,
-		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
-		reference_id = CASE 
-							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+		hidden = false,
+		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update.
+		reference_id = CASE
+							WHEN source.replaced_by_id = :model_consensuskey THEN source.id
 							ELSE NULL
 						END
-WHEN MATCHED AND target.id = source.id THEN
-	UPDATE SET
-		kind = source.kind,
-		system_kind = source.system_kind,
-		master_pubkey = source.master_pubkey,
-		d_tag = source.d_tag,
-		created_at = source.created_at,
-		pubkey = source.pubkey,
-		sig = source.sig,
-		sig_alg = source.sig_alg,
-		key_alg = source.key_alg,
-		lookup = source.lookup,
-		content = source.content,
-		tags = source.tags,
-		has_images = source.has_images,
-		has_videos = source.has_videos,
-		expiration = source.expiration,
-		hidden = false
-WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
-	UPDATE SET
-		id = source.id,
-		kind = source.kind,
-		system_kind = source.system_kind,
-		master_pubkey = source.master_pubkey,
-		d_tag = source.d_tag,
-		created_at = source.created_at,
-		pubkey = source.pubkey,
-		sig = source.sig,
-		sig_alg = source.sig_alg,
-		key_alg = source.key_alg,
-		lookup = source.lookup,
-		content = source.content,
-		tags = source.tags,
-		has_images = source.has_images,
-		has_videos = source.has_videos,
-		expiration = source.expiration,
-		hidden = false
 WHEN NOT MATCHED THEN
 	INSERT (
-		id, kind, system_kind, created_at, pubkey, master_pubkey,
-		sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
+		id, kind, system_kind, created_at,
+		pubkey, master_pubkey,
+		sig, sig_alg, key_alg,
+		content,
+		tags, d_tag, h_tag,
 		deleted,
-		has_images,
-		has_videos,
-		is_reply, is_quote, has_references,
+		has_images, has_videos, is_reply, is_quote, has_references,
 		lookup,
 		expiration
 	)
 	VALUES (
 		source.id, source.kind, source.system_kind, source.created_at,
-		source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
-		source.key_alg, source.content, source.tags, source.d_tag,
-		source.h_tag, source.deleted,
-		source.has_images, source.has_videos,
-		source.is_reply, source.is_quote, source.has_references,
+		source.pubkey, source.master_pubkey,
+		source.sig, source.sig_alg, source.key_alg,
+		source.content,
+		source.tags, source.d_tag, source.h_tag,
+		source.deleted,
+		source.has_images, source.has_videos, source.is_reply, source.is_quote, source.has_references,
 		source.lookup,
 		source.expiration
 	)
@@ -770,8 +755,7 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		}
 		events = slices.DeleteFunc(events, keepOnlyInsertedEvents)
 	}
-	expectedRows := len(req.InsertOrReplace) + len(req.Rollback)
-	if actual := len(events) + len(replaceableEvents); sErr == nil && actual != expectedRows {
+	if expectedRows, actual := len(req.Rollback), len(events)+len(replaceableEvents); sErr == nil && actual < expectedRows {
 		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expectedRows, actual)
 	}
 	if sErr == nil && req.EventsHash != nil && len(events) > 0 {
