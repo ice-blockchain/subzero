@@ -51,6 +51,12 @@ type (
 		Params map[string]any
 		strings.Builder
 	}
+	queryBuilderValue struct {
+		Name   string
+		CastTo string // If empty, no cast is applied.
+		Func   string // If non-empty, the value is passed to the function.
+		Value  any
+	}
 	databaseFilterSearch struct {
 		model.Filter
 		ID           string
@@ -131,8 +137,43 @@ func (b *queryBuilder) PushValue(filterID, name string, value any) (key string) 
 	return key
 }
 
+func (b *queryBuilder) WriteValues(filterID string, values []queryBuilderValue) {
+	if len(values) == 0 {
+		return
+	}
+
+	b.WriteRune('(')
+	for i, v := range values {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if v.Func != "" {
+			b.WriteString(v.Func)
+			b.WriteRune('(')
+		}
+		if v.CastTo != "" {
+			b.WriteTypedValue(filterID, v.Name, v.CastTo, v.Value)
+		} else {
+			b.WriteRune(':')
+			b.WriteValue(filterID, v.Name, v.Value)
+		}
+		if v.Func != "" {
+			b.WriteRune(')')
+		}
+	}
+	b.WriteRune(')')
+}
+
 func (b *queryBuilder) WriteValue(filterID, name string, value any) {
 	b.WriteString(b.PushValue(filterID, name, value))
+}
+
+func (b *queryBuilder) WriteTypedValue(filterID, name, castTo string, value any) {
+	b.WriteString(`cast(:`)
+	b.WriteValue(filterID, name, value)
+	b.WriteString(` as `)
+	b.WriteString(castTo)
+	b.WriteRune(')')
 }
 
 func (b *queryBuilder) MaybeOP(op int) {

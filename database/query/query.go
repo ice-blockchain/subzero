@@ -426,72 +426,181 @@ func (db *dbClient) saveEvents(
 	events []databaseEvent,
 	replaceableEventsToRollback map[string]bool,
 ) (insertedEvents []*databaseEvent, err error) {
-	var stmt string
-	values := []string{}
+	builder := newQueryBuilder()
+
 	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
-	if len(replaceableEventsToRollback) > 0 {
-		for evID := range replaceableEventsToRollback {
-			replaceableEventsIDs = append(replaceableEventsIDs, evID)
-		}
+	for evID := range replaceableEventsToRollback {
+		replaceableEventsIDs = append(replaceableEventsIDs, evID)
 	}
-	params := []any{replaceableEventsIDs}
-	idx := 2
-	for _, ev := range events {
-		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
-			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
-			ev.Tags, ev.Dtag, ev.Htag,
-			ev.Deleted, ev.HasImages, ev.HasVideos,
-			ev.IsReply, ev.IsQuote, ev.HasReferences,
-			ev.Lookup,
-			ev.Expiration,
-		)
-		var isReplay string
-		if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
-			isReplay = model.ConsensusReplayCtxKey
-		}
-		values = append(values, fmt.Sprintf(
-			`($%[1]v::integer, $%[2]v::integer, $%[3]v::bigint,
-			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
-			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
-			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, 
-			$%[17]v::bool, $%[18]v::bool, $%[19]v::bool,
-			to_tsvector($%[20]v::text), $%[21]v::bigint,
-			'%[22]v')`, // replaced_by_id to match replaceable_events_before_update schema,
-			// we use it also to detect if save come from consensus.ReplayTx.
-			// In this case it should not trigger trigger_events_store_replaceable_data_before_update
-			// as data already committed and we want to avoid extra insert / delete to that table
-			// of rollbackable replaceable events.
-			idx, idx+1, idx+2,
-			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
-			idx+17, idx+18, idx+19, idx+20,
-			isReplay,
-		))
-		idx += 21
+
+	fields := []string{
+		"kind",
+		"system_kind",
+		"created_at",
+		"id",
+		"pubkey",
+		"master_pubkey",
+		"sig",
+		"sig_alg",
+		"key_alg",
+		"content",
+		"tags",
+		"d_tag",
+		"h_tag",
+		"deleted",
+		"has_images",
+		"has_videos",
+		"is_reply",
+		"is_quote",
+		"has_references",
+		"lookup",
+		"expiration",
+		"replaced_by_id",
 	}
-	valuesStr := ""
-	if len(values) > 0 {
-		valuesStr = "UNION ALL VALUES " + strings.Join(values, ",")
-	}
-	stmt = `
+
+	builder.WriteString(`
 WITH replaced AS (
 	DELETE FROM replaceable_events_before_update
 	WHERE
-		replaced_by_id = ANY($1)
+		replaced_by_id = ANY(:` + builder.PushValue("merge", "replaceableID", replaceableEventsIDs) + `)
 	RETURNING *
-)
-MERGE INTO events AS target
-	USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-		has_images, has_videos, is_reply, is_quote, has_references, lookup, expiration, replaced_by_id FROM replaced 
-			` + valuesStr + `
-	) AS source (
-		kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-		has_images,
-		has_videos,
-		is_reply, is_quote, has_references,
-		lookup,
-		expiration,
-		replaced_by_id
-	)
+)`)
+	builder.WriteString(` MERGE INTO events AS target USING (SELECT `)
+	for i, field := range fields {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(field)
+	}
+	builder.WriteString(` FROM replaced `)
+	var isReplay string
+	if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+		isReplay = model.ConsensusReplayCtxKey
+	}
+	if len(events) > 0 {
+		builder.WriteString(` UNION ALL VALUES `)
+	}
+	for i := range events {
+		name := "merge_event" + strconv.Itoa(i)
+		if i > 0 {
+			builder.WriteString(",\n")
+		}
+		builder.WriteValues(name, []queryBuilderValue{
+			{
+				Name:   "kind",
+				CastTo: "integer",
+				Value:  events[i].Kind,
+			},
+			{
+				Name:   "system_kind",
+				CastTo: "integer",
+				Value:  events[i].SystemKind,
+			},
+			{
+				Name:   "created_at",
+				CastTo: "bigint",
+				Value:  events[i].CreatedAt,
+			},
+			{
+				Name:  "id",
+				Value: events[i].ID,
+			},
+			{
+				Name:  "pubkey",
+				Value: events[i].PubKey,
+			},
+			{
+				Name:  "master_pubkey",
+				Value: events[i].MasterPubKey,
+			},
+			{
+				Name:  "sig",
+				Value: events[i].Sig,
+			},
+			{
+				Name:  "sig_alg",
+				Value: events[i].SigAlg,
+			},
+			{
+				Name:  "key_alg",
+				Value: events[i].KeyAlg,
+			},
+			{
+				Name:  "content",
+				Value: events[i].Content,
+			},
+			{
+				Name:   "tags",
+				CastTo: "jsonb",
+				Value: func() model.Tags {
+					if len(events[i].Tags) > 0 {
+						return events[i].Tags
+					}
+					return model.Tags{}
+				}(),
+			},
+			{
+				Name:  "d_tag",
+				Value: events[i].Dtag,
+			},
+			{
+				Name:  "h_tag",
+				Value: events[i].Htag,
+			},
+			{
+				Name:   "deleted",
+				CastTo: "bool",
+				Value:  events[i].Deleted,
+			},
+			{
+				Name:   "has_images",
+				CastTo: "bool",
+				Value:  events[i].HasImages,
+			},
+			{
+				Name:   "has_videos",
+				CastTo: "bool",
+				Value:  events[i].HasVideos,
+			},
+			{
+				Name:   "is_reply",
+				CastTo: "bool",
+				Value:  events[i].IsReply,
+			},
+			{
+				Name:   "is_quote",
+				CastTo: "bool",
+				Value:  events[i].IsQuote,
+			},
+			{
+				Name:   "has_references",
+				CastTo: "bool",
+				Value:  events[i].HasReferences,
+			},
+			{
+				Name:  "lookup",
+				Func:  "to_tsvector",
+				Value: events[i].Lookup,
+			},
+			{
+				Name:   "expiration",
+				CastTo: "bigint",
+				Value:  events[i].Expiration,
+			},
+			{
+				Name:  "replaced_by_id",
+				Value: isReplay,
+			},
+		})
+	}
+	builder.WriteString(`) AS source (`)
+	for i, field := range fields {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(field)
+	}
+	builder.WriteString(`)
 	ON (
 		target.id = source.id
 		OR (((target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
@@ -622,16 +731,15 @@ WHEN NOT MATCHED THEN
 		target.lookup,
 		target.tags,
 		merge_action() as savemergeaction;
-`
-
-	return connector.ExecManyWithCustomRetry[databaseEvent](
+`)
+	return connector.ExecNamedManyWithCustomRetry[databaseEvent](
 		ctx,
 		db.db,
 		func(err error) (doRetry bool) {
 			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation)
 		},
-		stmt,
-		params...,
+		builder.String(),
+		builder.Params,
 	)
 }
 
@@ -762,7 +870,7 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 		event.Tags = model.Tags{
 			{"request", ev.String()},
 			{"e", ev.ID, db.relayURL},
-			{"expiration", strconv.FormatInt(time.Now().Add(model.DVMJobResultExpiration).Unix(), 10)},
+			{"expiration", nostr.Now().Add(model.DVMJobResultExpiration).String()},
 		}
 		db.MustSignEvent(event)
 	}
