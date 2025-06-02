@@ -89,7 +89,7 @@ DO $$ BEGIN
         )
         UPDATE events e
         SET
-            is_reply = true
+            has_references = true
         FROM
             cte
         WHERE
