@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/bufiter"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -27,6 +28,17 @@ const (
 	replyMarkerIndex = 3 // event_tag_value3.
 
 	maxTagValues = 5
+
+	// Memory Usage:
+	// ┌─────────┬────────────────┬──────────────┬──────────────┐
+	// │  Users  │ Events/User    │ Total Events │ Memory Usage │
+	// ├─────────┼────────────────┼──────────────┼──────────────┤
+	// │   1K    │      50        │     50K      │   ~14.9 MB   │
+	// │  10K    │      50        │    500K      │   ~149 MB    │
+	// │ 100K    │      50        │     5M       │   ~1.49 GB   │
+	// └─────────┴────────────────┴──────────────┴──────────────┘
+	// Note: Each iterator batch = 50 events * 312 bytes (sizeof(databaseEvent)) = 15.6 KB.
+	iteratorBufferSize = 50
 )
 
 var (
@@ -870,7 +882,12 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 			if err != nil {
 				return nil, err
 			}
-			return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
+			it, err := connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
+			if err != nil {
+				return nil, err
+			}
+
+			return bufiter.New(it, iteratorBufferSize), nil
 		},
 	}
 
