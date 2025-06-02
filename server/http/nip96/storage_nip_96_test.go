@@ -104,7 +104,6 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, storage.Client().Close())
 		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
 		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
-		require.NoError(t, os.RemoveAll("db.sqlite"))
 	}()
 	master, masterPubKey := model.GenerateKeyPair()
 	user1, user1PubKey := model.GenerateKeyPair()
@@ -241,16 +240,16 @@ func TestNIP96(t *testing.T) {
 	t.Run("delete file owned by user 1 on behave of usr 1 (normally)", func(t *testing.T) {
 		var nip94ToBeDeleted *model.Event
 		for _, e := range events {
-			if e.Tags.GetFirst([]string{"x"}).Value() == "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292" {
+			if e.GetTag("ox").Value() == "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292" {
 				nip94ToBeDeleted = e
 				break
 			}
 		}
 		fileHash := ""
-		if xTag := nip94ToBeDeleted.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
-			fileHash = xTag.Value()
+		if oxTag := nip94ToBeDeleted.GetTag("ox"); oxTag != nil {
+			fileHash = oxTag.Value()
 		} else {
-			t.Fatalf("malformed x tag in nip94 event %v", nip94ToBeDeleted.ID)
+			t.Fatalf("malformed ox tag in nip94 event %v", nip94ToBeDeleted.ID)
 		}
 		status := deleteFile(t, ctx, user1, fileHash, masterPubKey)
 		require.Equal(t, http.StatusOK, status)
@@ -272,7 +271,7 @@ func TestNIP96(t *testing.T) {
 	t.Run("delete file owned by user 1 on behave of usr 2 (attestation) via deletion of imeta tagged post", func(t *testing.T) {
 		var nip94ToBeDeleted *model.Event
 		for _, e := range events {
-			if e.Tags.GetFirst([]string{"x"}).Value() == "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1" {
+			if e.GetTag("ox").Value() == "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1" {
 				nip94ToBeDeleted = e
 				break
 			}
@@ -287,9 +286,8 @@ func TestNIP96(t *testing.T) {
 			Tags: nostr.Tags{
 				nostr.Tag{
 					"imeta",
-					"x 982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
 					"ox 982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
-					fmt.Sprintf("url %v", nip94ToBeDeleted.Tags.GetFirst([]string{"url"}).Value()),
+					fmt.Sprintf("url %v", nip94ToBeDeleted.GetTag("url").Value()),
 				},
 				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindTextNote), 10)},
 				nostr.Tag{"b", masterPubKey},
@@ -329,6 +327,16 @@ func TestNIP96(t *testing.T) {
 		t.Fatal("Expired events processor was not triggered")
 	}
 	require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, "master.txt"), "expiration")
+	t.Run("file re-uploaded after deletion", func(t *testing.T) {
+		upload(t, ctx, user1, masterPubKey, ".testdata/image2.png", "profile.png", "ice profile pic", func(resp *nip96.UploadResponse) {
+			verifyFile(t, resp.Nip94Event.Content, resp.Nip94Event.Tags)
+		})
+		expected := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice profile pic").Nip94Event.Tags})
+		status, location := download(t, ctx, user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
+		require.Equal(t, http.StatusFound, status)
+		require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expected.Summary), location)
+	})
+
 	t.Run("profile removal - causes whole storage removal for that user", func(t *testing.T) {
 		deletionEventToSign := &model.Event{
 			Event: nostr.Event{
