@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -123,7 +124,7 @@ func TestConsensusEvents(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
 		require.NoError(t, relay.PublishMany(t.Context(), &attestationEvent.Event, &relaysList.Event))
-		require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
+		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
 		ev = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEditableTextNote,
@@ -137,7 +138,7 @@ func TestConsensusEvents(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, privkey)
 
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
+		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
 	})
 	secondRelay := helperMustNewRelay(t, pubsubServers[1])
 	t.Run("query events", func(t *testing.T) {
@@ -159,7 +160,7 @@ func TestConsensusEvents(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev2, privkey)
 		require.NoError(t, secondRelay.Publish(t.Context(), ev2.Event))
-		require.NoError(t, helperAwaitConsensus(t, secondRelay, consensusDone))
+		require.NoError(t, helperAwaitConsensus(t, consensusDone, secondRelay))
 		receivedEventsFromFirstRelay = helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Len(t, receivedEventsFromFirstRelay, 2)
 		require.Contains(t, receivedEventsFromFirstRelay, ev)
@@ -167,7 +168,7 @@ func TestConsensusEvents(t *testing.T) {
 	})
 
 	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
-		if ctx.Value("consensusPort").(uint16) == 19977 {
+		if ctx.Value("consensusPort").(uint16) == 19988 || ctx.Value("consensusPort").(uint16) == 19966 {
 			return errors.New("simulating remote relay did not accept tx - it should be rolled back")
 		}
 		if _, ok := accepted.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
@@ -208,8 +209,8 @@ func TestConsensusEvents(t *testing.T) {
 			Content: "validEvent not gonna be accepted because of failed consensus",
 		}}
 		helperSignWithMinLeadingZeroBits(t, notAcceptedEvent, privkey)
-		require.Error(t, relay.Publish(t.Context(), notAcceptedEvent.Event))
-		require.NoError(t, helperAwaitConsensus(t, relay, rolledBack))
+		require.Error(t, secondRelay.Publish(t.Context(), notAcceptedEvent.Event))
+		require.NoError(t, helperAwaitConsensus(t, rolledBack, secondRelay))
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		receivedEventsFromSecondRelay := helperQueryEvents(t, t.Context(), secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		receivedEventsFromThirdRelay := helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
@@ -246,7 +247,7 @@ func TestConsensusEvents(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, eventMissedByRelay3DuringBroadcastTime, privkey)
 		require.NoError(t, relay.Publish(t.Context(), eventMissedByRelay3DuringBroadcastTime.Event))
-		waitAcceptErr := helperAwaitConsensus(t, relay, consensusDone)
+		waitAcceptErr := helperAwaitConsensus(t, consensusDone, relay, thirdRelay)
 		require.NoError(t, waitAcceptErr)
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime)
@@ -267,7 +268,7 @@ func TestConsensusEvents(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, eventAfterNodeComesUp, privkey)
 		require.NoError(t, relay.Publish(t.Context(), eventAfterNodeComesUp.Event))
-		require.NoError(t, helperAwaitConsensus(t, relay, consensusDone))
+		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
 		time.Sleep(10 * time.Second)
 		receivedEventsFromThirdRelay = helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromThirdRelay, eventAfterNodeComesUp)
@@ -462,10 +463,14 @@ func helperPickRandomRelay(tb testing.TB) *nostrRelay {
 	return relay
 }
 
-func helperAwaitConsensus(t testing.TB, broadcastFrom *nostrRelay, consensusDone map[string]chan bool) error {
+func helperAwaitConsensus(t testing.TB, consensusDone map[string]chan bool, broadcastFrom ...*nostrRelay) error {
 	t.Helper()
+	skipUrls := make([]string, 0, len(broadcastFrom))
+	for _, skipRelay := range broadcastFrom {
+		skipUrls = append(skipUrls, skipRelay.URL)
+	}
 	for endpoint, done := range consensusDone {
-		if endpoint == broadcastFrom.URL {
+		if slices.Contains(skipUrls, endpoint) {
 			continue
 		}
 		select {
