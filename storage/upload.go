@@ -104,7 +104,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
 
-	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(bag.CreatedAt.UnixNano(), 10), url, existed, err
+	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, err
 }
 
 func (c *client) upload(ctx context.Context, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
