@@ -55,40 +55,48 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 
 	spl := strings.Split(infohash, ":")
 	if len(spl) != 3 {
-		return errors.Newf("malformed i tag %v, cannot detect bootstrap and createdAt", infohash)
+		return errors.Newf("malformed i tag %v, cannot detect bootstrap and version", infohash)
 	}
 	infohash = spl[0]
 	bootstrap := spl[1]
-	createdAt, cErr := strconv.ParseInt(spl[2], 10, 64)
+	version, cErr := strconv.ParseInt(spl[2], 10, 64)
 	if cErr != nil {
-		return errors.Wrapf(err, "malformed i tag %v, cannot createdAt", infohash)
+		return errors.Wrapf(err, "malformed i tag %v, cannot version", infohash)
 	}
 
-	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap, createdAt); err != nil {
+	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap, version); err != nil {
 		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, event.PubKey)
 	}
 	return nil
 }
 
-func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, bootstap *string, newCreatedAt int64) error {
+func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, bootstap *string, newVersion int64) error {
 	existingBagForUser, err := c.bagByUser(user)
 	if err != nil {
 		return errors.Wrapf(err, "failed to find existing bag for user %s", user)
 	}
-	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID && existingBagForUser.CreatedAt.UnixNano() < newCreatedAt {
+	replaceBagPerUser := existingBagForUser == nil
+	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID && existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion {
 		log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
 		existingBagForUser.Stop()
 		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
 			return errors.Wrapf(err, "failed to replace bag for user %s", user)
 		}
+		replaceBagPerUser = true
 	}
-	if err = c.download(ctx, bagID, user, bootstap); err != nil {
+	if replaceBagPerUser && user != "" {
+		bagId, _ := hex.DecodeString(bagID)
+		if err = c.saveBagPerUser(bagId, &user); err != nil {
+			return errors.Wrapf(err, "failed to save bag per user")
+		}
+	}
+	if err = c.download(ctx, bagID, user, bootstap, replaceBagPerUser); err != nil {
 		return errors.Wrapf(err, "failed to download new bag ID %v for user %v", bagID, user)
 	}
 	return nil
 }
 
-func (c *client) download(ctx context.Context, bagID, user string, bootstrap *string) (err error) {
+func (c *client) download(ctx context.Context, bagID, user string, bootstrap *string, replaceByUsr bool) (err error) {
 	bag, err := hex.DecodeString(bagID)
 	if err != nil {
 		return errors.Wrapf(err, "invalid bagID %v", bagID)
@@ -201,11 +209,21 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 		return errors.Wrap(err, "failed to save torrent into storage")
 	}
 	if userPubKey != nil && *userPubKey != "" {
-		k := make([]byte, 3+64)
-		copy(k, "ub:")
-		copy(k[3:], *userPubKey)
-		if err := c.db.Put(k, tr.BagID, nil); err != nil {
-			return errors.Wrapf(err, "failed to save userID:bag mapping for bag %v", hex.EncodeToString(tr.BagID))
+		c.newFilesMx.RLock()
+		f := len(c.newFiles[*userPubKey])
+		c.newFilesMx.RUnlock()
+		maxVal := uint32(f)
+		existing, err := c.bagByUser(*userPubKey)
+		if err != nil {
+			return err
+		}
+		if existing != nil && existing.Header != nil {
+			maxVal = max(uint32(f), existing.Header.FilesCount)
+		}
+		if tr.Header != nil && tr.Header.FilesCount >= maxVal {
+			if err := c.saveBagPerUser(tr.BagID, userPubKey); err != nil {
+				return errors.Wrapf(err, "failed to save bag per user")
+			}
 		}
 	}
 	if bs != nil {
@@ -225,6 +243,18 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 		}
 	}
 
+	return nil
+}
+
+func (c *client) saveBagPerUser(bagID []byte, userPubKey *string) error {
+	if userPubKey != nil && *userPubKey != "" {
+		k := make([]byte, 3+64)
+		copy(k, "ub:")
+		copy(k[3:], *userPubKey)
+		if err := c.db.Put(k, bagID, nil); err != nil {
+			return errors.Wrapf(err, "failed to save userID:bag mapping for bag %X", bagID)
+		}
+	}
 	return nil
 }
 

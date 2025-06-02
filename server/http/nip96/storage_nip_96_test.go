@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -108,10 +109,6 @@ func TestNIP96(t *testing.T) {
 	master, masterPubKey := model.GenerateKeyPair()
 	user1, user1PubKey := model.GenerateKeyPair()
 	user2, user2PubKey := model.GenerateKeyPair()
-	var tagsToBroadcast nostr.Tags
-	var contentToBroadcast string
-	var outdatedTags nostr.Tags
-	var outdatedContent string
 	t.Run("create on-behalf attestations", func(t *testing.T) {
 		var ev model.Event
 		ev.Kind = model.CustomIONKindAttestation
@@ -123,9 +120,8 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(ctx, &ev))
 	})
-
+	events := make([]*model.Event, 0)
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
-		var responses = make([]*nip96.UploadResponse, 0)
 		const filesCount = 4
 		responsesCh := make(chan *nip96.UploadResponse, filesCount)
 		var wg sync.WaitGroup
@@ -148,20 +144,11 @@ func TestNIP96(t *testing.T) {
 		})
 		wg.Wait()
 		close(responsesCh)
-		for r := range responsesCh {
-			if r.Nip94Event.Content == "ice profile pic" {
-				outdatedTags = r.Nip94Event.Tags
-				outdatedContent = r.Nip94Event.Content
-			}
-			responses = append(responses, r)
-		}
-		tagsToBroadcast = responses[len(responses)-1].Nip94Event.Tags
-		contentToBroadcast = responses[len(responses)-1].Nip94Event.Content
-		for _, resp := range responses {
+		for resp := range responsesCh {
 			verifyFile(t, resp.Nip94Event.Content, resp.Nip94Event.Tags)
-			tagsToBroadcast = resp.Nip94Event.Tags.AppendUnique(model.Tag{"b", masterPubKey}).
+			tagsToBroadcast := resp.Nip94Event.Tags.AppendUnique(model.Tag{"b", masterPubKey}).
 				AppendUnique(model.Tag{"expiration", strconv.FormatInt(time.Now().Unix()-10, 10)})
-			contentToBroadcast = resp.Nip94Event.Content
+			contentToBroadcast := resp.Nip94Event.Content
 			nip94EventToSign := &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Timestamp(time.Now().Unix()),
 				Kind:      nostr.KindFileMetadata,
@@ -169,41 +156,41 @@ func TestNIP96(t *testing.T) {
 				Content:   contentToBroadcast,
 			}}
 			require.NoError(t, nip94EventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
-			require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
+			events = append(events, nip94EventToSign)
 		}
 	})
-
-	var outdatedNip94EventToSign *model.Event
-	t.Run("nip-94 event is accepted on the same relay it was uploaded to = no-op", func(t *testing.T) {
-		outdatedTags = outdatedTags.AppendUnique(model.Tag{"b", masterPubKey})
-		outdatedNip94EventToSign = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindFileMetadata,
-			Tags:      outdatedTags,
-			Content:   outdatedContent,
-		}}
-		require.NoError(t, outdatedNip94EventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, outdatedNip94EventToSign))
-		require.NoError(t, storage.AcceptEvents(ctx, outdatedNip94EventToSign))
-		time.Sleep(3 * time.Second)
+	rand.Shuffle(len(events), func(i, j int) {
+		events[i], events[j] = events[j], events[i]
 	})
+	t.Run("nip-94 accepted on same relay where is was uploaded to = no-op", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(len(events))
+		for _, e := range events {
+			go func() {
+				defer wg.Done()
+				require.NoError(t, query.AcceptEvents(ctx, e))
+				require.NoError(t, storage.AcceptEvents(ctx, e))
+			}()
+		}
+		wg.Wait()
+	})
+
 	const newStorageRoot = "./../../.test-uploads2"
-	var nip94EventToSign *model.Event
 	t.Run("nip-94 event is broadcasted, it causes download to other node", func(t *testing.T) {
-		tagsToBroadcast = tagsToBroadcast.AppendUnique(model.Tag{"b", masterPubKey})
-		nip94EventToSign = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
-			Kind:      nostr.KindFileMetadata,
-			Tags:      tagsToBroadcast,
-			Content:   contentToBroadcast,
-		}}
-		require.NoError(t, nip94EventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
 		cfg.MustInit("./../../../server/http/nip96/.testdata/storage-2nd-instance.yaml")
 		initStorage(ctx)
-		require.NoError(t, query.AcceptEvents(ctx, nip94EventToSign))
-		require.NoError(t, storage.AcceptEvents(ctx, nip94EventToSign))
+		var wg sync.WaitGroup
+		wg.Add(len(events))
+		for _, e := range events {
+			go func() {
+				defer wg.Done()
+				require.NoError(t, query.AcceptEvents(ctx, e))
+				require.NoError(t, storage.AcceptEvents(ctx, e))
+			}()
+		}
+		wg.Wait()
+
 		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "profile.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
 		require.NoError(t, err)
 		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
@@ -252,21 +239,28 @@ func TestNIP96(t *testing.T) {
 		}
 	})
 	t.Run("delete file owned by user 1 on behave of usr 1 (normally)", func(t *testing.T) {
+		var nip94ToBeDeleted *model.Event
+		for _, e := range events {
+			if e.Tags.GetFirst([]string{"x"}).Value() == "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292" {
+				nip94ToBeDeleted = e
+				break
+			}
+		}
 		fileHash := ""
-		if xTag := outdatedNip94EventToSign.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
+		if xTag := nip94ToBeDeleted.Tags.GetFirst([]string{"x"}); xTag != nil && len(*xTag) > 1 {
 			fileHash = xTag.Value()
 		} else {
-			t.Fatalf("malformed x tag in nip94 event %v", nip94EventToSign.ID)
+			t.Fatalf("malformed x tag in nip94 event %v", nip94ToBeDeleted.ID)
 		}
 		status := deleteFile(t, ctx, user1, fileHash, masterPubKey)
 		require.Equal(t, http.StatusOK, status)
-		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(outdatedNip94EventToSign.Content).Nip94Event.Tags}).Summary
+		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 		deletionEventToSign := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
 			Kind:      nostr.KindDeletion,
 			Tags: nostr.Tags{
-				nostr.Tag{"e", outdatedNip94EventToSign.ID},
+				nostr.Tag{"e", nip94ToBeDeleted.ID},
 				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindFileMetadata), 10)},
 				nostr.Tag{"b", masterPubKey},
 			},
@@ -276,6 +270,13 @@ func TestNIP96(t *testing.T) {
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})
 	t.Run("delete file owned by user 1 on behave of usr 2 (attestation) via deletion of imeta tagged post", func(t *testing.T) {
+		var nip94ToBeDeleted *model.Event
+		for _, e := range events {
+			if e.Tags.GetFirst([]string{"x"}).Value() == "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1" {
+				nip94ToBeDeleted = e
+				break
+			}
+		}
 		status := deleteFile(t, ctx, user2, "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1", masterPubKey)
 		require.Equal(t, http.StatusOK, status)
 		fileName := "text.txt"
@@ -288,7 +289,7 @@ func TestNIP96(t *testing.T) {
 					"imeta",
 					"x 982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
 					"ox 982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
-					fmt.Sprintf("url %v", nip94EventToSign.Tags.GetFirst([]string{"url"}).Value()),
+					fmt.Sprintf("url %v", nip94ToBeDeleted.Tags.GetFirst([]string{"url"}).Value()),
 				},
 				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindTextNote), 10)},
 				nostr.Tag{"b", masterPubKey},
