@@ -44,6 +44,9 @@ func applySubscriptionLimit(s *model.Subscription) error {
 	total = 0
 	for i := range s.Filters {
 		if s.Filters[i].Limit <= 0 {
+			if fairSharePerFilter == 0 {
+				return errors.Wrapf(errLimitExceeded, "no fair share limit available for filters without limit")
+			}
 			s.Filters[i].Limit = fairSharePerFilter
 		}
 		total += s.Filters[i].Limit
