@@ -95,16 +95,14 @@ func TestApplySubscriptionLimit(t *testing.T) {
 		s := &model.Subscription{
 			Filters: []model.Filter{
 				{Limit: 25},
-				{Limit: 0},
+				{Limit: 5},
 				{Limit: 70},
+				{Limit: 0},
 			},
 		}
 
 		err := applySubscriptionLimit(s)
-		require.NoError(t, err)
-		require.Equal(t, 25, s.Filters[0].Limit)
-		require.Equal(t, 5, s.Filters[1].Limit)
-		require.Equal(t, 70, s.Filters[2].Limit)
+		require.ErrorIs(t, err, errLimitExceeded)
 	})
 
 	t.Run("fair share", func(t *testing.T) {
