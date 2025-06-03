@@ -75,11 +75,8 @@ order by
 	random()
 limit 1000`
 
-	it := db.newReadEventIterator(t.Context(), stmt, map[string]any{})
-	for ev, err := range it {
-		require.NoError(t, err)
-		events = append(events, ev)
-	}
+	events, err := connector.SelectNamed[model.Event](t.Context(), db.db, stmt, map[string]any{})
+	require.NoError(t, err)
 
 	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })
 

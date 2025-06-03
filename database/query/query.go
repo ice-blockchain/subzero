@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query/internal/bufiter"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -28,17 +27,6 @@ const (
 	replyMarkerIndex = 3 // event_tag_value3.
 
 	maxTagValues = 5
-
-	// Memory Usage:
-	// ┌─────────┬────────────────┬──────────────┬──────────────┐
-	// │  Users  │ Events/User    │ Total Events │ Memory Usage │
-	// ├─────────┼────────────────┼──────────────┼──────────────┤
-	// │   1K    │      50        │     50K      │   ~14.9 MB   │
-	// │  10K    │      50        │    500K      │   ~149 MB    │
-	// │ 100K    │      50        │     5M       │   ~1.49 GB   │
-	// └─────────┴────────────────┴──────────────┴──────────────┘
-	// Note: Each iterator batch = 50 events * 312 bytes (sizeof(databaseEvent)) = 15.6 KB.
-	iteratorBufferSize = 50
 )
 
 var (
@@ -342,18 +330,14 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	created_at,
 	id,
 	pubkey,
-	master_pubkey,
 	sig,
 	content,
-	d_tag,
-	h_tag,
 	tags
 `
-	for ev, err := range db.newExecEventIterator(ctx, stmt, params) {
-		if err != nil {
-			return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
-		}
-		deletedEvents = append(deletedEvents, ev)
+
+	deletedEvents, err = connector.ExecNamed[model.Event](ctx, db.db, stmt, params)
+	if err != nil {
+		return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
 	}
 	if len(deletedEvents) == 0 {
 		return nil, nil, nil
@@ -877,17 +861,12 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
 	it := &eventIterator{
 		Map: db.eventTransform,
-		Fetch: func() (internalEventIterator, error) {
+		Fetch: func() ([]*databaseEvent, error) {
 			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
 			if err != nil {
 				return nil, err
 			}
-			it, err := connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
-			if err != nil {
-				return nil, err
-			}
-
-			return bufiter.New(it, iteratorBufferSize), nil
+			return connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
 		},
 	}
 
@@ -1104,24 +1083,19 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	params := map[string]any{"batch_size": batchSize}
 
 	for ctx.Err() == nil {
-		var deleted int
-		it := db.newExecEventIterator(ctx, stmt, params)
-		for event, iterErr := range it {
-			if iterErr != nil {
-				return errors.Wrap(iterErr, "failed to exec delete expired events")
-			}
-
-			if notifyExpiredEvents != nil {
-				if notifyErr := notifyExpiredEvents(ctx, event); notifyErr != nil {
-					log.Printf("failed to process notification of expired events: %v", notifyErr)
-					// Continue to delete the events even if notification fails.
-				}
-			}
-
-			deleted++
+		events, err := connector.ExecNamed[model.Event](ctx, db.db, stmt, params)
+		if err != nil {
+			return errors.Wrap(err, "failed to exec delete expired events")
 		}
 
-		if deleted < batchSize {
+		if notifyExpiredEvents != nil {
+			if notifyErr := notifyExpiredEvents(ctx, events...); notifyErr != nil {
+				log.Printf("failed to process notification of expired events: %v", notifyErr)
+				// Continue to delete the events even if notification fails.
+			}
+		}
+
+		if len(events) < batchSize {
 			break
 		}
 	}

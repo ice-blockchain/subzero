@@ -3,7 +3,6 @@
 package query
 
 import (
-	"context"
 	"encoding/json"
 	"math/rand/v2"
 	"os"
@@ -187,16 +186,16 @@ func helperGenFilterCombinations(t *testing.T) [][]*structElement {
 func TestQueryFuzzWhereGenerator(t *testing.T) {
 	t.Parallel()
 
-	db := helperNewDatabase(t)
+	db, _ := helperEnsureDatabaseWithData(t, 100)
 	defer db.Close()
-	helperFillDatabase(t, db, 100)
 
 	sets := helperGenFilterCombinations(t)
-
+	bar := progressbar.Default(int64(len(sets)), "testing where sets")
 	t.Run("Fuzz", func(t *testing.T) {
 		for i, set := range sets {
+			bar.Add(1)
 			filter := helperNewFilterFromElements(t, set)
-			_, err := db.CountEvents(context.TODO(), filter)
+			_, err := db.CountEvents(t.Context(), filter)
 			require.NoErrorf(t, err, "failed to count events for set #%d (%#v)", i+1, filter)
 		}
 	})

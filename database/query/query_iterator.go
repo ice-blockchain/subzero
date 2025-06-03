@@ -15,22 +15,21 @@ import (
 type (
 	EventIterator = connector.Iterator[*model.Event]
 
-	internalEventIterator = connector.Iterator[*databaseEvent]
-	eventIterator         struct {
-		Fetch func() (internalEventIterator, error)
+	eventIterator struct {
+		Fetch func() ([]*databaseEvent, error)
 		Map   func(*databaseEvent) *databaseEvent
 	}
 )
 
 func (it *eventIterator) Each(ctx context.Context, fn func(*databaseEvent) error) error {
-	reader, err := it.Fetch()
+	events, err := it.Fetch()
 	if err != nil {
 		return errors.Wrap(err, "failed to get events")
-	} else if reader == nil {
+	} else if len(events) == 0 {
 		return nil
 	}
 
-	for ev, err := range reader {
+	for _, ev := range events {
 		if err != nil || ctx.Err() != nil {
 			return errors.Wrap(cmp.Or(err, ctx.Err()), "failed to scan event")
 		}
@@ -45,37 +44,4 @@ func (it *eventIterator) Each(ctx context.Context, fn func(*databaseEvent) error
 		}
 	}
 	return ctx.Err()
-}
-
-func (db *dbClient) newInternalIterator(ctx context.Context, it *eventIterator) EventIterator {
-	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *databaseEvent) error {
-			if !yield(&event.Event, nil) {
-				return errEventIteratorInterrupted
-			}
-			return nil
-		})
-
-		if err != nil && !errors.Is(err, errEventIteratorInterrupted) {
-			yield(nil, errors.Wrap(err, "failed to iterate events"))
-		}
-	}
-}
-
-func (db *dbClient) newReadEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
-	it := &eventIterator{
-		Fetch: func() (internalEventIterator, error) {
-			return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
-		},
-	}
-	return db.newInternalIterator(ctx, it)
-}
-
-func (db *dbClient) newExecEventIterator(ctx context.Context, sqlQuery string, params map[string]any) EventIterator {
-	it := &eventIterator{
-		Fetch: func() (internalEventIterator, error) {
-			return connector.ExecNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
-		},
-	}
-	return db.newInternalIterator(ctx, it)
 }

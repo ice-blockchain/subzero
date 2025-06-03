@@ -44,8 +44,8 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 			}
 
 			it := &eventIterator{
-				Fetch: func() (internalEventIterator, error) {
-					return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
+				Fetch: func() ([]*databaseEvent, error) {
+					return connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
 				},
 			}
 
