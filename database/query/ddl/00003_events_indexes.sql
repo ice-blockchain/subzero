@@ -11,7 +11,7 @@
 -- Order by:
 --   created_at DESC
 CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
-CREATE INDEX IF NOT EXISTS idx_events_address ON events(address) WHERE hidden = FALSE;
+DROP INDEX IF EXISTS idx_events_address;
 CREATE INDEX IF NOT EXISTS idx_events_lookup_created_at ON events(lookup_created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_id_lookup_created_at ON events(id, lookup_created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_kind_lookup_created_at ON events(kind, lookup_created_at DESC) WHERE hidden = FALSE;

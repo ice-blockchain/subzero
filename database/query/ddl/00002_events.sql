@@ -47,11 +47,9 @@ CREATE TABLE IF NOT EXISTS events (
     hidden         BOOLEAN NOT NULL DEFAULT FALSE
 );
 --------
-create unique index if not exists replaceable_event_uk on events(master_pubkey, kind)
-  where (10000 <= kind AND kind < 20000 ) OR kind = 0 OR kind = 3;
---------
-create unique index if not exists parameterized_replaceable_event_uk on events(master_pubkey, kind, d_tag)
-  where 30000 <= kind AND kind < 40000;
+DROP INDEX IF EXISTS replaceable_event_uk;
+DROP INDEX IF EXISTS parameterized_replaceable_event_uk;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_events_address ON events(address);
 --------
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
   where kind = 31750;
