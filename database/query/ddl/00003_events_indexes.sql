@@ -1,5 +1,7 @@
 -- SPDX-License-Identifier: ice License 1.0
 
+--- TODO: optimize index size and usage.
+
 -- Where order:
 --   id
 --   kind
