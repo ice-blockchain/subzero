@@ -222,6 +222,7 @@ BEGIN
     END IF;
     insert into replaceable_events_before_update (
         created_at,
+        expiration,
         kind,
         system_kind,
         lookup,
@@ -240,11 +241,15 @@ BEGIN
         has_images,
         has_videos,
         deleted,
+        is_reply,
+        is_quote,
+        has_references,
         hidden,
         replaced_by_id
     )
     values (
             old.created_at,
+            old.expiration,
             old.kind,
             old.system_kind,
             old.lookup,
@@ -263,6 +268,9 @@ BEGIN
             old.has_images,
             old.has_videos,
             old.deleted,
+            old.is_reply,
+            old.is_quote,
+            old.has_references,
             old.hidden,
             new.id
            )

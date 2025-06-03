@@ -14,7 +14,7 @@ END;$$;
 CREATE TABLE IF NOT EXISTS events (
     created_at        BIGINT NOT NULL,
     lookup_created_at BIGINT GENERATED ALWAYS AS (to_timestamp_nano(created_at)) STORED,
-    -- expiration       BIGINT,
+    expiration        BIGINT,
     kind           INTEGER   NOT NULL,
     system_kind    INTEGER,
     lookup         tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
@@ -40,9 +40,9 @@ CREATE TABLE IF NOT EXISTS events (
     tags           JSONB   NOT NULL DEFAULT '[]',
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
-    -- is_reply       BOOLEAN NOT NULL DEFAULT FALSE,
-    -- is_quote       BOOLEAN NOT NULL DEFAULT FALSE,
-    -- has_references BOOLEAN NOT NULL DEFAULT FALSE,
+    is_reply       BOOLEAN NOT NULL DEFAULT FALSE,
+    is_quote       BOOLEAN NOT NULL DEFAULT FALSE,
+    has_references BOOLEAN NOT NULL DEFAULT FALSE,
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,
     hidden         BOOLEAN NOT NULL DEFAULT FALSE
 );
