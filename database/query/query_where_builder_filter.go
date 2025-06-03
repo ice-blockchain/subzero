@@ -19,6 +19,7 @@ func parseNostrFilterFlags(f *databaseFilterSearch) *databaseFilterSearch {
 		{"images", &f.Images},
 		{"quotes", &f.Quotes},
 		{"references", &f.References},
+		{"media", &f.Media},
 	}
 
 	for idx := range flags {

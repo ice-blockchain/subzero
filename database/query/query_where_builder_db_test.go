@@ -468,24 +468,30 @@ func TestSelectByMimeType(t *testing.T) {
 		require.Equal(t, int64(100), count)
 	})
 	t.Run("Image", func(t *testing.T) {
-		for ev, err := range db.SelectEvents(t.Context(), model.Filter{
+		events := helperSelectEvents(t, db, model.Filter{
 			Search: "images:true",
-		}) {
-			require.NoError(t, err)
-			t.Logf("event: %+v", ev)
-			require.NotNil(t, ev)
-			require.Equal(t, "2", ev.ID)
-		}
+		})
+		require.Len(t, events, 1)
+		require.Equal(t, "2", events[0].ID)
 	})
 	t.Run("Video", func(t *testing.T) {
-		for ev, err := range db.SelectEvents(t.Context(), model.Filter{
+		events := helperSelectEvents(t, db, model.Filter{
 			Search: "videos:true",
-		}) {
-			require.NoError(t, err)
-			t.Logf("event: %+v", ev)
-			require.NotNil(t, ev)
-			require.Equal(t, "1", ev.ID)
-		}
+		})
+		require.Lenf(t, events, 1, "expected 1 video event, got %d", len(events))
+		require.Equal(t, "1", events[0].ID)
+	})
+	t.Run("Media", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Search: "media:true",
+		})
+		require.Len(t, events, 2, "expected 2 events with media tags, got %d", len(events))
+	})
+	t.Run("No Media", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Search: "media:false",
+		})
+		require.Len(t, events, 100)
 	})
 	t.Run("VideoByID", func(t *testing.T) {
 		count, err := db.CountEvents(t.Context(), model.Filter{

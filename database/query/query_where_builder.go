@@ -57,6 +57,7 @@ type (
 		Expiration   *bool
 		Videos       *bool
 		Images       *bool
+		Media        *bool
 		Quotes       *bool
 		References   *bool
 		TagMarkers   []databaseFilterMarker
@@ -351,6 +352,7 @@ func isFilterEmpty(filter *databaseFilterSearch) bool {
 		filter.Quotes == nil &&
 		filter.References == nil &&
 		filter.Images == nil &&
+		filter.Media == nil &&
 		filter.SearchText == ""
 }
 
@@ -388,15 +390,31 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 }
 
 func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
-	if filter.Videos != nil {
+	if filter.Media != nil {
 		b.MaybeAND()
-		b.WriteString("e.has_videos=:")
-		b.WriteValue(filter.ID, "videos", *filter.Videos)
-	}
-	if filter.Images != nil {
-		b.MaybeAND()
+		b.WriteString("(e.has_videos=:")
+		b.WriteValue(filter.ID, "media", *filter.Media)
+		if *filter.Media {
+			// Check for either videos or images.
+			b.WriteString(" OR ")
+		} else {
+			// Return only events without media.
+			b.WriteString(" AND ")
+		}
 		b.WriteString("e.has_images=:")
-		b.WriteValue(filter.ID, "images", *filter.Images)
+		b.WriteValue(filter.ID, "media", *filter.Media)
+		b.WriteString(")")
+	} else {
+		if filter.Videos != nil {
+			b.MaybeAND()
+			b.WriteString("e.has_videos=:")
+			b.WriteValue(filter.ID, "videos", *filter.Videos)
+		}
+		if filter.Images != nil {
+			b.MaybeAND()
+			b.WriteString("e.has_images=:")
+			b.WriteValue(filter.ID, "images", *filter.Images)
+		}
 	}
 
 	if filter.Quotes != nil {

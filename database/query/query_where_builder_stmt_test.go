@@ -265,6 +265,17 @@ func TestParseNostrFilter(t *testing.T) {
 		require.False(t, *f.Quotes)
 		require.Empty(t, f.Filter)
 	})
+	t.Run("Media with references", func(t *testing.T) {
+		f, err := parseNostrFilter(model.Filter{
+			Search: "media:true references:off",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, f.Media)
+		require.True(t, *f.Media)
+		require.NotNil(t, f.References)
+		require.False(t, *f.References)
+		require.Empty(t, f.Filter)
+	})
 	t.Run("ImagesWithQuotesWithRef", func(t *testing.T) {
 		f, err := parseNostrFilter(model.Filter{
 			Search: "images:true quoteS:off references:yes",
