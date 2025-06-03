@@ -28,7 +28,7 @@ require (
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250602163928-ae1a52f484f0
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250603082716-142b9f5c894b
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/imroc/req/v3 v3.52.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -155,7 +155,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250602163928-ae1a52f484f0 // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250603082716-142b9f5c894b // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
