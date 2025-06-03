@@ -7,10 +7,13 @@ import (
 	"math/rand/v2"
 	"os"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/alitto/pond/v2"
+	"github.com/cockroachdb/errors"
 	combinations "github.com/mxschmitt/golang-combinations"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/schollz/progressbar/v3"
@@ -191,12 +194,27 @@ func TestQueryFuzzWhereGenerator(t *testing.T) {
 
 	sets := helperGenFilterCombinations(t)
 	bar := progressbar.Default(int64(len(sets)), "testing where sets")
+	w := min(runtime.NumCPU()*3, 100)
 	t.Run("Fuzz", func(t *testing.T) {
+		t.Logf("testing %d sets with %d workers", len(sets), w)
+		pool := pond.NewPool(w)
+		errCh := make(chan error, len(sets))
 		for i, set := range sets {
-			bar.Add(1)
-			filter := helperNewFilterFromElements(t, set)
-			_, err := db.CountEvents(t.Context(), filter)
-			require.NoErrorf(t, err, "failed to count events for set #%d (%#v)", i+1, filter)
+			i, set := i, set
+			pool.Submit(func() {
+				filter := helperNewFilterFromElements(t, set)
+				_, err := db.CountEvents(t.Context(), filter)
+				if err != nil {
+					errCh <- errors.Errorf("failed to count events for set #%d (%#v): %w", i+1, filter, err)
+				}
+				bar.Add(1)
+			})
+		}
+		pool.StopAndWait()
+		close(errCh)
+
+		for err := range errCh {
+			require.NoError(t, err)
 		}
 	})
 }
@@ -263,35 +281,65 @@ func TestQueryFuzzIndexes(t *testing.T) {
 	op := make(map[string]int)
 	sets := helperGenFilterCombinations(t)
 	results := make([]Query, 0, len(sets))
+	w := min(runtime.NumCPU()*3, 100)
 
 	t.Run("Fuzz", func(t *testing.T) {
+		t.Logf("testing %d sets with %d workers", len(sets), w)
 		bar := progressbar.Default(int64(len(sets)), "testing sets")
+		pool := pond.NewPool(w)
+		resultsCh := make(chan []Query, len(sets))
+		errCh := make(chan error, len(sets))
+
 		for i, set := range sets {
-			bar.Add(1)
-			filter := helperNewFilterFromElements(t, set)
-			sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
-			require.NoErrorf(t, err, "failed to generate select events sql for set #%d (%#v)", i+1, set)
-
-			sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
-			result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-
-			var q []Query
-			err = json.Unmarshal([]byte(*result), &q)
-			require.NoError(t, err)
-
-			results = append(results, q...)
-			if helperQueryHas(t, q, "Seq Scan") {
-				var emptyFilter model.Filter
-				if nostr.FilterEqual(filter, emptyFilter) {
-					continue
+			i, set := i, set
+			pool.Submit(func() {
+				defer bar.Add(1)
+				filter := helperNewFilterFromElements(t, set)
+				sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
+				if err != nil {
+					errCh <- errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i+1, set, err)
+					return
 				}
 
-				t.Errorf("sql: %s", sql)
-				t.Errorf("------- found SCAN without INDEX -------")
-				t.Errorf("params: %#v", params)
-			}
+				sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
+				result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
+				if err != nil {
+					errCh <- errors.Errorf("failed to execute query for set #%d: %w", i+1, err)
+					return
+				}
+				if result == nil {
+					errCh <- errors.Errorf("nil result for set #%d", i+1)
+					return
+				}
+
+				var q []Query
+				err = json.Unmarshal([]byte(*result), &q)
+				if err != nil {
+					errCh <- errors.Errorf("failed to unmarshal query result for set #%d: %w", i+1, err)
+					return
+				}
+
+				resultsCh <- q
+
+				if helperQueryHas(t, q, "Seq Scan") {
+					var emptyFilter model.Filter
+					if !nostr.FilterEqual(filter, emptyFilter) {
+						errCh <- errors.Errorf("set #%d: found SCAN without INDEX; sql: %s; params: %#v", i+1, sql, params)
+					}
+				}
+			})
+		}
+
+		pool.StopAndWait()
+		close(resultsCh)
+		close(errCh)
+
+		for q := range resultsCh {
+			results = append(results, q...)
+		}
+
+		for err := range errCh {
+			t.Errorf("error: %v", err)
 		}
 	})
 

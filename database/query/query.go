@@ -37,12 +37,12 @@ var (
 	ErrInvalidEvent              = errors.New("invalid event")
 	ErrRaceCondition             = errors.New("race condition")
 
-	errEventIteratorInterrupted = errors.New("interrupted")
-
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
 
 type (
+	EventIterator = connector.Iterator[*model.Event]
+
 	databaseEvent struct {
 		model.Event
 		LookupCreatedAt int64
@@ -859,28 +859,26 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
-	it := &eventIterator{
-		Map: db.eventTransform,
-		Fetch: func() ([]*databaseEvent, error) {
-			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
-			if err != nil {
-				return nil, err
-			}
-			return connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
-		},
-	}
-
 	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *databaseEvent) error {
-			if !yield(&event.Event, nil) {
-				return errEventIteratorInterrupted
+		sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
+		if err != nil {
+			yield(nil, errors.Wrap(err, "failed to generate select events SQL"))
+			return
+		}
+
+		data, err := connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
+		if err != nil {
+			if errors.Is(err, connector.ErrNotFound) {
+				err = nil
 			}
+			yield(nil, errors.Wrap(err, "failed to select events"))
+			return
+		}
 
-			return nil
-		})
-
-		if err != nil && !errors.Is(err, errEventIteratorInterrupted) {
-			yield(nil, errors.Wrap(err, "failed to iterate events"))
+		for i := range data {
+			if !yield(&db.eventTransform(data[i]).Event, nil) {
+				return
+			}
 		}
 	}
 }
