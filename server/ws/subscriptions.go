@@ -303,6 +303,10 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	sub = h.prepareSubscription(ctx, sub)
 
+	if err := applySubscriptionLimit(sub); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
