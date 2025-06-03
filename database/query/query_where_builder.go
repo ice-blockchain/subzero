@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cockroachdb/errors"
@@ -365,8 +366,11 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 			b.WriteRune(')')
 
 			return nil
-		} else if *since > *until {
-			return errors.Wrapf(ErrWhereBuilderInvalidTimeRange, "since [%d] is greater than until [%d]", *since, *until)
+		} else if since.After(*until) {
+			return errors.Wrapf(ErrWhereBuilderInvalidTimeRange, "since [%s] is greater than until [%s]",
+				since.Time().Format(time.RFC3339Nano),
+				until.Time().Format(time.RFC3339Nano),
+			)
 		}
 	}
 
