@@ -88,17 +88,14 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		if db.master == nil {
 			return nil, errors.Errorf("ddl is set but master is not set")
 		}
-		err := DoInTransaction(ctx, db, func(conn QueryExecer) error {
-			for statement := range strings.SplitSeq(db.ddl, "--------") {
+		for statement := range strings.SplitSeq(db.ddl, "--------") {
+			err := DoInTransaction(ctx, db, func(conn QueryExecer) error {
 				_, err := conn.Exec(ctx, statement)
-				if err != nil {
-					return errors.Wrapf(err, "statement failed: %s", statement)
-				}
+				return err
+			})
+			if err != nil {
+				return nil, errors.Wrapf(err, "statement failed: %s", statement)
 			}
-			return nil
-		})
-		if err != nil {
-			return nil, errors.Wrap(err, "ddl failed")
 		}
 	}
 
