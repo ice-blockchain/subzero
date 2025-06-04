@@ -751,7 +751,7 @@ func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 			{targetEventArticle.Tag, targetEventArticle.Address},
 		}
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-		helperPointsScoreEqual(t, db, targetEventArticle.ID, 1, 1.0)
+		helperPointsScoreEqual(t, db, targetEventArticle.ID, 1, 1e4)
 	})
 	t.Run("search ranked events", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -772,7 +772,7 @@ func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 			{targetEventNote.Tag, targetEventNote.Address},
 		}
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-		helperPointsScoreEqual(t, db, targetEventNote.ID, 3, 3.0) // repost (3).
+		helperPointsScoreEqual(t, db, targetEventNote.ID, 3, 3e4) // repost (3).
 	})
 	t.Run("search ranked events", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -798,7 +798,7 @@ func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 		ev.CreatedAt = nostr.Now()
 		quotes = append(quotes, ev.ID)
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-		helperPointsScoreEqual(t, db, targetEventArticle.ID, 5, 5.0) // like (1) + quote (4).
+		helperPointsScoreEqual(t, db, targetEventArticle.ID, 5, 5e4) // like (1) + quote (4).
 	})
 
 	t.Run("search ranked events", func(t *testing.T) {

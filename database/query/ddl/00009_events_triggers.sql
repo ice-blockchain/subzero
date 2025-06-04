@@ -337,7 +337,7 @@ BEGIN
         e.kind,
         e.created_at,
         event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply),
-        event_calculate_score(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)
+        event_calculate_score_int(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)
     from
         events e
     inner join cte on e.address = cte.event_address
@@ -350,7 +350,7 @@ BEGIN
     on conflict (event_id) do update
     set
         points = ranked_events.points + excluded.points,
-        score  = event_calculate_score(ranked_events.points + excluded.points, excluded.event_created_at);
+        score  = event_calculate_score_int(ranked_events.points + excluded.points, excluded.event_created_at);
     return NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -383,7 +383,7 @@ BEGIN
     update ranked_events
     set
         points = points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply),
-        score  = event_calculate_score(points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply), event_created_at)
+        score  = event_calculate_score_int(points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply), event_created_at)
     from
         affected_events
     where
@@ -405,7 +405,7 @@ BEGIN
     update ranked_events
     set
         points = points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply),
-        score =  event_calculate_score(points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply), event_created_at)
+        score =  event_calculate_score_int(points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply), event_created_at)
     where exists (
         select 1
         from
@@ -439,7 +439,7 @@ BEGIN
         e.kind,
         e.created_at,
         event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply),
-        event_calculate_score(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)
+        event_calculate_score_int(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)
     from
         events e
     inner join cte on e.address = cte.event_address
@@ -453,7 +453,7 @@ BEGIN
     on conflict (event_id) do update
     set
         points = ranked_events.points + excluded.points,
-        score  = event_calculate_score(ranked_events.points + excluded.points, excluded.event_created_at);
+        score  = event_calculate_score_int(ranked_events.points + excluded.points, excluded.event_created_at);
     delete from ranked_events where points <= 0;
     return NEW;
 END;

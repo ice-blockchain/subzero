@@ -14,19 +14,19 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperGetEventPointsAndScore(t *testing.T, client *dbClient, eventID string) (points int, score float64) {
+func helperGetEventPointsAndScore(t *testing.T, client *dbClient, eventID string) (points int, score int) {
 	t.Helper()
 
 	data, err := connector.Get[struct {
-		Points int     `db:"points"`
-		Score  float64 `db:"score"`
+		Points int `db:"points"`
+		Score  int `db:"score"`
 	}](t.Context(), client.db, "SELECT points, score FROM ranked_events WHERE event_id = $1", eventID)
 	require.NoError(t, err)
 	require.NotNil(t, data)
 
 	points, score = data.Points, data.Score
 
-	t.Logf("event %s: points=%d, score=%f", eventID, points, score)
+	t.Logf("event %s: points=%d, score=%d", eventID, points, score)
 
 	return points, score
 }
@@ -36,7 +36,7 @@ func helperPointsScoreEqual(t *testing.T, db *dbClient, eventID string, points i
 
 	p, s := helperGetEventPointsAndScore(t, db, eventID)
 	require.EqualValues(t, points, p)
-	require.InDelta(t, score, s, 0.3)
+	require.InDelta(t, score, s, 300)
 }
 
 func TestEventScore(t *testing.T) {
@@ -87,7 +87,7 @@ func TestEventScore(t *testing.T) {
 				{target.Tag, target.Address},
 			}
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-			helperPointsScoreEqual(t, db, target.ID, 1, 1.0)
+			helperPointsScoreEqual(t, db, target.ID, 1, 1e4)
 		}
 	})
 	var reposts []model.Event
@@ -107,7 +107,7 @@ func TestEventScore(t *testing.T) {
 			}
 			reposts = append(reposts, ev)
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-			helperPointsScoreEqual(t, db, target.ID, 4, 4.0) // like (1) + repost (3).
+			helperPointsScoreEqual(t, db, target.ID, 4, 4e4) // like (1) + repost (3).
 		}
 	})
 	var quotes []string
@@ -132,7 +132,7 @@ func TestEventScore(t *testing.T) {
 			ev.CreatedAt = nostr.Now()
 			quotes = append(quotes, ev.ID)
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-			helperPointsScoreEqual(t, db, target.ID, 8, 8.0) // like (1) + repost (3) + quote (4).
+			helperPointsScoreEqual(t, db, target.ID, 8, 8e4) // like (1) + repost (3) + quote (4).
 		}
 	})
 	t.Run("Comment", func(t *testing.T) {
@@ -153,7 +153,7 @@ func TestEventScore(t *testing.T) {
 					{target.Tag, target.Address, "", "reply"},
 				}
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-				helperPointsScoreEqual(t, db, target.ID, 10, 10.0) // like (1) + repost (3) + quote (4) + root comment (2).
+				helperPointsScoreEqual(t, db, target.ID, 10, 10e4) // like (1) + repost (3) + quote (4) + root comment (2).
 				replies = append(replies, &ev)
 			}
 		})
@@ -174,7 +174,7 @@ func TestEventScore(t *testing.T) {
 				}
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 				// Should not affect the score of the target event.
-				helperPointsScoreEqual(t, db, target.ID, 10, 10.0) // like (1) + repost (3) + quote (4) + root comment (2).
+				helperPointsScoreEqual(t, db, target.ID, 10, 10e4) // like (1) + repost (3) + quote (4) + root comment (2).
 			}
 		})
 	})
@@ -191,7 +191,7 @@ func TestEventScore(t *testing.T) {
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			}
 			for _, target := range targetEvents {
-				helperPointsScoreEqual(t, db, target.ID, 6, 6.0) // like (1) + repost (3) + root comment (2).
+				helperPointsScoreEqual(t, db, target.ID, 6, 6e4) // like (1) + repost (3) + root comment (2).
 			}
 		})
 		t.Run("Soft delete root comment", func(t *testing.T) {
@@ -206,8 +206,8 @@ func TestEventScore(t *testing.T) {
 				{"published_at", strconv.FormatInt(int64(nostr.Now())-1, 10)},
 			}
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
-			helperPointsScoreEqual(t, db, evArticle.ID, 4, 4.0) // like (1) + repost (3).
-			helperPointsScoreEqual(t, db, evNote.ID, 6, 6.0)    // like (1) + repost (3) + root comment (2).
+			helperPointsScoreEqual(t, db, evArticle.ID, 4, 4e4) // like (1) + repost (3).
+			helperPointsScoreEqual(t, db, evNote.ID, 6, 6e4)    // like (1) + repost (3) + root comment (2).
 		})
 		t.Run("rollback deletes", func(t *testing.T) {
 			for _, id := range quotes {
@@ -220,15 +220,15 @@ func TestEventScore(t *testing.T) {
 				}
 				require.NoError(t, db.RollbackEvents(t.Context(), &ev))
 			}
-			helperPointsScoreEqual(t, db, evArticle.ID, 8, 8) // like (1) + repost (3) + quote(4)
-			helperPointsScoreEqual(t, db, evNote.ID, 10, 10)  // like (1) + repost (3) + root comment (2) + quote(4)
+			helperPointsScoreEqual(t, db, evArticle.ID, 8, 8e4) // like (1) + repost (3) + quote(4)
+			helperPointsScoreEqual(t, db, evNote.ID, 10, 10e4)  // like (1) + repost (3) + root comment (2) + quote(4)
 		})
 		t.Run("rollback reposts", func(t *testing.T) {
 			for _, repost := range reposts {
 				require.NoError(t, db.RollbackEvents(t.Context(), &repost))
 			}
-			helperPointsScoreEqual(t, db, evArticle.ID, 5, 5) // like (1) + quote(4)
-			helperPointsScoreEqual(t, db, evNote.ID, 7, 7)    // like (1) + root comment (2) + quote(4)
+			helperPointsScoreEqual(t, db, evArticle.ID, 5, 5e4) // like (1) + quote(4)
+			helperPointsScoreEqual(t, db, evNote.ID, 7, 7e4)    // like (1) + root comment (2) + quote(4)
 		})
 	})
 }

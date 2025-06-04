@@ -1583,8 +1583,8 @@ func TestSelectRankTopEvents(t *testing.T) {
 	require.Equal(t, notes[1].ID, top[0].ID)
 	require.Equal(t, notes[0].ID, top[1].ID)
 
-	helperPointsScoreEqual(t, db, notes[1].ID, 22, 22.0)
-	helperPointsScoreEqual(t, db, notes[0].ID, 17, 17.0)
+	helperPointsScoreEqual(t, db, notes[1].ID, 22, 22e4)
+	helperPointsScoreEqual(t, db, notes[0].ID, 17, 17e4)
 }
 
 func TestExtendWhereFilters(t *testing.T) {
