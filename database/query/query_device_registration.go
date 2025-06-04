@@ -43,36 +43,21 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 				"batch_size":  batchSize,
 			}
 
-			it := &eventIterator{
-				Fetch: func() (internalEventIterator, error) {
-					return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
-				},
-			}
-
-			var eventsProcessed int
-			var lastErr error
-
-			err := it.Each(ctx, func(event *databaseEvent) error {
-				if !yield(&event.Event, nil) {
-					return errEventIteratorInterrupted
-				}
-
-				lastTagID = event.TagID
-				eventsProcessed++
-				return nil
-			})
-
+			events, err := connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
 			if err != nil {
-				if !errors.Is(err, errEventIteratorInterrupted) {
-					lastErr = errors.Wrap(err, "failed to iterate device registration events")
-					if !yield(nil, lastErr) {
-						return
-					}
-				}
-				break
+				yield(nil, errors.Wrap(err, "failed to collect device registration events"))
+				return
 			}
 
-			if eventsProcessed < batchSize {
+			for _, event := range events {
+				if yield(&event.Event, nil) {
+					lastTagID = event.TagID
+				} else {
+					return
+				}
+			}
+
+			if len(events) < batchSize {
 				break
 			}
 		}

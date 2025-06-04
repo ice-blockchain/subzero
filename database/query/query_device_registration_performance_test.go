@@ -596,24 +596,23 @@ func helperQueryWithIteratorBase(t *testing.T, db *dbClient, sqlQuery string) Ev
 				"batch_size":      batchSize,
 			}
 
-			var eventsProcessed int
-			it := db.newReadEventIterator(t.Context(), sqlQuery, params)
-			for event, iterErr := range it {
-				if iterErr != nil {
-					if !yield(nil, errors.Wrap(iterErr, "failed to iterate device registration events")) {
-						return
-					}
-					break
-				}
+			events, err := connector.SelectNamed[model.Event](t.Context(), db.db, sqlQuery, params)
+			if err != nil {
+				yield(nil, errors.Wrap(err, "failed to select device registration events"))
+
+				return
+			}
+
+			for _, event := range events {
 				if !yield(event, nil) {
 					return
 				}
 
 				lastCreatedAt = time.Unix(int64(event.CreatedAt), 0)
 				lastID = event.ID
-				eventsProcessed++
 			}
-			if eventsProcessed < batchSize {
+
+			if len(events) < batchSize {
 				break
 			}
 		}

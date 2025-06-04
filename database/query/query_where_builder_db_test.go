@@ -75,11 +75,8 @@ order by
 	random()
 limit 1000`
 
-	it := db.newReadEventIterator(t.Context(), stmt, map[string]any{})
-	for ev, err := range it {
-		require.NoError(t, err)
-		events = append(events, ev)
-	}
+	events, err := connector.SelectNamed[model.Event](t.Context(), db.db, stmt, map[string]any{})
+	require.NoError(t, err)
 
 	rand.Shuffle(len(events), func(i, j int) { events[i], events[j] = events[j], events[i] })
 
@@ -602,12 +599,7 @@ func helperCountExpiredEvents(t *testing.T, client *dbClient) int {
 	t.Helper()
 
 	count, err := connector.Get[int](t.Context(), client.db,
-		`
-select count(*) from events WHERE exists (
-	select true from event_tags et where et.event_id = events.id 
-			and et.event_tag_key = 'expiration'
-			and to_timestamp_nano(cast(et.event_tag_value1 as bigint)) <= get_current_timestamp_nano()
-	)`,
+		`select count(*) from events WHERE expiration <= get_current_timestamp_nano()`,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, count)
@@ -968,6 +960,11 @@ func TestFilterTagsNegative(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			Tags: model.TagMap{}.Set("!e", nil, nil, model.PointerOf("root")),
 		})
+		require.Len(t, events, 1)
+		require.Equal(t, "2id", events[0].ID)
+	})
+	t.Run("Find reply by marker", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Search: "emarker:reply"})
 		require.Len(t, events, 1)
 		require.Equal(t, "2id", events[0].ID)
 	})

@@ -37,16 +37,17 @@ var (
 	ErrInvalidEvent              = errors.New("invalid event")
 	ErrRaceCondition             = errors.New("race condition")
 
-	errEventIteratorInterrupted = errors.New("interrupted")
-
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
 
 type (
+	EventIterator = connector.Iterator[*model.Event]
+
 	databaseEvent struct {
 		model.Event
 		LookupCreatedAt int64
-		SystemKind      sql.NullInt64
+		TagID           int64
+		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
 		SigAlg          string
 		KeyAlg          string
@@ -55,11 +56,14 @@ type (
 		Htag            string
 		AddressValue    string
 		Lookup          string
-		TagID           int64
+		SaveMergeAction string
 		Deleted         bool
 		HasImages       bool
 		HasVideos       bool
-		SaveMergeAction string
+		HasReferences   bool
+		IsReply         bool
+		IsQuote         bool
+		IsRootReply     bool
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -83,100 +87,84 @@ type databaseBatchRequest struct {
 	Rollback map[string]bool
 }
 
-func detectImagesVideos(tags model.Tags) (images, videos bool) {
-	for _, tag := range tags {
-		if tag.Key() != "imeta" {
-			continue
-		}
-
-		for i := range len(tag) {
-			if strings.HasPrefix(tag[i], "m image/") {
-				images = true
-			} else if strings.HasPrefix(tag[i], "m video/") {
-				videos = true
-			}
-		}
-	}
-	return images, videos
-}
-
-func detectSystemKind(tags model.Tags) (int64, bool) {
+func (d *databaseEvent) FromTags(tags model.Tags) {
 	// Syntax: "a|e", "<address>", "", "reply|root", "<master_pubkey>".
 	var rootOf, replyOf string
-	for i := range tags {
-		switch tags[i].Key() {
-		case "a", "e":
-			if len(tags[i]) <= replyMarkerIndex {
-				continue
+
+	for _, tag := range tags {
+		switch tag.Key() {
+		case "imeta":
+			for i := range len(tag) {
+				if strings.HasPrefix(tag[i], "m image/") {
+					d.HasImages = true
+				} else if strings.HasPrefix(tag[i], "m video/") {
+					d.HasVideos = true
+				} else if d.HasImages && d.HasVideos {
+					break // No need to check further.
+				}
 			}
-			if strings.EqualFold(tags[i][replyMarkerIndex], "reply") && replyOf == "" {
-				replyOf = tags[i].Value()
-			} else if strings.EqualFold(tags[i][replyMarkerIndex], "root") && rootOf == "" {
-				rootOf = tags[i].Value()
+		case "expiration":
+			deadline, err := nostr.ParseTimestamp(tag.Value())
+			if err == nil && deadline > 0 && (!d.Expiration.Valid || deadline.Before(nostr.Timestamp(d.Expiration.Int64))) {
+				d.Expiration.Int64 = deadline.Time().UnixNano()
+				d.Expiration.Valid = true
+			}
+		case "a", "e":
+			d.HasReferences = true
+			if len(tag) > replyMarkerIndex {
+				if strings.EqualFold(tag[replyMarkerIndex], model.TagMarkerReply) && replyOf == "" {
+					d.IsReply = true
+					replyOf = tag.Value()
+				} else if strings.EqualFold(tag[replyMarkerIndex], model.TagMarkerRoot) && rootOf == "" {
+					rootOf = tag.Value()
+				}
 			}
 		case "q", "Q":
-			return systemKindQuote, true
+			d.IsQuote = true
 		}
 	}
 
-	// Cover:
-	// - has both reply and root tags that points to the same event.
-	// - has only root tag.
-	if rootOf != "" && (rootOf == replyOf || replyOf == "") {
-		return systemKindCommentRoot, true
-	} else if replyOf != "" && replyOf != rootOf { // Has reply tag, and optional root tag.
-		return systemKindCommentReply, true
-	}
-	return -1, false
+	// If it has both `reply` and `root` tags, that points to the same event,
+	// then it is a root reply.
+	d.IsRootReply = rootOf != "" && replyOf != "" && rootOf == replyOf
 }
 
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
-	var deleted bool
+	event := databaseEvent{
+		Event:        *e,
+		MasterPubKey: e.GetMasterPublicKey(),
+		Dtag:         e.Tags.GetD(),
+		Htag:         e.GetHTag(),
+	}
 
 	sigAlg, keyAlg, err := parseSigKeyAlg(e)
 	if err != nil {
 		return nil, err
 	}
+	event.SigAlg, event.KeyAlg = sigAlg, keyAlg
+	event.Lookup = prepareSearchContent(e)
+	event.FromTags(e.Tags)
 
-	// Is it a soft delete?
-	if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
-		switch e.Kind {
-		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+	switch e.Kind {
+	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+		// Is it a soft delete?
+		if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
 			val, err := nostr.ParseTimestamp(e.GetTag("published_at").Value())
-			deleted = err == nil && e.CreatedAt.After(val)
+			event.Deleted = err == nil && e.CreatedAt.After(val)
 		}
-	}
-
-	var images, videos bool
-	images, videos = detectImagesVideos(e.Tags)
-
-	var lookup string
-	if e.Kind == nostr.KindRepost || e.Kind == nostr.KindGenericRepost {
+	case nostr.KindRepost, nostr.KindGenericRepost:
 		var original model.Event
 		if err := original.UnmarshalJSON([]byte(e.Content)); err == nil {
-			images, videos = detectImagesVideos(original.Tags)
+			event.Lookup = prepareSearchContent(&original)
+			event.FromTags(original.Tags)
 		}
-		lookup = prepareSearchContent(&original)
-	} else {
-		lookup = prepareSearchContent(e)
 	}
 
-	var systemKind sql.NullInt64
-	systemKind.Int64, systemKind.Valid = detectSystemKind(e.Tags)
+	if event.Expiration.Valid {
+		event.Expiration.Int64 = nostr.Timestamp(event.Expiration.Int64).Time().UnixNano()
+	}
 
-	return &databaseEvent{
-		Event:        *e,
-		MasterPubKey: e.GetMasterPublicKey(),
-		SystemKind:   systemKind,
-		SigAlg:       sigAlg,
-		KeyAlg:       keyAlg,
-		Dtag:         e.Tags.GetD(),
-		Htag:         e.GetHTag(),
-		Lookup:       lookup,
-		Deleted:      deleted,
-		HasImages:    images,
-		HasVideos:    videos,
-	}, nil
+	return &event, nil
 }
 
 func (req *databaseBatchRequest) Save(e *model.Event) error {
@@ -340,18 +328,14 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	created_at,
 	id,
 	pubkey,
-	master_pubkey,
 	sig,
 	content,
-	d_tag,
-	h_tag,
 	tags
 `
-	for ev, err := range db.newExecEventIterator(ctx, stmt, params) {
-		if err != nil {
-			return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
-		}
-		deletedEvents = append(deletedEvents, ev)
+
+	deletedEvents, err = connector.ExecNamed[model.Event](ctx, db.db, stmt, params)
+	if err != nil {
+		return nil, nil, errors.Wrap(handleError(err), "failed to exec delete event sql")
 	}
 	if len(deletedEvents) == 0 {
 		return nil, nil, nil
@@ -436,171 +420,284 @@ func (db *dbClient) saveEvents(
 	events []databaseEvent,
 	replaceableEventsToRollback map[string]bool,
 ) (insertedEvents []*databaseEvent, err error) {
-	var stmt string
-	values := []string{}
+	builder := newQueryBuilder()
+
 	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
-	if len(replaceableEventsToRollback) > 0 {
-		for evID := range replaceableEventsToRollback {
-			replaceableEventsIDs = append(replaceableEventsIDs, evID)
-		}
+	for evID := range replaceableEventsToRollback {
+		replaceableEventsIDs = append(replaceableEventsIDs, evID)
 	}
-	params := []any{replaceableEventsIDs}
-	idx := 2
-	for _, ev := range events {
-		params = append(params, ev.Kind, ev.SystemKind, ev.CreatedAt,
-			ev.ID, ev.PubKey, ev.MasterPubKey, ev.Sig, ev.SigAlg, ev.KeyAlg, ev.Content,
-			ev.Tags, ev.Dtag, ev.Htag, ev.Deleted, ev.HasImages, ev.HasVideos,
-			ev.Lookup,
-		)
-		isReplay := ""
-		if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
-			isReplay = model.ConsensusReplayCtxKey
-		}
-		values = append(values, fmt.Sprintf(
-			`($%[1]v::integer, $%[2]v::integer, $%[3]v::bigint,
-			$%[4]v, $%[5]v, $%[6]v, $%[7]v, $%[8]v, $%[9]v, $%[10]v,
-			COALESCE($%[11]v, '[]'::jsonb), $%[12]v, $%[13]v,
-			$%[14]v::bool, $%[15]v::bool, $%[16]v::bool, to_tsvector($%[17]v::text),
-			'%[18]v')`, // replaced_by_id to match replaceable_events_before_update schema,
-			// we use it also to detect if save come from consensus.ReplayTx.
-			// In this case it should not trigger trigger_events_store_replaceable_data_before_update
-			// as data already committed and we want to avoid extra insert / delete to that table
-			// of rollbackable replaceable events.
-			idx, idx+1, idx+2,
-			idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12, idx+13, idx+14, idx+15, idx+16,
-			isReplay,
-		))
-		idx += 17
+
+	fields := []string{
+		"kind",
+		"created_at",
+		"id",
+		"address",
+		"pubkey",
+		"master_pubkey",
+		"sig",
+		"sig_alg",
+		"key_alg",
+		"content",
+		"tags",
+		"d_tag",
+		"h_tag",
+		"deleted",
+		"has_images",
+		"has_videos",
+		"is_reply",
+		"is_root_reply",
+		"is_quote",
+		"has_references",
+		"hidden",
+		"lookup",
+		"expiration",
+		"replaced_by_id",
 	}
-	valuesStr := ""
-	if len(values) > 0 {
-		valuesStr = "UNION ALL VALUES " + strings.Join(values, ",")
-	}
-	stmt = `
+
+	builder.WriteString(`
 WITH replaced AS (
 	DELETE FROM replaceable_events_before_update
 	WHERE
-		replaced_by_id = ANY($1)
+		replaced_by_id = ANY(:` + builder.PushValue("merge", "replaceableID", replaceableEventsIDs) + `)
 	RETURNING *
-)
-MERGE INTO events AS target
-	USING (SELECT kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-		has_images, has_videos, lookup, replaced_by_id FROM replaced 
-			` + valuesStr + `
-	) AS source (
-		kind, system_kind, created_at, id, pubkey, master_pubkey, sig, sig_alg, key_alg, content, tags, d_tag, h_tag, deleted,
-		has_images,
-		has_videos,
-		lookup, replaced_by_id
-	)
+)`)
+	builder.WriteString(` MERGE INTO events AS target USING (SELECT `)
+	for i, field := range fields {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(field)
+	}
+	builder.WriteString(` FROM replaced `)
+	var isReplay string
+	if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+		isReplay = model.ConsensusReplayCtxKey
+	}
+	if len(events) > 0 {
+		builder.WriteString(` UNION ALL VALUES `)
+	}
+	for i := range events {
+		name := "merge_event" + strconv.Itoa(i)
+		if i > 0 {
+			builder.WriteString(",\n")
+		}
+		builder.WriteValues(name, []queryBuilderValue{ // Keep in sync with `fields`.
+			{
+				Name:   "kind",
+				CastTo: "integer",
+				Value:  events[i].Kind,
+			},
+			{
+				Name:   "created_at",
+				CastTo: "bigint",
+				Value:  events[i].CreatedAt,
+			},
+			{
+				Name:  "id",
+				Value: events[i].ID,
+			},
+			{
+				Name:  "address",
+				Value: events[i].Address(),
+			},
+			{
+				Name:  "pubkey",
+				Value: events[i].PubKey,
+			},
+			{
+				Name:  "master_pubkey",
+				Value: events[i].MasterPubKey,
+			},
+			{
+				Name:  "sig",
+				Value: events[i].Sig,
+			},
+			{
+				Name:  "sig_alg",
+				Value: events[i].SigAlg,
+			},
+			{
+				Name:  "key_alg",
+				Value: events[i].KeyAlg,
+			},
+			{
+				Name:  "content",
+				Value: events[i].Content,
+			},
+			{
+				Name:   "tags",
+				CastTo: "jsonb",
+				Value: func() model.Tags {
+					if len(events[i].Tags) > 0 {
+						return events[i].Tags
+					}
+					return model.Tags{}
+				}(),
+			},
+			{
+				Name:  "d_tag",
+				Value: events[i].Dtag,
+			},
+			{
+				Name:  "h_tag",
+				Value: events[i].Htag,
+			},
+			{
+				Name:   "deleted",
+				CastTo: "bool",
+				Value:  events[i].Deleted,
+			},
+			{
+				Name:   "has_images",
+				CastTo: "bool",
+				Value:  events[i].HasImages,
+			},
+			{
+				Name:   "has_videos",
+				CastTo: "bool",
+				Value:  events[i].HasVideos,
+			},
+			{
+				Name:   "is_reply",
+				CastTo: "bool",
+				Value:  events[i].IsReply,
+			},
+			{
+				Name:   "is_root_reply",
+				CastTo: "bool",
+				Value:  events[i].IsRootReply,
+			},
+			{
+				Name:   "is_quote",
+				CastTo: "bool",
+				Value:  events[i].IsQuote,
+			},
+			{
+				Name:   "has_references",
+				CastTo: "bool",
+				Value:  events[i].HasReferences,
+			},
+			{
+				Name:   "hidden",
+				CastTo: "bool",
+				Value:  false,
+			},
+			{
+				Name:  "lookup",
+				Func:  "to_tsvector",
+				Value: events[i].Lookup,
+			},
+			{
+				Name:   "expiration",
+				CastTo: "bigint",
+				Value:  events[i].Expiration,
+			},
+			{
+				Name:  "replaced_by_id",
+				Value: isReplay,
+			},
+		})
+	}
+	builder.WriteString(`) AS source (`)
+	for i, field := range fields {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(field)
+	}
+	builder.PushValue("model", "_consensuskey", model.ConsensusReplayCtxKey)
+	builder.WriteString(`)
 	ON (
 		target.id = source.id
-		OR (((target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3))
-		OR (target.master_pubkey = source.master_pubkey AND target.kind = source.kind AND target.d_tag = source.d_tag AND (30000 <= source.kind AND source.kind < 40000))
-		OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `'))
-		AND hidden=false)
+		OR (target.address = source.address and target.hidden=false)
+		OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != :model_consensuskey and target.hidden=false)
 	)
-WHEN MATCHED AND
-	target.master_pubkey = source.master_pubkey
-	AND target.kind = source.kind
-	AND target.d_tag = source.d_tag
-	AND (30000 <= source.kind AND source.kind < 40000) THEN
+WHEN MATCHED
+	AND target.id = source.id
+	AND target.hidden = source.hidden THEN
+	-- The same event is being updated, ignore it.
+	DO NOTHING
+WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != :model_consensuskey THEN
 	UPDATE SET
 		id = source.id,
-		system_kind = source.system_kind,
+		kind = source.kind,
 		created_at = source.created_at,
 		pubkey = source.pubkey,
+		master_pubkey = source.master_pubkey,
 		sig = source.sig,
 		sig_alg = source.sig_alg,
 		key_alg = source.key_alg,
 		content = source.content,
 		tags = source.tags,
+		d_tag = source.d_tag,
 		h_tag = source.h_tag,
-		lookup = source.lookup,
 		deleted = source.deleted,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
-		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
-		reference_id = CASE 
-							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
-							ELSE NULL
-						END
-WHEN MATCHED AND
-	target.master_pubkey = source.master_pubkey
-	AND target.kind = source.kind
-	AND ((10000 <= source.kind AND source.kind < 20000) OR source.kind = 0 OR source.kind = 3) THEN
+		is_reply = source.is_reply,
+		is_root_reply = source.is_root_reply,
+		is_quote = source.is_quote,
+		has_references = source.has_references,
+		lookup = source.lookup,
+		expiration = source.expiration
+WHEN MATCHED
+	AND (
+		(target.id = source.id AND source.hidden = false AND target.hidden = true) -- Promote hidden event to visible and update all fields.
+			OR
+		(target.address = source.address) -- Addressable event.
+	) THEN
 	UPDATE SET
 		id = source.id,
 		kind = source.kind,
-		system_kind = source.system_kind,
-		d_tag = source.d_tag,
+		created_at = source.created_at,
+		pubkey = source.pubkey,
 		master_pubkey = source.master_pubkey,
 		sig = source.sig,
 		sig_alg = source.sig_alg,
 		key_alg = source.key_alg,
-		pubkey = source.pubkey,
-		created_at = source.created_at,
 		content = source.content,
-		lookup = source.lookup,
 		tags = source.tags,
+		d_tag = source.d_tag,
+		h_tag = source.h_tag,
+		deleted = source.deleted,
 		has_images = source.has_images,
 		has_videos = source.has_videos,
-		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update
-		reference_id = CASE 
-							WHEN source.replaced_by_id = '` + model.ConsensusReplayCtxKey + `' THEN source.id
+		is_reply = source.is_reply,
+		is_root_reply = source.is_root_reply,
+		is_quote = source.is_quote,
+		has_references = source.has_references,
+		lookup = source.lookup,
+		expiration = source.expiration,
+		hidden = false,
+		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update.
+		reference_id = CASE
+							WHEN source.replaced_by_id = :model_consensuskey THEN source.id
 							ELSE NULL
 						END
-WHEN MATCHED AND target.id = source.id THEN
-	UPDATE SET
-		kind = source.kind,
-		system_kind = source.system_kind,
-		master_pubkey = source.master_pubkey,
-		d_tag = source.d_tag,
-		created_at = source.created_at,
-		pubkey = source.pubkey,
-		sig = source.sig,
-		sig_alg = source.sig_alg,
-		key_alg = source.key_alg,
-		lookup = source.lookup,
-		content = source.content,
-		tags = source.tags,
-		has_images = source.has_images,
-		has_videos = source.has_videos,
-		hidden = false
-WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != '` + model.ConsensusReplayCtxKey + `' THEN
-	UPDATE SET
-		id = source.id,
-		kind = source.kind,
-		system_kind = source.system_kind,
-		master_pubkey = source.master_pubkey,
-		d_tag = source.d_tag,
-		created_at = source.created_at,
-		pubkey = source.pubkey,
-		sig = source.sig,
-		sig_alg = source.sig_alg,
-		key_alg = source.key_alg,
-		lookup = source.lookup,
-		content = source.content,
-		tags = source.tags,
-		has_images = source.has_images,
-		has_videos = source.has_videos,
-		hidden = false
 WHEN NOT MATCHED THEN
 	INSERT (
-		id, kind, system_kind, created_at, pubkey, master_pubkey,
-		sig, sig_alg, key_alg, content, tags, d_tag, h_tag,
+		id, kind, created_at,
+		pubkey, master_pubkey,
+		sig, sig_alg, key_alg,
+		content,
+		tags, d_tag, h_tag,
 		deleted,
-		has_images,
-		has_videos,
-		lookup
+		has_images, has_videos,
+		is_reply, is_root_reply, is_quote, has_references,
+		lookup,
+		expiration
 	)
 	VALUES (
-		source.id, source.kind, source.system_kind, source.created_at,
-		source.pubkey, source.master_pubkey, source.sig, source.sig_alg,
-		source.key_alg, source.content, source.tags, source.d_tag,
-		source.h_tag, source.deleted,
+		source.id, source.kind, source.created_at,
+		source.pubkey, source.master_pubkey,
+		source.sig, source.sig_alg, source.key_alg,
+		source.content,
+		source.tags, source.d_tag, source.h_tag,
+		source.deleted,
 		source.has_images, source.has_videos,
-		source.lookup
+		source.is_reply, source.is_root_reply, source.is_quote, source.has_references,
+		source.lookup,
+		source.expiration
 	)
 	RETURNING
 		target.kind,
@@ -615,16 +712,15 @@ WHEN NOT MATCHED THEN
 		target.lookup,
 		target.tags,
 		merge_action() as savemergeaction;
-`
-
-	return connector.ExecManyWithCustomRetry[databaseEvent](
+`)
+	return connector.ExecNamedManyWithCustomRetry[databaseEvent](
 		ctx,
 		db.db,
 		func(err error) (doRetry bool) {
 			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation)
 		},
-		stmt,
-		params...,
+		builder.String(),
+		builder.Params,
 	)
 }
 
@@ -655,8 +751,7 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		}
 		events = slices.DeleteFunc(events, keepOnlyInsertedEvents)
 	}
-	expectedRows := len(req.InsertOrReplace) + len(req.Rollback)
-	if actual := len(events) + len(replaceableEvents); sErr == nil && actual != expectedRows {
+	if expectedRows, actual := len(req.Rollback), len(events)+len(replaceableEvents); sErr == nil && actual < expectedRows {
 		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expectedRows, actual)
 	}
 	if sErr == nil && req.EventsHash != nil && len(events) > 0 {
@@ -755,7 +850,7 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 		event.Tags = model.Tags{
 			{"request", ev.String()},
 			{"e", ev.ID, db.relayURL},
-			{"expiration", strconv.FormatInt(time.Now().Add(model.DVMJobResultExpiration).Unix(), 10)},
+			{"expiration", nostr.Now().Add(model.DVMJobResultExpiration).String()},
 		}
 		db.MustSignEvent(event)
 	}
@@ -764,28 +859,26 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 }
 
 func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
-	it := &eventIterator{
-		Map: db.eventTransform,
-		Fetch: func() (internalEventIterator, error) {
-			sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
-			if err != nil {
-				return nil, err
-			}
-			return connector.SelectNamedIterator[databaseEvent](ctx, db.db, sqlQuery, params)
-		},
-	}
-
 	return func(yield func(*model.Event, error) bool) {
-		err := it.Each(ctx, func(event *databaseEvent) error {
-			if !yield(&event.Event, nil) {
-				return errEventIteratorInterrupted
+		sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
+		if err != nil {
+			yield(nil, errors.Wrap(err, "failed to generate select events SQL"))
+			return
+		}
+
+		data, err := connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
+		if err != nil {
+			if errors.Is(err, connector.ErrNotFound) {
+				err = nil
 			}
+			yield(nil, errors.Wrap(err, "failed to select events"))
+			return
+		}
 
-			return nil
-		})
-
-		if err != nil && !errors.Is(err, errEventIteratorInterrupted) {
-			yield(nil, errors.Wrap(err, "failed to iterate events"))
+		for i := range data {
+			if !yield(&db.eventTransform(data[i]).Event, nil) {
+				return
+			}
 		}
 	}
 }
@@ -967,12 +1060,12 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	const batchSize = 1000
 	const stmt = `
 	WITH expired_events AS (
-		SELECT e.id
-		FROM event_tags et
-		INNER JOIN events e ON e.id = et.event_id 
+		SELECT
+			id
+		FROM
+			events
 		WHERE
-			et.event_tag_key = 'expiration'
-		AND to_timestamp_nano(cast(et.event_tag_value1 as bigint)) <= get_current_timestamp_nano()
+			expiration <= get_current_timestamp_nano()
 		LIMIT :batch_size
 	)
 	DELETE FROM events
@@ -988,24 +1081,19 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	params := map[string]any{"batch_size": batchSize}
 
 	for ctx.Err() == nil {
-		var deleted int
-		it := db.newExecEventIterator(ctx, stmt, params)
-		for event, iterErr := range it {
-			if iterErr != nil {
-				return errors.Wrap(iterErr, "failed to exec delete expired events")
-			}
-
-			if notifyExpiredEvents != nil {
-				if notifyErr := notifyExpiredEvents(ctx, event); notifyErr != nil {
-					log.Printf("failed to process notification of expired events: %v", notifyErr)
-					// Continue to delete the events even if notification fails.
-				}
-			}
-
-			deleted++
+		events, err := connector.ExecNamed[model.Event](ctx, db.db, stmt, params)
+		if err != nil {
+			return errors.Wrap(err, "failed to exec delete expired events")
 		}
 
-		if deleted < batchSize {
+		if notifyExpiredEvents != nil {
+			if notifyErr := notifyExpiredEvents(ctx, events...); notifyErr != nil {
+				log.Printf("failed to process notification of expired events: %v", notifyErr)
+				// Continue to delete the events even if notification fails.
+			}
+		}
+
+		if len(events) < batchSize {
 			break
 		}
 	}

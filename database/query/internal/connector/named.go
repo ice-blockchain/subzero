@@ -59,3 +59,12 @@ func ExecNamed[T any](ctx context.Context, db Querier, stmt string, params map[s
 
 	return ExecMany[T](ctx, db, query, argList...)
 }
+
+func ExecNamedManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf func(err error) bool, stmt string, params map[string]any) ([]*T, error) {
+	query, argList, err := bindNamed(stmt, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return ExecManyWithCustomRetry[T](ctx, db, retryIf, query, argList...)
+}

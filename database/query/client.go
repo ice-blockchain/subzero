@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"errors"
 	"log"
+	"path"
+	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/puzpuzpuz/xsync/v4"
 
@@ -27,9 +30,54 @@ type (
 )
 
 var (
-	//go:embed DDL.sql
-	ddl string
+	//go:embed ddl/*.sql
+	ddl embed.FS
 )
+
+func readDDL() string {
+	var sb strings.Builder
+
+	files, err := ddl.ReadDir("ddl")
+	if err != nil {
+		log.Panicf("failed to read DDL directory: %v", err)
+	}
+
+	var names []string
+	for _, file := range files {
+		names = append(names, file.Name())
+	}
+
+	extractPrefix := func(name string) (value int) {
+		for _, c := range name {
+			if unicode.IsDigit(c) {
+				value = value*10 + int(c-'0')
+			} else {
+				break
+			}
+		}
+		return value
+	}
+
+	// Sort files by their numeric prefix.
+	sort.SliceStable(names, func(i, j int) bool {
+		return extractPrefix(names[i]) < extractPrefix(names[j])
+	})
+
+	for i, fileName := range names {
+		target := path.Join("ddl", fileName)
+		content, err := ddl.ReadFile(target)
+		if err != nil {
+			log.Panicf("failed to read DDL file %s: %v", target, err)
+		}
+		if i > 0 {
+			sb.WriteString("--------")
+		}
+		sb.WriteString(string(content))
+		sb.WriteRune('\n')
+	}
+
+	return sb.String()
+}
 
 func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...string) *dbClient {
 	client := &dbClient{
@@ -43,8 +91,6 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 			switch n {
 			case "createdat":
 				out = "created_at"
-			case "systemkind":
-				out = "system_kind"
 			case "referenceid":
 				out = "reference_id"
 			case "sigalg":
@@ -67,6 +113,8 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 				out = "tag_id"
 			case "lookupcreatedat":
 				out = "lookup_created_at"
+			case "hasreferences":
+				out = "has_references"
 			default:
 				out = n
 			}
@@ -75,7 +123,7 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 	}
 
 	if runDDL {
-		options = append(options, connector.WithDDL(ddl))
+		options = append(options, connector.WithDDL(readDDL()))
 	}
 
 	db, err := connector.New(ctx, options...)

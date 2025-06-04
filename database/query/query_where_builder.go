@@ -19,7 +19,7 @@ import (
 
 const (
 	whereBuilderDefaultWhere    = "e.hidden=false"
-	whereBuilderCommunityFilter = "(case when e.kind in (1, 30023, 30175) then NOT EXISTS (select true from event_tags where event_id = e.id AND event_tag_key = 'h') else true end)"
+	whereBuilderCommunityFilter = "(case when e.kind in (1, 30023, 30175) then e.id = e.h_tag else true end)"
 	whereBuilderNoSoftDeleted   = "e.deleted=false"
 	whereBuilderDefaultOrderBy  = "lookup_created_at DESC"
 
@@ -50,6 +50,12 @@ type (
 	queryBuilder struct {
 		Params map[string]any
 		strings.Builder
+	}
+	queryBuilderValue struct {
+		Name   string
+		CastTo string // If empty, no cast is applied.
+		Func   string // If non-empty, the value is passed to the function.
+		Value  any
 	}
 	databaseFilterSearch struct {
 		model.Filter
@@ -131,8 +137,43 @@ func (b *queryBuilder) PushValue(filterID, name string, value any) (key string) 
 	return key
 }
 
+func (b *queryBuilder) WriteValues(filterID string, values []queryBuilderValue) {
+	if len(values) == 0 {
+		return
+	}
+
+	b.WriteRune('(')
+	for i, v := range values {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if v.Func != "" {
+			b.WriteString(v.Func)
+			b.WriteRune('(')
+		}
+		if v.CastTo != "" {
+			b.WriteTypedValue(filterID, v.Name, v.CastTo, v.Value)
+		} else {
+			b.WriteRune(':')
+			b.WriteValue(filterID, v.Name, v.Value)
+		}
+		if v.Func != "" {
+			b.WriteRune(')')
+		}
+	}
+	b.WriteRune(')')
+}
+
 func (b *queryBuilder) WriteValue(filterID, name string, value any) {
 	b.WriteString(b.PushValue(filterID, name, value))
+}
+
+func (b *queryBuilder) WriteTypedValue(filterID, name, castTo string, value any) {
+	b.WriteString(`cast(:`)
+	b.WriteValue(filterID, name, value)
+	b.WriteString(` as `)
+	b.WriteString(castTo)
+	b.WriteRune(')')
 }
 
 func (b *queryBuilder) MaybeOP(op int) {
@@ -163,33 +204,23 @@ func (b *sliceBuilder[T]) Build(builder *queryBuilder, filterID string, name str
 
 	builder.MaybeOP(b.Op)
 	builder.WriteString(name)
+	if b.Negative {
+		builder.WriteString(" != ")
+	} else {
+		builder.WriteString(" = ")
+	}
+
 	s := model.DeduplicateSlice(b.Slice, func(elem T) T { return elem })
 	if len(s) == 1 {
-		// X = :X_name.
-		if b.Negative {
-			builder.WriteString(" != :")
-		} else {
-			builder.WriteString(" = :")
-		}
-		builder.WriteString(builder.PushValue(filterID, b.ParamName, s[0]))
-
-		return builder
-	}
-
-	// X in (:X_name0, :X_name1, ...).
-	if b.Negative {
-		builder.WriteString(" NOT IN (")
-	} else {
-		builder.WriteString(" IN (")
-	}
-	for i := range len(s) - 1 {
+		// X = :X_name0.
 		builder.WriteRune(':')
-		builder.WriteString(builder.PushValue(filterID, b.ParamName+strconv.Itoa(i), s[i]))
-		builder.WriteRune(',')
+		builder.WriteString(builder.PushValue(filterID, b.ParamName, s[0]))
+	} else {
+		// X = ANY(...).
+		builder.WriteString("ANY(:")
+		builder.WriteString(builder.PushValue(filterID, b.ParamName, s))
+		builder.WriteRune(')')
 	}
-	builder.WriteRune(':')
-	builder.WriteString(builder.PushValue(filterID, b.ParamName+strconv.Itoa(len(s)-1), s[len(s)-1]))
-	builder.WriteRune(')')
 
 	return builder
 }
@@ -244,19 +275,36 @@ func (b *queryBuilder) ApplyFilterTagMarkers(filterID string, markers ...databas
 
 	for id, marker := range markers {
 		b.MaybeAND()
-		if marker.Exclude {
-			b.WriteString("NOT ")
+
+		switch {
+		// Special case for [!]<e, a>marker:reply, like `!amarker:reply`.
+		case (marker.Tag == "a" || marker.Tag == "e") && marker.Marker == model.TagMarkerReply:
+			b.WriteString(`e.is_reply = :`)
+			b.WriteValue(filterID, "mtagvalue"+strconv.Itoa(id), !marker.Exclude)
+		default:
+			if marker.Exclude {
+				b.WriteString("NOT ")
+			}
+			b.WriteString("EXISTS (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = :")
+			b.WriteValue(filterID, "mtagname"+strconv.Itoa(id), marker.Tag)
+			b.WriteString(" AND event_tag_value3 = :")
+			b.WriteValue(filterID, "mtagvalue"+strconv.Itoa(id), marker.Marker)
+			b.WriteRune(')')
 		}
-		b.WriteString("EXISTS (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = :")
-		b.WriteValue(filterID, "mtagname"+strconv.Itoa(id), marker.Tag)
-		b.WriteString(" AND event_tag_value3 = :")
-		b.WriteValue(filterID, "mtagvalue"+strconv.Itoa(id), marker.Marker)
-		b.WriteRune(')')
 	}
 }
 
 func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 	if len(tags) == 0 {
+		return
+	}
+
+	if v, ok := tags["d"]; ok && len(v) == 1 && len(tags) == 1 && len(v[0]) == 1 && v[0][0] != nil {
+		// Special case for "d" tag.
+		b.MaybeAND()
+		b.WriteString("e.d_tag = :")
+		b.WriteValue(filterID, "dtag", *v[0][0])
+
 		return
 	}
 
@@ -423,32 +471,24 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 
 	if filter.Quotes != nil {
 		b.MaybeAND()
-		if !*filter.Quotes {
-			b.WriteString("NOT ")
-		}
-		b.WriteString("exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key in ('q', 'Q'))")
+		b.WriteString("e.is_quote=:")
+		b.WriteValue(filter.ID, "quote", *filter.Quotes)
 	}
 
 	if filter.Expiration != nil {
 		b.MaybeAND()
 		if *filter.Expiration {
-			b.WriteString(`exists
-(select true from event_tags where
-	event_id in (e.id, e.reference_id) 
-	AND event_tag_key = 'expiration'
-	AND to_timestamp_nano(cast(event_tag_value1 as bigint)) > get_current_timestamp_nano())`)
+			b.WriteString(`(e.expiration > get_current_timestamp_nano())`)
 		} else {
-			b.WriteString("NOT exists (select true from event_tags where event_id in (e.id, e.reference_id) AND event_tag_key = 'expiration')")
+			b.WriteString(`(e.expiration is null)`)
 		}
 	}
 
 	if filter.References != nil {
 		b.MaybeAND()
-		b.WriteString(`(case when e.reference_id is not null then true else `)
-		if !*filter.References {
-			b.WriteString("NOT ")
-		}
-		b.WriteString("exists (select true from event_tags where event_id = e.id AND event_tag_key in ('a', 'e')) end)")
+		b.WriteString(`(case when e.reference_id is not null then true else e.has_references=:`)
+		b.WriteValue(filter.ID, "references", *filter.References)
+		b.WriteString(` end)`)
 	}
 }
 

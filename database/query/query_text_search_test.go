@@ -628,16 +628,18 @@ func TestSearchEvents_KindTextNoteWithDependencies(t *testing.T) {
 
 func TestSearchEvents_Replace_Update(t *testing.T) {
 	t.Parallel()
+
 	db := helperNewDatabase(t)
 	defer db.Close()
 
+	pk := model.GeneratePrivateKey()
+
 	initialEvent := &model.Event{
 		Event: nostr.Event{
-			ID:        "initial" + uuid.NewString(),
-			PubKey:    "pubkey123",
 			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindTextNote,
-			Tags: nostr.Tags{
+			Kind:      nostr.KindArticle,
+			Tags: model.Tags{
+				{"d", "article"},
 				{
 					"imeta",
 					"url https://alicerelay.example.com",
@@ -650,14 +652,14 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 				},
 			},
 			Content: "initial",
-			Sig:     "sig123",
 		},
 	}
+	require.NoError(t, initialEvent.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, db.AcceptEvents(t.Context(), initialEvent))
 
 	t.Run("search initial event", func(t *testing.T) {
 		searchResult := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
+			Kinds:  []int{nostr.KindArticle},
 			Search: `"initial"`,
 		})
 		require.Len(t, searchResult, 1)
@@ -666,11 +668,10 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 
 	updatedEvent := &model.Event{
 		Event: nostr.Event{
-			ID:        initialEvent.ID,
-			PubKey:    "pubkey123",
 			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindTextNote,
-			Tags: nostr.Tags{
+			Kind:      nostr.KindArticle,
+			Tags: model.Tags{
+				{"d", "article"},
 				{
 					"imeta",
 					"url https://alicerelay.example.com",
@@ -683,20 +684,20 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 				},
 			},
 			Content: "updated, content",
-			Sig:     "sig123_updated",
 		},
 	}
+	require.NoError(t, updatedEvent.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, db.AcceptEvents(t.Context(), updatedEvent))
 
 	storedUpdated := helperSelectEvents(t, db, model.Filter{
-		Kinds: []int{nostr.KindTextNote},
+		Kinds: []int{nostr.KindArticle},
 	})
 	require.Len(t, storedUpdated, 1)
 	require.EqualValues(t, updatedEvent, storedUpdated[0])
 
 	t.Run("search updated event", func(t *testing.T) {
 		searchResult := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
+			Kinds:  []int{nostr.KindArticle},
 			Search: `"updated"`,
 		})
 		require.Len(t, searchResult, 1)
