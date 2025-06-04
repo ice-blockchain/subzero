@@ -49,6 +49,7 @@ type (
 		TagID           int64
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
+		Categories      []string
 		SigAlg          string
 		KeyAlg          string
 		MasterPubKey    string
@@ -93,6 +94,10 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 
 	for _, tag := range tags {
 		switch tag.Key() {
+		case "t":
+			if t := tag.Value(); t != "" && !strings.EqualFold(t, "unclassified") {
+				d.Categories = append(d.Categories, t)
+			}
 		case "imeta":
 			for i := range len(tag) {
 				if strings.HasPrefix(tag[i], "m image/") {
@@ -132,6 +137,7 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	event := databaseEvent{
 		Event:        *e,
+		Categories:   []string{},
 		MasterPubKey: e.GetMasterPublicKey(),
 		Dtag:         e.Tags.GetD(),
 		Htag:         e.GetHTag(),
@@ -439,6 +445,7 @@ func (db *dbClient) saveEvents(
 		"key_alg",
 		"content",
 		"tags",
+		"categories",
 		"d_tag",
 		"h_tag",
 		"deleted",
@@ -535,6 +542,11 @@ WITH replaced AS (
 				}(),
 			},
 			{
+				Name:   "categories",
+				CastTo: "text[]",
+				Value:  events[i].Categories,
+			},
+			{
 				Name:  "d_tag",
 				Value: events[i].Dtag,
 			},
@@ -629,6 +641,7 @@ WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != 
 		key_alg = source.key_alg,
 		content = source.content,
 		tags = source.tags,
+		categories = source.categories,
 		d_tag = source.d_tag,
 		h_tag = source.h_tag,
 		deleted = source.deleted,
@@ -657,6 +670,7 @@ WHEN MATCHED
 		key_alg = source.key_alg,
 		content = source.content,
 		tags = source.tags,
+		categories = source.categories,
 		d_tag = source.d_tag,
 		h_tag = source.h_tag,
 		deleted = source.deleted,
@@ -680,7 +694,8 @@ WHEN NOT MATCHED THEN
 		pubkey, master_pubkey,
 		sig, sig_alg, key_alg,
 		content,
-		tags, d_tag, h_tag,
+		tags, categories,
+		d_tag, h_tag,
 		deleted,
 		has_images, has_videos,
 		is_reply, is_root_reply, is_quote, has_references,
@@ -692,7 +707,8 @@ WHEN NOT MATCHED THEN
 		source.pubkey, source.master_pubkey,
 		source.sig, source.sig_alg, source.key_alg,
 		source.content,
-		source.tags, source.d_tag, source.h_tag,
+		source.tags, source.categories,
+		source.d_tag, source.h_tag,
 		source.deleted,
 		source.has_images, source.has_videos,
 		source.is_reply, source.is_root_reply, source.is_quote, source.has_references,

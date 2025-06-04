@@ -441,6 +441,41 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	return nil
 }
 
+func (b *queryBuilder) ApplyFilterCategories(filter *databaseFilterSearch) {
+	if v, ok := filter.Tags["!t"]; ok {
+		b.MaybeAND()
+		if len(v) == 1 && len(v[0]) == 1 && v[0][0] != nil && *v[0][0] == "unclassified" {
+			// All events with some categories.
+			b.WriteString(`(coalesce(array_length(e.categories, 1), 0) > 0)`)
+		} else if exclude := filter.Tags.All("!t"); len(exclude) > 0 {
+			// Exclude events containing ANY of specified categories.
+			b.WriteString(`(NOT (e.categories && `)
+			b.WriteTypedValue(filter.ID, "categories", "text[]", exclude)
+			b.WriteString(`))`)
+		}
+		delete(filter.Tags, "!t")
+	}
+
+	categories := filter.Tags.All("t")
+	if len(categories) == 0 {
+		// No categories specified, nothing to filter.
+		return
+	}
+
+	b.MaybeAND()
+	if len(categories) == 1 && categories[0] == "unclassified" {
+		// All events without categories.
+		b.WriteString(`(coalesce(array_length(e.categories, 1), 0) = 0)`)
+	} else {
+		// Only events with specified categories.
+		b.WriteString(`(e.categories @> `)
+		b.WriteTypedValue(filter.ID, "categories", "text[]", categories)
+		b.WriteRune(')')
+	}
+
+	delete(filter.Tags, "t")
+}
+
 func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Media != nil {
 		b.MaybeAND()
@@ -593,6 +628,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, b.ApplySpecialKinds(filter), "e.kind", "")
 	b.ApplyFilterForExtensions(filter)
+	b.ApplyFilterCategories(filter)
 	if len(filter.Authors) > 0 {
 		b.MaybeAND()
 		b.WriteRune('(')
