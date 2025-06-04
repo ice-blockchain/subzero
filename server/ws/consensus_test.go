@@ -30,9 +30,6 @@ import (
 )
 
 func TestConsensusEvents(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.Skip("skipping test on CI")
-	}
 	privkey, pk := model.GenerateKeyPair()
 	mapPort := func(ctx context.Context) *fixture.MockService {
 		var port, consensusPort uint16
@@ -168,7 +165,14 @@ func TestConsensusEvents(t *testing.T) {
 	})
 
 	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
-		if ctx.Value("consensusPort").(uint16) == 19988 || ctx.Value("consensusPort").(uint16) == 19966 {
+		hasFailedTx := false
+		for _, e := range events {
+			if e.Content == "validEvent not gonna be accepted because of failed consensus" {
+				hasFailedTx = true
+				break
+			}
+		}
+		if hasFailedTx && (ctx.Value("consensusPort").(uint16) == 19977 || ctx.Value("consensusPort").(uint16) == 19966) {
 			return errors.New("simulating remote relay did not accept tx - it should be rolled back")
 		}
 		if _, ok := accepted.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
@@ -231,6 +235,7 @@ func TestConsensusEvents(t *testing.T) {
 		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
 	})
 	command.RegisterAcceptListener(normalAccept)
+	command.RegisterRollbackListener(query.RollbackEvents)
 	var eventMissedByRelay3DuringBroadcastTime, eventAfterNodeComesUp *model.Event
 	t.Run("relay fetches missed data after downtime, broadcast still works as 2/3 reached", func(t *testing.T) {
 		err := pubsubServers[2].Consensus.Stop(t.Context(), 10*time.Second)
