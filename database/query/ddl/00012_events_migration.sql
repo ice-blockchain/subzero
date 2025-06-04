@@ -76,6 +76,11 @@ DO $$ BEGIN
         WHERE
             e.id = cte.event_id;
 
+        -- Is root reply.
+        ALTER TABLE events ADD COLUMN is_root_reply boolean NOT NULL DEFAULT FALSE;
+        UPDATE events SET is_root_reply = true WHERE system_kind is not null and system_kind = 2;
+        ALTER TABLE events DROP COLUMN system_kind;
+
         -- Has references.
         ALTER TABLE events ADD COLUMN has_references boolean NOT NULL DEFAULT FALSE;
         with cte as (

@@ -47,7 +47,6 @@ type (
 		model.Event
 		LookupCreatedAt int64
 		TagID           int64
-		SystemKind      sql.NullInt64
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
 		SigAlg          string
@@ -64,6 +63,7 @@ type (
 		HasReferences   bool
 		IsReply         bool
 		IsQuote         bool
+		IsRootReply     bool
 	}
 	databaseEventAddress struct {
 		Kind   int
@@ -90,7 +90,7 @@ type databaseBatchRequest struct {
 func (d *databaseEvent) FromTags(tags model.Tags) {
 	// Syntax: "a|e", "<address>", "", "reply|root", "<master_pubkey>".
 	var rootOf, replyOf string
-	// TODO: review SystemKind and remove it.
+
 	for _, tag := range tags {
 		switch tag.Key() {
 		case "imeta":
@@ -121,14 +121,12 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 			}
 		case "q", "Q":
 			d.IsQuote = true
-			d.SystemKind = sql.NullInt64{Int64: systemKindQuote, Valid: true}
 		}
 	}
-	if rootOf != "" && (rootOf == replyOf || replyOf == "") {
-		d.SystemKind = sql.NullInt64{Int64: systemKindCommentRoot, Valid: true}
-	} else if replyOf != "" && replyOf != rootOf {
-		d.SystemKind = sql.NullInt64{Int64: systemKindCommentReply, Valid: true}
-	}
+
+	// If it has both `reply` and `root` tags, that points to the same event,
+	// then it is a root reply.
+	d.IsRootReply = rootOf != "" && replyOf != "" && rootOf == replyOf
 }
 
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
@@ -431,7 +429,6 @@ func (db *dbClient) saveEvents(
 
 	fields := []string{
 		"kind",
-		"system_kind",
 		"created_at",
 		"id",
 		"address",
@@ -448,6 +445,7 @@ func (db *dbClient) saveEvents(
 		"has_images",
 		"has_videos",
 		"is_reply",
+		"is_root_reply",
 		"is_quote",
 		"has_references",
 		"hidden",
@@ -488,11 +486,6 @@ WITH replaced AS (
 				Name:   "kind",
 				CastTo: "integer",
 				Value:  events[i].Kind,
-			},
-			{
-				Name:   "system_kind",
-				CastTo: "integer",
-				Value:  events[i].SystemKind,
 			},
 			{
 				Name:   "created_at",
@@ -570,6 +563,11 @@ WITH replaced AS (
 				Value:  events[i].IsReply,
 			},
 			{
+				Name:   "is_root_reply",
+				CastTo: "bool",
+				Value:  events[i].IsRootReply,
+			},
+			{
 				Name:   "is_quote",
 				CastTo: "bool",
 				Value:  events[i].IsQuote,
@@ -623,7 +621,6 @@ WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != 
 	UPDATE SET
 		id = source.id,
 		kind = source.kind,
-		system_kind = source.system_kind,
 		created_at = source.created_at,
 		pubkey = source.pubkey,
 		master_pubkey = source.master_pubkey,
@@ -638,6 +635,7 @@ WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != 
 		has_images = source.has_images,
 		has_videos = source.has_videos,
 		is_reply = source.is_reply,
+		is_root_reply = source.is_root_reply,
 		is_quote = source.is_quote,
 		has_references = source.has_references,
 		lookup = source.lookup,
@@ -651,7 +649,6 @@ WHEN MATCHED
 	UPDATE SET
 		id = source.id,
 		kind = source.kind,
-		system_kind = source.system_kind,
 		created_at = source.created_at,
 		pubkey = source.pubkey,
 		master_pubkey = source.master_pubkey,
@@ -666,6 +663,7 @@ WHEN MATCHED
 		has_images = source.has_images,
 		has_videos = source.has_videos,
 		is_reply = source.is_reply,
+		is_root_reply = source.is_root_reply,
 		is_quote = source.is_quote,
 		has_references = source.has_references,
 		lookup = source.lookup,
@@ -678,24 +676,26 @@ WHEN MATCHED
 						END
 WHEN NOT MATCHED THEN
 	INSERT (
-		id, kind, system_kind, created_at,
+		id, kind, created_at,
 		pubkey, master_pubkey,
 		sig, sig_alg, key_alg,
 		content,
 		tags, d_tag, h_tag,
 		deleted,
-		has_images, has_videos, is_reply, is_quote, has_references,
+		has_images, has_videos,
+		is_reply, is_root_reply, is_quote, has_references,
 		lookup,
 		expiration
 	)
 	VALUES (
-		source.id, source.kind, source.system_kind, source.created_at,
+		source.id, source.kind, source.created_at,
 		source.pubkey, source.master_pubkey,
 		source.sig, source.sig_alg, source.key_alg,
 		source.content,
 		source.tags, source.d_tag, source.h_tag,
 		source.deleted,
-		source.has_images, source.has_videos, source.is_reply, source.is_quote, source.has_references,
+		source.has_images, source.has_videos,
+		source.is_reply, source.is_root_reply, source.is_quote, source.has_references,
 		source.lookup,
 		source.expiration
 	)

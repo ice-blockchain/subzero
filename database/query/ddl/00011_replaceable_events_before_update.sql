@@ -16,5 +16,7 @@ ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS expiration
 ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS has_references boolean NOT NULL DEFAULT FALSE;
 ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS is_quote boolean NOT NULL DEFAULT FALSE;
 ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS is_reply boolean NOT NULL DEFAULT FALSE;
+ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS is_root_reply boolean NOT NULL DEFAULT FALSE;
+ALTER TABLE replaceable_events_before_update DROP COLUMN IF EXISTS system_kind;
 --------
 CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_events_before_update(replaced_by_id);

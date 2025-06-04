@@ -45,19 +45,19 @@ func TestEventScore(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	ts := time.Now().Add(time.Hour).Unix()
+	ts := nostr.Now().Add(time.Hour)
 
 	var evNote, evArticle model.Event
 	evNote.ID = "note"
 	evNote.Kind = nostr.KindTextNote
 	evNote.PubKey = "note_pub"
-	evNote.CreatedAt = model.Timestamp(ts)
+	evNote.CreatedAt = ts
 	evNote.Content = "note content"
 
 	evArticle.ID = "article"
 	evArticle.Kind = nostr.KindArticle
 	evArticle.PubKey = "article_pub"
-	evArticle.CreatedAt = model.Timestamp(ts)
+	evArticle.CreatedAt = ts
 	evArticle.Content = "article content"
 	evArticle.Tags = model.Tags{
 		{"d", "my article"},

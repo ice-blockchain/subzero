@@ -394,3 +394,15 @@ BEGIN
    RETURN 42;
 END;
 $$ LANGUAGE plpgsql;
+--------
+CREATE OR REPLACE FUNCTION event_calculate_points(kind integer, is_quote boolean, is_root_reply boolean) RETURNS integer AS $$
+BEGIN
+    RETURN CASE
+            WHEN kind = 7        then 1 -- like
+            WHEN kind in (6, 16) then 3 -- repost
+            WHEN is_quote        then 4 -- quote
+            WHEN is_root_reply   then 2 -- top level comment (root)
+            ELSE 0                      -- no points, other event
+        END;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;

@@ -1,9 +1,5 @@
 -- SPDX-License-Identifier: ice License 1.0
 
--- systemKindQuote        = 1
--- systemKindCommentRoot  = 2
--- systemKindCommentReply = 3
-
 DO
 $$BEGIN
    CREATE TEXT SEARCH CONFIGURATION fts ( COPY = pg_catalog.english );
@@ -16,7 +12,6 @@ CREATE TABLE IF NOT EXISTS events (
     lookup_created_at BIGINT GENERATED ALWAYS AS (to_timestamp_nano(created_at)) STORED,
     expiration        BIGINT,
     kind           INTEGER   NOT NULL,
-    system_kind    INTEGER,
     lookup         tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
     key_alg        TEXT    NOT NULL DEFAULT '',
     content        TEXT    NOT NULL,
@@ -41,6 +36,7 @@ CREATE TABLE IF NOT EXISTS events (
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
     is_reply       BOOLEAN NOT NULL DEFAULT FALSE,
+    is_root_reply  BOOLEAN NOT NULL DEFAULT FALSE,
     is_quote       BOOLEAN NOT NULL DEFAULT FALSE,
     has_references BOOLEAN NOT NULL DEFAULT FALSE,
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,

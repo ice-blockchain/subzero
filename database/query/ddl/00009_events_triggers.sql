@@ -224,7 +224,6 @@ BEGIN
         created_at,
         expiration,
         kind,
-        system_kind,
         lookup,
         key_alg,
         content,
@@ -242,6 +241,7 @@ BEGIN
         has_videos,
         deleted,
         is_reply,
+        is_root_reply,
         is_quote,
         has_references,
         hidden,
@@ -251,7 +251,6 @@ BEGIN
             old.created_at,
             old.expiration,
             old.kind,
-            old.system_kind,
             old.lookup,
             old.key_alg,
             old.content,
@@ -269,6 +268,7 @@ BEGIN
             old.has_videos,
             old.deleted,
             old.is_reply,
+            old.is_root_reply,
             old.is_quote,
             old.has_references,
             old.hidden,
@@ -328,31 +328,16 @@ BEGIN
             jsonb_array_elements(NEW.tags) je
         where
             je->>0 in ('a', 'e', 'q', 'Q')
-            and (NEW.system_kind is null or case
-                when NEW.system_kind = 2 then je->>3 = 'root'
-                when NEW.system_kind = 3 then false -- ignore replies
-                else true
-            end)
+            and event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply) > 0
+            and case when NEW.is_root_reply then je->>3 = 'root' else true end
     )
     insert into ranked_events(event_id, event_kind, event_created_at, points, score)
     select
         e.id,
         e.kind,
         e.created_at,
-        case
-            when NEW.kind = 7 then 1                                        -- like
-            when NEW.kind in (6, 16) then 3                                 -- repost
-            when NEW.system_kind is not null and NEW.system_kind = 1 then 4 -- quote
-            when NEW.system_kind is not null and NEW.system_kind = 2 then 2 -- top level comment (root)
-            else 0
-        end,
-        event_calculate_score(case
-            when NEW.kind = 7 then 1
-            when NEW.kind in (6, 16) then 3
-            when NEW.system_kind is not null and NEW.system_kind = 1 then 4
-            when NEW.system_kind is not null and NEW.system_kind = 2 then 2
-            else 0
-        end, e.created_at)
+        event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply),
+        event_calculate_score(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)
     from
         events e
     inner join cte on e.address = cte.event_address
@@ -361,7 +346,7 @@ BEGIN
         and e.deleted = false
         and e.lookup_created_at > 0
         and e.kind in (1, 30023, 30175)
-        and (NEW.system_kind is null or NEW.system_kind != 3)
+        and event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply) > 0
     on conflict (event_id) do update
     set
         points = ranked_events.points + excluded.points,
@@ -391,30 +376,14 @@ BEGIN
             and e.deleted = false
             and e.lookup_created_at > 0
             and e.kind IN (1, 30023, 30175)
-            and (OLD.system_kind IS NULL or OLD.system_kind != 3)
-            and (OLD.system_kind IS NULL or case
-                when OLD.system_kind = 2 then je->>3 = 'root'
-                when OLD.system_kind = 3 then false
-                else true
-            end)
+            and event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply) > 0
+            and case when OLD.is_root_reply then je->>3 = 'root' else true end
             limit 1
     )
     update ranked_events
     set
-        points = points - case
-            when OLD.kind = 7 then 1                                        -- like
-            when OLD.kind in (6, 16) then 3                                 -- repost
-            when OLD.system_kind is not null and OLD.system_kind = 1 then 4 -- quote
-            when OLD.system_kind is not null and OLD.system_kind = 2 then 2 -- top level comment (root)
-            else 0
-        end,
-        score = event_calculate_score(points - case
-            when OLD.kind = 7 then 1
-            when OLD.kind in (6, 16) then 3
-            when OLD.system_kind is not null and OLD.system_kind = 1 then 4
-            when OLD.system_kind is not null and OLD.system_kind = 2 then 2
-            else 0
-        end, event_created_at)
+        points = points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply),
+        score  = event_calculate_score(points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply), event_created_at)
     from
         affected_events
     where
@@ -435,25 +404,14 @@ RETURNS TRIGGER AS $$
 BEGIN
     update ranked_events
     set
-        points = points - case
-            when OLD.kind = 7 then 1                                        -- like
-            when OLD.kind in (6, 16) then 3                                 -- repost
-            when OLD.system_kind is not null and OLD.system_kind = 1 then 4 -- quote
-            when OLD.system_kind is not null and OLD.system_kind = 2 then 2 -- top level comment (root)
-            else 0
-        end,
-        score = event_calculate_score(points - case
-            when OLD.kind = 7 then 1
-            when OLD.kind in (6, 16) then 3
-            when OLD.system_kind is not null and OLD.system_kind = 1 then 4
-            when OLD.system_kind is not null and OLD.system_kind = 2 then 2
-            else 0
-        end, event_created_at)
+        points = points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply),
+        score =  event_calculate_score(points - event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply), event_created_at)
     where exists (
         select 1
-        from jsonb_array_elements(OLD.tags) je
+        from
+            jsonb_array_elements(OLD.tags) je
         where
-        je->>0 in ('a', 'e', 'q', 'Q')
+            je->>0 in ('a', 'e', 'q', 'Q')
         and event_id in (
             select e.id
             from events e
@@ -461,12 +419,8 @@ BEGIN
             and e.hidden = false
             and e.lookup_created_at > 0
             and e.kind in (1, 30023, 30175)
-            and (OLD.system_kind is null or OLD.system_kind != 3)
-            and (OLD.system_kind is null or case
-                when OLD.system_kind = 2 then je->>3 = 'root'
-                when OLD.system_kind = 3 then false
-                else true
-            end)
+            and case when OLD.is_root_reply then je->>3 = 'root' else true end
+            and event_calculate_points(OLD.kind, OLD.is_quote, OLD.is_root_reply) > 0
         )
     );
     with cte as (
@@ -476,31 +430,16 @@ BEGIN
             jsonb_array_elements(NEW.tags) je
         where
             je->>0 in ('a', 'e', 'q', 'Q')
-            and (NEW.system_kind is null or case
-                when NEW.system_kind = 2 then je->>3 = 'root'
-                when NEW.system_kind = 3 then false -- ignore replies
-                else true
-            end)
+            and event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply) > 0
+            and case when NEW.is_root_reply then je->>3 = 'root' else true end
     )
     insert into ranked_events(event_id, event_kind, event_created_at, points, score)
     select
         e.id,
         e.kind,
         e.created_at,
-        case
-            when NEW.kind = 7 then 1                                        -- like
-            when NEW.kind in (6, 16) then 3                                 -- repost
-            when NEW.system_kind is not null and NEW.system_kind = 1 then 4 -- quote
-            when NEW.system_kind is not null and NEW.system_kind = 2 then 2 -- top level comment (root)
-            else 0
-        end,
-        event_calculate_score(case
-            when NEW.kind = 7 then 1
-            when NEW.kind in (6, 16) then 3
-            when NEW.system_kind is not null and NEW.system_kind = 1 then 4
-            when NEW.system_kind is not null and NEW.system_kind = 2 then 2
-            else 0
-        end, e.created_at)
+        event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply),
+        event_calculate_score(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)
     from
         events e
     inner join cte on e.address = cte.event_address
@@ -510,7 +449,7 @@ BEGIN
         and e.lookup_created_at > 0
         and e.kind in (1, 30023, 30175)
         and NEW.deleted = false
-        and (NEW.system_kind is null or NEW.system_kind != 3)
+        and event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply) > 0
     on conflict (event_id) do update
     set
         points = ranked_events.points + excluded.points,

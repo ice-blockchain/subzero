@@ -91,8 +91,6 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 			switch n {
 			case "createdat":
 				out = "created_at"
-			case "systemkind":
-				out = "system_kind"
 			case "referenceid":
 				out = "reference_id"
 			case "sigalg":
