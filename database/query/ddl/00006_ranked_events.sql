@@ -3,9 +3,9 @@
 CREATE TABLE IF NOT EXISTS ranked_events
 (
     event_created_at  bigint    not null,
+    score             bigint    not null,
+    points            bigint    not null,
     event_kind        integer   not null,
-    points            integer   not null,
-    score             integer   not null,
     event_id          text      not null primary key REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 --------
@@ -15,10 +15,10 @@ DO $$ BEGIN
         FROM information_schema.columns
         WHERE table_name = 'ranked_events'
         AND column_name = 'score'
-        AND data_type = 'integer'
+        AND data_type = 'bigint'
     ) THEN
-        ALTER TABLE ranked_events ADD COLUMN score_temp integer;
-        UPDATE ranked_events SET score_temp = cast(score * 10000 as integer);
+        ALTER TABLE ranked_events ADD COLUMN score_temp bigint;
+        UPDATE ranked_events SET score_temp = cast(score * 10000 as bigint);
         ALTER TABLE ranked_events DROP COLUMN score;
         ALTER TABLE ranked_events RENAME COLUMN score_temp TO score;
         ALTER TABLE ranked_events ALTER COLUMN score SET NOT NULL;

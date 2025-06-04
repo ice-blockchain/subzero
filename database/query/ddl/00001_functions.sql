@@ -379,12 +379,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 --------
-CREATE OR REPLACE FUNCTION event_calculate_score_int(p integer, created_at bigint) RETURNS INTEGER AS $$
+CREATE OR REPLACE FUNCTION event_calculate_score_int(p bigint, created_at bigint) RETURNS bigint AS $$
 DECLARE
     created_at_timestamp timestamp;
 BEGIN
     created_at_timestamp := to_timestamp(to_timestamp_seconds(created_at));
-    RETURN cast((round((p / power((1 + extract(EPOCH from (CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, created_at_timestamp))) /3600.0), 0.9)), 4)) * 10000 as integer);
+    RETURN cast((round((p / power((1 + extract(EPOCH from (CURRENT_TIMESTAMP - least(CURRENT_TIMESTAMP, created_at_timestamp))) /3600.0), 0.9)), 4)) * 10000 as bigint);
 END;
 $$ LANGUAGE plpgsql;
 --------
