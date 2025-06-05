@@ -190,7 +190,6 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 				Tags: nostr.Tags{
 					nostr.Tag{"url", url},
 					nostr.Tag{"ox", hashHex},
-					nostr.Tag{"x", hashHex},
 					nostr.Tag{"m", upload.ContentType},
 					nostr.Tag{"i", bagID},
 					nostr.Tag{"alt", upload.Alt},

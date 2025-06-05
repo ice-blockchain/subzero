@@ -475,7 +475,6 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Tags: nostr.Tags{
 					nostr.Tag{"summary", "profile.png"},
 					nostr.Tag{"ox", "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292"},
-					nostr.Tag{"x", "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292"},
 					nostr.Tag{"m", "image/png"},
 					nostr.Tag{"size", "182744"},
 				},
@@ -493,7 +492,6 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Tags: nostr.Tags{
 					nostr.Tag{"summary", "ice.jpg"},
 					nostr.Tag{"ox", "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218"},
-					nostr.Tag{"x", "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218"},
 					nostr.Tag{"m", "image/png"},
 					nostr.Tag{"size", "415939"},
 				},
@@ -511,7 +509,6 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Tags: nostr.Tags{
 					nostr.Tag{"summary", "text.txt"},
 					nostr.Tag{"ox", "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1"},
-					nostr.Tag{"x", "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "4"},
 				},
@@ -529,7 +526,6 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Tags: nostr.Tags{
 					nostr.Tag{"summary", "master.txt"},
 					nostr.Tag{"ox", "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9"},
-					nostr.Tag{"x", "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "6"},
 				},

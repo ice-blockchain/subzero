@@ -115,7 +115,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	}
 	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
 	fileHashes := []string{}
-	if xTag := originalEvent.Tags.GetFirst([]string{"x"}); originalEvent.Kind == nostr.KindFileMetadata && xTag != nil && len(*xTag) > 1 {
+	if xTag := originalEvent.GetTag("ox"); originalEvent.Kind == nostr.KindFileMetadata && xTag.Value() != "" {
 		fileHashes = append(fileHashes, xTag.Value())
 	} else {
 		imetas := originalEvent.Tags.GetAll([]string{"imeta"})
@@ -125,9 +125,6 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 				return errors.Wrapf(err, "malformed imeta")
 			}
 			hash := imetaValues["ox"]
-			if hash == "" {
-				hash = imetaValues["x"]
-			}
 			if hash == "" {
 				return errors.Errorf("malformed imeta: empty x, ox tags")
 			}
@@ -311,7 +308,7 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 		}
 		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String())
 		fileHash := ""
-		if xTag := ev.Tags.GetFirst([]string{"x"}); ev.Kind == nostr.KindFileMetadata && xTag != nil && len(*xTag) > 1 {
+		if xTag := ev.GetTag("ox"); ev.Kind == nostr.KindFileMetadata && xTag.Value() != "" {
 			fileHash = xTag.Value()
 		}
 		if fileHash == "" {
