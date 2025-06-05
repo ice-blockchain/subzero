@@ -49,6 +49,7 @@ type (
 		TagID           int64
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
+		Ttags           []string
 		SigAlg          string
 		KeyAlg          string
 		MasterPubKey    string
@@ -93,6 +94,10 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 
 	for _, tag := range tags {
 		switch tag.Key() {
+		case "t":
+			if t := tag.Value(); t != "" {
+				d.Ttags = append(d.Ttags, t)
+			}
 		case "imeta":
 			for i := range len(tag) {
 				if strings.HasPrefix(tag[i], "m image/") {
@@ -132,6 +137,7 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	event := databaseEvent{
 		Event:        *e,
+		Ttags:        []string{},
 		MasterPubKey: e.GetMasterPublicKey(),
 		Dtag:         e.Tags.GetD(),
 		Htag:         e.GetHTag(),
@@ -439,6 +445,7 @@ func (db *dbClient) saveEvents(
 		"key_alg",
 		"content",
 		"tags",
+		"t_tags",
 		"d_tag",
 		"h_tag",
 		"deleted",
@@ -535,6 +542,11 @@ WITH replaced AS (
 				}(),
 			},
 			{
+				Name:   "t_tags",
+				CastTo: "text[]",
+				Value:  events[i].Ttags,
+			},
+			{
 				Name:  "d_tag",
 				Value: events[i].Dtag,
 			},
@@ -629,6 +641,7 @@ WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != 
 		key_alg = source.key_alg,
 		content = source.content,
 		tags = source.tags,
+		t_tags = source.t_tags,
 		d_tag = source.d_tag,
 		h_tag = source.h_tag,
 		deleted = source.deleted,
@@ -657,6 +670,7 @@ WHEN MATCHED
 		key_alg = source.key_alg,
 		content = source.content,
 		tags = source.tags,
+		t_tags = source.t_tags,
 		d_tag = source.d_tag,
 		h_tag = source.h_tag,
 		deleted = source.deleted,
@@ -680,7 +694,8 @@ WHEN NOT MATCHED THEN
 		pubkey, master_pubkey,
 		sig, sig_alg, key_alg,
 		content,
-		tags, d_tag, h_tag,
+		tags, t_tags,
+		d_tag, h_tag,
 		deleted,
 		has_images, has_videos,
 		is_reply, is_root_reply, is_quote, has_references,
@@ -692,7 +707,8 @@ WHEN NOT MATCHED THEN
 		source.pubkey, source.master_pubkey,
 		source.sig, source.sig_alg, source.key_alg,
 		source.content,
-		source.tags, source.d_tag, source.h_tag,
+		source.tags, source.t_tags,
+		source.d_tag, source.h_tag,
 		source.deleted,
 		source.has_images, source.has_videos,
 		source.is_reply, source.is_root_reply, source.is_quote, source.has_references,

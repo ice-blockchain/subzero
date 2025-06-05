@@ -441,6 +441,40 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	return nil
 }
 
+func (b *queryBuilder) applyFilterTtags(filter *databaseFilterSearch, exclude bool, values []string) {
+	name := "ttags"
+
+	if len(values) == 0 {
+		return
+	}
+
+	b.MaybeAND()
+	if exclude {
+		name += "_exclude"
+		b.WriteString("(NOT ")
+	}
+
+	b.WriteString(`(e.t_tags && `)
+	b.WriteTypedValue(filter.ID, name, "text[]", values)
+	b.WriteRune(')')
+
+	if exclude {
+		b.WriteRune(')')
+	}
+}
+
+func (b *queryBuilder) ApplyFilterTtags(filter *databaseFilterSearch) {
+	if values := filter.Tags.All("!t"); len(values) > 0 {
+		b.applyFilterTtags(filter, true, values)
+		delete(filter.Tags, "!t")
+	}
+
+	if values := filter.Tags.All("t"); len(values) > 0 {
+		b.applyFilterTtags(filter, false, values)
+		delete(filter.Tags, "t")
+	}
+}
+
 func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Media != nil {
 		b.MaybeAND()
@@ -593,6 +627,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, b.ApplySpecialKinds(filter), "e.kind", "")
 	b.ApplyFilterForExtensions(filter)
+	b.ApplyFilterTtags(filter)
 	if len(filter.Authors) > 0 {
 		b.MaybeAND()
 		b.WriteRune('(')
