@@ -441,39 +441,38 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	return nil
 }
 
-func (b *queryBuilder) ApplyFilterCategories(filter *databaseFilterSearch) {
-	if v, ok := filter.Tags["!t"]; ok {
-		b.MaybeAND()
-		if len(v) == 1 && len(v[0]) == 1 && v[0][0] != nil && *v[0][0] == "unclassified" {
-			// All events with some categories.
-			b.WriteString(`(coalesce(array_length(e.categories, 1), 0) > 0)`)
-		} else if exclude := filter.Tags.All("!t"); len(exclude) > 0 {
-			// Exclude events containing ANY of specified categories.
-			b.WriteString(`(NOT (e.categories && `)
-			b.WriteTypedValue(filter.ID, "categories", "text[]", exclude)
-			b.WriteString(`))`)
-		}
-		delete(filter.Tags, "!t")
-	}
+func (b *queryBuilder) applyFilterTtags(filter *databaseFilterSearch, exclude bool, values []string) {
+	name := "ttags"
 
-	categories := filter.Tags.All("t")
-	if len(categories) == 0 {
-		// No categories specified, nothing to filter.
+	if len(values) == 0 {
 		return
 	}
 
 	b.MaybeAND()
-	if len(categories) == 1 && categories[0] == "unclassified" {
-		// All events without categories.
-		b.WriteString(`(coalesce(array_length(e.categories, 1), 0) = 0)`)
-	} else {
-		// Only events with specified categories.
-		b.WriteString(`(e.categories @> `)
-		b.WriteTypedValue(filter.ID, "categories", "text[]", categories)
-		b.WriteRune(')')
+	if exclude {
+		name += "_exclude"
+		b.WriteString("(NOT ")
 	}
 
-	delete(filter.Tags, "t")
+	b.WriteString(`(e.ttags && `)
+	b.WriteTypedValue(filter.ID, name, "text[]", values)
+	b.WriteRune(')')
+
+	if exclude {
+		b.WriteRune(')')
+	}
+}
+
+func (b *queryBuilder) ApplyFilterTtags(filter *databaseFilterSearch) {
+	if values := filter.Tags.All("!t"); len(values) > 0 {
+		b.applyFilterTtags(filter, true, values)
+		delete(filter.Tags, "!t")
+	}
+
+	if values := filter.Tags.All("t"); len(values) > 0 {
+		b.applyFilterTtags(filter, false, values)
+		delete(filter.Tags, "t")
+	}
 }
 
 func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
@@ -628,7 +627,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, b.ApplySpecialKinds(filter), "e.kind", "")
 	b.ApplyFilterForExtensions(filter)
-	b.ApplyFilterCategories(filter)
+	b.ApplyFilterTtags(filter)
 	if len(filter.Authors) > 0 {
 		b.MaybeAND()
 		b.WriteRune('(')

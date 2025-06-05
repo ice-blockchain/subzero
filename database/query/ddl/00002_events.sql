@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS events (
     sig_alg        TEXT    NOT NULL DEFAULT '',
     reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     tags           JSONB   NOT NULL DEFAULT '[]',
-    categories     TEXT[]  NOT NULL DEFAULT ARRAY[]::TEXT[],
+    ttags          TEXT[]  NOT NULL DEFAULT ARRAY[]::TEXT[],
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
     has_videos     BOOLEAN NOT NULL DEFAULT FALSE,
     is_reply       BOOLEAN NOT NULL DEFAULT FALSE,
@@ -51,4 +51,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_events_address ON events(address);
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
   where kind = 31750;
 --------
-ALTER TABLE events ADD COLUMN IF NOT EXISTS categories text[] NOT NULL DEFAULT ARRAY[]::text[];
+ALTER TABLE events ADD COLUMN IF NOT EXISTS ttags text[] NOT NULL DEFAULT ARRAY[]::text[];
