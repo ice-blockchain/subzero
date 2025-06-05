@@ -30,4 +30,4 @@ CREATE INDEX IF NOT EXISTS idx_events_has_videos_has_images_lookup_created_at ON
 CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
 
 -- T tags index.
-CREATE INDEX IF NOT EXISTS idx_events_ttags ON events USING GIN(ttags);
+CREATE INDEX IF NOT EXISTS idx_events_ttags ON events USING GIN(t_tags);

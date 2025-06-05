@@ -454,7 +454,7 @@ func (b *queryBuilder) applyFilterTtags(filter *databaseFilterSearch, exclude bo
 		b.WriteString("(NOT ")
 	}
 
-	b.WriteString(`(e.ttags && `)
+	b.WriteString(`(e.t_tags && `)
 	b.WriteTypedValue(filter.ID, name, "text[]", values)
 	b.WriteRune(')')
 
