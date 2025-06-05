@@ -20,10 +20,6 @@ import (
 )
 
 const (
-	systemKindQuote        = 1
-	systemKindCommentRoot  = 2
-	systemKindCommentReply = 3
-
 	replyMarkerIndex = 3 // event_tag_value3.
 
 	maxTagValues = 5
