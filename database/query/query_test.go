@@ -552,7 +552,8 @@ func TestQueryEventAttestation(t *testing.T) {
 	db := helperNewDatabase(t)
 	defer db.Close()
 
-	now := time.Now().Unix()
+	now := time.Now()
+	unix := now.Unix()
 
 	t.Run("AddAttestation", func(t *testing.T) {
 		var ev model.Event
@@ -560,7 +561,7 @@ func TestQueryEventAttestation(t *testing.T) {
 		t.Log("add first attestation")
 		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 1
-		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now, 10)}}
+		ev.Tags = model.Tags{{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now.UnixNano(), 10)}}
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event %+v", ev)
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev))
@@ -576,7 +577,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Kind = model.CustomIONKindAttestation
 			ev.CreatedAt = 2
 			ev.Tags = model.Tags{
-				{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-1, 10)},
+				{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now.UnixNano()-1, 10)},
 			}
 			require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
@@ -587,10 +588,10 @@ func TestQueryEventAttestation(t *testing.T) {
 		ev.Kind = model.CustomIONKindAttestation
 		ev.CreatedAt = 3
 		ev.Tags = model.Tags{
-			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now, 10)},
-			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-20, 10)},
-			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindInactive + ":" + strconv.FormatInt(now-10, 10)},
-			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now-5, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(now.UnixNano(), 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(unix-20, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindInactive + ":" + strconv.FormatInt(unix-10, 10)},
+			{model.TagAttestationName, activePk, "", model.CustomIONAttestationKindActive + ":" + strconv.FormatInt(unix-5, 10)},
 		}
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		t.Logf("event %+v", ev)

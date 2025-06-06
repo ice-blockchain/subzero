@@ -142,7 +142,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 		if err != nil {
 			return errors.Wrapf(err, "failed to get attestation event")
 		}
-		allowed, err = model.OnBehalfIsAccessAllowed(attestation.Tags, t.ev.PubKey, kind, now.Unix())
+		allowed, err = model.OnBehalfIsAccessAllowed(attestation.Tags, t.ev.PubKey, kind, model.Timestamp(0).Set(now))
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse attestation event")
 		}

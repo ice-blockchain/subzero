@@ -7,15 +7,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 )
 
 type OnBehalfAccessEntry struct {
-	Start   *time.Time
-	End     *time.Time
-	Revoked *time.Time
+	Start   *Timestamp
+	End     *Timestamp
+	Revoked *Timestamp
 	Kinds   []int
 }
 
@@ -26,12 +25,12 @@ const (
 	TagAttestationValueIndexAction = 3
 )
 
-func ParseAttestationString(s string) (action string, ts time.Time, kinds []int, err error) {
+func ParseAttestationString(s string) (action string, ts Timestamp, kinds []int, err error) {
 	// Format: <action>:<timestamp>[:<kind1>,<kind2>,...]
 	actionEnd := strings.IndexRune(s, ':')
 	if actionEnd == -1 {
 		// Just action.
-		return s, time.Time{}, nil, errors.Errorf("missing timestamp in attestation string: %v", s)
+		return s, 0, nil, errors.Errorf("missing timestamp in attestation string: %v", s)
 	}
 
 	tsStr := s[actionEnd+1:]
@@ -42,9 +41,9 @@ func ParseAttestationString(s string) (action string, ts time.Time, kinds []int,
 	}
 	unix, err := strconv.ParseInt(tsStr[:tsStrEnd], 10, 64)
 	if err != nil {
-		return "", time.Time{}, nil, errors.Wrapf(err, "failed to parse timestamp in attestation string: %v", tsStr[:tsStrEnd])
+		return "", 0, nil, errors.Wrapf(err, "failed to parse timestamp in attestation string: %v", tsStr[:tsStrEnd])
 	}
-	ts = time.Unix(unix, 0)
+	ts = Timestamp(unix)
 	if tsStrEnd == len(tsStr) {
 		return action, ts, nil, nil
 	}
@@ -54,7 +53,7 @@ func ParseAttestationString(s string) (action string, ts time.Time, kinds []int,
 		for i, kindStr := range kindsTokens {
 			kinds[i], err = strconv.Atoi(kindStr)
 			if err != nil {
-				return "", time.Time{}, nil, errors.Wrapf(err, "failed to parse kind %q in attestation string: %v", kindStr, s)
+				return "", 0, nil, errors.Wrapf(err, "failed to parse kind %q in attestation string: %v", kindStr, s)
 			}
 		}
 	}
@@ -103,7 +102,7 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 	return entries, nil
 }
 
-func OnBehalfIsAccessAllowed(masterTags Tags, onBehalfPubkey string, kind int, nowUnix int64) (bool, error) {
+func OnBehalfIsAccessAllowed(masterTags Tags, onBehalfPubkey string, kind int, now Timestamp) (bool, error) {
 	if kind == CustomIONKindAttestation {
 		// Explicitly forbid attestation access for all sub-accounts.
 		return false, nil
@@ -121,8 +120,6 @@ func OnBehalfIsAccessAllowed(masterTags Tags, onBehalfPubkey string, kind int, n
 	if kind > 0 && len(entry.Kinds) > 0 && !slices.Contains(entry.Kinds, kind) {
 		return false, nil
 	}
-
-	now := time.Unix(nowUnix, 0)
 
 	return (now.After(*entry.Start)) &&
 		(entry.End == nil || now.Before(*entry.End)), nil

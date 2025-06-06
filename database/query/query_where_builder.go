@@ -1282,9 +1282,11 @@ func (b *queryBuilder) ApplyDeleteFilter(idx int, filter *databaseFilterDelete) 
 	b.WriteString(" AND hidden=false) OR ((master_pubkey = :")
 	b.WriteString(owner)
 	b.WriteString(" AND pubkey != master_pubkey AND ")
-	b.WriteString("subzero_nostr_onbehalf_is_allowed(jsonb(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden=false limit 1), '[]')), :")
+	b.WriteString("subzero_nostr_onbehalf_is_allowed_on_time(jsonb(coalesce((select p.tags from events p where p.master_pubkey = master_pubkey and p.kind = 10100 and hidden=false limit 1), '[]')), :")
 	b.WriteString(owner)
-	b.WriteString(", kind)))))")
+	b.WriteString(", kind, :")
+	b.WriteValue(filterID, "current_timestamp_nano", time.Now().UnixNano())
+	b.WriteString(")))))")
 }
 
 func (b *queryBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params map[string]any, err error) {

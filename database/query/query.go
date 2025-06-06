@@ -1151,7 +1151,7 @@ func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, eve
 		}
 	}
 	if ephemeralAttestationEvent != nil {
-		allowed, err := model.OnBehalfIsAccessAllowed(ephemeralAttestationEvent.Tags, event.PubKey, event.Kind, time.Now().Unix())
+		allowed, err := model.OnBehalfIsAccessAllowed(ephemeralAttestationEvent.Tags, event.PubKey, event.Kind, nostr.Now())
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse attestation event")
 		}

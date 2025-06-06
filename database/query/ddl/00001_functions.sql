@@ -40,10 +40,10 @@ END;
 $$ LANGUAGE plpgsql;
 --------
 --------
-CREATE OR REPLACE FUNCTION parse_attestation_string(input_str text)
+CREATE OR REPLACE FUNCTION parse_attestation_string_bigint(input_str text)
 RETURNS TABLE (
     action text,
-    ts timestamp,
+    ts bigint,
     kinds integer[]
 ) AS $$
 DECLARE
@@ -75,7 +75,7 @@ BEGIN
         RETURN;
     END;
 
-    ts := to_timestamp(unix_time);
+    ts := to_timestamp_nano(unix_time);
 
     IF ts_end_pos <= length(ts_str) THEN
         kinds_str := substring(ts_str from ts_end_pos + 1);
@@ -99,28 +99,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 --------
-CREATE OR REPLACE FUNCTION parse_attestation_tags(tags jsonb)
+CREATE OR REPLACE FUNCTION parse_attestation_tags_for(tags jsonb, target_pubkey text)
 RETURNS jsonb AS $$
 DECLARE
     tag_item        jsonb;
     pubkey          text;
     action_str      text;
     parsed_action   text;
-    parsed_ts       timestamp;
+    parsed_ts_nano  bigint;
     parsed_kinds    integer[];
     current_entry   jsonb;
     entries         jsonb := '{}'::jsonb;
 BEGIN
     FOR tag_item IN SELECT * FROM jsonb_array_elements(tags) LOOP
-        IF jsonb_array_length(tag_item) < 4 OR tag_item->>0 <> 'p' THEN
+        IF jsonb_array_length(tag_item) < 4 OR tag_item->>0 <> 'p' OR tag_item->>1 <> target_pubkey THEN
             CONTINUE;
         END IF;
 
         pubkey := tag_item->>1;
         action_str := tag_item->>3;
 
-        SELECT a.action, a.ts, a.kinds INTO parsed_action, parsed_ts, parsed_kinds
-        FROM parse_attestation_string(action_str) a;
+        SELECT
+            a.action, a.ts, a.kinds
+        INTO
+            parsed_action, parsed_ts_nano, parsed_kinds
+        FROM parse_attestation_string_bigint(action_str) a;
 
         IF NOT FOUND THEN
             CONTINUE;
@@ -130,10 +133,10 @@ BEGIN
 
         CASE parsed_action
             WHEN 'revoked' THEN
-                current_entry := jsonb_set(current_entry, '{revoked}', to_jsonb(parsed_ts));
+                current_entry := jsonb_set(current_entry, '{revoked}', to_jsonb(parsed_ts_nano));
 
             WHEN 'active' THEN
-                current_entry := jsonb_set(current_entry, '{start}', to_jsonb(parsed_ts));
+                current_entry := jsonb_set(current_entry, '{start}', to_jsonb(parsed_ts_nano));
                 current_entry := jsonb_set(current_entry, '{end}', 'null'::jsonb);
 
                 IF parsed_kinds IS NOT NULL THEN
@@ -141,7 +144,7 @@ BEGIN
                 END IF;
 
             WHEN 'inactive' THEN
-                current_entry := jsonb_set(current_entry, '{end}', to_jsonb(parsed_ts));
+                current_entry := jsonb_set(current_entry, '{end}', to_jsonb(parsed_ts_nano));
 
             ELSE
                 CONTINUE;
@@ -154,22 +157,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 --------
-CREATE OR REPLACE FUNCTION subzero_nostr_onbehalf_is_allowed(
+CREATE OR REPLACE FUNCTION subzero_nostr_onbehalf_is_allowed_on_time(
     master_tags jsonb,
     on_behalf_pubkey text,
-    kind integer
+    kind integer,
+    now_ts_nano bigint
 ) RETURNS boolean AS $$
 DECLARE
     entries         jsonb;
     entry           jsonb;
-    now_ts          timestamp;
-    start_ts        timestamp;
-    end_ts          timestamp;
+    start_ts_nano   bigint;
+    end_ts_nano     bigint;
 BEGIN
     IF kind = 10100 THEN
         RETURN false;
     END IF;
-	entries := parse_attestation_tags(master_tags);
+	entries := parse_attestation_tags_for(master_tags, on_behalf_pubkey);
     entry := entries -> on_behalf_pubkey;
     IF entry IS NULL OR entry ? 'revoked' THEN
         RETURN false;
@@ -183,19 +186,18 @@ BEGIN
         END IF;
     END IF;
 
-    now_ts := CURRENT_TIMESTAMP::timestamp;
-    start_ts := (entry ->> 'start')::timestamp;
-    end_ts := (entry ->> 'end')::timestamp;
+    start_ts_nano := (entry ->> 'start')::bigint;
+    end_ts_nano := (entry ->> 'end')::bigint;
 
-    IF start_ts IS NULL THEN
+    IF start_ts_nano IS NULL THEN
         RETURN false;
     END IF;
 
-    IF now_ts <= start_ts THEN
+    IF now_ts_nano <= start_ts_nano THEN
         RETURN false;
     END IF;
 
-    IF end_ts IS NOT NULL AND now_ts >= end_ts THEN
+    IF end_ts_nano IS NOT NULL AND now_ts_nano >= end_ts_nano THEN
         RETURN false;
     END IF;
 
@@ -204,7 +206,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     RETURN false;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql IMMUTABLE;
 --------
 CREATE OR REPLACE FUNCTION subzero_nostr_attestation_update_is_allowed(
     old_tags JSONB,
@@ -259,7 +261,7 @@ BEGIN
         action_str := tag->>3;
         BEGIN
             SELECT a.action INTO parsed_action
-            FROM parse_attestation_string(action_str) a;
+            FROM parse_attestation_string_bigint(action_str) a;
         EXCEPTION WHEN OTHERS THEN
             RETURN FALSE;
         END;
