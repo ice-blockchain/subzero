@@ -1077,7 +1077,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 		FROM
 			events
 		WHERE
-			expiration <= get_current_timestamp_nano()
+			expiration <= :cutoff
 		LIMIT :batch_size
 	)
 	DELETE FROM events
@@ -1090,7 +1090,10 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 		sig,
 		content,
 		tags`
-	params := map[string]any{"batch_size": batchSize}
+	params := map[string]any{
+		"batch_size": batchSize,
+		"cutoff":     time.Now().UnixNano(),
+	}
 
 	for ctx.Err() == nil {
 		events, err := connector.ExecNamed[model.Event](ctx, db.db, stmt, params)

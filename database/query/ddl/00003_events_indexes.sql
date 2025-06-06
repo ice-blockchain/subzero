@@ -31,3 +31,6 @@ CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
 
 -- T tags index.
 CREATE INDEX IF NOT EXISTS idx_events_ttags ON events USING GIN(t_tags);
+
+-- Expiration.
+CREATE INDEX IF NOT EXISTS idx_events_expiration_id ON events(expiration, id) WHERE expiration IS NOT NULL;
