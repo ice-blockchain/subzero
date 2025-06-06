@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.24.3
+go 1.24.4
 
 replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	firebase.google.com/go/v4 v4.15.2
+	firebase.google.com/go/v4 v4.16.0
 	github.com/alitto/pond/v2 v2.3.4
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.23.0
@@ -28,7 +28,7 @@ require (
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250604183427-cf2dfeb0cdf2
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250606020435-b83baa3bbfd1
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/imroc/req/v3 v3.52.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -56,7 +56,7 @@ require (
 	github.com/xssnick/tonutils-go v1.13.0
 	github.com/xssnick/tonutils-storage v1.0.5
 	go.uber.org/goleak v1.3.0
-	golang.org/x/net v0.40.0
+	golang.org/x/net v0.41.0
 	google.golang.org/api v0.236.0
 	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
 )
@@ -155,7 +155,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250604183427-cf2dfeb0cdf2 // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250606020435-b83baa3bbfd1 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -259,17 +259,17 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	golang.org/x/arch v0.18.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b // indirect
-	golang.org/x/image v0.27.0 // indirect
+	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476 // indirect
+	golang.org/x/image v0.28.0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
+	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/appengine/v2 v2.0.6 // indirect
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
