@@ -208,7 +208,7 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 		return nil, errors.Wrap(errAttestationRecordNotFound, e.PubKey)
 	}
 
-	now := time.Now()
+	now := nostr.Now()
 	if record.Revoked != nil && now.After(*record.Revoked) {
 		return nil, errors.Wrap(errAttestationRecordRevoked, e.PubKey)
 	} else if record.End != nil && now.After(*record.End) {

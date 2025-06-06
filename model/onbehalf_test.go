@@ -4,7 +4,6 @@ package model
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +14,7 @@ func TestParseAttestationString(t *testing.T) {
 	cases := []struct {
 		In     string
 		Action string
-		Ts     time.Time
+		Ts     Timestamp
 		Kinds  []int
 		Err    bool
 	}{
@@ -26,7 +25,7 @@ func TestParseAttestationString(t *testing.T) {
 		{
 			In:     "action:123",
 			Action: "action",
-			Ts:     time.Unix(123, 0),
+			Ts:     123,
 		},
 		{
 			In:  "action:foo",
@@ -35,7 +34,13 @@ func TestParseAttestationString(t *testing.T) {
 		{
 			In:     "action:123:1,2,3",
 			Action: "action",
-			Ts:     time.Unix(123, 0),
+			Ts:     123,
+			Kinds:  []int{1, 2, 3},
+		},
+		{
+			In:     "action:1749219680077637000:1,2,3",
+			Action: "action",
+			Ts:     1749219680077637000,
 			Kinds:  []int{1, 2, 3},
 		},
 		{
