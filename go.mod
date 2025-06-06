@@ -37,7 +37,6 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/libdns/cloudflare v0.2.1
-	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.51.12
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
@@ -58,7 +57,6 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.41.0
 	google.golang.org/api v0.236.0
-	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
 )
 
 require (

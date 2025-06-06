@@ -911,5 +911,3 @@ gotest.tools/v3 v3.5.2 h1:7koQfIKdy+I8UTetycgUqXWSDwpgv193Ka+qRsmBY8Q=
 gotest.tools/v3 v3.5.2/go.mod h1:LtdLGcnqToBH83WByAAi/wiwSFCArdFIUV/xxN4pcjA=
 nullprogram.com/x/optparse v1.0.0/go.mod h1:KdyPE+Igbe0jQUrVfMqDMeJQIJZEuyV7pjYmp6pbG50=
 sigs.k8s.io/yaml v1.2.0/go.mod h1:yfXDCHCao9+ENCvLSE62v9VSji2MKu5jeNfTrofGhJc=
-spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100 h1:zvxvrLygkh0bC7Ui3Vwa29g7v1FJ4utoIoWk5fOtSIc=
-spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100/go.mod h1:i4SlkNfFrn1974zbGZWg8FYXAWLnrS6cYAXtSfmIDhU=

@@ -291,14 +291,15 @@ CREATE OR REPLACE FUNCTION trigger_events_before_insert_check_onbehalf_permissio
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.master_pubkey != NEW.pubkey THEN
-        IF NOT subzero_nostr_onbehalf_is_allowed(
+        IF NOT subzero_nostr_onbehalf_is_allowed_on_time(
             COALESCE((
                 SELECT tags
                 FROM events
                 WHERE kind = 10100 AND pubkey = NEW.master_pubkey AND hidden = FALSE
             ), '[]'::JSONB),
             NEW.pubkey::text,
-            NEW.kind
+            NEW.kind,
+            get_current_timestamp_nano()
         ) THEN
             RAISE EXCEPTION 'onbehalf permission denied';
         END IF;

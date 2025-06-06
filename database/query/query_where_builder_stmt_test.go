@@ -426,7 +426,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
-		require.Len(t, param, 2)
+		require.Len(t, param, 3)
 	})
 	t.Run("Complex", func(t *testing.T) {
 		filter := databaseFilterDelete{
@@ -439,7 +439,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
-		require.Len(t, param, 5)
+		require.Len(t, param, 6)
 	})
 	t.Run("TwoSimple", func(t *testing.T) {
 		filters := []databaseFilterDelete{
@@ -450,7 +450,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 		stmt, param, err := newQueryBuilder().BuildForDelete(filters...)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
-		require.Len(t, param, 4)
+		require.Len(t, param, 6)
 	})
 	t.Run("OnlyOwner", func(t *testing.T) {
 		filter := databaseFilterDelete{
@@ -460,7 +460,7 @@ func TestApplyDeleteFilter(t *testing.T) {
 		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
-		require.Len(t, param, 1)
+		require.Len(t, param, 2)
 	})
 	t.Run("Empty", func(t *testing.T) {
 		_, _, err := newQueryBuilder().BuildForDelete()
