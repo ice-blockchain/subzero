@@ -58,7 +58,6 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.41.0
 	google.golang.org/api v0.236.0
-	spheric.cloud/xiter v0.0.0-20250113160306-a1a2c1108100
 )
 
 require (
