@@ -284,3 +284,282 @@ func TestServerRestart(t *testing.T) {
 		node.Start(t.Context())
 	}
 }
+
+func TestBroadcastUserEvents_BasicFunctionality(t *testing.T) {
+	t.Parallel()
+	var memdb query.MemDB
+	userPrivKey, userPubkey := model.GenerateKeyPair()
+	relaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, userPubkey},
+			[]string{"r", "wss://localhost:9988"},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, relaysList.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, memdb.AcceptEvents(t.Context(), relaysList))
+
+	var broadcastedUserAddress string
+	var broadcastedRelays []string
+	var broadcastedEvents []*model.Event
+
+	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
+		broadcastedUserAddress = userAddress
+		broadcastedRelays = relays
+		for _, tx := range transactions {
+			evs, err := mapTxToEvent(tx)
+			require.NoError(t, err)
+			broadcastedEvents = append(broadcastedEvents, evs...)
+		}
+	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
+		require.Fail(t, "Rollback should not be called")
+	})
+
+	node, release := newConsensusNode(t.Context(), nil, 19999,
+		WithClient(consensusClient),
+		WithQuery(memdb.SelectEvents),
+	)
+	defer release()
+
+	t.Run("simple_text_note", func(t *testing.T) {
+		broadcastedEvents = nil
+		textNote := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
+			Content:   "Hello, world!",
+		}}
+		require.NoError(t, textNote.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), textNote))
+		unhex, err := hex.DecodeString(userPubkey)
+		require.NoError(t, err)
+		expectedAddr, err := client.PubKeyToAddress(string(unhex))
+		require.NoError(t, err)
+		require.Equal(t, expectedAddr, broadcastedUserAddress)
+		require.ElementsMatch(t, []string{"localhost:19988", "localhost:19977"}, broadcastedRelays)
+		require.Len(t, broadcastedEvents, 1)
+		require.Equal(t, textNote.ID, broadcastedEvents[0].ID)
+	})
+
+	t.Run("profile_metadata", func(t *testing.T) {
+		broadcastedEvents = nil
+		profileMetadata := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindProfileMetadata,
+			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
+			Content:   `{"name":"testuser","display_name":"Test User"}`,
+		}}
+		require.NoError(t, profileMetadata.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), profileMetadata))
+
+		require.Len(t, broadcastedEvents, 1)
+		require.Equal(t, profileMetadata.ID, broadcastedEvents[0].ID)
+	})
+
+	t.Run("multiple_events_same_user", func(t *testing.T) {
+		broadcastedEvents = nil
+		textNote1 := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
+			Content:   "First note",
+		}}
+		require.NoError(t, textNote1.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		textNote2 := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, userPubkey}},
+			Content:   "Second note",
+		}}
+		require.NoError(t, textNote2.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), textNote1, textNote2))
+		require.Len(t, broadcastedEvents, 2)
+		eventIDs := []string{broadcastedEvents[0].ID, broadcastedEvents[1].ID}
+		require.ElementsMatch(t, []string{textNote1.ID, textNote2.ID}, eventIDs)
+	})
+}
+
+func TestBroadcastUserEvents_MasterKeyDetection(t *testing.T) {
+	t.Parallel()
+	var memdb query.MemDB
+	userPrivKey, userPubkey := model.GenerateKeyPair()
+	otherUserPrivKey, otherUserPubkey := model.GenerateKeyPair()
+	userRelaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, userPubkey},
+			[]string{"r", "wss://localhost:9988"},
+		},
+	}}
+	require.NoError(t, userRelaysList.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, memdb.AcceptEvents(t.Context(), userRelaysList))
+
+	otherUserRelaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, otherUserPubkey},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, otherUserRelaysList.SignWithAlg(otherUserPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, memdb.AcceptEvents(t.Context(), otherUserRelaysList))
+
+	var broadcastedUserAddress string
+	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
+		broadcastedUserAddress = userAddress
+	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
+		require.Fail(t, "Rollback should not be called")
+	})
+
+	node, release := newConsensusNode(t.Context(), nil, 19999,
+		WithClient(consensusClient),
+		WithQuery(memdb.SelectEvents),
+	)
+	defer release()
+
+	t.Run("reply_to_other_user", func(t *testing.T) {
+		broadcastedUserAddress = ""
+		rootPost := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags:      model.Tags{{model.CustomIONTagOnBehalfOf, otherUserPubkey}},
+			Content:   "Root post",
+		}}
+		require.NoError(t, rootPost.SignWithAlg(otherUserPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, memdb.AcceptEvents(t.Context(), rootPost))
+		replyPost := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{model.CustomIONTagOnBehalfOf, userPubkey},
+				{"e", rootPost.ID, "", model.TagMarkerReply},
+			},
+			Content: "Reply to root post",
+		}}
+		require.NoError(t, replyPost.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), replyPost))
+		require.NotEmpty(t, broadcastedUserAddress)
+	})
+
+	t.Run("mention_other_user", func(t *testing.T) {
+		broadcastedUserAddress = ""
+		mentionPost := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags: nostr.Tags{
+				{model.CustomIONTagOnBehalfOf, userPubkey},
+				{"p", otherUserPubkey},
+			},
+			Content: "Mentioning other user",
+		}}
+		require.NoError(t, mentionPost.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), mentionPost))
+		require.NotEmpty(t, broadcastedUserAddress)
+	})
+}
+
+func TestBroadcastUserEvents_BadgeEvents(t *testing.T) {
+	t.Parallel()
+	var memdb query.MemDB
+	userPrivKey, userPubkey := model.GenerateKeyPair()
+	badgeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
+
+	userRelaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, userPubkey},
+			[]string{"r", "wss://localhost:9988"},
+		},
+	}}
+	require.NoError(t, userRelaysList.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, memdb.AcceptEvents(t.Context(), userRelaysList))
+
+	badgeIssuerRelaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: nostr.Tags{
+			[]string{model.CustomIONTagOnBehalfOf, badgeIssuerPubkey},
+			[]string{"r", "wss://localhost:9977"},
+		},
+	}}
+	require.NoError(t, badgeIssuerRelaysList.SignWithAlg(badgeIssuerPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, memdb.AcceptEvents(t.Context(), badgeIssuerRelaysList))
+
+	var broadcastedEvents []*model.Event
+	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
+		for _, tx := range transactions {
+			evs, err := mapTxToEvent(tx)
+			require.NoError(t, err)
+			broadcastedEvents = append(broadcastedEvents, evs...)
+		}
+	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
+		require.Fail(t, "Rollback should not be called")
+	})
+
+	node, release := newConsensusNode(t.Context(), nil, 19999,
+		WithClient(consensusClient),
+		WithQuery(memdb.SelectEvents),
+	)
+	defer release()
+
+	t.Run("badge_definition_and_award", func(t *testing.T) {
+		broadcastedEvents = nil
+
+		badgeDefinition := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags: nostr.Tags{
+				{"d", "verified"},
+				{"name", "Verified Badge"},
+				{"description", "Verification badge"},
+			},
+		}}
+		require.NoError(t, badgeDefinition.SignWithAlg(badgeIssuerPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		badgeAward := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeAward,
+			Tags: nostr.Tags{
+				[]string{model.CustomIONTagOnBehalfOf, badgeIssuerPubkey},
+				[]string{"a", fmt.Sprintf("30009:%s:verified", badgeIssuerPubkey)},
+				[]string{"p", userPubkey},
+			},
+		}}
+		require.NoError(t, badgeAward.SignWithAlg(badgeIssuerPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, node.broadcastUserEvents(t.Context(), badgeDefinition, badgeAward))
+		require.Len(t, broadcastedEvents, 2)
+		eventIDs := []string{broadcastedEvents[0].ID, broadcastedEvents[1].ID}
+		require.ElementsMatch(t, []string{badgeDefinition.ID, badgeAward.ID}, eventIDs)
+	})
+
+	t.Run("profile_badges", func(t *testing.T) {
+		broadcastedEvents = nil
+
+		profileBadges := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindProfileBadges,
+			Tags: nostr.Tags{
+				{"d", "profile_badges"},
+				[]string{model.CustomIONTagOnBehalfOf, userPubkey},
+				[]string{"a", fmt.Sprintf("30009:%s:verified", badgeIssuerPubkey)},
+				[]string{"e", "some_badge_award_id"},
+			},
+		}}
+		require.NoError(t, profileBadges.SignWithAlg(userPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, node.broadcastUserEvents(t.Context(), profileBadges))
+		require.Len(t, broadcastedEvents, 1)
+		require.Equal(t, profileBadges.ID, broadcastedEvents[0].ID)
+	})
+}

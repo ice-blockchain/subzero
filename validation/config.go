@@ -4,8 +4,6 @@ package validation
 
 import (
 	"time"
-
-	"github.com/ice-blockchain/subzero/cfg"
 )
 
 type (
@@ -20,10 +18,6 @@ type (
 var (
 	globalConfig *config
 )
-
-func MustInit() {
-	globalConfig = cfg.MustGet[config]()
-}
 
 func (c *config) MaxContentSizeOf(kind int) int {
 	if c != nil {

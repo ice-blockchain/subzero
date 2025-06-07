@@ -93,6 +93,7 @@ func (c *consensus) CommitBroadcastTx(ctx context.Context, transactions ...clien
 func (c *consensus) CommitBroadcastTxRemoval(ctx context.Context, transactions ...client.Transaction) error {
 	return c.CommitBroadcastTx(ctx, transactions...)
 }
+
 func (c *consensus) AcceptBroadcastTx(ctx context.Context, transactions ...client.Transaction) error {
 	events := make([]*model.Event, 0, len(transactions))
 	for _, tx := range transactions {
@@ -313,41 +314,9 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
 				return pTag.Value(), nil
 			}
-		case nostr.KindProfileMetadata:
-			masterKey = ev.GetMasterPublicKey()
-			nameChanged, username, err := c.validateProfileMetadataNameChange(ctx, ev, masterKey)
-			if err != nil {
-				return "", errors.Wrapf(err, "failed to validate profile metadata name change")
-			}
-			if !nameChanged {
-				return masterKey, nil
-			}
-			if err := c.checkProofOfOwnershipBadges(username, masterKey, incomingEvents); err != nil {
-				return "", errors.Wrapf(err, "failed to check proof of ownership for badges for username %s", username)
-			}
-
-			return masterKey, nil
 		case nostr.KindBadgeAward:
-			badgeDefinitionIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
-				return e.Kind == nostr.KindBadgeDefinition
-			})
-			if badgeDefinitionIndex == -1 {
-				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "[badge-award] no badge definition found in events or no p tag %v", ev.ID)
-			}
 			if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
 				masterKey = pTag.Value()
-			}
-			if masterKey == "" {
-				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "[badge-award] no badge definition found in events or no p tag %v", ev.ID)
-			}
-			isProofBadge, username := extractUsernameFromProofBadge(ev)
-			if isProofBadge {
-				if username == "" {
-					return "", errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[badge-award] badge award proof of ownership username is empty")
-				}
-				if found := c.findProfileEventInEventsBatch(ctx, masterKey, username, incomingEvents); !found {
-					return "", errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[badge-award] profile with username %s not found", username)
-				}
 			}
 
 			return masterKey, nil
@@ -362,22 +331,8 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			if pTag := badgeAward.GetTag("p"); pTag != nil && pTag.Value() != "" {
 				masterKey = pTag.Value()
 			}
-			if masterKey == "" {
-				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "[badge-definition] no badge award found in events or no p tag %v", ev.ID)
-			}
-			isProofBadge, username := extractUsernameFromProofBadge(ev)
-			if isProofBadge {
-				if username == "" {
-					return "", errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[badge-definition] badge definition proof of ownership username is empty")
-				}
-				if found := c.findProfileEventInEventsBatch(ctx, masterKey, username, incomingEvents); !found {
-					return "", errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[badge-definition] profile with username %s not found", username)
-				}
-			}
 
 			return masterKey, nil
-		case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
-			return c.handleTextNoteWithoutAck(ctx, ev)
 		default:
 			return ev.GetMasterPublicKey(), nil
 		}
@@ -410,7 +365,30 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 			}
 		}
 	case nostr.KindTextNote, model.CustomIONKindEditableTextNote, nostr.KindArticle:
-		return c.handleTextNoteWithAck(ctx, ev, acks)
+		if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
+			relays, rErr := c.fetchUserRelays(ctx, pTag.Value()) // Mentioned user is presented on relay
+			if rErr == nil && len(relays) > 0 {
+				masterKey = pTag.Value()
+			}
+		}
+		if eTag := ev.GetTag("e"); eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
+			linkedEvent, masterKey, err = c.getEvent(ctx, eTag.Value())
+			if err != nil {
+				return "", errors.Wrapf(err, "failed to get referenced event")
+			}
+		}
+		refTags := []string{"q", "Q", "a"}
+		for _, tagName := range refTags {
+			if tag := ev.GetTag(tagName); tag != nil && tag.Value() != "" {
+				linkedEvent, masterKey, err = c.getEvent(ctx, tag.Value())
+				if err != nil {
+					return "", errors.Wrapf(err, "failed to get referenced event")
+				}
+				if linkedEvent != nil && masterKey != "" {
+					break
+				}
+			}
+		}
 	default:
 		masterKey = ev.GetMasterPublicKey()
 	}
