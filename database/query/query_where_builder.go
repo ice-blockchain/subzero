@@ -512,7 +512,10 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 	if filter.Expiration != nil {
 		b.MaybeAND()
 		if *filter.Expiration {
-			b.WriteString(`(e.expiration > get_current_timestamp_nano())`)
+			now := time.Now().UnixNano()
+			b.WriteString(`(e.expiration > `)
+			b.WriteTypedValue(filter.ID, "expiration_after", "bigint", now)
+			b.WriteRune(')')
 		} else {
 			b.WriteString(`(e.expiration is null)`)
 		}
@@ -1192,7 +1195,9 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 
 	case rankTrending:
 		// 24h trending.
-		joinString = ` inner join ranked_events r on e.id = r.event_id and ((get_current_timestamp_nano() - least(get_current_timestamp_nano(), e.lookup_created_at)) < 86400e9)`
+		dayAgo := time.Now().Add(-24 * time.Hour).UnixNano()
+		joinString = ` inner join ranked_events r on e.id = r.event_id and e.lookup_created_at > :` +
+			b.PushValue(filter.ID, "trending_since", dayAgo)
 		orderBy = `score desc`
 		fields = append(fields, "r.score")
 	}
