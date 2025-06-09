@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/errors"
+
 	"github.com/ice-blockchain/subzero/model"
 )
 

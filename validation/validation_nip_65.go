@@ -4,6 +4,7 @@ package validation
 
 import (
 	"github.com/cockroachdb/errors"
+
 	"github.com/ice-blockchain/subzero/model"
 )
 

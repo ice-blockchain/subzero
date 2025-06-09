@@ -5,9 +5,10 @@ package ws
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestPublishingNIP23Events(t *testing.T) {

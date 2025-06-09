@@ -4,8 +4,9 @@ package validation
 
 import (
 	"github.com/cockroachdb/errors"
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 type JobFeedbackStatus string

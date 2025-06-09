@@ -9,10 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ice-blockchain/subzero/database/query"
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pkg/errors"
+
+	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 )
 
 var (

@@ -5,8 +5,9 @@ package validation
 import (
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestValidateFundSend(t *testing.T) {

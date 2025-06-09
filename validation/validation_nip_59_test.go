@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestValidateKindGiftWrapEvent(t *testing.T) {
