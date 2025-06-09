@@ -106,6 +106,25 @@ func IsMessageTooLarge(err error) bool {
 	return errors.Is(err, ErrMessageTooLarge)
 }
 
+func isUnregisteredByContent(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	unregisteredPatterns := []string{
+		"requested entity was not found",
+		"registration token is not a valid fcm registration token",
+		"unregistered",
+	}
+	for _, pattern := range unregisteredPatterns {
+		if strings.Contains(strings.ToLower(errStr), pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func New(ctx context.Context, opts ...Option) (Client, error) {
 	options := &options{
 		retryConfig: defaultRetryConfig,
@@ -166,7 +185,7 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 		if IsMessageTooLarge(err) {
 			return "", errors.Wrapf(err, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
 		}
-		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
+		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) || isUnregisteredByContent(err) {
 			return "", ErrInvalidDeviceToken
 		}
 		return "", fmt.Errorf("fcm send failed for %#v: %w", message, err)

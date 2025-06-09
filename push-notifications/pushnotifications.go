@@ -22,7 +22,6 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 type (
@@ -512,7 +511,7 @@ func (pm *PushNotificationManager) createNotifications(
 		}
 
 		switch event.GetTag("t").Value() {
-		case validation.DeviceTokenOSAndroid:
+		case model.DeviceTokenOSAndroid:
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
 				Target: event,
 				Data:   data,

@@ -14,7 +14,6 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 func helperCreateCommunityMessageEvent(t *testing.T, id string, pubKey string, content string, communityID string, recipientPubKey string) *model.Event {
@@ -498,10 +497,10 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			notification := deviceTypeMap[platform]
 			require.Contains(t, notification.Data, "event", "Data should contain event")
 
-			if platform == validation.DeviceTokenOSIOS || platform == validation.DeviceTokenOSWeb {
+			if platform == model.DeviceTokenOSIOS || platform == model.DeviceTokenOSWeb {
 				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Title, "Title should match")
 				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Body, "Body should match")
-			} else if platform == validation.DeviceTokenOSAndroid {
+			} else if platform == model.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android devices")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android devices")
 			}

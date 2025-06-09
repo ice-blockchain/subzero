@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tags nostr.Tags) *model.Event {
@@ -283,7 +282,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 
 			notification := notifications[0]
 
-			if device.platform == validation.DeviceTokenOSAndroid {
+			if device.platform == model.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android")
 			} else {

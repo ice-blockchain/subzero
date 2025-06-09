@@ -20,7 +20,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
@@ -36,7 +36,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", "wss://example.com"},
 			{"token", "device-token"},
 		}
@@ -52,7 +52,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", "wss://different-relay.example.com"},
 			{"token", "device-token"},
 		}
@@ -71,7 +71,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSIOS},
+			{"t", model.DeviceTokenOSIOS},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
@@ -87,7 +87,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSWeb},
+			{"t", model.DeviceTokenOSWeb},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
@@ -102,7 +102,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		var ev model.Event
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
@@ -149,7 +149,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
@@ -164,7 +164,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", "wss://wrong-relay.example.com"},
 			{"token", "device-token"},
 		}
@@ -180,7 +180,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", globalConfig.RelayURL},
 		}
 		ev.Content = `[{"kinds":[1]}]`
@@ -195,7 +195,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
@@ -211,7 +211,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
@@ -227,7 +227,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"t", DeviceTokenOSAndroid},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", globalConfig.RelayURL},
 			{"token", "device-token"},
 		}
