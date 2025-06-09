@@ -4,9 +4,9 @@ package validation
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -18,7 +18,7 @@ func validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*mo
 	}
 	if len(e.Content) == 0 && richText == nil {
 		pubAt := e.GetTag("published_at").Value()
-		if val, err := strconv.ParseInt(pubAt, 10, 64); err != nil || val == int64(e.CreatedAt) {
+		if val, err := nostr.ParseTimestamp(pubAt); err != nil || val.Equal(e.CreatedAt) {
 			return errors.Wrap(ErrWrongEventParams, "content is empty or too short")
 		}
 		for _, tag := range e.Tags {
