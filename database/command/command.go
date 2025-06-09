@@ -40,7 +40,6 @@ const consensusTimeout = time.Second * 25
 var (
 	ErrMultipleMasterKeys             = errors.New("cannot broadcast single batch to multiple master keys")
 	ErrUsernameProofOfOwnershipFailed = errors.New("username proof of ownership failed")
-	ErrCommentsForbidden              = errors.New("comments forbidden")
 )
 
 func (c *consensus) waitForStop(ctx context.Context) {

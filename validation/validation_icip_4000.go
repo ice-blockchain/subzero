@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -363,7 +363,7 @@ func GetCommunityDefinition(ctx context.Context, hTag string) (*model.Event, err
 
 			continue
 		}
-		if ev.CreatedAt > lastDefinitionEvent.CreatedAt {
+		if ev.CreatedAt.After(lastDefinitionEvent.CreatedAt) {
 			lastDefinitionEvent = ev
 		}
 	}
@@ -383,8 +383,15 @@ func applyChangeCommunityPatch(patches []*model.Event, communityDefEvent *model.
 	if len(patches) == 0 {
 		return nil
 	}
-	sort.Slice(patches, func(i, j int) bool {
-		return patches[i].CreatedAt < patches[j].CreatedAt
+	slices.SortStableFunc(patches, func(a, b *model.Event) int {
+		if a.CreatedAt.Before(b.CreatedAt) {
+			return -1
+		}
+		if a.CreatedAt.After(b.CreatedAt) {
+			return 1
+		}
+
+		return 0
 	})
 	tags := communityDefEvent.Tags
 	for _, patch := range patches {

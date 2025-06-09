@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	ErrCommentsForbidden              = errors.New("comments are forbidden")
 	ErrUsernameProofOfOwnershipFailed = errors.New("username proof of ownership failed")
 )
 
