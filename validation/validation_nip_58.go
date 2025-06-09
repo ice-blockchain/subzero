@@ -4,13 +4,12 @@ package validation
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pkg/errors"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -163,62 +162,6 @@ func validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomi
 	return nil
 }
 
-func validateKindBadgeDefinitionOwnership(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
-	dTag := e.Tags.GetD()
-	if dTag == "" {
-		return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge definition missing d tag %v", e.ID)
-	}
-	aTagRef := fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, e.GetMasterPublicKey(), dTag)
-	badgeAwardIndex := slices.IndexFunc(incomingEvents, func(event *model.Event) bool {
-		if event.Kind != nostr.KindBadgeAward {
-			return false
-		}
-		if aTag := event.GetTag("a"); aTag != nil && aTag.Value() == aTagRef {
-			return true
-		}
-		return false
-	})
-
-	var masterKey string
-	if badgeAwardIndex != -1 {
-		badgeAward := incomingEvents[badgeAwardIndex]
-		if pTag := badgeAward.GetTag("p"); pTag != nil && pTag.Value() != "" {
-			masterKey = pTag.Value()
-		}
-	} else {
-		it := query.GetStoredEvents(ctx, &model.Subscription{
-			Filters: nostr.Filters{
-				model.Filter{
-					Kinds: []int{nostr.KindBadgeAward},
-					Tags:  nostr.TagMap{}.SetLiterals("a", aTagRef),
-					Limit: 1,
-				},
-			},
-		})
-		for event, err := range it {
-			if err != nil {
-				return errors.Wrapf(err, "failed to query badge award from database")
-			}
-			if event.Kind == nostr.KindBadgeAward {
-				if pTag := event.GetTag("p"); pTag != nil && pTag.Value() != "" {
-					masterKey = pTag.Value()
-
-					break
-				}
-			}
-		}
-
-		if masterKey == "" {
-			return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no badge award found in events or database for badge definition %v", e.ID)
-		}
-	}
-	if masterKey == "" {
-		return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "no p tag found in badge award %v", e.ID)
-	}
-
-	return nil
-}
-
 func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
 	const usernameProofOfOwnership = "username_proof_of_ownership"
 	if ev.Kind == nostr.KindBadgeAward {
@@ -245,55 +188,6 @@ func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
 	}
 
 	return false, ""
-}
-
-func validateBadgeRestrictionsWithAck(settingsTag *model.Tag, ev *model.Event, acks []*model.EphemeralEmbeddingEvent) error {
-	if settingsTag == nil || (*settingsTag).Value() != model.WhoCanReplySettings {
-		return nil
-	}
-
-	values := strings.Split((*settingsTag)[2], ",")
-	for _, value := range values {
-		if !strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix) {
-			continue
-		}
-
-		badgeATagRef := strings.TrimPrefix(value, model.BadgeWhoCanReplySettingsPrefix+"|")
-		badgePubkey := strings.Split(badgeATagRef, ":")[1]
-		badgeDTag := strings.Split(badgeATagRef, ":")[2]
-
-		isBadgeDefinitionValid, isBadgeAwardValid := false, false
-		for _, ack := range acks {
-			if ack.ContentEvent.GetMasterPublicKey() != badgePubkey {
-				continue
-			}
-
-			if ack.ContentEvent.Kind == nostr.KindBadgeDefinition {
-				if ack.ContentEvent.Tags.GetD() != badgeDTag {
-					continue
-				}
-				isBadgeDefinitionValid = true
-			}
-
-			if ack.ContentEvent.Kind == nostr.KindBadgeAward {
-				aTag := ack.ContentEvent.GetTag("a")
-				if aTag == nil || aTag.Value() != badgeATagRef {
-					continue
-				}
-				pTag := ack.ContentEvent.GetTag("p")
-				if pTag == nil || pTag.Value() != ev.GetMasterPublicKey() {
-					continue
-				}
-				isBadgeAwardValid = true
-			}
-		}
-
-		if !isBadgeDefinitionValid || !isBadgeAwardValid {
-			return errors.Wrap(ErrCommentsForbidden, "comments are disabled for root post")
-		}
-	}
-
-	return nil
 }
 
 func checkProofOfOwnershipBadges(username string, masterKey string, incomingEvents []*model.Event) error {
