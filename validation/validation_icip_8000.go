@@ -10,15 +10,9 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-const (
-	DeviceTokenOSAndroid = "android"
-	DeviceTokenOSIOS     = "ios"
-	DeviceTokenOSWeb     = "web"
-)
-
 func validateKindDeviceRegistration(e *model.Event) error {
 	tTag := e.GetTag("t").Value()
-	if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {
+	if tTag != model.DeviceTokenOSAndroid && tTag != model.DeviceTokenOSIOS && tTag != model.DeviceTokenOSWeb {
 		return errors.Wrapf(ErrWrongEventParams, "wrong t tag value: %v", tTag)
 	}
 	relayTag := e.GetTag("relay").Value()

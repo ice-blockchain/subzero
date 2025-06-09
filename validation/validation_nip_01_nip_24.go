@@ -11,18 +11,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type (
-	ProfileMetadataContent struct {
-		Name        string `json:"name" example:"username"`
-		About       string `json:"about" example:"about"`
-		Picture     string `json:"picture" example:"https://example.com/pic.jpg"`
-		DisplayName string `json:"display_name" example:"John Deer"`
-		Website     string `json:"website" example:"https://ice.io"`
-		Banner      string `json:"banner" example:"https://example.com/banner.jpg"`
-		Bot         bool   `json:"bot" example:"false"`
-	}
-)
-
 func validateKindProfileMetadataEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
 	if !json.Valid([]byte(e.Content)) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be stringified json: %+v", e)

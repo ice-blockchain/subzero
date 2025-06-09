@@ -286,7 +286,6 @@ func TestServerRestart(t *testing.T) {
 }
 
 func TestBroadcastUserEvents_BasicFunctionality(t *testing.T) {
-	t.Parallel()
 	var memdb query.MemDB
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	relaysList := &model.Event{Event: nostr.Event{
@@ -386,7 +385,6 @@ func TestBroadcastUserEvents_BasicFunctionality(t *testing.T) {
 }
 
 func TestBroadcastUserEvents_MasterKeyDetection(t *testing.T) {
-	t.Parallel()
 	var memdb query.MemDB
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	otherUserPrivKey, otherUserPubkey := model.GenerateKeyPair()
@@ -469,7 +467,6 @@ func TestBroadcastUserEvents_MasterKeyDetection(t *testing.T) {
 }
 
 func TestBroadcastUserEvents_BadgeEvents(t *testing.T) {
-	t.Parallel()
 	var memdb query.MemDB
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	badgeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()

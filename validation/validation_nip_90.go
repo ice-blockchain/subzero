@@ -9,37 +9,8 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type JobFeedbackStatus string
-
-const (
-	KindJobTextExtraction            = 5000
-	KindJobSummarization             = 5001
-	KindJobTranslation               = 5002
-	KindJobTextGeneration            = 5050
-	KindJobImageGeneration           = 5100
-	KindJobVideoConversion           = 5200
-	KindJobVideoTranslation          = 5201
-	KindJobImageToVideoConversion    = 5202
-	KindJobTextToSpeechGeneration    = 5250
-	KindJobNostrContentDiscovery     = 5300
-	KindJobNostrPeopleDiscovery      = 5301
-	KindJobNostrContentSearch        = 5302
-	KindJobNostrPeopleSearch         = 5303
-	KindJobNostrEventCount           = 5400
-	KindJobMalwareScanning           = 5500
-	KindJobNostrEventTimeStamping    = 5900
-	KindJobOpReturnCreation          = 5901
-	KindJobNostrEventPublishSchedule = 5905
-
-	JobFeedbackStatusPaymentRequired JobFeedbackStatus = "payment-required"
-	JobFeedbackStatusProcessing      JobFeedbackStatus = "processing"
-	JobFeedbackStatusError           JobFeedbackStatus = "error"
-	JobFeedbackStatusSuccess         JobFeedbackStatus = "success"
-	JobFeedbackStatusPartial         JobFeedbackStatus = "partial"
-)
-
 var (
-	JobFeedbackStatusValues = map[string]struct{}{
+	jobFeedbackStatusValues = map[string]struct{}{
 		model.JobFeedbackStatusPaymentRequired: {},
 		model.JobFeedbackStatusProcessing:      {},
 		model.JobFeedbackStatusError:           {},
@@ -154,7 +125,7 @@ func validateKindFeedbackJob(e *model.Event) error {
 	if statusTag == nil || len(*statusTag) < 2 {
 		return errors.Wrapf(ErrWrongEventParams, "kind:7000 job feedback, no status tag: %+v", e)
 	}
-	if _, ok := JobFeedbackStatusValues[statusTag.Value()]; !ok {
+	if _, ok := jobFeedbackStatusValues[statusTag.Value()]; !ok {
 		return errors.Wrapf(ErrWrongEventParams, "kind:7000 job feedback, wrong status tag: %+v", e)
 	}
 	jobRequestIDTag := e.Tags.GetFirst([]string{"e"})

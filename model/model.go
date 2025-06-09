@@ -136,6 +136,12 @@ const (
 	ConsensusReplayCtxKey = "replay"
 )
 
+const (
+	DeviceTokenOSAndroid = "android"
+	DeviceTokenOSIOS     = "ios"
+	DeviceTokenOSWeb     = "web"
+)
+
 type (
 	JobFeedbackStatus      = string
 	Role                   string

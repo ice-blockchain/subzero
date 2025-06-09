@@ -12,7 +12,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-var SupportedIMetaKeys = map[string]tagState{
+var supportedIMetaKeys = map[string]tagState{
 	"url":      tagStateRequired,
 	"m":        tagStateRequired,
 	"ox":       tagStateOptional,
@@ -38,7 +38,7 @@ func validateIMetaTag(tag nostr.Tag) error {
 		return errors.Wrapf(ErrWrongEventParams, "invalid imeta: %v", err.Error())
 	}
 	// Check for all required values.
-	for key, state := range SupportedIMetaKeys {
+	for key, state := range supportedIMetaKeys {
 		if state == tagStateRequired && values[key] == "" {
 			return errors.Wrapf(ErrWrongEventParams, "missing required imeta value: %s", key)
 		}
@@ -51,7 +51,7 @@ func validateIMetaTag(tag nostr.Tag) error {
 
 	// Check for values correctness.
 	for key, value := range values {
-		if _, ok := SupportedIMetaKeys[key]; !ok {
+		if _, ok := supportedIMetaKeys[key]; !ok {
 			return errors.Wrapf(ErrWrongEventParams, "not supported imeta value: %s", key)
 		}
 		switch key {

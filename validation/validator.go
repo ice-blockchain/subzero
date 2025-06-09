@@ -11,52 +11,45 @@ import (
 )
 
 type Validator interface {
-	Validate(ctx context.Context, e *model.Event, events ...*model.Event) error
+	Validate(ctx context.Context, events ...*model.Event) error
 }
 
 type eventValidator struct {
 	config *config
 }
 
-func (v *eventValidator) Validate(ctx context.Context, e *model.Event, events ...*model.Event) error {
-	if e == nil {
+func (v *eventValidator) Validate(ctx context.Context, events ...*model.Event) error {
+	if events == nil {
 		return nil
 	}
 
-	if !e.CheckID() {
-		return ErrEventInvalidID
-	}
+	for _, e := range events {
+		if !e.CheckID() {
+			return ErrEventInvalidID
+		}
+		if ok, err := e.CheckSignature(); err != nil {
+			return errors.Wrap(err, "signature check failed")
+		} else if !ok {
+			return ErrEventInvalidSign
+		}
 
-	if ok, err := e.CheckSignature(); err != nil {
-		return errors.Wrap(err, "signature check failed")
-	} else if !ok {
-		return ErrEventInvalidSign
-	}
+		if err := validate(ctx, e, events...); err != nil {
+			return errors.Wrap(err, "validation failed")
+		}
 
-	if err := validate(ctx, e, events...); err != nil {
-		return errors.Wrap(err, "validation failed")
-	}
-
-	if v.config != nil && v.config.NIP13MinLeadingZeroBits > 0 {
-		if err := e.CheckNIP13Difficulty(v.config.NIP13MinLeadingZeroBits); err != nil {
-			return errors.Wrap(err, "wrong event difficulty")
+		if v.config != nil && v.config.NIP13MinLeadingZeroBits > 0 {
+			if err := e.CheckNIP13Difficulty(v.config.NIP13MinLeadingZeroBits); err != nil {
+				return errors.Wrap(err, "wrong event difficulty")
+			}
 		}
 	}
 
 	return nil
 }
 
-// newEventValidator creates a new eventValidator instance
-func newEventValidator(cfg *config) *eventValidator {
-	return &eventValidator{
-		config: cfg,
-	}
-}
-
-// NewEventValidator creates a new eventValidator instance with public Config
 func NewEventValidator(cfg *Config) Validator {
 	if cfg == nil {
-		return newEventValidator(nil)
+		return &eventValidator{}
 	}
 
 	internalConfig := &config{
@@ -66,5 +59,7 @@ func NewEventValidator(cfg *Config) Validator {
 		RelayURL:                  cfg.RelayURL,
 	}
 
-	return newEventValidator(internalConfig)
+	return &eventValidator{
+		config: internalConfig,
+	}
 }

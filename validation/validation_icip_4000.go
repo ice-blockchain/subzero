@@ -219,7 +219,7 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 		communityEventsToCheck = append(communityEventsToCheck, ev)
 	}
 	for _, ev := range communityEventsToCheck {
-		if err := ValidateCommunityDeleteEvent(ctx, ev, e); err != nil {
+		if err := validateCommunityDeleteEvent(ctx, ev, e); err != nil {
 			return errors.Wrap(err, "failed to validate delete event")
 		}
 	}
@@ -227,7 +227,7 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
-func ValidateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
+func validateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
 	communityDefinitionEvent, err := GetCommunityDefinition(ctx, event.GetTag(model.CustomIONTagCommunity).Value())
 	if err != nil {
 		return err
