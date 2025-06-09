@@ -6,11 +6,11 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -36,12 +36,12 @@ func validatePollTag(tag model.Tag) error {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid type value: %q, want single or multi", value)
 			}
 		case "ttl":
-			v, err := strconv.ParseInt(value, 10, 64)
+			v, err := nostr.ParseTimestamp(value)
 			if err != nil {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time: %v", value, err)
 			} else if v < 0 {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time", value)
-			} else if v > 0 && time.Unix(v, 0).Before(time.Now()) {
+			} else if v > 0 && v.Time().Before(time.Now()) {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time in the future", value)
 			}
 		case "title":
@@ -97,10 +97,10 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	}
 
 	deadlineStr, _ := extractTagValueFromPairs(pollTag, "ttl")
-	deadline, err := strconv.ParseInt(deadlineStr, 10, 64)
+	deadline, err := nostr.ParseTimestamp(deadlineStr)
 	if err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "vote: invalid ttl value: %q: %v", deadlineStr, err)
-	} else if time.Now().Unix() > deadline {
+	} else if deadline.Time().Before(time.Now()) {
 		return errors.Wrapf(ErrWrongEventParams, "vote: poll is expired")
 	}
 

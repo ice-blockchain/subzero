@@ -467,7 +467,7 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	settingType := tag[1]
 	value := tag[2]
 	timestamp := tag[3]
-	if _, err := strconv.ParseInt(timestamp, 10, 64); err != nil {
+	if _, err := nostr.ParseTimestamp(timestamp); err != nil {
 		return errors.Wrapf(err, "invalid timestamp in settings tag: %+v", tag)
 	}
 	switch settingType {

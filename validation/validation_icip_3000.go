@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -125,16 +126,15 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 		if parsedContent.Kind != model.CustomIONKindCommunityJoin {
 			return errors.Wrapf(ErrWrongEventParams, "wrong authorization content kind: %+v", e)
 		}
-		expirationTag := parsedContent.GetTag("expiration")
-		if expirationTag == nil {
+		expirationTag := parsedContent.GetTag("expiration").Value()
+		if expirationTag == "" {
 			return errors.Wrapf(ErrWrongEventParams, "community join must have an expiration tag for authorization event: %+v", e)
 		}
-		expirationTime, err := strconv.ParseInt(expirationTag.Value(), 10, 64)
+		expirationTime, err := nostr.ParseTimestamp(expirationTag)
 		if err != nil {
 			return errors.Wrapf(ErrWrongEventParams, "wrong expiration tag value, %v", err.Error())
 		}
-		currentTime := time.Now().Unix()
-		if currentTime > expirationTime {
+		if expirationTime.Time().Before(time.Now()) {
 			return errors.Wrapf(ErrWrongEventParams, "authorization event has expired: %v", expirationTime)
 		}
 		if ok, err := parsedContent.CheckSignature(); err != nil || !ok {
@@ -177,8 +177,7 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 		aTags         = e.Tags.GetAll([]string{"a"})
 		hTag          = e.GetTag(model.CustomIONTagCommunity)
 		pTags         = e.Tags.GetAll([]string{"p"})
-		expirationTag = e.GetTag("expiration")
-		currentTime   = time.Now().Unix()
+		expirationTag = e.GetTag("expiration").Value()
 	)
 	for _, aTag := range aTags {
 		if len(aTag) < 2 {
@@ -194,14 +193,14 @@ func validateCustomIONKindCommunityOwnershipTransferringEvent(ctx context.Contex
 	if len(pTags) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have at least one p tag: %+v", e)
 	}
-	if expirationTag == nil {
+	if expirationTag == "" {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership must have an expiration tag: %+v", e)
 	}
-	expirationTime, err := strconv.ParseInt(expirationTag.Value(), 10, 64)
+	expirationTime, err := nostr.ParseTimestamp(expirationTag)
 	if err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "wrong expiration tag value: %+v", e)
 	}
-	if currentTime > expirationTime {
+	if expirationTime.Time().Before(time.Now()) {
 		return errors.Wrapf(ErrWrongEventParams, "community ownership transferring event has expired: %+v", e)
 	}
 	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
