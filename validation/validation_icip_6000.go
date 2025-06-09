@@ -10,26 +10,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func GetFundReceiveValidator() kindValidator {
-	return newKindValidatorBuilderEmpty().
-		ContentNotEmpty().
-		Optional("asset_address").
-		OneOf("p", "l").
-		Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
-		RequiredWith("l", "L").
-		Build()
-}
-
-func GetFundSendNotifyValidator() kindValidator {
-	return newKindValidatorBuilderEmpty().
-		ContentNotEmpty().
-		Optional("request", "asset_address").
-		OneOf("p", "l").
-		Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
-		RequiredWith("l", "L").
-		Build()
-}
-
 func validateKindFundReceive(e *model.Event) error {
 	if e.GetTag("p").Value() != "" {
 		return nil

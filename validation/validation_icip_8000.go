@@ -16,13 +16,6 @@ const (
 	DeviceTokenOSWeb     = "web"
 )
 
-func GetDeviceRegistrationValidator() kindValidator {
-	return newKindValidatorBuilder().
-		ContentNotEmpty().
-		Required("d", "t", "relay", "token").
-		Build()
-}
-
 func validateKindDeviceRegistration(e *model.Event) error {
 	tTag := e.GetTag("t").Value()
 	if tTag != DeviceTokenOSAndroid && tTag != DeviceTokenOSIOS && tTag != DeviceTokenOSWeb {

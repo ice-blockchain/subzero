@@ -16,10 +16,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func GetPollVoteValidator() kindValidator {
-	return newKindValidatorBuilder().OneOfSingle("e", "a").Forbidden("expiration").Build()
-}
-
 func validatePollTag(tag model.Tag) error {
 	var rules = map[string]int{
 		"type":    0,

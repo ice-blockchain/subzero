@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ice-blockchain/subzero/cfg"
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -22,11 +21,10 @@ var (
 
 type (
 	Config struct {
-		MaxWrappedEventExpiration time.Duration              `yaml:"max-wrapped-event-expiration"`
-		MaxContentSizes           map[int]int                `yaml:"max-content-sizes"`
-		NIP13MinLeadingZeroBits   int                        `yaml:"nip13MinLeadingZeroBits"`
-		RelayURL                  string                     `yaml:"relay-url" validate:"omitempty,url"`
-		QueryFunc                 func() query.EventIterator `yaml:"-"`
+		MaxWrappedEventExpiration time.Duration `yaml:"max-wrapped-event-expiration"`
+		MaxContentSizes           map[int]int   `yaml:"max-content-sizes"`
+		NIP13MinLeadingZeroBits   int           `yaml:"nip13MinLeadingZeroBits"`
+		RelayURL                  string        `yaml:"relay-url" validate:"omitempty,url"`
 	}
 	Option func(*Config)
 )
@@ -48,15 +46,6 @@ func WithConfig(cfg *Config) Option {
 		if cfg.RelayURL != "" {
 			in.RelayURL = cfg.RelayURL
 		}
-		if cfg.QueryFunc != nil {
-			in.QueryFunc = cfg.QueryFunc
-		}
-	}
-}
-
-func WithQueryFunc(queryFunc func() query.EventIterator) Option {
-	return func(cfg *Config) {
-		cfg.QueryFunc = queryFunc
 	}
 }
 
