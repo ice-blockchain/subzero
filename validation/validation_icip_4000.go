@@ -293,18 +293,18 @@ func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.
 
 func getLatestSettingsTag(event *model.Event, settingsName string) model.Tag {
 	var latestSettingsTag model.Tag
-	latestTimestamp := int64(0)
+	latestTimestamp := nostr.Timestamp(0)
 
 	for _, tag := range event.Tags.GetAll([]string{"settings"}) {
 		if tag.Value() == settingsName && len(tag) > 3 {
-			timestamp, err := strconv.ParseInt(tag[3], 10, 64)
+			timestamp, err := nostr.ParseTimestamp(tag[3])
 			if err != nil {
 				log.Printf("%v: error parsing timestamp: %v: %v", event.String(), settingsName, err)
 
 				continue
 			}
 
-			if timestamp > latestTimestamp {
+			if timestamp.After(latestTimestamp) {
 				latestSettingsTag = tag
 				latestTimestamp = timestamp
 			}
