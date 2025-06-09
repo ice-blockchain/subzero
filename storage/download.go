@@ -76,13 +76,15 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 		return errors.Wrapf(err, "failed to find existing bag for user %s", user)
 	}
 	replaceBagPerUser := existingBagForUser == nil
-	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID && existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion {
-		log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
-		existingBagForUser.Stop()
-		if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
-			return errors.Wrapf(err, "failed to replace bag for user %s", user)
+	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
+		if existingBagForUser.Header == nil || (existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion) {
+			log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
+			existingBagForUser.Stop()
+			if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
+				return errors.Wrapf(err, "failed to replace bag for user %s", user)
+			}
+			replaceBagPerUser = true
 		}
-		replaceBagPerUser = true
 	}
 	if replaceBagPerUser && user != "" {
 		bagId, _ := hex.DecodeString(bagID)
@@ -220,7 +222,7 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 		if existing != nil && existing.Header != nil {
 			maxVal = max(uint32(f), existing.Header.FilesCount)
 		}
-		if tr.Header != nil && tr.Header.FilesCount >= maxVal {
+		if tr.Header == nil || (tr.Header != nil && tr.Header.FilesCount >= maxVal) {
 			if err := c.saveBagPerUser(tr.BagID, userPubKey); err != nil {
 				return errors.Wrapf(err, "failed to save bag per user")
 			}
