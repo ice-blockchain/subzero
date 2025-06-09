@@ -20,7 +20,7 @@ var (
 	ErrUserIsNotPresentedOnRelay = errors.New("user is not presented on relay")
 )
 
-func validateKindBadgeDefinitionEvent(ctx context.Context, e *model.Event, imcomingEvents []*model.Event) error {
+func validateKindBadgeDefinitionEvent(e *model.Event) error {
 	if dTag := e.Tags.GetD(); dTag == "" {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58, no required d tag: %+v", e)
 	}

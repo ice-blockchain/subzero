@@ -27,12 +27,12 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...
 	if rootPost == nil || rootPost.GetMasterPublicKey() == e.GetMasterPublicKey() {
 		return nil
 	}
-	settingsTag := GetLatestSettingsTag(rootPost, model.WhoCanReplySettings)
-	if settingsTag == nil || (*settingsTag)[1] != model.WhoCanReplySettings {
+	settingsTag := getLatestSettingsTag(rootPost, model.WhoCanReplySettings)
+	if settingsTag == nil || (settingsTag)[1] != model.WhoCanReplySettings {
 		return nil
 	}
 
-	values := strings.Split((*settingsTag)[2], ",")
+	values := strings.Split((settingsTag)[2], ",")
 	passed := false
 
 	for _, value := range values {
@@ -50,7 +50,7 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...
 	return nil
 }
 
-func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *model.Event, settingsTag *model.Tag, events ...*model.Event) (bool, error) {
+func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *model.Event, settingsTag model.Tag, events ...*model.Event) (bool, error) {
 	switch {
 	case value == model.FollowingWhoCanReplySettings:
 		return checkFollowingWhoCanReplySettings(ctx, rootPost, e)
@@ -59,14 +59,6 @@ func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *mo
 		return checkMentionWhoCanReplySettings(rootPost, e)
 
 	case strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix):
-		// var passed bool
-		// var err error
-		// if passed, err = checkBadgeWhoCanReplySettings(ctx, value, e); err != nil {
-		// 	return false, err
-		// }
-		// if !passed {
-		// 	return false, nil
-		// }
 		if err := handleTextNoteVerifiedOnlyReply(ctx, e, settingsTag, events...); err != nil {
 			return false, err
 		}
@@ -299,8 +291,8 @@ func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.
 	return errors.Wrap(ErrActionForbidden, "user is not part of the community")
 }
 
-func GetLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
-	var latestSettingsTag *model.Tag
+func getLatestSettingsTag(event *model.Event, settingsName string) model.Tag {
+	var latestSettingsTag model.Tag
 	latestTimestamp := int64(0)
 
 	for _, tag := range event.Tags.GetAll([]string{"settings"}) {
@@ -313,7 +305,7 @@ func GetLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
 			}
 
 			if timestamp > latestTimestamp {
-				latestSettingsTag = &tag
+				latestSettingsTag = tag
 				latestTimestamp = timestamp
 			}
 		}
@@ -323,8 +315,8 @@ func GetLatestSettingsTag(event *model.Event, settingsName string) *model.Tag {
 }
 
 func isCommunityCommentsEnabled(event *model.Event) bool {
-	if settings := GetLatestSettingsTag(event, "comments_enabled"); settings != nil && len(*settings) > 3 {
-		val, err := strconv.ParseBool((*settings)[2])
+	if settings := getLatestSettingsTag(event, "comments_enabled"); settings != nil && len(settings) > 3 {
+		val, err := strconv.ParseBool(settings[2])
 		if err != nil {
 			return false
 		}
@@ -336,8 +328,8 @@ func isCommunityCommentsEnabled(event *model.Event) bool {
 }
 
 func roleRequiredForPosting(event *model.Event) model.Role {
-	if settings := GetLatestSettingsTag(event, model.RoleRequiredForPostingSettings); settings != nil && len(*settings) > 3 && (model.Role((*settings)[2]) == model.AdminRole || model.Role((*settings)[2]) == model.ModeratorRole) {
-		return model.Role((*settings)[2])
+	if settings := getLatestSettingsTag(event, model.RoleRequiredForPostingSettings); settings != nil && len(settings) > 3 && (model.Role(settings[2]) == model.AdminRole || model.Role(settings[2]) == model.ModeratorRole) {
+		return model.Role(settings[2])
 	}
 
 	return ""
@@ -515,7 +507,7 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	return nil
 }
 
-func handleTextNoteVerifiedOnlyReply(ctx context.Context, ev *model.Event, settingsTag *model.Tag, events ...*model.Event) error {
+func handleTextNoteVerifiedOnlyReply(ctx context.Context, ev *model.Event, settingsTag model.Tag, events ...*model.Event) error {
 	ephemeralAckEvents, err := model.ParseEphemeralEmbeddingEvents(events...)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ephemeral ack events")
@@ -524,11 +516,9 @@ func handleTextNoteVerifiedOnlyReply(ctx context.Context, ev *model.Event, setti
 	var acks []*model.EphemeralEmbeddingEvent
 	var hasAck bool
 	if acks, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck || len(acks) == 0 {
-		// No ephemeral acks for this event, check database
 		return checkReplyPermissions(ctx, settingsTag, ev, nil)
 	}
 
-	// Check reply permissions with ephemeral acks
 	return checkReplyPermissions(ctx, settingsTag, ev, acks)
 }
 
@@ -537,7 +527,6 @@ func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePub
 		return false
 	}
 
-	// Look for badge definition and award in ephemeral events content
 	var badgeDefinitionFound, badgeAwardFound bool
 	expectedBadgeRef := fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgePubkey, badgeDTag)
 
@@ -548,7 +537,6 @@ func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePub
 
 		switch ack.ContentEvent.Kind {
 		case nostr.KindBadgeDefinition:
-			// Check if this is the right badge definition
 			dTag := ack.ContentEvent.Tags.GetD()
 			if ack.ContentEvent.GetMasterPublicKey() == badgePubkey &&
 				dTag == badgeDTag {
@@ -556,14 +544,12 @@ func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePub
 			}
 
 		case nostr.KindBadgeAward:
-			// Check if this badge award matches our criteria
 			aTags := ack.ContentEvent.GetTags("a")
 			pTags := ack.ContentEvent.GetTags("p")
 
 			for _, aTag := range aTags {
 				if len(aTag) >= 2 {
 					if aTag[1] == expectedBadgeRef {
-						// Check if the award is for the right user
 						for _, pTag := range pTags {
 							if len(pTag) >= 2 {
 								if pTag[1] == userPubkey {
@@ -589,7 +575,6 @@ func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePub
 }
 
 func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string) bool {
-	// Check if badge definition exists
 	it := query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: nostr.Filters{
 			model.Filter{
@@ -618,7 +603,6 @@ func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string
 		return false
 	}
 
-	// Check for badge award for this user
 	badgeATagRef := fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgePubkey, badgeDTag)
 	it = query.GetStoredEvents(ctx, &model.Subscription{
 		Filters: nostr.Filters{
@@ -647,29 +631,21 @@ func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string
 	return false
 }
 
-func checkReplyPermissions(ctx context.Context, settingsTag *model.Tag, ev *model.Event, acks []*model.EphemeralEmbeddingEvent) error {
-	// Parse settings configuration
-	if len(*settingsTag) < 3 {
+func checkReplyPermissions(ctx context.Context, settingsTag model.Tag, ev *model.Event, acks []*model.EphemeralEmbeddingEvent) error {
+	if len(settingsTag) < 3 {
 		return errors.New("invalid settings tag format")
 	}
-
-	settingsConfig := (*settingsTag)[2]
-
-	// Split by comma to get individual settings
+	settingsConfig := (settingsTag)[2]
 	settings := strings.Split(settingsConfig, ",")
 
 	userPubkey := ev.GetMasterPublicKey()
 
 	for _, setting := range settings {
 		if strings.HasPrefix(setting, model.BadgeWhoCanReplySettingsPrefix) {
-			// Extract badge reference from setting
 			badgeRef := strings.TrimPrefix(setting, model.BadgeWhoCanReplySettingsPrefix)
-			// Remove "badge|" prefix if present
 			if strings.HasPrefix(badgeRef, "badge|") {
 				badgeRef = strings.TrimPrefix(badgeRef, "badge|")
 			}
-
-			// Parse badge reference: kind:pubkey:dtag
 			parts := strings.Split(badgeRef, ":")
 			if len(parts) != 3 {
 				continue
@@ -677,17 +653,13 @@ func checkReplyPermissions(ctx context.Context, settingsTag *model.Tag, ev *mode
 
 			badgePubkey := parts[1]
 			dtag := parts[2]
-
-			// Check if user has this badge in ephemeral events first
 			if acks != nil && len(acks) > 0 {
 				if checkBadgeInEphemeralEvents(acks, badgePubkey, dtag, userPubkey) {
-					return nil // Badge found in ephemeral events, allow reply
+					return nil
 				}
 			}
-
-			// Check database for badge
 			if hasUserBadge(ctx, badgePubkey, dtag, userPubkey) {
-				return nil // Badge found in database, allow reply
+				return nil
 			}
 		}
 	}

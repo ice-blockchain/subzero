@@ -339,7 +339,7 @@ func validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Even
 	case nostr.KindProfileBadges:
 		return validateKindProfileBadgesEvent(ctx, e, incomingEvents)
 	case nostr.KindBadgeDefinition:
-		return validateKindBadgeDefinitionEvent(ctx, e, incomingEvents)
+		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 		return validateTextNote(ctx, e, incomingEvents...)
 	case model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition:

@@ -152,7 +152,7 @@ func TestGetLatestSettingsTag(t *testing.T) {
 		name        string
 		settingsTag string
 		community   model.Event
-		wantTag     *model.Tag
+		wantTag     model.Tag
 	}{
 		{
 			name:        "no settings tag",
@@ -189,7 +189,7 @@ func TestGetLatestSettingsTag(t *testing.T) {
 					},
 				},
 			},
-			wantTag: &model.Tag{"settings", "foo", "1", fmt.Sprint(now.Add(-1 * time.Minute).Unix())},
+			wantTag: model.Tag{"settings", "foo", "1", fmt.Sprint(now.Add(-1 * time.Minute).Unix())},
 		},
 		{
 			name:        "wrong unix timestamps",
@@ -210,7 +210,7 @@ func TestGetLatestSettingsTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tag := GetLatestSettingsTag(&tt.community, tt.settingsTag)
+			tag := getLatestSettingsTag(&tt.community, tt.settingsTag)
 
 			require.EqualValues(t, tag, tt.wantTag)
 		})
