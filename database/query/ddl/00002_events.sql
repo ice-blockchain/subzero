@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS events (
     sig            TEXT    NOT NULL,
     sig_alg        TEXT    NOT NULL DEFAULT '',
     reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    --gift_receiver_pubkey TEXT DEFAULT NULL,
     tags           JSONB   NOT NULL DEFAULT '[]',
     t_tags         TEXT[]  NOT NULL DEFAULT ARRAY[]::TEXT[],
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,

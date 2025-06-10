@@ -4,6 +4,7 @@ package query
 
 import (
 	"cmp"
+	"context"
 	"log"
 	"slices"
 	"strconv"
@@ -59,18 +60,19 @@ type (
 	}
 	databaseFilterSearch struct {
 		model.Filter
-		ID           string
-		SearchText   string
-		Expiration   *bool
-		Videos       *bool
-		Images       *bool
-		Media        *bool
-		Quotes       *bool
-		References   *bool
-		TagMarkers   []databaseFilterMarker
-		Dependencies []*filterDependency
-		Rank         rank
-		Extra        []string // Extra `where` clauses, ANDed to the main filter.
+		ID                string
+		SearchText        string
+		Expiration        *bool
+		Videos            *bool
+		Images            *bool
+		Media             *bool
+		Quotes            *bool
+		References        *bool
+		CurrentUserPubkey *string
+		TagMarkers        []databaseFilterMarker
+		Dependencies      []*filterDependency
+		Rank              rank
+		Extra             []string // Extra `where` clauses, ANDed to the main filter.
 	}
 	databaseFilterDelete struct {
 		Author string
@@ -527,6 +529,16 @@ func (b *queryBuilder) ApplyFilterForExtensions(filter *databaseFilterSearch) {
 		b.WriteValue(filter.ID, "references", *filter.References)
 		b.WriteString(` end)`)
 	}
+}
+
+func (b *queryBuilder) ApplyFilterGiftWrap(filter *databaseFilterSearch) {
+	b.MaybeAND()
+	b.WriteString(`(e.gift_receiver_pubkey is null`)
+	if filter.CurrentUserPubkey != nil {
+		b.WriteString(` OR e.gift_receiver_pubkey = :`)
+		b.WriteValue(filter.ID, "gift_receiver_pubkey", *filter.CurrentUserPubkey)
+	}
+	b.WriteRune(')')
 }
 
 func (b *queryBuilder) ApplyFilterSoftDeleted(filter *databaseFilterSearch) {
@@ -1034,11 +1046,18 @@ group by e.master_pubkey, e.pubkey`)
 	}
 }
 
-func (b *queryBuilder) ParseFilters(in ...model.Filter) (out []*databaseFilterSearch, err error) {
+func (b *queryBuilder) ParseFilters(ctx context.Context, in ...model.Filter) (out []*databaseFilterSearch, err error) {
+	var currentUserPubkey *string
+
+	if _, pub, ok, _ := model.GetUserDataFromContext(ctx); ok && pub != "" {
+		currentUserPubkey = &pub
+	}
+
 	if len(in) == 0 {
 		return []*databaseFilterSearch{{
-			ID:    "empty",
-			Extra: []string{whereBuilderCommunityFilter, whereBuilderNoSoftDeleted},
+			ID:                "empty",
+			CurrentUserPubkey: currentUserPubkey,
+			Extra:             []string{whereBuilderCommunityFilter, whereBuilderNoSoftDeleted},
 		}}, nil
 	}
 
@@ -1047,6 +1066,7 @@ func (b *queryBuilder) ParseFilters(in ...model.Filter) (out []*databaseFilterSe
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse filter %d", i)
 		}
+		filter.CurrentUserPubkey = currentUserPubkey
 		filter.ID = "filter" + strconv.Itoa(i) + "_"
 
 		out = append(out, filter)
@@ -1055,8 +1075,8 @@ func (b *queryBuilder) ParseFilters(in ...model.Filter) (out []*databaseFilterSe
 	return out, nil
 }
 
-func (b *queryBuilder) BuildSingleWhere(filters ...model.Filter) (whereClause string, params map[string]any, err error) {
-	databaseFilters, err := b.ParseFilters(filters...)
+func (b *queryBuilder) BuildSingleWhere(ctx context.Context, filters ...model.Filter) (whereClause string, params map[string]any, err error) {
+	databaseFilters, err := b.ParseFilters(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to parse filters")
 	}
@@ -1075,10 +1095,10 @@ func (b *queryBuilder) BuildSingleWhere(filters ...model.Filter) (whereClause st
 	return b.String(), b.Params, nil
 }
 
-func (b *queryBuilder) Build(filters ...model.Filter) (sql string, params map[string]any, err error) {
+func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (sql string, params map[string]any, err error) {
 	var ctes []*databaseCTE
 
-	databaseFilters, err := b.ParseFilters(filters...)
+	databaseFilters, err := b.ParseFilters(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to parse filters")
 	}
@@ -1246,6 +1266,7 @@ func (b *queryBuilder) BuildWhere(filter *databaseFilterSearch) (sql string, par
 	}
 	b.MaybeAND()
 	b.WriteString(whereBuilderDefaultWhere)
+	b.ApplyFilterGiftWrap(filter)
 
 	return b.String(), b.Params, nil
 }
