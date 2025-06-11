@@ -316,9 +316,7 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
 
-			if !canForwardEventContext(ctx, event) {
-				continue
-			} else if sub.Reduce != nil && sub.Reduce(event) {
+			if sub.Reduce != nil && sub.Reduce(event) {
 				continue
 			}
 

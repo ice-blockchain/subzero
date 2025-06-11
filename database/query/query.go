@@ -45,6 +45,7 @@ type (
 		TagID           int64
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
+		GiftReceiver    sql.NullString
 		Ttags           []string
 		SigAlg          string
 		KeyAlg          string
@@ -93,6 +94,10 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 		case "t":
 			if t := tag.Value(); t != "" {
 				d.Ttags = append(d.Ttags, t)
+			}
+		case "p":
+			if d.Kind == nostr.KindGiftWrap && tag.Value() != "" {
+				d.GiftReceiver = sql.NullString{Valid: true, String: tag.Value()}
 			}
 		case "imeta":
 			for i := range len(tag) {
@@ -319,7 +324,7 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		if len(genericFilters) == 0 {
 			panic("attempt to delete events without filters")
 		}
-		where, params, err = builder.BuildSingleWhere(genericFilters...)
+		where, params, err = builder.BuildSingleWhere(ctx, genericFilters...)
 	}
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to generate events where clause")
@@ -436,6 +441,7 @@ func (db *dbClient) saveEvents(
 		"address",
 		"pubkey",
 		"master_pubkey",
+		"gift_receiver_pubkey",
 		"sig",
 		"sig_alg",
 		"key_alg",
@@ -510,6 +516,10 @@ WITH replaced AS (
 			{
 				Name:  "master_pubkey",
 				Value: events[i].MasterPubKey,
+			},
+			{
+				Name:  "gift_receiver_pubkey",
+				Value: events[i].GiftReceiver,
 			},
 			{
 				Name:  "sig",
@@ -632,6 +642,7 @@ WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != 
 		created_at = source.created_at,
 		pubkey = source.pubkey,
 		master_pubkey = source.master_pubkey,
+		gift_receiver_pubkey = source.gift_receiver_pubkey,
 		sig = source.sig,
 		sig_alg = source.sig_alg,
 		key_alg = source.key_alg,
@@ -661,6 +672,7 @@ WHEN MATCHED
 		created_at = source.created_at,
 		pubkey = source.pubkey,
 		master_pubkey = source.master_pubkey,
+		gift_receiver_pubkey = source.gift_receiver_pubkey,
 		sig = source.sig,
 		sig_alg = source.sig_alg,
 		key_alg = source.key_alg,
@@ -688,6 +700,7 @@ WHEN NOT MATCHED THEN
 	INSERT (
 		id, kind, created_at,
 		pubkey, master_pubkey,
+		gift_receiver_pubkey,
 		sig, sig_alg, key_alg,
 		content,
 		tags, t_tags,
@@ -701,6 +714,7 @@ WHEN NOT MATCHED THEN
 	VALUES (
 		source.id, source.kind, source.created_at,
 		source.pubkey, source.master_pubkey,
+		source.gift_receiver_pubkey,
 		source.sig, source.sig_alg, source.key_alg,
 		source.content,
 		source.tags, source.t_tags,
@@ -934,7 +948,7 @@ func (db *dbClient) generateEventsCountClause(ctx context.Context, filters ...mo
 	}
 
 	filters = db.extendWhereFilters(ctx, filters...)
-	where, params, err := newQueryBuilder().BuildSingleWhere(filters...)
+	where, params, err := newQueryBuilder().BuildSingleWhere(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
 	}
@@ -985,7 +999,7 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
 	filters := db.extendWhereFilters(ctx, filter...)
 
-	return newQueryBuilder().Build(filters...)
+	return newQueryBuilder().Build(ctx, filters...)
 }
 
 func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []string, err error) {

@@ -19,5 +19,6 @@ ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS is_reply b
 ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS is_root_reply boolean NOT NULL DEFAULT FALSE;
 ALTER TABLE replaceable_events_before_update DROP COLUMN IF EXISTS system_kind;
 ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS t_tags text[] NOT NULL DEFAULT ARRAY[]::text[];
+ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS gift_receiver_pubkey TEXT;
 --------
 CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_events_before_update(replaced_by_id);

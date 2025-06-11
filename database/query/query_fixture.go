@@ -29,7 +29,7 @@ func TriggerExpiredEventsCleanup(ctx context.Context) error {
 }
 
 func GenerateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
-	return newQueryBuilder().Build(filter...)
+	return newQueryBuilder().Build(ctx, filter...)
 }
 
 func DeleteAllEvents(ctx context.Context) error {

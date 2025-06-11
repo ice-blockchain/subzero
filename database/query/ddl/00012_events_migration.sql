@@ -102,6 +102,41 @@ DO $$ BEGIN
     END IF;
 END $$;
 --------
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'events'
+        AND column_name = 'gift_receiver_pubkey'
+    ) THEN
+        ALTER TABLE events ADD COLUMN gift_receiver_pubkey text DEFAULT NULL;
+        with cte as (
+            select
+                event_id,
+                case when event_tag_value3 != '' then event_tag_value3 else event_tag_value1 end as pk
+            from
+                event_tags
+            inner join events et on et.id = event_tags.event_id
+            where
+                event_tag_key = 'p'
+                and (event_tag_value1 != '' OR event_tag_value3 != '')
+                and et.kind = 1059
+                and et.hidden = FALSE
+            group by
+                event_id,
+                event_tag_value1,
+                event_tag_value3
+        )
+        update events e
+        set
+            gift_receiver_pubkey = cte.pk
+        from
+            cte
+        where
+            e.id = cte.event_id;
+    END IF;
+END $$;
+--------
 -- Feed request:
 --   kinds":[1, 30175, 6, 30023]
 --   !amarker:reply
@@ -112,3 +147,5 @@ CREATE INDEX IF NOT EXISTS
     idx_events_kind_has_references_expiration_is_reply_lookup_created_at ON
         events(kind, has_references, expiration, is_reply, lookup_created_at DESC)
         WHERE is_reply = FALSE AND has_references = FALSE AND expiration is NULL AND hidden = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_events_gift_receiver_pubkey ON events(gift_receiver_pubkey NULLS FIRST) WHERE hidden = FALSE;

@@ -1761,6 +1761,57 @@ func TestReplaceEventCheckSignature(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestGiftWrapReceiverFilter(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	priv1, pub1 := model.GenerateKeyPair()
+	priv2, pub2 := model.GenerateKeyPair()
+	var ev1, ev2 model.Event
+	t.Run("Create events", func(t *testing.T) {
+		ev1.Kind, ev2.Kind = nostr.KindGiftWrap, nostr.KindGiftWrap
+		ev1.CreatedAt, ev2.CreatedAt = nostr.Now(), nostr.Now()
+		ev1.Content, ev2.Content = "gift wrap 1", "gift wrap 2"
+
+		ev1.Tags = model.Tags{
+			{"p", pub2},
+		}
+		ev2.Tags = model.Tags{
+			{"p", pub1},
+		}
+		helperSignAndSaveEvent(t, db, priv1, &ev1)
+		helperSignAndSaveEvent(t, db, priv2, &ev2)
+	})
+	t.Run("User1 can see only events sent to him", func(t *testing.T) {
+		ctx := model.SetUserDataInContext(t.Context(), "", pub1, true, nil)
+		it := db.SelectEvents(ctx)
+		var events []*model.Event
+		for ev, err := range it {
+			require.NoError(t, err)
+			events = append(events, ev)
+		}
+		require.Len(t, events, 1, "User1 should see only one event sent to him")
+		require.Equal(t, ev2.ID, events[0].ID)
+	})
+	t.Run("User2 can see only events sent to him", func(t *testing.T) {
+		ctx := model.SetUserDataInContext(t.Context(), "", pub2, true, nil)
+		it := db.SelectEvents(ctx)
+		var events []*model.Event
+		for ev, err := range it {
+			require.NoError(t, err)
+			events = append(events, ev)
+		}
+		require.Len(t, events, 1, "User1 should see only one event sent to him")
+		require.Equal(t, ev1.ID, events[0].ID)
+	})
+	t.Run("Other users cannot see gift wrap events", func(t *testing.T) {
+		events := helperSelectEvents(t, db)
+		require.Len(t, events, 0, "Other users should not see gift wrap events")
+	})
+}
+
 func TestQueryDependencyWithReply(t *testing.T) {
 	t.Parallel()
 
