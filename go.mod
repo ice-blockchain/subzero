@@ -28,7 +28,7 @@ require (
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250606020435-b83baa3bbfd1
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250610135811-c08d7c5db2ce
 	github.com/ice-blockchain/go/src v0.0.0-20240529122316-8d9458949bdd
 	github.com/imroc/req/v3 v3.52.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -153,7 +153,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250606020435-b83baa3bbfd1 // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250610135811-c08d7c5db2ce // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -241,7 +241,7 @@ require (
 	github.com/zeebo/assert v1.3.0 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
-	go.etcd.io/bbolt v1.4.0 // indirect
+	go.etcd.io/bbolt v1.4.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.36.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
