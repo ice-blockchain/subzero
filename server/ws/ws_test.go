@@ -91,11 +91,10 @@ func TestMain(m *testing.M) {
 	}
 
 	if code == 0 {
-		time.Sleep(time.Second)
+		time.Sleep(15 * time.Second)
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
-			// TODO: check cbft nodes shutdown
-			// code = 1
+			code = 1
 		}
 	}
 

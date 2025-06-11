@@ -256,8 +256,10 @@ func TestConsensusEvents(t *testing.T) {
 		require.NoError(t, waitAcceptErr)
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.NotContains(t, receivedEventsFromFirstRelay, notAcceptedEvent)
 		receivedEventsFromSecondRelay := helperQueryEvents(t, t.Context(), secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromSecondRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.NotContains(t, receivedEventsFromSecondRelay, notAcceptedEvent)
 		receivedEventsFromThirdRelay := helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.NotContains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 		pubsubServers[2].Consensus.Start(t.Context())
@@ -278,6 +280,7 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromThirdRelay = helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromThirdRelay, eventAfterNodeComesUp)
 		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
 	})
 
 	t.Run("relay list is updated for the user including new relays to bootstrap", func(t *testing.T) {
@@ -317,6 +320,7 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromFourthRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Contains(t, receivedEventsFromFourthRelay, ev)
 		require.Contains(t, receivedEventsFromFourthRelay, ev2)
+		require.NotContains(t, receivedEventsFromFourthRelay, notAcceptedEvent)
 		helperMustCloseRelay(t, relay)
 		for i := range pubsubServersExtra {
 			t.Logf("shutting down extra server on port %v / %v", pubsubServersExtra[i].Endpoint(),
