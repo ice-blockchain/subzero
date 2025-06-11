@@ -73,7 +73,11 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 					return "", "", false, errors.Wrapf(err, "failed to marshal %#v", bs)
 				}
 				bootstrap := base64.StdEncoding.EncodeToString(b)
-				return bagID + ":" + bootstrap + ":" + strconv.FormatInt(existingBagForUser.CreatedAt.UnixNano(), 10), url, existed, nil
+				version := int64(0)
+				if existingBagForUser.Header != nil {
+					version = int64(existingBagForUser.Header.FilesCount)
+				}
+				return bagID + ":" + bootstrap + ":" + strconv.FormatInt(version, 10), url, existed, nil
 			}
 
 		}
