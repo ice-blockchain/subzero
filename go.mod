@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	firebase.google.com/go/v4 v4.16.0
+	firebase.google.com/go/v4 v4.16.1
 	github.com/alitto/pond/v2 v2.3.4
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.23.0
@@ -18,6 +18,7 @@ require (
 	github.com/cockroachdb/errors v1.12.0
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
+	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
 	github.com/docker/go-connections v0.5.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4
