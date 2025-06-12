@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	quill "github.com/dchenk/go-render-quill"
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -148,9 +149,10 @@ func isAnyCustomTextEditorElement(element map[string]interface{}) bool {
 }
 
 func htmlToPlainText(htmlStr string) string {
-	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
-	text := htmlTagRegex.ReplaceAllString(htmlStr, " ")
-	text = html.UnescapeString(text)
+	policy := bluemonday.StrictPolicy()
+	policy.AddSpaceWhenStrippingTag(true)
+	text := html.UnescapeString(policy.Sanitize(htmlStr))
+
 	text = strings.ReplaceAll(text, "\n", " ")
 	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
 
