@@ -1508,6 +1508,31 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 	})
 }
 
+func TestSelectPositiveNegativeKinds(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Add events", func(t *testing.T) {
+		var ev1, ev2, ev3 model.Event
+		ev1.Kind, ev2.Kind, ev3.Kind = nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote
+		ev1.CreatedAt, ev2.CreatedAt, ev3.CreatedAt = nostr.Now(), nostr.Now(), nostr.Now()
+		ev1.Content, ev2.Content, ev3.Content = "text note", "article", "editable text note"
+		helperSignAndSaveEvent(t, db, "", &ev1, &ev2, &ev3)
+	})
+	t.Run("Select NOT text notes", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Kinds: []int{-nostr.KindTextNote, -model.CustomIONKindEditableTextNote}})
+		require.Len(t, events, 1, "should return only article")
+		require.Equal(t, nostr.KindArticle, events[0].Kind)
+	})
+	t.Run("Select all kinds except articles", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{Kinds: []int{-nostr.KindArticle}})
+		require.Len(t, events, 2, "should return text note and editable text note")
+		require.ElementsMatch(t, []int{nostr.KindTextNote, model.CustomIONKindEditableTextNote}, []int{events[0].Kind, events[1].Kind})
+	})
+}
+
 func TestSelectRankTopEvents(t *testing.T) {
 	t.Parallel()
 

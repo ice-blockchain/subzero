@@ -55,10 +55,10 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.13.0
-	github.com/xssnick/tonutils-storage v1.0.5
+	github.com/xssnick/tonutils-storage v1.1.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.41.0
-	google.golang.org/api v0.236.0
+	google.golang.org/api v0.237.0
 )
 
 require (
