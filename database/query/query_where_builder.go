@@ -218,8 +218,12 @@ func (b *sliceBuilder[T]) Build(builder *queryBuilder, filterID string, name str
 		builder.WriteRune(':')
 		builder.WriteString(builder.PushValue(filterID, b.ParamName, s[0]))
 	} else {
-		// X = ANY(...).
-		builder.WriteString("ANY(:")
+		// X = ANY/ALL(...).
+		if b.Negative {
+			builder.WriteString("ALL(:")
+		} else {
+			builder.WriteString("ANY(:")
+		}
 		builder.WriteString(builder.PushValue(filterID, b.ParamName, s))
 		builder.WriteRune(')')
 	}
@@ -632,6 +636,29 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 	return kinds
 }
 
+func (b *queryBuilder) ApplyKinds(filter *databaseFilterSearch, kinds []int) {
+	if len(kinds) == 0 {
+		return
+	}
+
+	var negative, positive []int
+	for _, kind := range kinds {
+		if kind < 0 {
+			negative = append(negative, -kind)
+		}
+		if kind > 0 {
+			positive = append(positive, kind)
+		}
+	}
+
+	buildFromSlice(b, sqlOpCodeAND, filter.ID, positive, "e.kind", "kind_positive")
+	if len(positive) == 0 {
+		// Include `negative` kinds only if there are no positive ones, because it does not make sense to
+		// have both positive and negative kinds in the same filter.
+		buildFromSliceNegative(b, sqlOpCodeAND, filter.ID, negative, "e.kind", "kind_negative")
+	}
+}
+
 func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
@@ -640,7 +667,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	b.WriteRune('(') // Begin the filter section.
 	buildFromSlice(b, sqlOpCodeNONE, filter.ID, filter.IDs, "e.id", "")
 	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
-	buildFromSlice(b, sqlOpCodeAND, filter.ID, b.ApplySpecialKinds(filter), "e.kind", "")
+	b.ApplyKinds(filter, b.ApplySpecialKinds(filter))
 	b.ApplyFilterForExtensions(filter)
 	b.ApplyFilterTtags(filter)
 	if len(filter.Authors) > 0 {
