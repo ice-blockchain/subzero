@@ -655,3 +655,72 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 		require.NoError(t, relay.service.WaitForReaders(testDeadline))
 	}
 }
+
+func TestStreamGiftWrapEvents(t *testing.T) {
+	const giftWrapCount = 50
+
+	masterPriv, masterPub := model.GenerateKeyPair()
+	userPriv, userPub := model.GenerateKeyPair()
+
+	t.Cleanup(func() {
+		RegisterReqMustAuthenticate(nil)
+		RegisterEventMustAuthenticate(nil)
+	})
+
+	t.Run("Create attestation", func(t *testing.T) {
+		attestationEvent := &model.Event{Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: 1,
+			Tags: model.Tags{
+				{model.TagAttestationName, userPub, "", model.CustomIONAttestationKindActive + ":1"},
+			},
+		}}
+		require.NoError(t, attestationEvent.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent))
+	})
+	published := make([]*model.Event, 0, giftWrapCount)
+	t.Run("Create gift wrap events", func(t *testing.T) {
+		for i := range giftWrapCount {
+			var ev model.Event
+			ev.Kind = nostr.KindGiftWrap
+			ev.CreatedAt = model.Timestamp(time.Now().UnixNano())
+			ev.Content = "Gift wrap event " + strconv.Itoa(i+1)
+			ev.Tags = model.Tags{
+				{"p", masterPub, "", userPub},
+			}
+			require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, query.AcceptEvents(t.Context(), &ev))
+			published = append(published, &ev)
+		}
+	})
+
+	RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) bool { return true })
+	RegisterEventMustAuthenticate(func(context.Context, ...*model.Event) bool { return true })
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
+	RegisterWSEventListener(query.AcceptEvents)
+
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	t.Run("WithAuth", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = nostr.KindNostrConnect
+		ev.CreatedAt = nostr.Now()
+		helperSignWithMinLeadingZeroBits(t, &ev, userPriv)
+		err := relay.Publish(t.Context(), ev.Event)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), errAuthRequired.Error())
+	})
+	t.Run("DoAuth", func(t *testing.T) {
+		helperDoAuth(t, relay.Relay, userPriv, masterPub)
+	})
+	t.Run("Fetch", func(t *testing.T) {
+		received := helperQueryEvents(t, t.Context(), relay, model.Filter{
+			Kinds: []int{nostr.KindGiftWrap},
+			Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
+			Limit: 11,
+		})
+		t.Logf("received %d events", len(published))
+		require.ElementsMatch(t, published, received)
+	})
+	helperMustCloseRelay(t, relay)
+}
