@@ -1804,7 +1804,7 @@ func TestGiftWrapReceiverFilter(t *testing.T) {
 			{"p", pub2},
 		}
 		ev2.Tags = model.Tags{
-			{"p", pub1},
+			{"p", "foo", "", pub1},
 		}
 		helperSignAndSaveEvent(t, db, priv1, &ev1)
 		helperSignAndSaveEvent(t, db, priv2, &ev2)
