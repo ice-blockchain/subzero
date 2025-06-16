@@ -415,9 +415,8 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	if since != nil && until != nil {
 		if *since == *until {
 			b.MaybeAND()
-			b.WriteString("e.lookup_created_at = to_timestamp_nano(:")
-			b.WriteValue(filterID, "timestamp", *since)
-			b.WriteRune(')')
+			b.WriteString("e.lookup_created_at = :")
+			b.WriteValue(filterID, "timestamp", since.Time().UnixNano())
 
 			return nil
 		} else if since.After(*until) {
@@ -431,17 +430,15 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	// If a filter includes the `since` property, events with `created_at` greater than or equal to since are considered to match the filter.
 	if since != nil && *since > 0 {
 		b.MaybeAND()
-		b.WriteString("e.lookup_created_at >= to_timestamp_nano(:")
-		b.WriteValue(filterID, "since", *since)
-		b.WriteRune(')')
+		b.WriteString("e.lookup_created_at >= :")
+		b.WriteValue(filterID, "since", since.Time().UnixNano())
 	}
 
 	// The `until` property is similar except that `created_at` must be less than or equal to `until`.
 	if until != nil && *until > 0 {
 		b.MaybeAND()
-		b.WriteString("e.lookup_created_at <= to_timestamp_nano(:")
-		b.WriteValue(filterID, "until", *until)
-		b.WriteRune(')')
+		b.WriteString("e.lookup_created_at <= :")
+		b.WriteValue(filterID, "until", until.Time().UnixNano())
 	}
 
 	return nil
