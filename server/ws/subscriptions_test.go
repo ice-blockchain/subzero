@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
+	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -657,7 +658,7 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 }
 
 func TestStreamGiftWrapEvents(t *testing.T) {
-	const giftWrapCount = 50
+	const giftWrapCount = 3_000
 
 	masterPriv, masterPub := model.GenerateKeyPair()
 	userPriv, userPub := model.GenerateKeyPair()
@@ -680,6 +681,7 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 	})
 	published := make([]*model.Event, 0, giftWrapCount)
 	t.Run("Create gift wrap events", func(t *testing.T) {
+		bar := progressbar.Default(int64(giftWrapCount), "generating events")
 		for i := range giftWrapCount {
 			var ev model.Event
 			ev.Kind = nostr.KindGiftWrap
@@ -691,6 +693,7 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 			require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, query.AcceptEvents(t.Context(), &ev))
 			published = append(published, &ev)
+			bar.Add(1)
 		}
 	})
 
@@ -714,13 +717,20 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 		helperDoAuth(t, relay.Relay, userPriv, masterPub)
 	})
 	t.Run("Fetch", func(t *testing.T) {
+		start := time.Now()
 		received := helperQueryEvents(t, t.Context(), relay, model.Filter{
 			Kinds: []int{nostr.KindGiftWrap},
 			Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
-			Limit: 11,
 		})
-		t.Logf("received %d events", len(published))
-		require.ElementsMatch(t, published, received)
+		t.Logf("received %d events in %s", len(published), time.Since(start))
+		expected := make(map[string]struct{}, len(published))
+		for _, ev := range published {
+			expected[ev.ID] = struct{}{}
+		}
+		for i := range received {
+			delete(expected, received[i].ID)
+		}
+		require.Emptyf(t, expected, "not all events were received, missing: %#v", expected)
 	})
 	helperMustCloseRelay(t, relay)
 }

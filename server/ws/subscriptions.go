@@ -291,6 +291,8 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 }
 
 func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	sub.Filters[0].Limit = 1000
+
 	for ctx.Err() == nil {
 		var oldestTimestamp model.Timestamp
 		var eventCount int
@@ -322,7 +324,7 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 			break
 		}
 
-		nextUntil := oldestTimestamp.Add(-time.Nanosecond)
+		nextUntil := oldestTimestamp
 		sub.Filters[0].Until = &nextUntil
 
 		if sub.Filters[0].Since != nil && sub.Filters[0].Since.After(*sub.Filters[0].Until) {
