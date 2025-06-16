@@ -90,16 +90,14 @@ func TestPublishingNIP05Events(t *testing.T) {
 func TestPublishingNIP05Events_NoEvent(t *testing.T) {
 	privkey, pubkey := model.GenerateKeyPair()
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var deletionEvent *model.Event

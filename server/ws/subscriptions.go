@@ -58,12 +58,6 @@ func generateChallenge(hints ...string) string {
 	return base64.URLEncoding.EncodeToString(h.Sum(nil))
 }
 
-func canForwardEventContext(ctx context.Context, in *model.Event) bool {
-	master, pk, _, kinds := model.GetUserDataFromContext(ctx)
-
-	return canForwardCommunityEvent(ctx, in, master) && canForwardEvent(in, kinds, master, pk)
-}
-
 func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
 	if len(currentkinds) > 0 {
 		if _, ok := currentkinds[in.Kind]; !ok {
@@ -176,15 +170,11 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 		}
 		attestationEvent = &ev
 	} else {
-		it := query.GetStoredEvents(ctx, &model.Subscription{
-			Filters: []model.Filter{
-				{
-					Kinds:   []int{model.CustomIONKindAttestation},
-					Authors: []string{owner},
-					Tags:    model.TagMap{}.Set("p", &e.PubKey),
-					Limit:   1,
-				},
-			},
+		it := query.GetStoredEvents(ctx, model.Filter{
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Authors: []string{owner},
+			Tags:    model.TagMap{}.Set("p", &e.PubKey),
+			Limit:   1,
 		})
 		for ev, err := range it {
 			if err != nil {
@@ -300,6 +290,49 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 	return sub
 }
 
+func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	for ctx.Err() == nil {
+		var oldestTimestamp model.Timestamp
+		var eventCount int
+
+		for event, err := range query.GetStoredEvents(ctx, sub.Filters...) {
+			if err != nil {
+				return errors.Wrap(err, "failed to fetch events")
+			}
+
+			eventCount++
+			oldestTimestamp = event.CreatedAt
+
+			if sub.Reduce != nil && sub.Reduce(event) {
+				continue
+			}
+
+			err := h.writeResponse(ctx, respWriter,
+				&nostr.EventEnvelope{
+					SubscriptionID: &sub.SubscriptionID,
+					Events:         []*nostr.Event{&event.Event},
+				})
+			if err != nil {
+				return errors.Wrapf(err, "failed to write event[%s]", event.String())
+			}
+		}
+
+		if eventCount < sub.Filters[0].Limit {
+			// No more events to process.
+			break
+		}
+
+		nextUntil := oldestTimestamp.Add(-time.Nanosecond)
+		sub.Filters[0].Until = &nextUntil
+
+		if sub.Filters[0].Since != nil && sub.Filters[0].Since.After(*sub.Filters[0].Until) {
+			// Reached the end of the subscription time range.
+			break
+		}
+	}
+	return ctx.Err()
+}
+
 func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	sub = h.prepareSubscription(ctx, sub)
 
@@ -307,11 +340,34 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 		return err
 	}
 
+	// Special case for global gift wrap subscription.
+	// { "kinds":[1059], "#p": [[loggedinMasterKey, '', loggedinDevicekey]] }.
+	if len(sub.Filters) == 1 &&
+		len(sub.Filters[0].Kinds) == 1 &&
+		sub.Filters[0].Kinds[0] == nostr.KindGiftWrap &&
+		len(sub.Filters[0].Tags) == 1 &&
+		len(sub.Filters[0].Tags["p"]) == 1 && len(sub.Filters[0].Tags["p"][0]) == 3 {
+		master, device, _, _ := model.GetUserDataFromContext(ctx)
+		if slices.CompareFunc(sub.Filters[0].Tags["p"][0], model.TagValues{&master, model.PointerOf(""), &device}, func(a, b *string) int {
+			if a == nil && b == nil {
+				return 0
+			} else if a == nil {
+				return -1
+			} else if b == nil {
+				return 1
+			}
+			return strings.Compare(*a, *b)
+		}) == 0 {
+			return h.streamGiftWrapEvents(ctx, respWriter, sub)
+		}
+		// Not a gift wrap subscription, continue with normal processing.
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	for i, getter := range wsSubscriptionListeners {
-		for event, err := range getter(ctx, sub) {
+		for event, err := range getter(ctx, sub.Filters...) {
 			if err != nil {
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
@@ -505,7 +561,7 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
-	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
+	count, err := query.CountEvents(ctx, envelope.Filters...)
 	if err != nil {
 		return errors.Wrap(err, "failed to count events")
 	}

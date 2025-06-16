@@ -65,9 +65,10 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 			}
 			queryCtx, cancelQuery := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancelQuery()
-			eventsIt := d.searchDVMEvents(queryCtx, &model.Subscription{Filters: model.Filters{{Kinds: []int{model.KindDVMCountResponse}, Tags: model.TagMap{}.
-				Append("p", &userKey),
-			}}})
+			eventsIt := d.searchDVMEvents(queryCtx, model.Filters{{
+				Kinds: []int{model.KindDVMCountResponse},
+				Tags:  model.TagMap{}.Append("p", &userKey),
+			}})
 			events := []*model.Event{}
 			for ev, err := range eventsIt {
 				require.NoError(t, err)

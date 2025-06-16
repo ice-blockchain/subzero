@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -37,7 +36,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		Kind:      nostr.KindTextNote,
 		Content:   "db event",
 	}}}
-	RegisterWSSubscriptionListener(func(context.Context, *model.Subscription) EventIterator {
+	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, storedEvents)
 	})
 	helperSignWithMinLeadingZeroBits(t, storedEvents[len(storedEvents)-1], privkey)
@@ -94,13 +93,13 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				case <-ctx.Done():
 					log.Panic(errors.New("timeout waiting for the event"))
 				}
-				assert.Equal(t, storedEvents[0].ID, ev.ID)
-				assert.Equal(t, storedEvents[0].Tags, ev.Tags)
-				assert.Equal(t, storedEvents[0].CreatedAt, ev.CreatedAt)
-				assert.Equal(t, storedEvents[0].Sig, ev.Sig)
-				assert.Equal(t, storedEvents[0].Kind, ev.Kind)
-				assert.Equal(t, storedEvents[0].PubKey, ev.PubKey)
-				assert.Equal(t, storedEvents[0].Content, ev.Content)
+				require.Equal(t, storedEvents[0].ID, ev.ID)
+				require.Equal(t, storedEvents[0].Tags, ev.Tags)
+				require.Equal(t, storedEvents[0].CreatedAt, ev.CreatedAt)
+				require.Equal(t, storedEvents[0].Sig, ev.Sig)
+				require.Equal(t, storedEvents[0].Kind, ev.Kind)
+				require.Equal(t, storedEvents[0].PubKey, ev.PubKey)
+				require.Equal(t, storedEvents[0].Content, ev.Content)
 				select {
 				case <-eosCh:
 				case <-ctx.Done():
@@ -112,21 +111,21 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 					log.Panic(errors.New("timeout waiting for the event"))
 				}
 				require.NotNil(t, ev)
-				assert.Equal(t, storedEvents[1].ID, ev.ID)
-				assert.Equal(t, storedEvents[1].Tags, ev.Tags)
-				assert.Equal(t, storedEvents[1].CreatedAt, ev.CreatedAt)
-				assert.Equal(t, storedEvents[1].Sig, ev.Sig)
-				assert.Equal(t, storedEvents[1].Kind, ev.Kind)
-				assert.Equal(t, storedEvents[1].PubKey, ev.PubKey)
-				assert.Equal(t, storedEvents[1].Content, ev.Content)
+				require.Equal(t, storedEvents[1].ID, ev.ID)
+				require.Equal(t, storedEvents[1].Tags, ev.Tags)
+				require.Equal(t, storedEvents[1].CreatedAt, ev.CreatedAt)
+				require.Equal(t, storedEvents[1].Sig, ev.Sig)
+				require.Equal(t, storedEvents[1].Kind, ev.Kind)
+				require.Equal(t, storedEvents[1].PubKey, ev.PubKey)
+				require.Equal(t, storedEvents[1].Content, ev.Content)
 
-				assert.Equal(t, newRealtimeEvent.ID, ev.ID)
-				assert.Equal(t, newRealtimeEvent.Tags, ev.Tags)
-				assert.Equal(t, newRealtimeEvent.CreatedAt, ev.CreatedAt)
-				assert.Equal(t, newRealtimeEvent.Sig, ev.Sig)
-				assert.Equal(t, newRealtimeEvent.Kind, ev.Kind)
-				assert.Equal(t, newRealtimeEvent.PubKey, ev.PubKey)
-				assert.Equal(t, newRealtimeEvent.Content, ev.Content)
+				require.Equal(t, newRealtimeEvent.ID, ev.ID)
+				require.Equal(t, newRealtimeEvent.Tags, ev.Tags)
+				require.Equal(t, newRealtimeEvent.CreatedAt, ev.CreatedAt)
+				require.Equal(t, newRealtimeEvent.Sig, ev.Sig)
+				require.Equal(t, newRealtimeEvent.Kind, ev.Kind)
+				require.Equal(t, newRealtimeEvent.PubKey, ev.PubKey)
+				require.Equal(t, newRealtimeEvent.Content, ev.Content)
 				sub.Close()
 			}(s)
 		}
@@ -392,15 +391,14 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
 		return nil
 	})
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		t.Logf("subscription: %v: %s", subscription.SubscriptionID, subscription.Filters.String())
-		require.Len(t, subscription.Filters, 1)
-		require.Len(t, subscription.Filters[0].Kinds, 1)
-		require.Equal(t, nostr.KindFollowList, subscription.Filters[0].Kinds[0])
-		require.Contains(t, subscription.Filters[0].Authors, pubKey)
-		require.Equal(t, `include:dependencies:kind3>kind0+p+|foo,bar|`, subscription.Filters[0].Search)
+	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
+		require.Len(t, filters, 1)
+		require.Len(t, filters[0].Kinds, 1)
+		require.Equal(t, nostr.KindFollowList, filters[0].Kinds[0])
+		require.Contains(t, filters[0].Authors, pubKey)
+		require.Equal(t, `include:dependencies:kind3>kind0+p+|foo,bar|`, filters[0].Search)
 
-		return query.GetStoredEvents(ctx, subscription)
+		return query.GetStoredEvents(ctx, filters...)
 	})
 	RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) bool {
 		return false
@@ -617,15 +615,15 @@ func helperRegisterWSEventListenerProxyWithStorage(t *testing.T, storedEvents *[
 func helperRegisterWSSubscriptionListenerWithStorage(t *testing.T, storedEvents *[]*model.Event) {
 	t.Helper()
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		if subscription == nil || len(subscription.Filters) == 0 {
+	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
+		if len(filters) == 0 {
 			return helperNewIterator(t, *storedEvents)
 		}
 
 		var filteredEvents []*model.Event
 		for i := range *storedEvents {
 			ev := (*storedEvents)[i]
-			if subscription.Filters.Match(&ev.Event) {
+			if model.Filters(filters).Match(&ev.Event) {
 				filteredEvents = append(filteredEvents, (*storedEvents)[i])
 			}
 		}
@@ -656,4 +654,73 @@ func helperMustCloseRelay(t *testing.T, relay *nostrRelay) {
 		}
 		require.NoError(t, relay.service.WaitForReaders(testDeadline))
 	}
+}
+
+func TestStreamGiftWrapEvents(t *testing.T) {
+	const giftWrapCount = 50
+
+	masterPriv, masterPub := model.GenerateKeyPair()
+	userPriv, userPub := model.GenerateKeyPair()
+
+	t.Cleanup(func() {
+		RegisterReqMustAuthenticate(nil)
+		RegisterEventMustAuthenticate(nil)
+	})
+
+	t.Run("Create attestation", func(t *testing.T) {
+		attestationEvent := &model.Event{Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: 1,
+			Tags: model.Tags{
+				{model.TagAttestationName, userPub, "", model.CustomIONAttestationKindActive + ":1"},
+			},
+		}}
+		require.NoError(t, attestationEvent.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent))
+	})
+	published := make([]*model.Event, 0, giftWrapCount)
+	t.Run("Create gift wrap events", func(t *testing.T) {
+		for i := range giftWrapCount {
+			var ev model.Event
+			ev.Kind = nostr.KindGiftWrap
+			ev.CreatedAt = model.Timestamp(time.Now().UnixNano())
+			ev.Content = "Gift wrap event " + strconv.Itoa(i+1)
+			ev.Tags = model.Tags{
+				{"p", masterPub, "", userPub},
+			}
+			require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, query.AcceptEvents(t.Context(), &ev))
+			published = append(published, &ev)
+		}
+	})
+
+	RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) bool { return true })
+	RegisterEventMustAuthenticate(func(context.Context, ...*model.Event) bool { return true })
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
+	RegisterWSEventListener(query.AcceptEvents)
+
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	t.Run("WithAuth", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = nostr.KindNostrConnect
+		ev.CreatedAt = nostr.Now()
+		helperSignWithMinLeadingZeroBits(t, &ev, userPriv)
+		err := relay.Publish(t.Context(), ev.Event)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), errAuthRequired.Error())
+	})
+	t.Run("DoAuth", func(t *testing.T) {
+		helperDoAuth(t, relay.Relay, userPriv, masterPub)
+	})
+	t.Run("Fetch", func(t *testing.T) {
+		received := helperQueryEvents(t, t.Context(), relay, model.Filter{
+			Kinds: []int{nostr.KindGiftWrap},
+			Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
+			Limit: 11,
+		})
+		t.Logf("received %d events", len(published))
+		require.ElementsMatch(t, published, received)
+	})
+	helperMustCloseRelay(t, relay)
 }

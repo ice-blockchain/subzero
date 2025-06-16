@@ -13,15 +13,11 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func GetStoredEvents(ctx context.Context, subscription *model.Subscription) query.EventIterator {
-	return globalDVM.searchDVMEvents(ctx, subscription)
+func GetStoredEvents(ctx context.Context, filters ...model.Filter) query.EventIterator {
+	return globalDVM.searchDVMEvents(ctx, filters)
 }
 
-func (d *dvm) searchDVMEvents(ctx context.Context, subscription *model.Subscription) query.EventIterator {
-	var filters model.Filters
-	if subscription != nil {
-		filters = subscription.Filters
-	}
+func (d *dvm) searchDVMEvents(ctx context.Context, filters model.Filters) query.EventIterator {
 	return func(yield func(*model.Event, error) bool) {
 		for index, f := range filters {
 			if f.Tags.HasValues("p") {

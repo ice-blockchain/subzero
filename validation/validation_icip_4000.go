@@ -71,16 +71,11 @@ func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *mo
 }
 
 func checkFollowingWhoCanReplySettings(ctx context.Context, rootPost, e *model.Event) (bool, error) {
-	events := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: []nostr.Filter{
-			{
-				Authors: []string{rootPost.GetMasterPublicKey()},
-				Kinds:   []int{nostr.KindFollowList},
-				Tags:    model.TagMap{}.SetLiterals("p", e.GetMasterPublicKey()),
-			},
-		},
-	})
-	for _, err := range events {
+	for _, err := range query.GetStoredEvents(ctx, model.Filter{
+		Authors: []string{rootPost.GetMasterPublicKey()},
+		Kinds:   []int{nostr.KindFollowList},
+		Tags:    model.TagMap{}.SetLiterals("p", e.GetMasterPublicKey()),
+	}) {
 		if err != nil {
 			return false, err
 		}
@@ -115,7 +110,7 @@ func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
 	if filter == nil {
 		return nil, nil
 	}
-	rootPosts := query.GetStoredEvents(ctx, &model.Subscription{Filters: nostr.Filters{*filter}})
+	rootPosts := query.GetStoredEvents(ctx, *filter)
 	for ev, err := range rootPosts {
 		if err != nil {
 			return nil, err
@@ -128,7 +123,7 @@ func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
 	return nil, nil
 }
 
-func createRootPostFilter(e *model.Event) (*nostr.Filter, error) {
+func createRootPostFilter(e *model.Event) (*model.Filter, error) {
 	for _, tag := range e.GetTags("a") {
 		if !isRootTag(tag) {
 			continue
@@ -209,10 +204,10 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	}
 
 	var communityEventsToCheck []*model.Event
-	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: model.Filters{{
+	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
 		IDs:  ids,
 		Tags: model.TagMap{}.SetLiterals(model.CustomIONTagCommunity),
-	}}}) {
+	}) {
 		if err != nil {
 			return errors.Wrap(err, "failed to get stored events")
 		}
@@ -248,13 +243,9 @@ func validateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model
 }
 
 func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
-	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: model.Filters{
-			model.Filter{
-				Kinds: []int{model.CustomIONKindCommunityBanUser},
-				Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals(model.CustomIONTagCommunity, communityID),
-			},
-		},
+	eventIterator := query.GetStoredEvents(ctx, model.Filter{
+		Kinds: []int{model.CustomIONKindCommunityBanUser},
+		Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals(model.CustomIONTagCommunity, communityID),
 	})
 	for _, err := range eventIterator {
 		if err != nil {
@@ -268,13 +259,11 @@ func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
 }
 
 func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.Event, masterPubkey string) error {
-	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: model.Filters{
-			model.Filter{
-				Kinds: []int{model.CustomIONKindCommunityJoin},
-				Tags:  model.TagMap{}.SetLiterals("p", masterPubkey).SetLiterals(model.CustomIONTagCommunity, communityDefinitionEvent.GetHTag()),
-			},
-		},
+	eventIterator := query.GetStoredEvents(ctx, model.Filter{
+		Kinds: []int{model.CustomIONKindCommunityJoin},
+		Tags: model.TagMap{}.
+			SetLiterals("p", masterPubkey).
+			SetLiterals(model.CustomIONTagCommunity, communityDefinitionEvent.GetHTag()),
 	})
 	for ev, err := range eventIterator {
 		if err != nil {
@@ -336,13 +325,9 @@ func roleRequiredForPosting(event *model.Event) model.Role {
 }
 
 func GetCommunityDefinition(ctx context.Context, hTag string) (*model.Event, error) {
-	eventIterator := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: model.Filters{
-			model.Filter{
-				Kinds: []int{model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition},
-				Tags:  model.TagMap{}.SetLiterals(model.CustomIONTagCommunity, hTag),
-			},
-		},
+	eventIterator := query.GetStoredEvents(ctx, model.Filter{
+		Kinds: []int{model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition},
+		Tags:  model.TagMap{}.SetLiterals(model.CustomIONTagCommunity, hTag),
 	})
 
 	var (
@@ -582,15 +567,11 @@ func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePub
 }
 
 func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string) bool {
-	it := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: nostr.Filters{
-			model.Filter{
-				Authors: []string{badgePubkey},
-				Kinds:   []int{nostr.KindBadgeDefinition},
-				Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
-				Limit:   1,
-			},
-		},
+	it := query.GetStoredEvents(ctx, model.Filter{
+		Authors: []string{badgePubkey},
+		Kinds:   []int{nostr.KindBadgeDefinition},
+		Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
+		Limit:   1,
 	})
 
 	badgeDefinitionFound := false
@@ -611,15 +592,11 @@ func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string
 	}
 
 	badgeATagRef := fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgePubkey, badgeDTag)
-	it = query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: nostr.Filters{
-			model.Filter{
-				Authors: []string{badgePubkey},
-				Kinds:   []int{nostr.KindBadgeAward},
-				Tags:    nostr.TagMap{}.SetLiterals("a", badgeATagRef).SetLiterals("p", userPubkey),
-				Limit:   1,
-			},
-		},
+	it = query.GetStoredEvents(ctx, model.Filter{
+		Authors: []string{badgePubkey},
+		Kinds:   []int{nostr.KindBadgeAward},
+		Tags:    nostr.TagMap{}.SetLiterals("a", badgeATagRef).SetLiterals("p", userPubkey),
+		Limit:   1,
 	})
 
 	for badgeAward, err := range it {

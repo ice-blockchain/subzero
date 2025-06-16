@@ -17,10 +17,8 @@ import (
 
 func TestCommunityDefinitionHijack(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))

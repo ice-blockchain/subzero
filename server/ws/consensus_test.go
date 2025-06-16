@@ -88,11 +88,7 @@ func TestConsensusEvents(t *testing.T) {
 		return nil
 	}
 	command.RegisterAcceptListener(normalAccept)
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		var filters model.Filters
-		if subscription != nil {
-			filters = subscription.Filters
-		}
+	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
 		return mapPort(ctx).DB.SelectEvents(ctx, filters...)
 	})
 	relay := helperMustNewRelay(t, pubsubServers[0])
@@ -383,11 +379,7 @@ func BenchmarkConcurrentConsensusEvents(b *testing.B) {
 		consensusDone[mapPort(ctx).Endpoint()] <- true
 		return nil
 	})
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		var filters model.Filters
-		if subscription != nil {
-			filters = subscription.Filters
-		}
+	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
 		return mapPort(ctx).DB.SelectEvents(ctx, filters...)
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

@@ -96,8 +96,15 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 				d.Ttags = append(d.Ttags, t)
 			}
 		case "p":
-			if d.Kind == nostr.KindGiftWrap && tag.Value() != "" {
-				d.GiftReceiver = sql.NullString{Valid: true, String: tag.Value()}
+			// Order: master public key, empty string, device public key.
+			if d.Kind == nostr.KindGiftWrap {
+				target := tag.Value() // Master public key.
+				if len(tag) >= 3 && tag[3] != "" {
+					target = tag[3] // Device public key.
+				}
+				if target != "" {
+					d.GiftReceiver = sql.NullString{Valid: true, String: target}
+				}
 			}
 		case "imeta":
 			for i := range len(tag) {
