@@ -36,17 +36,12 @@ func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, e
 }
 
 func (pm *PushNotificationManager) getOldFollowListEvent(ctx context.Context, authorPubKey string) (*model.Event, error) {
-	subscription := &model.Subscription{
-		Filters: model.Filters{
-			{
-				Kinds:   []int{nostr.KindFollowList},
-				Authors: []string{authorPubKey},
-			},
-		},
-	}
-
 	var oldEvent *model.Event
-	it := query.GetStoredEvents(ctx, subscription)
+
+	it := query.GetStoredEvents(ctx, model.Filter{
+		Kinds:   []int{nostr.KindFollowList},
+		Authors: []string{authorPubKey},
+	})
 	for ev, err := range it {
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get old follow list event")

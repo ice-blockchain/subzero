@@ -19,10 +19,8 @@ import (
 
 func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -689,10 +687,8 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 
 func TestCommunityDefinition_OpenPublicCommunity(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -785,10 +781,8 @@ func TestCommunityDefinition_OpenPublicCommunity(t *testing.T) {
 
 func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -1062,10 +1056,8 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 
 func TestCommunityDefinition_ClosedCommunity_AnybodyPosting(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -1256,10 +1248,8 @@ func TestCommunityDefinition_ClosedCommunity_AnybodyPosting(t *testing.T) {
 
 func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -1398,10 +1388,8 @@ func TestCommunityDefinition_ChangeDefinition(t *testing.T) {
 
 func TestCommunity_TransferringOwnership(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -1505,10 +1493,8 @@ func TestCommunity_TransferringOwnership(t *testing.T) {
 
 func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -1688,10 +1674,8 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 
 func TestCommunity_Deletion(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -1966,10 +1950,8 @@ func TestCommunity_Deletion(t *testing.T) {
 
 func TestCommunityBanUser(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
-	ctx := context.Background()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -2093,9 +2075,7 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 	privkeyOwner, pubkeyCommunityOwner := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -2301,13 +2281,11 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 
 func TestPublishingICIP3000RelayCustomIONKindCommunityDefinition(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
-	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
@@ -2681,16 +2659,14 @@ func TestPublishingICIP3000RelayCustomIONKindCommunityJoin(t *testing.T) {
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	privkey := model.GeneratePrivateKey()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validJoinCommunityEvent *model.Event
@@ -2863,16 +2839,14 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)
 	privkey := model.GeneratePrivateKey()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	eventAuthorPubkey := uuid.NewString()
@@ -3000,16 +2974,14 @@ func TestPublishingICIP3000RelayKindTransferCommunityMembership(t *testing.T) {
 
 func TestPublishingICIP3000RelayKindBanUser(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := context.Background()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 	hVal, err := uuid.NewV7()
 	require.NoError(t, err)

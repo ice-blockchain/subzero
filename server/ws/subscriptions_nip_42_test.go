@@ -44,9 +44,7 @@ func TestSubscriptionReqWithAuth(t *testing.T) {
 
 		return nil
 	})
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		t.Logf("received subscription: %v", subscription)
-
+	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, []*model.Event{})
 	})
 	RegisterReqMustAuthenticate(func(ctx context.Context, subscription *model.Subscription) bool {
@@ -131,7 +129,7 @@ func TestSubscriptionEventAuth(t *testing.T) {
 		return nil
 	})
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
+	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, storedEvents)
 	})
 	RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) bool {
@@ -233,7 +231,7 @@ func TestSubscriptionEventAuthWithEmbeddedAttesttion(t *testing.T) {
 		return nil
 	})
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
+	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, storedEvents)
 	})
 	RegisterEventMustAuthenticate(func(ctx context.Context, events ...*model.Event) bool {

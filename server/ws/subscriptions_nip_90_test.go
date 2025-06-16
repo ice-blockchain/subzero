@@ -56,9 +56,7 @@ func helperQueryEvents(t *testing.T, ctx context.Context, relay *nostrRelay, fil
 func TestJobOnline(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	}, dvm.GetStoredEvents)
+	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {
@@ -241,13 +239,13 @@ func TestJobDeletion(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 	wake := make(chan struct{}, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
 		select {
 		case <-wake:
 		case <-time.After(time.Second * 10):
 		case <-ctx.Done():
 		}
-		return query.GetStoredEvents(ctx, s)
+		return query.GetStoredEvents(ctx, filters...)
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
@@ -312,7 +310,7 @@ func TestErrorFeedback(t *testing.T) {
 
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
+	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, []*model.Event{})
 	})
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
@@ -364,9 +362,7 @@ func TestErrorFeedback(t *testing.T) {
 func TestJobOffline(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			if ev.Kind == model.KindDVMCountResponse {

@@ -79,14 +79,12 @@ func (n *nostrEventCountJob) doCountMRF(ctx context.Context, filter model.Filter
 	}
 
 	var total int64
-	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: []model.Filter{
-		{
-			Kinds:   []int{nostr.KindFollowList},
-			Authors: []string{m, pk},
-			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(filter.Tags.All("p"), ",") + "|",
-			Limit:   1,
-		},
-	}}) {
+	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
+		Kinds:   []int{nostr.KindFollowList},
+		Authors: []string{m, pk},
+		Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(filter.Tags.All("p"), ",") + "|",
+		Limit:   1,
+	}) {
 		if err != nil {
 			return "", errors.Wrap(err, "failed to get events")
 		} else if ev.Kind != nostr.KindProfileMetadata {
@@ -105,17 +103,17 @@ func (n *nostrEventCountJob) doCountLocal(ctx context.Context, filters model.Fil
 	}
 
 	if groupBy == "" {
-		count, err := query.CountEvents(ctx, &model.Subscription{Filters: filters})
+		count, err := query.CountEvents(ctx, filters...)
 
 		return strconv.FormatInt(count, 10), err
 	}
 
 	if len(filters) == 1 && len(filters[0].Kinds) == 1 && filters[0].Kinds[0] == nostr.KindReaction && groupBy == NostrEventCountGroupContent {
-		return query.CountGroupedEventReactions(ctx, &model.Subscription{Filters: filters})
+		return query.CountGroupedEventReactions(ctx, filters...)
 	}
 
 	var events []*nostr.Event
-	for ev, err := range query.GetStoredEvents(ctx, &model.Subscription{Filters: filters}) {
+	for ev, err := range query.GetStoredEvents(ctx, filters...) {
 		if err != nil {
 			return "", errors.Wrap(err, "failed to get events")
 		}

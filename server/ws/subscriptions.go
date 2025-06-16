@@ -176,15 +176,11 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 		}
 		attestationEvent = &ev
 	} else {
-		it := query.GetStoredEvents(ctx, &model.Subscription{
-			Filters: []model.Filter{
-				{
-					Kinds:   []int{model.CustomIONKindAttestation},
-					Authors: []string{owner},
-					Tags:    model.TagMap{}.Set("p", &e.PubKey),
-					Limit:   1,
-				},
-			},
+		it := query.GetStoredEvents(ctx, model.Filter{
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Authors: []string{owner},
+			Tags:    model.TagMap{}.Set("p", &e.PubKey),
+			Limit:   1,
 		})
 		for ev, err := range it {
 			if err != nil {
@@ -311,7 +307,7 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	defer cancel()
 
 	for i, getter := range wsSubscriptionListeners {
-		for event, err := range getter(ctx, sub) {
+		for event, err := range getter(ctx, sub.Filters...) {
 			if err != nil {
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
@@ -505,7 +501,7 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
-	count, err := query.CountEvents(ctx, &model.Subscription{Filters: envelope.Filters})
+	count, err := query.CountEvents(ctx, envelope.Filters...)
 	if err != nil {
 		return errors.Wrap(err, "failed to count events")
 	}

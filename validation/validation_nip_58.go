@@ -130,15 +130,11 @@ func validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomi
 		badgePubkey := parts[1]
 		badgeDTag := parts[2]
 
-		it := query.GetStoredEvents(ctx, &model.Subscription{
-			Filters: nostr.Filters{
-				model.Filter{
-					Authors: []string{badgePubkey},
-					Kinds:   []int{nostr.KindBadgeDefinition},
-					Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
-					Limit:   1,
-				},
-			},
+		it := query.GetStoredEvents(ctx, model.Filter{
+			Authors: []string{badgePubkey},
+			Kinds:   []int{nostr.KindBadgeDefinition},
+			Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
+			Limit:   1,
 		})
 		badgeDefinitionFound := false
 		for event, err := range it {
@@ -228,14 +224,9 @@ func checkProofOfOwnershipBadges(username string, masterKey string, incomingEven
 }
 
 func getEvent(ctx context.Context, address string) (event *model.Event, err error) {
-	events := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: []nostr.Filter{
-			{
-				Addresses: []string{address},
-			},
-		},
-	})
-	for e, err := range events {
+	for e, err := range query.GetStoredEvents(ctx, model.Filter{
+		Addresses: []string{address},
+	}) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to fetch linked event for by filter %v ", address)
 		}
@@ -259,14 +250,11 @@ func validateProfileBadgeAward(ctx context.Context, badgeRef, badgeAwardID, user
 			return nil
 		}
 	}
-	it := query.GetStoredEvents(ctx, &model.Subscription{
-		Filters: nostr.Filters{
-			model.Filter{
-				IDs:   []string{badgeAwardID},
-				Kinds: []int{nostr.KindBadgeAward},
-				Limit: 1,
-			},
-		},
+
+	it := query.GetStoredEvents(ctx, model.Filter{
+		IDs:   []string{badgeAwardID},
+		Kinds: []int{nostr.KindBadgeAward},
+		Limit: 1,
 	})
 
 	for event, err := range it {

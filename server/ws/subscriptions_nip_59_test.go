@@ -36,9 +36,7 @@ func TestSelfChat(t *testing.T) {
 
 		return nil
 	})
-	RegisterWSSubscriptionListener(func(ctx context.Context, subscription *model.Subscription) EventIterator {
-		t.Logf("received subscription: %v", subscription)
-
+	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, []*model.Event{})
 	})
 	RegisterReqMustAuthenticate(func(ctx context.Context, subscription *model.Subscription) bool {

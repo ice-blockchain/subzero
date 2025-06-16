@@ -73,15 +73,10 @@ func validatePollVote(ctx context.Context, e *model.Event) error {
 	}
 
 	var poll *model.Event
-	for ev, err := range query.GetStoredEvents(ctx,
-		&model.Subscription{
-			Filters: model.Filters{
-				model.Filter{
-					Addresses: []string{pollAddress},
-					Limit:     1,
-				},
-			},
-		}) {
+	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
+		Addresses: []string{pollAddress},
+		Limit:     1,
+	}) {
 		if err != nil {
 			return errors.Wrapf(err, "vote: failed to get poll event %s", pollAddress)
 		}

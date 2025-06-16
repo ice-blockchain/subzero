@@ -118,7 +118,7 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 		Logger:       cmtlog.NewFilter(cmtlog.NewTMLogger(cmtlog.NewSyncWriter(os.Stdout)), cmtlog.AllowError()),
 		Config:       cfg.MustGet[Config](),
 		Query: func(ctx context.Context, f ...model.Filter) query.EventIterator {
-			return query.GetStoredEvents(ctx, &model.Subscription{Filters: f})
+			return query.GetStoredEvents(ctx, f...)
 		},
 		ShutdownCh: make(chan chan<- error, 1),
 	}

@@ -106,11 +106,7 @@ func CommitEvents(ctx context.Context, events ...*model.Event) error {
 	return globalDB.Client.CommitEvents(ctx, events...)
 }
 
-func GetStoredEvents(ctx context.Context, subscription *model.Subscription) EventIterator {
-	var filters model.Filters
-	if subscription != nil {
-		filters = subscription.Filters
-	}
+func GetStoredEvents(ctx context.Context, filters ...model.Filter) EventIterator {
 	return globalDB.Client.SelectEvents(ctx, filters...)
 }
 
@@ -118,19 +114,11 @@ func MarkTokenAsInvalidInEventTags(ctx context.Context, events []*model.Event) e
 	return globalDB.Client.markTokenAsInvalidInEventTags(ctx, events)
 }
 
-func CountEvents(ctx context.Context, subscription *model.Subscription) (int64, error) {
-	var filters model.Filters
-	if subscription != nil {
-		filters = subscription.Filters
-	}
+func CountEvents(ctx context.Context, filters ...model.Filter) (int64, error) {
 	return globalDB.Client.CountEvents(ctx, filters...)
 }
 
-func CountGroupedEventReactions(ctx context.Context, subscription *model.Subscription) (string, error) {
-	var filters model.Filters
-	if subscription != nil {
-		filters = subscription.Filters
-	}
+func CountGroupedEventReactions(ctx context.Context, filters ...model.Filter) (string, error) {
 	return globalDB.Client.CountGroupedEventReactions(ctx, filters...)
 }
 

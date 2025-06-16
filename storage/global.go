@@ -93,7 +93,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	for _, r := range refs {
 		filters = append(filters, r.Filter())
 	}
-	events := query.GetStoredEvents(ctx, &model.Subscription{Filters: filters})
+	events := query.GetStoredEvents(ctx, filters...)
 	var originalEvent *model.Event
 	for fileEvent, err := range events {
 		if err != nil {

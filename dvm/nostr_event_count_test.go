@@ -544,7 +544,7 @@ func helperMustExecuteJob(t *testing.T, ctx context.Context, req *model.Event) *
 func helperReadFromDB(t *testing.T, req model.Filter) *model.Event {
 	var result *model.Event
 
-	it := query.GetStoredEvents(t.Context(), &model.Subscription{Filters: model.Filters{req}})
+	it := query.GetStoredEvents(t.Context(), req)
 	for ev, err := range it {
 		require.NoError(t, err)
 		require.NotNil(t, ev)

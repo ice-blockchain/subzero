@@ -158,13 +158,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 
-	iterator := query.GetStoredEvents(t.Context(), &model.Subscription{
-		Filters: []model.Filter{
-			{
-				Authors: []string{followerPubKey},
-				Kinds:   []int{nostr.KindFollowList},
-			},
-		},
+	iterator := query.GetStoredEvents(t.Context(), model.Filter{
+		Authors: []string{followerPubKey},
+		Kinds:   []int{nostr.KindFollowList},
 	})
 	foundEvents := []*model.Event{}
 	for event, err := range iterator {
@@ -296,13 +292,9 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		}
 	}
 
-	iterator := query.GetStoredEvents(t.Context(), &model.Subscription{
-		Filters: []model.Filter{
-			{
-				Authors: []string{targetPubKey},
-				Kinds:   []int{model.CustomIONKindDeviceRegistration},
-			},
-		},
+	iterator := query.GetStoredEvents(t.Context(), model.Filter{
+		Authors: []string{targetPubKey},
+		Kinds:   []int{model.CustomIONKindDeviceRegistration},
 	})
 
 	foundEvents := []*model.Event{}

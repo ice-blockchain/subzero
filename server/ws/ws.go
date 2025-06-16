@@ -28,7 +28,7 @@ const (
 
 type (
 	EventIterator       = query.EventIterator
-	EventGetter         func(context.Context, *model.Subscription) EventIterator
+	EventGetter         func(context.Context, ...model.Filter) EventIterator
 	ReqMustAuthenticate func(context.Context, *model.Subscription) (authRequired bool)
 	EventAuthenticate   func(context.Context, ...*model.Event) (authRequired bool)
 	EventListener       func(context.Context, ...*model.Event) error

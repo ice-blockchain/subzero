@@ -132,14 +132,7 @@ func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, event
 		}
 	}
 	if len(eventIDs) > 0 {
-		it := query.GetStoredEvents(ctx, &model.Subscription{
-			Filters: []model.Filter{
-				{
-					IDs: eventIDs,
-				},
-			},
-		})
-		for event, err := range it {
+		for event, err := range query.GetStoredEvents(ctx, model.Filter{IDs: eventIDs}) {
 			if err != nil {
 				return errors.Wrap(err, "error getting event")
 			}

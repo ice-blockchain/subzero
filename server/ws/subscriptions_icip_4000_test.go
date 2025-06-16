@@ -21,16 +21,14 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 	privkeyUser2, _ := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -86,16 +84,14 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 	privkeyUser2, _ := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -143,16 +139,14 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 	privkeyUser2, _ := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -248,16 +242,14 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 func TestWhoCanReplySettings_SelfReply(t *testing.T) {
 	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
 	privkeyUser1, _ := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -308,16 +300,14 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 
 	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post, post2 *model.Event
@@ -542,16 +532,14 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
 	_, pubkeyUser3 := model.GenerateKeyPair()
 	privkeyUser4, _ := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post *model.Event
@@ -677,16 +665,14 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 	privkeyUser2, _ := model.GenerateKeyPair()
 	privkeyUser3, pubkeyUser3 := model.GenerateKeyPair()
-	RegisterWSSubscriptionListener(func(ctx context.Context, s *model.Subscription) EventIterator {
-		return query.GetStoredEvents(ctx, s)
-	})
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
 
 		return nil
 	})
-	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var post, post2 *model.Event
