@@ -642,8 +642,7 @@ func (b *queryBuilder) ApplyKinds(filter *databaseFilterSearch, kinds []int) {
 	for _, kind := range kinds {
 		if kind < 0 {
 			negative = append(negative, -kind)
-		}
-		if kind > 0 {
+		} else {
 			positive = append(positive, kind)
 		}
 	}
