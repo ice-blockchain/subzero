@@ -43,7 +43,7 @@ require (
 	github.com/nbd-wtf/go-nostr v0.51.12
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.52.0
-	github.com/quic-go/webtransport-go v0.8.1-0.20250607045527-0a9e2ee55f75
+	github.com/quic-go/webtransport-go v0.8.1-0.20250615082159-b15cfe193360
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/shirou/gopsutil/v4 v4.25.5
@@ -238,7 +238,7 @@ require (
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
-	github.com/ugorji/go/codec v1.2.14 // indirect
+	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xssnick/raptorq v1.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
