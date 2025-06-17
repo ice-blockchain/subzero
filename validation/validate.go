@@ -398,7 +398,7 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 				return errors.Wrapf(ErrWrongEventParams, "tag: %s: should be positive: %d", tag.Key(), v)
 			}
 		case "settings":
-			if err := validateSettingsTag(e.Kind, tag); err != nil {
+			if err := validateSettingsTag(e, tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
 		case model.CustomIONTagOnBehalfOf:

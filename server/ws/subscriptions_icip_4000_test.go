@@ -891,3 +891,112 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 
 	helperMustCloseRelay(t, relay)
 }
+
+func TestReplyCannotSetSettings(t *testing.T) {
+	privkeyPostOwner, _ := model.GenerateKeyPair()
+	privkeyUser1, _ := model.GenerateKeyPair()
+	ctx := t.Context()
+	RegisterWSSubscriptionListener(query.GetStoredEvents)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		require.True(t, len(events) > 0)
+		require.NoError(t, query.AcceptEvents(ctx, events...))
+
+		return nil
+	})
+	relay := helperMustNewRelay(t, pubsubServers[0])
+	var rootPost *model.Event
+	t.Run("create root post without who_can_reply settings", func(t *testing.T) {
+		rootPost = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "This is a root post without settings",
+			Tags:      nostr.Tags{},
+		}}
+		helperSignWithMinLeadingZeroBits(t, rootPost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, rootPost.Event))
+	})
+	t.Run("try to create reply with e tag and settings - should fail", func(t *testing.T) {
+		replyWithETags := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "This is a reply that tries to set settings",
+			Tags: nostr.Tags{
+				{"e", rootPost.GetID(), "", model.TagMarkerRoot},
+				{"e", rootPost.GetID(), "", model.TagMarkerReply},
+				{"p", rootPost.GetMasterPublicKey()},
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, replyWithETags, privkeyUser1)
+		require.Error(t, relay.Publish(ctx, replyWithETags.Event))
+	})
+	t.Run("try to create reply with a tag and settings - should fail", func(t *testing.T) {
+		addressableRootPost := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Content:   "Addressable root post with settings",
+			Tags: nostr.Tags{
+				{"d", "test-post"},
+				{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, addressableRootPost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, addressableRootPost.Event))
+
+		replyWithATags := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Content:   "Reply with a tag trying to set settings",
+			Tags: nostr.Tags{
+				{"d", "reply-post"},
+				{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				{"a", addressableRootPost.Address(), "", model.TagMarkerRoot},
+				{"a", addressableRootPost.Address(), "", model.TagMarkerReply},
+				{"p", addressableRootPost.GetMasterPublicKey()},
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, replyWithATags, privkeyUser1)
+		require.Error(t, relay.Publish(ctx, replyWithATags.Event))
+	})
+	t.Run("create normal reply without settings - should succeed", func(t *testing.T) {
+		normalReply := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "Normal reply without settings",
+			Tags: nostr.Tags{
+				{"e", rootPost.GetID(), "", model.TagMarkerRoot},
+				{"e", rootPost.GetID(), "", model.TagMarkerReply},
+				{"p", rootPost.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, normalReply, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, normalReply.Event))
+	})
+	t.Run("create root post with settings - should succeed", func(t *testing.T) {
+		newRootPost := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "New root post with settings",
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, newRootPost, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, newRootPost.Event))
+	})
+	t.Run("create another root post with following settings - should succeed", func(t *testing.T) {
+		anotherRootPost := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "Another root post with following settings",
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, anotherRootPost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, anotherRootPost.Event))
+	})
+	helperMustCloseRelay(t, relay)
+}
