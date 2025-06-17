@@ -17,6 +17,8 @@ func applySubscriptionLimit(s *model.Subscription) {
 
 	limitPerFilter := defaultLimitREQ / len(s.Filters)
 	for i := range s.Filters {
-		s.Filters[i].Limit = limitPerFilter
+		if s.Filters[i].Limit > limitPerFilter || s.Filters[i].Limit <= 0 {
+			s.Filters[i].Limit = limitPerFilter
+		}
 	}
 }

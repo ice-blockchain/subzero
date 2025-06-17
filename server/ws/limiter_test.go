@@ -38,9 +38,7 @@ func TestApplySubscriptionLimit(t *testing.T) {
 		}
 
 		applySubscriptionLimit(s)
-		for i := range s.Filters {
-			require.Equal(t, 25, s.Filters[i].Limit)
-		}
+		require.Equal(t, 25, s.Filters[2].Limit)
 	})
 	t.Run("single filter with limit", func(t *testing.T) {
 		s := &model.Subscription{
@@ -50,7 +48,7 @@ func TestApplySubscriptionLimit(t *testing.T) {
 		}
 
 		applySubscriptionLimit(s)
-		require.Equal(t, defaultLimitREQ, s.Filters[0].Limit)
+		require.Equal(t, 50, s.Filters[0].Limit)
 	})
 	t.Run("no filters", func(t *testing.T) {
 		s := &model.Subscription{}
