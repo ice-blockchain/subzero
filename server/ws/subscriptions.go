@@ -337,9 +337,7 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	sub = h.prepareSubscription(ctx, sub)
 
-	if err := applySubscriptionLimit(sub); err != nil {
-		return err
-	}
+	applySubscriptionLimit(sub)
 
 	// Special case for global gift wrap subscription.
 	// { "kinds":[1059], "#p": [[loggedinMasterKey, '', loggedinDevicekey]] }.
