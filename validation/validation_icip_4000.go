@@ -445,7 +445,11 @@ func removeTag(tags []nostr.Tag, tag *nostr.Tag) []nostr.Tag {
 	return tags
 }
 
-func validateSettingsTag(kind int, tag nostr.Tag) error {
+func validateSettingsTag(e *model.Event, tag nostr.Tag) error {
+	if hasReplyTag(e) {
+		return errors.Wrapf(ErrWrongEventParams, "reply events cannot set settings: %+v", tag)
+	}
+
 	if len(tag) < 4 {
 		return errors.Wrapf(ErrWrongEventParams, "settings tag is incomplete: %+v", tag)
 	}
@@ -457,14 +461,14 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	}
 	switch settingType {
 	case model.CommentsEnabledSettings:
-		if kind != model.CustomIONKindCommunityDefinition && kind != model.CustomIONKindCommunityChangeDefinition {
+		if e.Kind != model.CustomIONKindCommunityDefinition && e.Kind != model.CustomIONKindCommunityChangeDefinition {
 			return errors.Wrapf(ErrWrongEventParams, "comments_enabled can be set only for 31750 kind: %+v", tag)
 		}
 		if value != "true" && value != "false" {
 			return errors.Wrapf(ErrWrongEventParams, "comments_enabled must be true or false: %+v", tag)
 		}
 	case model.RoleRequiredForPostingSettings:
-		if kind != model.CustomIONKindCommunityDefinition && kind != model.CustomIONKindCommunityChangeDefinition {
+		if e.Kind != model.CustomIONKindCommunityDefinition && e.Kind != model.CustomIONKindCommunityChangeDefinition {
 			return errors.Wrapf(ErrWrongEventParams, "role_required_for_posting can be set only for 31750 kind: %+v", tag)
 		}
 		if value != string(model.AdminRole) && value != string(model.ModeratorRole) && value != "" {
@@ -477,8 +481,8 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 			nostr.KindDraftArticle:              {},
 			model.CustomIONKindEditableTextNote: {},
 		}
-		if _, ok := accept[kind]; !ok {
-			return errors.Wrapf(ErrWrongEventParams, "who_can_reply cannot be set for kind: %d: %+v", kind, tag)
+		if _, ok := accept[e.Kind]; !ok {
+			return errors.Wrapf(ErrWrongEventParams, "who_can_reply cannot be set for kind: %d: %+v", e.Kind, tag)
 		}
 		values := strings.Split(value, ",")
 		for _, v := range values {
@@ -497,6 +501,21 @@ func validateSettingsTag(kind int, tag nostr.Tag) error {
 	}
 
 	return nil
+}
+
+func hasReplyTag(e *model.Event) bool {
+	for _, tag := range e.GetTags("e") {
+		if len(tag) >= 4 && tag[3] == model.TagMarkerReply {
+			return true
+		}
+	}
+	for _, tag := range e.GetTags("a") {
+		if len(tag) >= 4 && tag[3] == model.TagMarkerReply {
+			return true
+		}
+	}
+
+	return false
 }
 
 func handleTextNoteVerifiedOnlyReply(ctx context.Context, ev *model.Event, settingsTag model.Tag, events ...*model.Event) error {

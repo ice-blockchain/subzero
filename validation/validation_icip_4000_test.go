@@ -15,119 +15,230 @@ import (
 
 func TestValidateSettingsTag(t *testing.T) {
 	t.Parallel()
+	ev := &model.Event{
+		Event: nostr.Event{
+			Tags: model.Tags{},
+		},
+	}
 
 	tests := []struct {
 		name    string
+		event   *model.Event
 		tag     model.Tag
-		kind    int
 		wantNil bool
 	}{
 		{
 			name:    "no timestamp at the settings",
+			event:   ev,
 			tag:     nostr.Tag{"settings", "foo", "0"},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
 			name:    "invalid settings length",
+			event:   ev,
 			tag:     nostr.Tag{"settings", "foo"},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
-			name:    "invalid settings value for comments_enabled",
+			name: "invalid settings value for comments_enabled",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "comments_enabled", "bar", fmt.Sprint(time.Now().Unix())},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
-			name:    "valid settings value for comments_enabled",
+			name: "valid settings value for comments_enabled",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for comments_enabled",
+			name: "valid settings value for comments_enabled",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "comments_enabled", "false", fmt.Sprint(time.Now().Unix())},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
-			name:    "wrong kind for comments_enabled settings",
+			name: "wrong kind for comments_enabled settings",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "comments_enabled", "false", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: false,
 		},
 		{
-			name:    "invalid settings value for role_required_for_posting",
+			name: "invalid settings value for role_required_for_posting",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "admin", fmt.Sprint(time.Now().Unix())},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
-			name:    "invalid settings value for role_required_for_posting",
+			name: "invalid settings value for role_required_for_posting",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "moderator", fmt.Sprint(time.Now().Unix())},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: true,
 		},
 		{
-			name:    "wrong kind for role_required_for_posting settings",
+			name: "wrong kind for role_required_for_posting settings",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "admin", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: false,
 		},
 		{
-			name:    "invalid settings value for role_required_for_posting",
+			name: "invalid settings value for role_required_for_posting",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "role_required_for_posting", "dummy", fmt.Sprint(time.Now().Unix())},
-			kind:    model.CustomIONKindCommunityDefinition,
 			wantNil: false,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "following,mentioned,badge|30009:alice:bravery", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindArticle,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "following", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindArticle,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "mentioned", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "badge|30009:alice:bravery", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "following,mentioned", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "mentioned,badge|30009:alice:bravery", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: true,
 		},
 		{
-			name:    "valid settings value for who_can_reply",
+			name: "valid settings value for who_can_reply",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "dummy,badge|30009:alice:bravery", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindTextNote,
 			wantNil: false,
 		},
 		{
-			name:    "wrong kind for who_can_reply settings",
+			name: "wrong kind for who_can_reply settings",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindRepost,
+					Tags: model.Tags{},
+				},
+			},
 			tag:     nostr.Tag{"settings", "who_can_reply", "following,mentioned,badge|30009:alice:bravery", fmt.Sprint(time.Now().Unix())},
-			kind:    nostr.KindRepost,
+			wantNil: false,
+		},
+		{
+			name: "reply event with e tag cannot set settings",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+					Tags: model.Tags{
+						{"e", "some_event_id", "", model.TagMarkerReply},
+					},
+				},
+			},
+			tag:     nostr.Tag{"settings", "who_can_reply", "following", fmt.Sprint(time.Now().Unix())},
+			wantNil: false,
+		},
+		{
+			name: "reply event with a tag cannot set settings",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: model.CustomIONKindCommunityDefinition,
+					Tags: model.Tags{
+						{"a", "30023:pubkey:dtag", "", model.TagMarkerReply},
+					},
+				},
+			},
+			tag:     nostr.Tag{"settings", "comments_enabled", "true", fmt.Sprint(time.Now().Unix())},
 			wantNil: false,
 		},
 	}
@@ -136,7 +247,7 @@ func TestValidateSettingsTag(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := validateSettingsTag(tt.kind, tt.tag)
+			got := validateSettingsTag(tt.event, tt.tag)
 			if got == nil && !tt.wantNil || got != nil && tt.wantNil {
 				t.Fatalf("validateSettingsTag(%v) = nil, wantNil %v", tt.tag, tt.wantNil)
 			}
