@@ -118,7 +118,7 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 	}
 
 	err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-		SubscriptionID: sub.SubscriptionID,
+		SubscriptionID: sub.ID,
 		Reason:         errAuthRequired.Error(),
 	})
 
@@ -126,12 +126,17 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
+	if sub.OneShot {
+		// OneShot subscriptions are not stored, they are processed immediately.
+		return
+	}
+
 	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
 		return connSubscriptions{
 			Subscriptions: xsync.NewMap[string, *model.Subscription](),
 		}, false
 	})
-	conn.Subscriptions.Store(sub.SubscriptionID, sub)
+	conn.Subscriptions.Store(sub.ID, sub)
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
@@ -283,9 +288,9 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(sub.Filters[i].Tags.All("p"), ",") + "|",
 			Limit:   1,
 		}
-		sub.Reduce = func(e *model.Event) bool {
+		sub.WithReduce(func(e *model.Event) bool {
 			return e.Kind != nostr.KindProfileMetadata
-		}
+		})
 	}
 	return sub
 }
@@ -305,13 +310,13 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 			eventCount++
 			oldestTimestamp = event.CreatedAt
 
-			if sub.Reduce != nil && sub.Reduce(event) {
+			if sub.Reduce(event) {
 				continue
 			}
 
 			err := h.writeResponse(ctx, respWriter,
 				&nostr.EventEnvelope{
-					SubscriptionID: &sub.SubscriptionID,
+					SubscriptionID: &sub.ID,
 					Events:         []*nostr.Event{&event.Event},
 				})
 			if err != nil {
@@ -335,8 +340,6 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 }
 
 func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
-	sub = h.prepareSubscription(ctx, sub)
-
 	applySubscriptionLimit(sub)
 
 	// Special case for global gift wrap subscription.
@@ -371,13 +374,13 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
 
-			if sub.Reduce != nil && sub.Reduce(event) {
+			if sub.Reduce(event) {
 				continue
 			}
 
 			err := h.writeResponse(ctx, respWriter,
 				&nostr.EventEnvelope{
-					SubscriptionID: &sub.SubscriptionID,
+					SubscriptionID: &sub.ID,
 					Events:         []*nostr.Event{&event.Event},
 				})
 			if err != nil {
@@ -389,49 +392,112 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	return nil
 }
 
-func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
-	if reqMustAuth != nil {
-		if authRequired := reqMustAuth(ctx, sub); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
-				return connAuthData{
-					Challenge: generateChallenge(sub.SubscriptionID),
-				}, false
-			})
-			if !status.Authenticated {
-				return h.authRequiredReq(ctx, respWriter, sub, status.Challenge)
-			} else if !status.IsFilterAllowed(sub.Filters...) {
-				return h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-					SubscriptionID: sub.SubscriptionID,
-					Reason:         "error: not allowed to access the requested data",
-				})
+func (h *handler) checkReqAuth(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	if reqMustAuth == nil || !reqMustAuth(ctx, sub) {
+		return nil // Auth not required, success.
+	}
+
+	status, _ := h.connAuth.LoadOrCompute(
+		respWriter,
+		func() (connAuthData, bool) {
+			return connAuthData{
+				Challenge: generateChallenge(sub.ID),
+			}, false
+		},
+	)
+
+	if !status.Authenticated {
+		return h.authRequiredReq(ctx, respWriter, sub, status.Challenge)
+	}
+
+	if !status.IsFilterAllowed(sub.Filters...) {
+		return h.writeResponse(
+			ctx,
+			respWriter,
+			&nostr.ClosedEnvelope{
+				SubscriptionID: sub.ID,
+				Reason:         "error: not allowed to access the requested data",
+			},
+		)
+	}
+
+	return nil // Auth successful.
+}
+
+func (h *handler) processSubscriptionStream(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	if wsSubscriptionListeners == nil {
+		log.Printf(
+			"WARN: RegisterWSSubscriptionListener not registered, ignoring query part",
+		)
+		// Fall through to send EOSE and finalize, as there's nothing to stream.
+	} else {
+		if err := h.streamEvents(ctx, respWriter, sub); err != nil {
+			closedErr := h.writeResponse(
+				ctx,
+				respWriter,
+				&nostr.ClosedEnvelope{
+					SubscriptionID: sub.ID,
+					Reason:         err.Error(),
+				},
+			)
+			return errors.Join(err, closedErr)
+		}
+	}
+
+	return h.finalizeSuccessfulSubscription(ctx, respWriter, sub)
+}
+
+func (h *handler) finalizeSuccessfulSubscription(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	if err := h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.ID))); err != nil {
+		return err
+	}
+
+	sub.SetLive()
+
+	// Handle one-shot subscriptions which close immediately after EOSE.
+	if sub.OneShot {
+		return h.writeResponse(
+			ctx,
+			respWriter,
+			&nostr.ClosedEnvelope{
+				SubscriptionID: sub.ID,
+				Reason:         "processed: single request only subscription",
+			},
+		)
+	}
+
+	// For live subscriptions, send any events that were buffered during the initial query.
+	if bufferedEvents := sub.GetPending(); len(bufferedEvents) > 0 {
+		log.Printf("INFO: subscription %s has %d buffered events", sub.ID, len(bufferedEvents))
+		for i := range bufferedEvents {
+			err := h.writeResponse(
+				ctx,
+				respWriter,
+				&nostr.EventEnvelope{
+					SubscriptionID: &sub.ID,
+					Events:         []*nostr.Event{&bufferedEvents[i].Event},
+				},
+			)
+			if err != nil {
+				return err
 			}
 		}
 	}
 
-	var err error
-	if wsSubscriptionListeners != nil {
-		err = h.streamEvents(ctx, respWriter, sub)
-	} else {
-		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
+	return nil
+}
+
+func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) (err error) {
+	if authErr := h.checkReqAuth(ctx, respWriter, sub); authErr != nil {
+		return authErr
 	}
 
+	sub = h.prepareSubscription(ctx, sub)
+	h.linkSubscription(respWriter, sub)
+
+	err = h.processSubscriptionStream(ctx, respWriter, sub)
 	if err != nil {
-		return errors.Join(err, h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-			SubscriptionID: sub.SubscriptionID,
-			Reason:         err.Error(),
-		}))
-	}
-
-	err = h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
-	if err == nil {
-		if sub.OneShot {
-			err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-				SubscriptionID: sub.SubscriptionID,
-				Reason:         "processed: single request only subscription",
-			})
-		} else {
-			h.linkSubscription(respWriter, sub)
-		}
+		h.unlinkSubscription(respWriter, &sub.ID)
 	}
 
 	return err
@@ -509,7 +575,7 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
 		authData, _ := h.connAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
-			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
+			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.ID}
 			for _, event := range events {
 				if !filtersMatchWithMasterKey(sub.Filters, event, authData.MasterPublicKey, authData.PublicKey) {
 					continue
@@ -517,7 +583,12 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 					!canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
 					continue
 				}
-				envelope.Events = append(envelope.Events, &event.Event)
+				if sub.IsLive() {
+					envelope.Events = append(envelope.Events, &event.Event)
+				} else {
+					// Wait for the subscription to become live and buffer the events for later.
+					sub.Push(event)
+				}
 			}
 			if len(envelope.Events) > 0 {
 				broadcast[writer] = append(broadcast[writer], envelope)
@@ -526,6 +597,11 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 		})
 		return true
 	})
+
+	if len(broadcast) == 0 {
+		// No subscriptions matched, nothing to do.
+		return nil
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(broadcast))
