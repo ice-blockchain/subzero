@@ -841,35 +841,83 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 	err = db.AcceptEvents(t.Context(),
 		&model.Event{
 			Event: nostr.Event{
-				ID:        "id2",
-				Kind:      nostr.KindTextNote,
+				ID:        "id1",
+				Kind:      model.CustomIONKindEditableTextNote,
 				PubKey:    "pk2",
-				CreatedAt: 2,
+				CreatedAt: 1,
 				Content:   "content of the reply from pk2",
-				Tags:      model.Tags{{"e", "id1", "", "root"}},
+				Tags: model.Tags{
+					{"e", "id1", "", "root"},
+					{"published_at", "1"},
+					{"d", "reply1"},
+				},
 			},
 		},
 		&model.Event{
 			Event: nostr.Event{
 				ID:        "id3",
-				Kind:      nostr.KindTextNote,
+				Kind:      model.CustomIONKindEditableTextNote,
 				PubKey:    "pk3",
 				CreatedAt: 3,
 				Content:   "content of the reply from pk3",
-				Tags:      model.Tags{{"e", "id1", "", "root"}},
+				Tags: model.Tags{
+					{"e", "id1", "", "root"},
+					{"published_at", "3"},
+					{"d", "reply1"},
+				},
+			},
+		},
+		&model.Event{
+			Event: nostr.Event{
+				ID:        "id4",
+				Kind:      model.CustomIONKindEditableTextNote,
+				PubKey:    "pk3",
+				CreatedAt: 4,
+				Content:   "content of the reply from pk3",
+				Tags: model.Tags{
+					{"e", "id1", "", "root"},
+					{"published_at", "4"},
+					{"d", "reply2"},
+				},
 			},
 		},
 	)
 	require.NoError(t, err)
 
-	events := helperSelectEvents(t, db, model.Filter{
-		IDs:    []string{"id1"},
-		Search: "include:dependencies:kind1>pk3@kind1+e+root",
+	t.Run("Select with dependencies", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"id1"},
+			Search: "include:dependencies:kind1>pk3@kind30175+e+root",
+		})
+		require.Len(t, events, 2) // Original note, one reply.
+		require.Equal(t, "id1", events[1].ID)
+		// No pk2 (id2) reply.
+		require.Equal(t, "id3", events[0].ID)
 	})
-	require.Len(t, events, 2) // Original note, one reply.
-	require.Equal(t, "id1", events[1].ID)
-	// No pk2 (id2) reply.
-	require.Equal(t, "id3", events[0].ID)
+	t.Run("Soft delete first reply", func(t *testing.T) {
+		require.NoError(t, db.AcceptEvents(t.Context(), &model.Event{
+			Event: nostr.Event{
+				ID:        "id5",
+				Kind:      model.CustomIONKindEditableTextNote,
+				PubKey:    "pk3",
+				CreatedAt: 5,
+				Tags: model.Tags{
+					{"e", "id1", "", "root"},
+					{"published_at", "3"},
+					{"d", "reply1"},
+				},
+			},
+		}))
+	})
+	t.Run("Select with dependencies after delete", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{"id1"},
+			Search: "include:dependencies:kind1>pk3@kind30175+e+root",
+		})
+		require.Len(t, events, 2)
+		require.Equal(t, "id1", events[1].ID)
+		require.Equal(t, "id4", events[0].ID) // id3 was soft-deleted, so we get id4 instead.
+	})
 }
 
 func helperEventsMatch(t *testing.T, events []*model.Event, expectedCount int, filters ...model.Filter) {

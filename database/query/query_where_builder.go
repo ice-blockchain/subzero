@@ -874,7 +874,7 @@ AND `)
 	switch current.Reduce.Kinds[0] {
 	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote, model.CustomIONKindPollVote:
 		tag := current.Reduce.Tag // Could be "q" or "e" or "p" or empty.
-		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id ")
+		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id and et.deleted = false ")
 		if current.Reduce.Author != "" {
 			b.WriteString(" and :")
 			b.WriteValue(filterID, "rauthor", current.Reduce.Author)
@@ -897,10 +897,10 @@ AND `)
 			b.WriteString(" and mctx.event_tag_value3 = :")
 			b.WriteValue(filterID, "rcontext", current.Reduce.Context)
 			if current.Reduce.Context == "root" {
-				b.WriteString(` and NOT EXISTS (select true from event_tags rctx where rctx.event_id = et.id AND rctx.event_tag_key = mctx.event_tag_key and rctx.event_tag_value3 = 'reply')`)
+				b.WriteString(` and NOT EXISTS (select true from event_tags rctx where rctx.event_id = et.id AND et.deleted = false AND rctx.event_tag_key = mctx.event_tag_key and rctx.event_tag_value3 = 'reply')`)
 			}
 		}
-		b.WriteString(` LIMIT 1) FROM ` + cteName + ` em) AND e.hidden = FALSE`)
+		b.WriteString(` LIMIT 1) FROM ` + cteName + ` em) AND e.hidden = FALSE AND e.deleted = FALSE`)
 
 	case nostr.KindProfileBadges:
 		// kindXXX>kind30008+profile_badges>kind30009>kind8.
