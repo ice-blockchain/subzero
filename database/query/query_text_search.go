@@ -18,7 +18,7 @@ import (
 
 func extractRichTextContent(ev *model.Event) string {
 	richTextTag := ev.GetTag(model.CustomIONTagRichText)
-	if richTextTag == nil || len(richTextTag) < 3 {
+	if len(richTextTag) < 3 {
 		return ""
 	}
 	protocol := richTextTag[1]
