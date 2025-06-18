@@ -10,20 +10,10 @@ import (
 )
 
 type (
-	Tag          = nostr.Tag
-	Tags         = nostr.Tags
-	TagMap       = nostr.TagMap
-	TagValues    = nostr.TagValues
-	Timestamp    = nostr.Timestamp
-	Filter       = nostr.Filter
-	Filters      = nostr.Filters
-	Kind         = int
-	Subscription struct {
-		SubscriptionID string
-		Filters        Filters
-		Reduce         func(*Event) (skip bool)
-		OneShot        bool
-	}
+	Tag            = nostr.Tag
+	Tags           = nostr.Tags
+	Timestamp      = nostr.Timestamp
+	Kind           = int
 	EventReference interface {
 		Filter() Filter
 	}

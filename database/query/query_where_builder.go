@@ -718,7 +718,7 @@ func (b *queryBuilder) BuildQueryForDependencyStart(filterID, cteName, field str
 
 func (b *queryBuilder) CountVotesOf(filterID, cteName string, filter *filterDependency) {
 	b.WriteString(`
-union
+union all
 select
 	6400,
 	cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint) as created_at,
@@ -829,7 +829,7 @@ where
 	exists (select 1 FROM ` + cteName + ` ) AND
 `)
 	} else {
-		b.WriteString(` union select `)
+		b.WriteString(` union all select `)
 		for i, f := range b.fieldsNames("e") {
 			if i > 0 {
 				b.WriteString(", ")
@@ -959,7 +959,7 @@ where
 		b.WriteString("e.id in ((select event_tag_value1 from event_tags where event_id in (")
 		b.WriteString(startFilter)
 		b.WriteString(") and event_tag_key = 'e')")
-		b.WriteString(" UNION ")
+		b.WriteString(" UNION ALL ")
 		b.WriteString(`(select ee.id from (select subzero_nostr_tag_a_get_pk(event_tag_value1) as pk, subzero_nostr_tag_a_get_dtag(event_tag_value1) as name from event_tags where event_id in (`)
 		b.WriteString(startFilter)
 		b.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = false)) AND e.hidden=false")
@@ -1057,7 +1057,7 @@ group by e.master_pubkey, e.pubkey`)
 		b.WriteString(" AND f.reference_id IN (")
 		if current.Reduce.Kinds[1] == nostr.KindFollowList {
 			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
-			b.WriteString(" UNION ")
+			b.WriteString(" UNION ALL ")
 			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &current.Start))
 		} else {
 			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "address", &current.Start))
@@ -1150,7 +1150,7 @@ func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (sql 
 	b.WriteString(" (")
 	for i := range ctes {
 		if i > 0 {
-			b.WriteString(" UNION \n")
+			b.WriteString(" UNION ALL \n")
 		}
 		b.WriteString(` (SELECT `)
 		for x, f := range b.fieldsNames(ctes[i].Name) {

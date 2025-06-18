@@ -85,15 +85,16 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 			return nil, errors.Wrap(err, "failed to parse attestation string")
 		}
 
-		if action == CustomIONAttestationKindRevoked {
+		switch action {
+		case CustomIONAttestationKindRevoked:
 			// Revoke access.
 			entry.Revoked = &ts
-		} else if action == CustomIONAttestationKindActive {
+		case CustomIONAttestationKindActive:
 			// Grant access.
 			entry.Start = &ts
 			entry.End = nil
 			entry.Kinds = kinds
-		} else if action == CustomIONAttestationKindInactive {
+		case CustomIONAttestationKindInactive:
 			// Remove access.
 			entry.End = &ts
 		}

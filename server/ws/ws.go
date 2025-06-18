@@ -168,7 +168,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		err = h.writeResponse(ctx, respWriter, h.handleAuth(ctx, respWriter, ev))
 		h.logOperation(respWriter, time.Since(start), "auth")
 	case *nostr.ReqEnvelope:
-		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, &model.Subscription{Filters: e.Filters, SubscriptionID: e.SubscriptionID})
+		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, model.NewSubscription(e.SubscriptionID, e.Filters))
 		h.logOperation(respWriter, time.Since(start), "req: %s: handle [%d] filters: %v: [%v]",
 			e.SubscriptionID, len(e.Filters), string(msgBytes),
 			err)
