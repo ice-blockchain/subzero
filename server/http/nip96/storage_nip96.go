@@ -155,7 +155,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			Alt:       upload.Alt,
 			CreatedAt: uint64(now.UnixNano()),
 		}
-		hash, err := s.storageClient.SaveFile(ctx, mpFile, token.MasterPubKey(), relativePath, &input)
+		hash, err := s.storageClient.SaveFile(ctx, mpFile, token.MasterPubKey(), &relativePath, &input)
 		if err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to save temp file while processing upload"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
