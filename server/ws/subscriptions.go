@@ -118,7 +118,7 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 	}
 
 	err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-		SubscriptionID: sub.SubscriptionID,
+		SubscriptionID: sub.ID,
 		Reason:         errAuthRequired.Error(),
 	})
 
@@ -131,7 +131,7 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 			Subscriptions: xsync.NewMap[string, *model.Subscription](),
 		}, false
 	})
-	conn.Subscriptions.Store(sub.SubscriptionID, sub)
+	conn.Subscriptions.Store(sub.ID, sub)
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
@@ -283,9 +283,9 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(sub.Filters[i].Tags.All("p"), ",") + "|",
 			Limit:   1,
 		}
-		sub.Reduce = func(e *model.Event) bool {
+		sub.WithReduce(func(e *model.Event) bool {
 			return e.Kind != nostr.KindProfileMetadata
-		}
+		})
 	}
 	return sub
 }
@@ -305,13 +305,13 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 			eventCount++
 			oldestTimestamp = event.CreatedAt
 
-			if sub.Reduce != nil && sub.Reduce(event) {
+			if sub.Reduce(event) {
 				continue
 			}
 
 			err := h.writeResponse(ctx, respWriter,
 				&nostr.EventEnvelope{
-					SubscriptionID: &sub.SubscriptionID,
+					SubscriptionID: &sub.ID,
 					Events:         []*nostr.Event{&event.Event},
 				})
 			if err != nil {
@@ -399,13 +399,13 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
 
-			if sub.Reduce != nil && sub.Reduce(event) {
+			if sub.Reduce(event) {
 				continue
 			}
 
 			err := h.writeResponse(ctx, respWriter,
 				&nostr.EventEnvelope{
-					SubscriptionID: &sub.SubscriptionID,
+					SubscriptionID: &sub.ID,
 					Events:         []*nostr.Event{&event.Event},
 				})
 			if err != nil {
@@ -422,14 +422,14 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
 			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
-					Challenge: generateChallenge(sub.SubscriptionID),
+					Challenge: generateChallenge(sub.ID),
 				}, false
 			})
 			if !status.Authenticated {
 				return h.authRequiredReq(ctx, respWriter, sub, status.Challenge)
 			} else if !status.IsFilterAllowed(sub.Filters...) {
 				return h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-					SubscriptionID: sub.SubscriptionID,
+					SubscriptionID: sub.ID,
 					Reason:         "error: not allowed to access the requested data",
 				})
 			}
@@ -445,16 +445,16 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 
 	if err != nil {
 		return errors.Join(err, h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-			SubscriptionID: sub.SubscriptionID,
+			SubscriptionID: sub.ID,
 			Reason:         err.Error(),
 		}))
 	}
 
-	err = h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.SubscriptionID)))
+	err = h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.ID)))
 	if err == nil {
 		if sub.OneShot {
 			err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-				SubscriptionID: sub.SubscriptionID,
+				SubscriptionID: sub.ID,
 				Reason:         "processed: single request only subscription",
 			})
 		} else {
@@ -506,30 +506,6 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 	return nil
 }
 
-func filtersMatchWithMasterKey(filters model.Filters, ev *model.Event, masterPubKey, deviceKey string) bool {
-	if filters.Match(&ev.Event) {
-		return true
-	}
-
-	for _, filter := range filters {
-		if !slices.Contains(filter.Authors, deviceKey) {
-			continue
-		}
-
-		n := filter.Clone()
-		n.Authors = nil
-		if n.Tags == nil {
-			n.Tags = model.TagMap{}
-		}
-		n.Tags.Set(model.CustomIONTagOnBehalfOf, &masterPubKey)
-		if n.Matches(&ev.Event) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
 	var broadcast = map[Writer][]nostr.EventEnvelope{}
 
@@ -537,9 +513,9 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
 		authData, _ := h.connAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
-			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.SubscriptionID}
+			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.ID}
 			for _, event := range events {
-				if !filtersMatchWithMasterKey(sub.Filters, event, authData.MasterPublicKey, authData.PublicKey) {
+				if !model.FiltersMatch(sub.Filters, event, authData.MasterPublicKey, authData.PublicKey) {
 					continue
 				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) ||
 					!canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
