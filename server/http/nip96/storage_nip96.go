@@ -289,7 +289,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("filehash is required"))
 			return
 		}
-		if err := s.storageClient.Delete(token.PubKey(), token.MasterPubKey(), file); err != nil {
+		if err := s.storageClient.Delete(ctx, token.PubKey(), token.MasterPubKey(), file); err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to delete file"))
 			if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrForbidden) {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))

@@ -3,15 +3,38 @@
 package storage
 
 import (
+	"context"
 	"encoding/hex"
 	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/syndtr/goleveldb/leveldb"
+
+	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/model"
 )
 
-func (c *client) Delete(userPubKey, masterKey, fileHash string) error {
+func (c *client) Delete(ctx context.Context, userPubKey, masterKey, fileHash string) error {
+	it := query.GetStoredEvents(ctx,
+		model.Filter{
+			Kinds:     []int{nostr.KindFileMetadata},
+			Authors:   []string{masterKey},
+			Addresses: nil,
+			Tags:      model.TagMap{}.Append("ox", &fileHash),
+			Limit:     2,
+		})
+	count := int64(0)
+	for _, err := range it {
+		if err != nil {
+			return errors.Wrapf(err, "failed to find deletable file hash %v", fileHash)
+		}
+		count += 1
+	}
+	if count >= 2 {
+		return nil // Used by other posts
+	}
 	bag, err := c.bagByUser(masterKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
@@ -34,8 +57,7 @@ func (c *client) Delete(userPubKey, masterKey, fileHash string) error {
 		}
 	}
 	userPath, _ := c.BuildUserPath(masterKey, "")
-	err = os.Remove(filepath.Join(userPath, file))
-	if err != nil {
+	if err = os.Remove(filepath.Join(userPath, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
 	}
 	return nil

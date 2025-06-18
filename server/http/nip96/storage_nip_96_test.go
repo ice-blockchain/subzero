@@ -120,8 +120,8 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, query.AcceptEvents(ctx, &ev))
 	})
 	events := make([]*model.Event, 0)
+	const filesCount = 6
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
-		const filesCount = 4
 		responsesCh := make(chan *nip96.UploadResponse, filesCount)
 		var wg sync.WaitGroup
 		wg.Add(filesCount)
@@ -138,6 +138,14 @@ func TestNIP96(t *testing.T) {
 			responsesCh <- resp
 		})
 		go upload(t, ctx, user1, masterPubKey, ".testdata/text.txt", "text.txt", "text file", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
+		})
+		go upload(t, ctx, user1, masterPubKey, ".testdata/dupl1.txt", "dupl1.txt", "same content file1", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
+		})
+		go upload(t, ctx, user1, masterPubKey, ".testdata/dupl1.txt", "dupl2.txt", "same content file2", func(resp *nip96.UploadResponse) {
 			defer wg.Done()
 			responsesCh <- resp
 		})
@@ -173,7 +181,6 @@ func TestNIP96(t *testing.T) {
 		}
 		wg.Wait()
 	})
-
 	const newStorageRoot = "./../../.test-uploads2"
 	t.Run("nip-94 event is broadcasted, it causes download to other node", func(t *testing.T) {
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
@@ -198,6 +205,48 @@ func TestNIP96(t *testing.T) {
 		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
 	})
 
+	t.Run("delete file by same hash used in multiple posts does not break link", func(t *testing.T) {
+		deleteFileAndVerify := func(verify func(fileName string)) {
+			var nip94ToBeDeleted *model.Event
+			for _, e := range events {
+				if e.GetTag("ox").Value() == "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1" {
+					nip94ToBeDeleted = e
+					break
+				}
+			}
+			fileHash := ""
+			if oxTag := nip94ToBeDeleted.GetTag("ox"); oxTag != nil {
+				fileHash = oxTag.Value()
+			} else {
+				t.Fatalf("malformed ox tag in nip94 event %v", nip94ToBeDeleted.ID)
+			}
+			status := deleteFile(t, ctx, user1, fileHash, masterPubKey)
+			require.Equal(t, http.StatusOK, status)
+			fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
+
+			deletionEventToSign := &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				Kind:      nostr.KindDeletion,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", nip94ToBeDeleted.ID},
+					nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindFileMetadata), 10)},
+					nostr.Tag{"b", masterPubKey},
+				},
+			}}
+			require.NoError(t, deletionEventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, query.AcceptEvents(ctx, deletionEventToSign))
+			require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
+
+			verify(fileName)
+		}
+		deleteFileAndVerify(func(fileName string) {
+			require.FileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
+			status, location := download(t, ctx, user1, "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1", masterPubKey)
+			require.Equal(t, http.StatusFound, status)
+			require.Regexp(t, "^http://[0-9a-fA-F]{64}.bag/dupl[12].txt.+", location)
+		})
+	})
+
 	t.Run("download endpoint redirects to same download url over ton storage", func(t *testing.T) {
 		expected := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice logo").Nip94Event.Tags})
 		status, location := download(t, ctx, user1, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", masterPubKey)
@@ -213,15 +262,15 @@ func TestNIP96(t *testing.T) {
 	})
 	t.Run("list files responds with up to all files for the user when total is less than page", func(t *testing.T) {
 		files := list(t, ctx, user1, 0, 0, masterPubKey)
-		assert.Equal(t, uint32(4), files.Total)
-		assert.Len(t, files.Files, 4)
+		assert.Equal(t, uint32(filesCount), files.Total)
+		assert.Len(t, files.Files, filesCount)
 		for _, f := range files.Files {
 			verifyFile(t, f.Content, f.Tags)
 		}
 	})
 	t.Run("list files with pagination", func(t *testing.T) {
 		files := list(t, ctx, user1, 0, 1, masterPubKey)
-		assert.Equal(t, uint32(4), files.Total)
+		assert.Equal(t, uint32(filesCount), files.Total)
 		assert.Len(t, files.Files, 1)
 		uniqFiles := map[string]struct{}{}
 		for _, f := range files.Files {
@@ -229,7 +278,7 @@ func TestNIP96(t *testing.T) {
 			uniqFiles[f.Content] = struct{}{}
 		}
 		files = list(t, ctx, user1, 1, 1, masterPubKey)
-		assert.Equal(t, uint32(4), files.Total)
+		assert.Equal(t, uint32(filesCount), files.Total)
 		assert.Len(t, files.Files, 1)
 		for _, f := range files.Files {
 			verifyFile(t, f.Content, f.Tags)
@@ -365,8 +414,12 @@ func verifyFile(t *testing.T, content string, tags nostr.Tags) {
 	md.URL = ""
 	md.TorrentInfoHash = ""
 	require.Equal(t, expected, md)
-	require.Contains(t, url, fmt.Sprintf("http://%v.bag/%v", bagID, expectedFileName))
-	require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expectedFileName), url)
+	if strings.Contains(content, "same content file") {
+		require.Regexp(t, "^http://[0-9a-fA-F]{64}.bag/dupl[12]\\.txt.+", url)
+	} else {
+		require.Contains(t, url, fmt.Sprintf("http://%v.bag/%v", bagID, expectedFileName))
+		require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expectedFileName), url)
+	}
 	require.Regexp(t, "^[0-9a-fA-F]{64}$", bagID)
 }
 
@@ -496,6 +549,40 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 					nostr.Tag{"size", "415939"},
 				},
 				Content: "ice profile pic",
+			},
+		},
+		"same content file1": {
+			Status:        "success",
+			Message:       "Upload successful.",
+			ProcessingURL: "",
+			Nip94Event: struct {
+				Tags    nostr.Tags `json:"tags"`
+				Content string     `json:"content"`
+			}{
+				Tags: nostr.Tags{
+					nostr.Tag{"summary", "dupl1.txt"},
+					nostr.Tag{"ox", "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1"},
+					nostr.Tag{"m", "text/plain"},
+					nostr.Tag{"size", "4"},
+				},
+				Content: "other text file same content",
+			},
+		},
+		"same content file2": {
+			Status:        "success",
+			Message:       "Upload successful.",
+			ProcessingURL: "",
+			Nip94Event: struct {
+				Tags    nostr.Tags `json:"tags"`
+				Content string     `json:"content"`
+			}{
+				Tags: nostr.Tags{
+					nostr.Tag{"summary", "dupl2.txt"},
+					nostr.Tag{"ox", "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1"},
+					nostr.Tag{"m", "text/plain"},
+					nostr.Tag{"size", "4"},
+				},
+				Content: "other text file same content",
 			},
 		},
 		"text file": {

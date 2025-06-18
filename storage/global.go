@@ -138,6 +138,24 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 }
 
 func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey string) error {
+	it := query.GetStoredEvents(ctx,
+		model.Filter{
+			Kinds:     []int{nostr.KindFileMetadata},
+			Authors:   []string{masterPubkey},
+			Addresses: nil,
+			Tags:      model.TagMap{}.Append("ox", &fileHash),
+			Limit:     2,
+		})
+	count := int64(0)
+	for _, err := range it {
+		if err != nil {
+			return errors.Wrapf(err, "failed to find deletable file hash %v", fileHash)
+		}
+		count += 1
+	}
+	if count >= 2 {
+		return nil // Used by other posts
+	}
 	bag, err := globalClient.bagByUser(masterPubkey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)

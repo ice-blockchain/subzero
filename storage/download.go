@@ -106,6 +106,12 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 	if len(bag) != 32 {
 		return errors.Wrapf(err, "invalid bagID %v, should be len 32", bagID)
 	}
+	c.activeDownloadsMx.RLock()
+	if _, has := c.activeDownloads[bagID]; has {
+		c.activeDownloadsMx.RUnlock()
+		return
+	}
+	c.activeDownloadsMx.RUnlock()
 	log.Printf("[STORAGE] INFO: ADDING %v for user %v TO DOWNLOADS, Q %v", bagID, user, len(c.downloadQueue))
 	tor := c.progressStorage.GetTorrent(bag)
 	if tor == nil {
