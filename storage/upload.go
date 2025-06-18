@@ -243,9 +243,9 @@ func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string) error
 	c.newFilesMx.Unlock()
 	return nil
 }
-func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey, relativePath string, input *FileMetaInput) ([]byte, error) {
+func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey string, relativePath *string, input *FileMetaInput) ([]byte, error) {
 	storagePath, _ := c.BuildUserPath(masterPubKey, "")
-	uploadingFilePath := filepath.Join(storagePath, relativePath)
+	uploadingFilePath := filepath.Join(storagePath, *relativePath)
 
 	fileUploadTo, err := os.Create(uploadingFilePath)
 	if err != nil {
@@ -261,11 +261,15 @@ func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey, rel
 	if err = fileUploadTo.Sync(); err != nil {
 		return nil, errors.Wrap(err, "failed to copy temp file while processing upload")
 	}
+	hexHash := hex.EncodeToString(hash)
+	newName := hexHash + filepath.Ext(uploadingFilePath)
+	os.Rename(uploadingFilePath, filepath.Join(storagePath, newName))
+	*relativePath = newName
 	c.newFilesMx.Lock()
 	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {
 		c.newFiles[masterPubKey] = make(map[string]*FileMetaInput)
 	}
-	c.newFiles[masterPubKey][relativePath] = input
+	c.newFiles[masterPubKey][newName] = input
 	c.newFilesMx.Unlock()
 	return hash, nil
 }

@@ -197,10 +197,10 @@ func TestNIP96(t *testing.T) {
 		}
 		wg.Wait()
 
-		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "profile.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
+		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
 		require.NoError(t, err)
 		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
-		downloadedLogoHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "ice.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
+		downloadedLogoHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
 		require.NoError(t, err)
 		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
 	})
@@ -243,7 +243,7 @@ func TestNIP96(t *testing.T) {
 			require.FileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 			status, location := download(t, ctx, user1, "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1", masterPubKey)
 			require.Equal(t, http.StatusFound, status)
-			require.Regexp(t, "^http://[0-9a-fA-F]{64}.bag/dupl[12].txt.+", location)
+			require.Regexp(t, "^http://[0-9a-fA-F]{64}.bag/c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1.txt.+", location)
 		})
 	})
 
@@ -262,15 +262,15 @@ func TestNIP96(t *testing.T) {
 	})
 	t.Run("list files responds with up to all files for the user when total is less than page", func(t *testing.T) {
 		files := list(t, ctx, user1, 0, 0, masterPubKey)
-		assert.Equal(t, uint32(filesCount), files.Total)
-		assert.Len(t, files.Files, filesCount)
+		assert.Equal(t, uint32(filesCount-1), files.Total)
+		assert.Len(t, files.Files, filesCount-1)
 		for _, f := range files.Files {
 			verifyFile(t, f.Content, f.Tags)
 		}
 	})
 	t.Run("list files with pagination", func(t *testing.T) {
 		files := list(t, ctx, user1, 0, 1, masterPubKey)
-		assert.Equal(t, uint32(filesCount), files.Total)
+		assert.Equal(t, uint32(filesCount-1), files.Total)
 		assert.Len(t, files.Files, 1)
 		uniqFiles := map[string]struct{}{}
 		for _, f := range files.Files {
@@ -278,7 +278,7 @@ func TestNIP96(t *testing.T) {
 			uniqFiles[f.Content] = struct{}{}
 		}
 		files = list(t, ctx, user1, 1, 1, masterPubKey)
-		assert.Equal(t, uint32(filesCount), files.Total)
+		assert.Equal(t, uint32(filesCount-1), files.Total)
 		assert.Len(t, files.Files, 1)
 		for _, f := range files.Files {
 			verifyFile(t, f.Content, f.Tags)
@@ -327,7 +327,7 @@ func TestNIP96(t *testing.T) {
 		}
 		status := deleteFile(t, ctx, user2, "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1", masterPubKey)
 		require.Equal(t, http.StatusOK, status)
-		fileName := "text.txt"
+		fileName := "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1.txt"
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 		imetaEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Timestamp(time.Now().Unix()),
@@ -360,7 +360,7 @@ func TestNIP96(t *testing.T) {
 	t.Run("delete file owned by master by usr1 (Forbidden)", func(t *testing.T) {
 		status := deleteFile(t, ctx, user1, "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9", masterPubKey)
 		require.Equal(t, http.StatusForbidden, status)
-		fileName := "master.txt"
+		fileName := "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9.txt"
 		require.FileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 	})
 	ch := make(chan struct{}, 100)
@@ -414,12 +414,8 @@ func verifyFile(t *testing.T, content string, tags nostr.Tags) {
 	md.URL = ""
 	md.TorrentInfoHash = ""
 	require.Equal(t, expected, md)
-	if strings.Contains(content, "same content file") {
-		require.Regexp(t, "^http://[0-9a-fA-F]{64}.bag/dupl[12]\\.txt.+", url)
-	} else {
-		require.Contains(t, url, fmt.Sprintf("http://%v.bag/%v", bagID, expectedFileName))
-		require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expectedFileName), url)
-	}
+	require.Contains(t, url, fmt.Sprintf("http://%v.bag/%v", bagID, expectedFileName))
+	require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expectedFileName), url)
 	require.Regexp(t, "^[0-9a-fA-F]{64}$", bagID)
 }
 
@@ -526,7 +522,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content string     `json:"content"`
 			}{
 				Tags: nostr.Tags{
-					nostr.Tag{"summary", "profile.png"},
+					nostr.Tag{"summary", "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png"},
 					nostr.Tag{"ox", "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292"},
 					nostr.Tag{"m", "image/png"},
 					nostr.Tag{"size", "182744"},
@@ -543,7 +539,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content string     `json:"content"`
 			}{
 				Tags: nostr.Tags{
-					nostr.Tag{"summary", "ice.jpg"},
+					nostr.Tag{"summary", "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218.jpg"},
 					nostr.Tag{"ox", "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218"},
 					nostr.Tag{"m", "image/png"},
 					nostr.Tag{"size", "415939"},
@@ -560,7 +556,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content string     `json:"content"`
 			}{
 				Tags: nostr.Tags{
-					nostr.Tag{"summary", "dupl1.txt"},
+					nostr.Tag{"summary", "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1.txt"},
 					nostr.Tag{"ox", "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "4"},
@@ -577,7 +573,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content string     `json:"content"`
 			}{
 				Tags: nostr.Tags{
-					nostr.Tag{"summary", "dupl2.txt"},
+					nostr.Tag{"summary", "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1.txt"},
 					nostr.Tag{"ox", "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "4"},
@@ -594,7 +590,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content string     `json:"content"`
 			}{
 				Tags: nostr.Tags{
-					nostr.Tag{"summary", "text.txt"},
+					nostr.Tag{"summary", "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1.txt"},
 					nostr.Tag{"ox", "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "4"},
@@ -611,7 +607,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content string     `json:"content"`
 			}{
 				Tags: nostr.Tags{
-					nostr.Tag{"summary", "master.txt"},
+					nostr.Tag{"summary", "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9.txt"},
 					nostr.Tag{"ox", "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "6"},
