@@ -560,3 +560,204 @@ func TestBroadcastUserEvents_BadgeEvents(t *testing.T) {
 		require.Equal(t, profileBadges.ID, broadcastedEvents[0].ID)
 	})
 }
+
+func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
+	t.Parallel()
+	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyUser1, _ := model.GenerateKeyPair()
+	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
+	dBadgeTagVal := "verified"
+
+	t.Run("badge_events_with_ephemeral_acks", func(t *testing.T) {
+		var post, replyEvent *model.Event
+		var badgeDefinition, badgeAward, profileEvent, attestationEvent, textNoteEvent *model.Event
+		var badgeDefAck, badgeAwardAck, profileAck, attestationAck, textNoteAck *model.Event
+
+		t.Run("create_main_post_with_badge_restrictions", func(t *testing.T) {
+			post = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "Post with badge restrictions",
+				Tags: nostr.Tags{
+					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
+				},
+			}}
+			require.NoError(t, post.SignWithAlg(privkeyPostOwner, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NotEmpty(t, post.ID)
+		})
+
+		t.Run("create_reply_event", func(t *testing.T) {
+			replyEvent = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Tags: nostr.Tags{
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
+					{"p", post.GetMasterPublicKey()},
+				},
+				Content: "Reply with badge acks",
+			}}
+			require.NoError(t, replyEvent.SignWithAlg(privkeyUser2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NotEmpty(t, replyEvent.ID)
+		})
+
+		t.Run("create_badge_definition_content", func(t *testing.T) {
+			badgeDefinition = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindBadgeDefinition,
+				Tags: nostr.Tags{
+					{"d", dBadgeTagVal},
+					{"name", "Verified Badge"},
+					{"description", "User verification badge"},
+				},
+			}}
+			require.NoError(t, badgeDefinition.SignWithAlg(privkeyPostOwner, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Equal(t, nostr.KindBadgeDefinition, badgeDefinition.Kind)
+		})
+
+		t.Run("create_badge_award_content", func(t *testing.T) {
+			badgeAward = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindBadgeAward,
+				Tags: nostr.Tags{
+					{"a", fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+					{"p", pubkeyUser2},
+				},
+			}}
+			require.NoError(t, badgeAward.SignWithAlg(privkeyPostOwner, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Equal(t, nostr.KindBadgeAward, badgeAward.Kind)
+		})
+
+		t.Run("create_profile_metadata_content", func(t *testing.T) {
+			profileEvent = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindProfileMetadata,
+				Content:   `{"name": "Test User", "about": "Testing badges"}`,
+			}}
+			require.NoError(t, profileEvent.SignWithAlg(privkeyUser2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Equal(t, nostr.KindProfileMetadata, profileEvent.Kind)
+		})
+
+		t.Run("create_attestation_content", func(t *testing.T) {
+			attestationEvent = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindAttestation,
+				Content:   "Attestation content",
+			}}
+			require.NoError(t, attestationEvent.SignWithAlg(privkeyUser1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Equal(t, model.CustomIONKindAttestation, attestationEvent.Kind)
+		})
+
+		t.Run("create_unsupported_content", func(t *testing.T) {
+			textNoteEvent = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "Just a regular text note",
+			}}
+			require.NoError(t, textNoteEvent.SignWithAlg(privkeyUser1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Equal(t, nostr.KindTextNote, textNoteEvent.Kind)
+		})
+
+		t.Run("create_ephemeral_acks", func(t *testing.T) {
+			badgeDefAckContent, err := badgeDefinition.MarshalJSON()
+			require.NoError(t, err)
+			badgeDefAck = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					{"e", replyEvent.ID},
+				},
+				Content: string(badgeDefAckContent),
+			}}
+			require.NoError(t, badgeDefAck.SignWithAlg(privkeyPostOwner, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			badgeAwardAckContent, err := badgeAward.MarshalJSON()
+			require.NoError(t, err)
+			badgeAwardAck = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					{"e", replyEvent.ID},
+				},
+				Content: string(badgeAwardAckContent),
+			}}
+			require.NoError(t, badgeAwardAck.SignWithAlg(privkeyPostOwner, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			profileAckContent, err := profileEvent.MarshalJSON()
+			require.NoError(t, err)
+			profileAck = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					{"e", replyEvent.ID},
+				},
+				Content: string(profileAckContent),
+			}}
+			require.NoError(t, profileAck.SignWithAlg(privkeyUser2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			attestationAckContent, err := attestationEvent.MarshalJSON()
+			require.NoError(t, err)
+			attestationAck = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					{"e", replyEvent.ID},
+				},
+				Content: string(attestationAckContent),
+			}}
+			require.NoError(t, attestationAck.SignWithAlg(privkeyUser1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			textNoteAckContent, err := textNoteEvent.MarshalJSON()
+			require.NoError(t, err)
+			textNoteAck = &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Tags: nostr.Tags{
+					{"e", replyEvent.ID},
+				},
+				Content: string(textNoteAckContent),
+			}}
+			require.NoError(t, textNoteAck.SignWithAlg(privkeyUser1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			require.NotEmpty(t, badgeDefAck.ID)
+			require.NotEmpty(t, badgeAwardAck.ID)
+			require.NotEmpty(t, profileAck.ID)
+			require.NotEmpty(t, attestationAck.ID)
+			require.NotEmpty(t, textNoteAck.ID)
+		})
+
+		t.Run("test_mapEventsToTXs_filtering", func(t *testing.T) {
+			allEvents := []*model.Event{replyEvent, badgeDefAck, badgeAwardAck, profileAck, attestationAck, textNoteAck}
+			ephemeralAckEvents, err := model.ParseEphemeralEmbeddingEvents(allEvents...)
+			require.NoError(t, err)
+
+			txs, err := mapEventsToTXs([]*model.Event{replyEvent}, ephemeralAckEvents)
+			require.NoError(t, err)
+			require.Len(t, txs, 1)
+
+			var env nostr.EventEnvelope
+			err = env.UnmarshalJSON(txs[0].Data)
+			require.NoError(t, err)
+
+			require.Len(t, env.Events, 5, "Should have reply + 4 filtered ephemeral events")
+
+			eventKinds := make(map[int]int)
+			ephemeralIDs := make(map[string]bool)
+
+			for _, ev := range env.Events {
+				eventKinds[ev.Kind]++
+				if ev.Kind == model.CustomIONKindEphemeralEmbeddding {
+					ephemeralIDs[ev.ID] = true
+				}
+			}
+			require.Equal(t, 1, eventKinds[nostr.KindTextNote], "Should have 1 text note (the reply)")
+			require.Equal(t, 4, eventKinds[model.CustomIONKindEphemeralEmbeddding], "Should have 4 ephemeral events")
+
+			require.True(t, ephemeralIDs[badgeDefAck.ID], "Badge definition ephemeral ack should be included")
+			require.True(t, ephemeralIDs[badgeAwardAck.ID], "Badge award ephemeral ack should be included")
+			require.True(t, ephemeralIDs[profileAck.ID], "Profile ephemeral ack should be included")
+			require.True(t, ephemeralIDs[attestationAck.ID], "Attestation ephemeral ack should be included")
+			require.False(t, ephemeralIDs[textNoteAck.ID], "Text note ephemeral ack should be filtered out")
+		})
+	})
+}

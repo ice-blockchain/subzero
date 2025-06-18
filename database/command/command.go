@@ -501,14 +501,15 @@ func mapEventsToTXs(events []*model.Event, ackEvents map[string][]*model.Ephemer
 		}
 		env.Events = append(env.Events, &ev.Event)
 		mappedEphemeralEvents := ackEvents[ev.Address()]
-		ackEphepheralEvents := make([]*nostr.Event, 0, len(mappedEphemeralEvents))
+		ackEphemeralEvents := make([]*nostr.Event, 0, len(mappedEphemeralEvents))
 		for _, e := range mappedEphemeralEvents {
-			if e.ContentEvent != nil && (e.ContentEvent.Kind == model.CustomIONKindAttestation || e.ContentEvent.Kind == nostr.KindProfileMetadata) {
-				ackEphepheralEvents = append(ackEphepheralEvents, &e.Event.Event)
+			if e.ContentEvent != nil && (e.ContentEvent.Kind == model.CustomIONKindAttestation || e.ContentEvent.Kind == nostr.KindProfileMetadata ||
+				e.ContentEvent.Kind == nostr.KindBadgeDefinition || e.ContentEvent.Kind == nostr.KindBadgeAward) {
+				ackEphemeralEvents = append(ackEphemeralEvents, &e.Event.Event)
 			}
 		}
-		if len(ackEphepheralEvents) > 0 {
-			env.Events = append(env.Events, ackEphepheralEvents...)
+		if len(ackEphemeralEvents) > 0 {
+			env.Events = append(env.Events, ackEphemeralEvents...)
 		}
 
 		encodedEvents[fingerprint] = env
