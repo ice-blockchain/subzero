@@ -716,13 +716,11 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 	t.Run("DoAuth", func(t *testing.T) {
 		helperDoAuth(t, relay.Relay, userPriv, masterPub)
 	})
-	t.Run("Fetch", func(t *testing.T) {
-		start := time.Now()
-		received := helperQueryEvents(t, t.Context(), relay, model.Filter{
-			Kinds: []int{nostr.KindGiftWrap},
-			Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
-		})
-		t.Logf("received %d events in %s", len(published), time.Since(start))
+
+	helperCompareEvents := func(t *testing.T, received []*model.Event) {
+		t.Helper()
+
+		t.Logf("received %d events", len(received))
 		expected := make(map[string]struct{}, len(published))
 		for _, ev := range published {
 			expected[ev.ID] = struct{}{}
@@ -731,6 +729,40 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 			delete(expected, received[i].ID)
 		}
 		require.Emptyf(t, expected, "not all events were received, missing: %#v", expected)
+	}
+
+	t.Run("Fetch as single filter", func(t *testing.T) {
+		start := time.Now()
+		received := helperQueryEvents(t, t.Context(), relay, model.Filter{
+			Kinds: []int{nostr.KindGiftWrap},
+			Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
+		})
+		t.Logf("received %d events in %s", len(published), time.Since(start))
+		helperCompareEvents(t, received)
+	})
+	t.Run("Fetch as part of the filters in the beginning", func(t *testing.T) {
+		received := helperQueryEvents(t, t.Context(), relay,
+			model.Filter{
+				Kinds: []int{nostr.KindGiftWrap},
+				Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
+			},
+			model.Filter{
+				Kinds: []int{nostr.KindTextNote},
+			},
+		)
+		helperCompareEvents(t, received)
+	})
+	t.Run("Fetch as part of the filters in the end", func(t *testing.T) {
+		received := helperQueryEvents(t, t.Context(), relay,
+			model.Filter{
+				Kinds: []int{nostr.KindTextNote},
+			},
+			model.Filter{
+				Kinds: []int{nostr.KindGiftWrap},
+				Tags:  model.TagMap{}.SetLiterals("p", masterPub, "", userPub),
+			},
+		)
+		helperCompareEvents(t, received)
 	})
 	helperMustCloseRelay(t, relay)
 }

@@ -43,8 +43,8 @@ func helperWaitFor[T any](t *testing.T, ch <-chan T, deadline time.Duration) T {
 	return zero
 }
 
-func helperQueryEvents(t *testing.T, ctx context.Context, relay *nostrRelay, filter model.Filter) []*model.Event {
-	nResults, err := relay.QuerySync(ctx, filter)
+func helperQueryEvents(t *testing.T, ctx context.Context, relay *nostrRelay, filter ...model.Filter) []*model.Event {
+	nResults, err := relay.BlockingQueryEventsMany(ctx, filter...)
 	require.NoError(t, err)
 	results := make([]*model.Event, 0, len(nResults))
 	for _, r := range nResults {
