@@ -290,14 +290,14 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 	return sub
 }
 
-func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
-	sub.Filters[0].Limit = 1000
+func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, sub *model.Subscription, giftWrapFilter model.Filter) error {
+	giftWrapFilter.Limit = 1000
 
 	for ctx.Err() == nil {
 		var oldestTimestamp model.Timestamp
 		var eventCount int
 
-		for event, err := range query.GetStoredEvents(ctx, sub.Filters...) {
+		for event, err := range query.GetStoredEvents(ctx, giftWrapFilter) {
 			if err != nil {
 				return errors.Wrap(err, "failed to fetch events")
 			}
@@ -319,14 +319,14 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 			}
 		}
 
-		if eventCount < sub.Filters[0].Limit {
+		if eventCount < giftWrapFilter.Limit {
 			// No more events to process.
 			break
 		}
 
-		sub.Filters[0].Until = &oldestTimestamp
+		giftWrapFilter.Until = &oldestTimestamp
 
-		if sub.Filters[0].Since != nil && sub.Filters[0].Since.After(*sub.Filters[0].Until) {
+		if giftWrapFilter.Since != nil && giftWrapFilter.Since.After(*giftWrapFilter.Until) {
 			// Reached the end of the subscription time range.
 			break
 		}
@@ -334,39 +334,67 @@ func (h *handler) streamGiftWrapEvents(ctx context.Context, respWriter Writer, s
 	return ctx.Err()
 }
 
+func getGiftWrapFilterIndex(filters model.Filters) int {
+	return slices.IndexFunc(filters,
+		func(filter model.Filter) bool {
+			return len(filter.Kinds) == 1 &&
+				filter.Kinds[0] == nostr.KindGiftWrap &&
+				len(filter.Tags) == 1 &&
+				len(filter.Tags["p"]) == 1 &&
+				len(filter.Tags["p"][0]) == 3 // [master, '', device].
+		})
+}
+
+func isValidGiftWrapFilter(filter model.Filter, master, device string) bool {
+	expectedTags := model.TagValues{&master, model.PointerOf(""), &device}
+	return slices.CompareFunc(filter.Tags["p"][0], expectedTags, compareStringPointers) == 0
+}
+
+func compareStringPointers(a, b *string) int {
+	if a == nil && b == nil {
+		return 0
+	} else if a == nil {
+		return -1
+	} else if b == nil {
+		return 1
+	}
+	return strings.Compare(*a, *b)
+}
+
 func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
 	sub = h.prepareSubscription(ctx, sub)
 
 	applySubscriptionLimit(sub)
 
+	filters := sub.Filters
+
 	// Special case for global gift wrap subscription.
 	// { "kinds":[1059], "#p": [[loggedinMasterKey, '', loggedinDevicekey]] }.
-	if len(sub.Filters) == 1 &&
-		len(sub.Filters[0].Kinds) == 1 &&
-		sub.Filters[0].Kinds[0] == nostr.KindGiftWrap &&
-		len(sub.Filters[0].Tags) == 1 &&
-		len(sub.Filters[0].Tags["p"]) == 1 && len(sub.Filters[0].Tags["p"][0]) == 3 {
+	if idx := getGiftWrapFilterIndex(filters); idx >= 0 {
 		master, device, _, _ := model.GetUserDataFromContext(ctx)
-		if slices.CompareFunc(sub.Filters[0].Tags["p"][0], model.TagValues{&master, model.PointerOf(""), &device}, func(a, b *string) int {
-			if a == nil && b == nil {
-				return 0
-			} else if a == nil {
-				return -1
-			} else if b == nil {
-				return 1
+		if isValidGiftWrapFilter(filters[idx], master, device) {
+			err := h.streamGiftWrapEvents(ctx, respWriter, sub, filters[idx])
+			if err != nil {
+				return errors.Wrap(err, "failed to stream gift wrap events")
+			} else {
+				if len(filters) == 1 {
+					return nil // No other filters to process.
+				}
+
+				// Remove the gift wrap filter from the initial request, but keep it for later use.
+				filtersCopy := make(model.Filters, len(filters)-1)
+				copy(filtersCopy, filters[:idx])
+				copy(filtersCopy[idx:], filters[idx+1:])
+				filters = filtersCopy
 			}
-			return strings.Compare(*a, *b)
-		}) == 0 {
-			return h.streamGiftWrapEvents(ctx, respWriter, sub)
 		}
-		// Not a gift wrap subscription, continue with normal processing.
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	for i, getter := range wsSubscriptionListeners {
-		for event, err := range getter(ctx, sub.Filters...) {
+		for event, err := range getter(ctx, filters...) {
 			if err != nil {
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
