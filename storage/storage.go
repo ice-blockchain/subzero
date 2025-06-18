@@ -38,7 +38,7 @@ type (
 		DownloadUrl(masterKey, fileSha256 string) (string, error)
 		FilePath(masterKey, fileSha256 string) (string, error)
 		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
-		Delete(userPubkey, masterKey string, fileSha256 string) error
+		Delete(ctx context.Context, userPubkey, masterKey string, fileSha256 string) error
 		DeleteUser(masterKey string) error
 	}
 	Bootstrap struct {
