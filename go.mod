@@ -35,7 +35,7 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
-	github.com/jellydator/ttlcache/v3 v3.3.0
+	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/libdns/cloudflare v0.2.1
 	github.com/microcosm-cc/bluemonday v1.0.27
@@ -43,7 +43,7 @@ require (
 	github.com/nbd-wtf/go-nostr v0.51.12
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.52.0
-	github.com/quic-go/webtransport-go v0.8.1-0.20250616120123-59b4ac101a3b
+	github.com/quic-go/webtransport-go v0.8.1-0.20250617154214-d62037919799
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/shirou/gopsutil/v4 v4.25.5
@@ -58,7 +58,7 @@ require (
 	github.com/xssnick/tonutils-storage v1.1.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.41.0
-	google.golang.org/api v0.237.0
+	google.golang.org/api v0.238.0
 )
 
 require (
