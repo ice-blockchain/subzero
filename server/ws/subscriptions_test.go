@@ -675,3 +675,84 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 	})
 	helperMustCloseRelay(t, relay)
 }
+
+func TestBufferAndStremEvents(t *testing.T) {
+	waitChannel := make(chan struct{})
+
+	RegisterReqMustAuthenticate(nil)
+	RegisterEventMustAuthenticate(nil)
+	RegisterWSSubscriptionListener(func(ctx context.Context, f ...model.Filter) EventIterator {
+		t.Logf("DB request with filters: %v", model.Filters(f).String())
+		<-waitChannel
+		t.Logf("DB request unblocked, returning stored events")
+		return query.GetStoredEvents(ctx, f...)
+	})
+	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
+		return nil
+	})
+
+	var note model.Event
+	t.Run("Create DB event", func(t *testing.T) {
+		note.Kind = nostr.KindTextNote
+		note.CreatedAt = nostr.Now()
+		note.Content = "test note initial"
+		helperSignWithMinLeadingZeroBits(t, &note, model.GeneratePrivateKey())
+		require.NoError(t, query.AcceptEvents(t.Context(), &note))
+	})
+
+	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	sub, err := relay.Subscribe(t.Context(), model.Filters{{Kinds: []int{nostr.KindTextNote}}})
+	require.NoError(t, err)
+
+	received := make([]*model.Event, 0, 10)
+	sent := make([]*model.Event, 0, 10)
+	signal := make(chan struct{}, 1)
+	signal <- struct{}{} // Start the loop immediately.
+
+loop:
+	for {
+		select {
+		case reason := <-sub.ClosedReason:
+			t.Fatalf("subscription %s closed unexpectedly: %s", sub.GetID(), reason)
+
+		case <-sub.EndOfStoredEvents:
+			t.Logf("subscription %s reached end of stored events", sub.GetID())
+			// Must be the event from the database.
+			require.Len(t, received, 1)
+			require.Equal(t, note.ID, received[0].ID)
+
+		case <-signal:
+			t.Logf("sending %d events to relay", cap(sent))
+			// Send for event that must be buffered.
+			for range cap(sent) {
+				var ev model.Event
+
+				ev.Kind = nostr.KindTextNote
+				ev.CreatedAt = nostr.Now()
+				ev.Content = "test note " + strconv.Itoa(len(sent)+1)
+				helperSignWithMinLeadingZeroBits(t, &ev, model.GeneratePrivateKey())
+				require.NoError(t, relay.Publish(t.Context(), ev.Event))
+				sent = append(sent, &ev)
+			}
+			// Unblock the subscription to start receiving events.
+			close(waitChannel)
+			t.Logf("unblocked subscription %s", sub.GetID())
+
+		case ev := <-sub.Events:
+			received = append(received, &model.Event{Event: *ev})
+			if len(received) == cap(sent)+1 { // +1 for the event from the database.
+				t.Logf("received all %d events", len(received))
+				sub.Unsub()
+				break loop
+			}
+		}
+	}
+	t.Logf("subscription %s finished with %d events", sub.GetID(), len(received))
+
+	require.Len(t, received, len(sent)+1) // +1 for the event from the database.
+	require.Equal(t, note.ID, received[0].ID)
+	require.ElementsMatch(t, sent, received[1:])
+
+	helperMustCloseRelay(t, relay)
+}
