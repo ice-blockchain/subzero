@@ -3,12 +3,9 @@
 package model
 
 import (
-	"math"
-	"math/rand/v2"
-	"strconv"
+	"log"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 type (
@@ -34,7 +31,7 @@ func NewSubscription(id string, filters Filters) *Subscription {
 	}
 
 	if s.ID == "" {
-		s.ID = "autogen-" + time.Now().Format(time.RFC3339Nano) + "-" + strconv.FormatUint(rand.Uint64N(math.MaxUint64), 16)
+		log.Panicf("Subscription ID cannot be empty, filters: %s", filters.String())
 	}
 
 	return s
