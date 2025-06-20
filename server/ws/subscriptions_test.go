@@ -681,23 +681,21 @@ func TestBufferAndStremEvents(t *testing.T) {
 
 	RegisterReqMustAuthenticate(nil)
 	RegisterEventMustAuthenticate(nil)
+
+	var note model.Event
+	note.Kind = nostr.KindTextNote
+	note.CreatedAt = nostr.Now()
+	note.Content = "test note initial"
+	helperSignWithMinLeadingZeroBits(t, &note, model.GeneratePrivateKey())
+
 	RegisterWSSubscriptionListener(func(ctx context.Context, f ...model.Filter) EventIterator {
 		t.Logf("DB request with filters: %v", model.Filters(f).String())
 		<-waitChannel
 		t.Logf("DB request unblocked, returning stored events")
-		return query.GetStoredEvents(ctx, f...)
+		return helperNewIterator(t, []*model.Event{&note})
 	})
 	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
 		return nil
-	})
-
-	var note model.Event
-	t.Run("Create DB event", func(t *testing.T) {
-		note.Kind = nostr.KindTextNote
-		note.CreatedAt = nostr.Now()
-		note.Content = "test note initial"
-		helperSignWithMinLeadingZeroBits(t, &note, model.GeneratePrivateKey())
-		require.NoError(t, query.AcceptEvents(t.Context(), &note))
 	})
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
