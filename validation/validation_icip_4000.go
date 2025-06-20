@@ -21,6 +21,15 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+type (
+	deltaOperation struct {
+		Insert json.RawMessage `json:"insert"`
+	}
+	deltaInsertObject struct {
+		TextEditorProfile string `json:"text-editor-profile,omitempty"`
+	}
+)
+
 var (
 	nprofileRegex = regexp.MustCompile(`(?:nostr:)?nprofile1[a-z0-9]+`)
 )
@@ -93,7 +102,7 @@ func checkFollowingWhoCanReplySettings(ctx context.Context, rootPost, e *model.E
 
 func ExtractMentionedPubkeys(e *model.Event) ([]string, error) {
 	if e.Event.Content != "" {
-		return extractPubkeysFromContent(e.Event.Content), nil
+		return extractPubkeysFromContent(e.Content), nil
 	}
 	richTextPubkeys, err := extractPubkeysFromRichText(e)
 	if err != nil {
@@ -119,26 +128,22 @@ func extractPubkeysFromContent(content string) []string {
 func extractPubkeysFromRichText(e *model.Event) ([]string, error) {
 	var pubkeys []string
 	richTextTag := e.GetTag(model.CustomIONTagRichText)
-	if richTextTag == nil || len(richTextTag) < 3 || richTextTag.Value() != model.QuillDeltaProtocol {
+	if len(richTextTag) < 3 || richTextTag.Value() != model.QuillDeltaProtocol {
 		return pubkeys, nil
 	}
-	deltaJSON := richTextTag[2]
-	var delta []map[string]interface{}
-	if err := json.Unmarshal([]byte(deltaJSON), &delta); err != nil {
+	var delta []deltaOperation
+	if err := json.Unmarshal([]byte(richTextTag[2]), &delta); err != nil {
 		return pubkeys, nil
 	}
 	for _, op := range delta {
-		insert, ok := op["insert"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		profile, ok := insert["text-editor-profile"].(string)
-		if !ok {
-			continue
-		}
-		for _, match := range nprofileRegex.FindAllString(profile, -1) {
-			if pubkey := decodePubkeyFromNprofile(match); pubkey != "" {
-				pubkeys = append(pubkeys, pubkey)
+		var insertObj deltaInsertObject
+		if err := json.Unmarshal(op.Insert, &insertObj); err == nil {
+			if insertObj.TextEditorProfile != "" {
+				for _, match := range nprofileRegex.FindAllString(insertObj.TextEditorProfile, -1) {
+					if pubkey := decodePubkeyFromNprofile(match); pubkey != "" {
+						pubkeys = append(pubkeys, pubkey)
+					}
+				}
 			}
 		}
 	}
