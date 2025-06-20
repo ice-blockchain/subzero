@@ -254,10 +254,7 @@ func validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Even
 	if e.Content != "" {
 		contentSize = len(e.Content)
 	} else {
-		richTextTag := e.GetTag(model.CustomIONTagRichText)
-		if richTextTag != nil && len(richTextTag) >= 3 {
-			contentSize = len(richTextTag[2])
-		}
+		contentSize = len(model.ExtractRichTextContent(e))
 	}
 	if maxSize := globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && contentSize > maxSize {
 		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", contentSize, maxSize)

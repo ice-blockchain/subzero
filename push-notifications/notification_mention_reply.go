@@ -7,12 +7,11 @@ import (
 
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
-	mentionedPubkeys, err := validation.ExtractMentionedPubkeys(event)
+	mentionedPubkeys, err := model.ExtractMentionedPubkeys(event)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract mentioned pubkeys")
 	}
