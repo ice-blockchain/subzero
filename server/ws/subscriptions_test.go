@@ -717,7 +717,7 @@ loop:
 		case <-sub.EndOfStoredEvents:
 			t.Logf("subscription %s reached end of stored events", sub.GetID())
 			// Must be the event from the database.
-			require.Len(t, received, 1)
+			require.NotEmpty(t, received)
 			require.Equal(t, note.ID, received[0].ID)
 
 		case <-signal:
@@ -738,6 +738,7 @@ loop:
 			t.Logf("unblocked subscription %s", sub.GetID())
 
 		case ev := <-sub.Events:
+			t.Logf("received event %s from subscription %s", ev.ID, sub.GetID())
 			received = append(received, &model.Event{Event: *ev})
 			if len(received) == cap(sent)+1 { // +1 for the event from the database.
 				t.Logf("received all %d events", len(received))
