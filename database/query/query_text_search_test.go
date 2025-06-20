@@ -902,7 +902,7 @@ func TestExtractRichTextContent(t *testing.T) {
 		deltaJSON := `[{"insert":"Header 1"},{"insert":"\n","attributes":{"header":1}},{"insert":"Regular text "},{"insert":"Bold","attributes":{"bold":true}},{"insert":" "},{"insert":"Italic","attributes":{"italic":true}},{"insert":"\n"}]`
 		var ev model.Event
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		result := extractRichTextContent(&ev)
 		require.Equal(t, "Header 1 Regular text Bold Italic", result)
@@ -911,7 +911,7 @@ func TestExtractRichTextContent(t *testing.T) {
 		deltaJSON := `[{"insert":"Hello World!\n"}]`
 		var ev model.Event
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		result := extractRichTextContent(&ev)
 		require.Equal(t, "Hello World!", result)
@@ -920,7 +920,7 @@ func TestExtractRichTextContent(t *testing.T) {
 		deltaJSON := `[{"insert":"Text before image "},{"insert":{"image":"https://example.com/img.jpg"}},{"insert":" text after image\n"}]`
 		var ev model.Event
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		result := extractRichTextContent(&ev)
 		require.Equal(t, "Text before image text after image", result)
@@ -929,7 +929,7 @@ func TestExtractRichTextContent(t *testing.T) {
 		invalidJSON := `[{"insert":"Header 1"}`
 		var ev model.Event
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", invalidJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, invalidJSON},
 		}
 		result := extractRichTextContent(&ev)
 		require.Empty(t, result)
@@ -951,7 +951,7 @@ func TestExtractRichTextContent(t *testing.T) {
 	t.Run("Malformed rich_text tag", func(t *testing.T) {
 		var ev model.Event
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta"},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol},
 		}
 		result := extractRichTextContent(&ev)
 		require.Empty(t, result)
@@ -1015,7 +1015,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindTextNote
 		ev.Content = "Plain text content"
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Plain text content", prepareSearchContent(&ev))
 	})
@@ -1025,7 +1025,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindTextNote
 		ev.Content = ""
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Rich text content with bold", prepareSearchContent(&ev))
 	})
@@ -1035,7 +1035,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = model.CustomIONKindEditableTextNote
 		ev.Content = "Editable plain content"
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Editable plain content", prepareSearchContent(&ev))
 	})
@@ -1045,7 +1045,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = model.CustomIONKindEditableTextNote
 		ev.Content = ""
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Editable rich content", prepareSearchContent(&ev))
 	})
@@ -1055,7 +1055,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindArticle
 		ev.Content = "Article plain content"
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Article plain content", prepareSearchContent(&ev))
 	})
@@ -1065,7 +1065,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindArticle
 		ev.Content = ""
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Article rich content", prepareSearchContent(&ev))
 	})
@@ -1082,7 +1082,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindProfileMetadata
 		ev.Content = `{"name":"testuser","display_name":"Test User"}`
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "testuser Test User", prepareSearchContent(&ev))
 	})
@@ -1092,7 +1092,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindArticle
 		ev.Content = "Markdown version of content"
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Markdown version of content", prepareSearchContent(&ev))
 	})
@@ -1102,7 +1102,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Kind = nostr.KindArticle
 		ev.Content = ""
 		ev.Tags = model.Tags{
-			{model.CustomIONTagRichText, "quill_delta", deltaJSON},
+			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Main Title Some bold text and italic text. List item 1 List item 2", prepareSearchContent(&ev))
 	})

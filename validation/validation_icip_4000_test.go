@@ -420,3 +420,174 @@ func TestIsCommunityCommentsEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckMentionWhoCanReplySettings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		rootPost *model.Event
+		reply    *model.Event
+		want     bool
+	}{
+		{
+			name: "user is mentioned in root post content",
+			rootPost: &model.Event{
+				Event: nostr.Event{
+					Content: "Only nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm and nostr:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj can reply",
+				},
+			},
+			reply: &model.Event{
+				Event: nostr.Event{
+					PubKey: "device_key_456",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagOnBehalfOf, "8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "user is mentioned in rich_text tag",
+			rootPost: &model.Event{
+				Event: nostr.Event{
+					Content: "",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Only "},{"insert":{"text-editor-profile":"nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm"}},{"insert":"  and "},{"insert":{"text-editor-profile":"nostr:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj"}},{"insert":" can reply\n"}]`},
+					},
+				},
+			},
+			reply: &model.Event{
+				Event: nostr.Event{
+					PubKey: "device_key_456",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagOnBehalfOf, "8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "user is not mentioned in root post",
+			rootPost: &model.Event{
+				Event: nostr.Event{
+					Content: "Only some other users can reply",
+				},
+			},
+			reply: &model.Event{
+				Event: nostr.Event{
+					PubKey: "device_key_456",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagOnBehalfOf, "8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c"},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "user is not mentioned in rich_text tag",
+			rootPost: &model.Event{
+				Event: nostr.Event{
+					Content: "",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Only other users can reply"}]`},
+					},
+				},
+			},
+			reply: &model.Event{
+				Event: nostr.Event{
+					PubKey: "device_key_456",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagOnBehalfOf, "8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c"},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "user without b tag uses PubKey directly",
+			rootPost: &model.Event{
+				Event: nostr.Event{
+					Content: "Only nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm can reply",
+				},
+			},
+			reply: &model.Event{
+				Event: nostr.Event{
+					PubKey: "8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c",
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := checkMentionWhoCanReplySettings(tt.rootPost, tt.reply)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExtractMentionedPubkeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		event    *model.Event
+		expected []string
+	}{
+		{
+			name: "extract from content with nprofile",
+			event: &model.Event{
+				Event: nostr.Event{
+					Content: "Mention nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm and nostr:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj here",
+				},
+			},
+			expected: []string{
+				"8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c",
+				"7d0b9f95bb36833e8f036df548c4521de5e37580b932fb009f5ab1b6b92f8a92",
+			},
+		},
+		{
+			name: "extract from rich_text tag",
+			event: &model.Event{
+				Event: nostr.Event{
+					Content: "",
+					Tags: model.Tags{
+						model.Tag{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Only "},{"insert":{"text-editor-profile":"nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm"}},{"insert":" can reply"}]`},
+					},
+				},
+			},
+			expected: []string{
+				"8228ddb51383c869a654023677cf035eedcbc76b62eb11cb2d2f2d4e255be11c",
+			},
+		},
+		{
+			name: "no mentions found",
+			event: &model.Event{
+				Event: nostr.Event{
+					Content: "No mentions here",
+				},
+			},
+			expected: []string{},
+		},
+		{
+			name: "empty content and no rich_text tag",
+			event: &model.Event{
+				Event: nostr.Event{
+					Content: "",
+				},
+			},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pubkeys, err := ExtractMentionedPubkeys(tt.event)
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.expected, pubkeys)
+		})
+	}
+}

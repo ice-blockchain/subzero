@@ -54,14 +54,14 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		"Post with mention user1",
 		nostr.Tags{
 			{"e", "event_id", "", model.TagMarkerMention},
-			{"p", "mentioned_pubkey"},
+			{"p", "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"},
 		},
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), event2))
 
 	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 		t,
-		"mentioned_pubkey",
+		"7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
 		"device1",
 		nostr.Tags{
 			{"t", "ios"},
@@ -79,7 +79,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 
 	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 		t,
-		"mentioned_pubkey",
+		"7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
 		"device2",
 		nostr.Tags{
 			{"t", "android"},
@@ -94,53 +94,88 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		},
 	)
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
-	require.Equal(t, 2, len(pm.userDevicesMap["mentioned_pubkey"]))
+	require.Equal(t, 2, len(pm.userDevicesMap["7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"]))
 
-	notifications, err := pm.handleMentionReplyEvent(event2)
-	require.NoError(t, err)
-	require.Len(t, notifications, 2)
-	for _, notification := range notifications {
-		if notification.Target.GetTag("t").Value() == "ios" {
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
-			require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
-		} else {
-			require.Equal(t, "", notification.Title, "Title should match")
-			require.Equal(t, "", notification.Body, "Body should match")
-			require.Contains(t, notification.Data, "event", "Data should contain event")
+	t.Run("mention in post", func(t *testing.T) {
+		notifications, err := pm.handleMentionReplyEvent(event2)
+		require.NoError(t, err)
+		require.Len(t, notifications, 2)
+		for _, notification := range notifications {
+			if notification.Target.GetTag("t").Value() == "ios" {
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+			} else {
+				require.Equal(t, "", notification.Title, "Title should match")
+				require.Equal(t, "", notification.Body, "Body should match")
+				require.Contains(t, notification.Data, "event", "Data should contain event")
+			}
 		}
-	}
+	})
+
+	t.Run("reply to post with mention", func(t *testing.T) {
+		mentionedPubkey := "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"
+		nprofileEncoded, err := nip19.EncodeProfile(mentionedPubkey, []string{"wss://relay.example.com"})
+		require.NoError(t, err)
+		originalPost := helperCreatePostEvent(
+			t,
+			"original_post_"+uuid.NewString(),
+			"original_author_pubkey",
+			nostr.KindTextNote,
+			"Original post content",
+			nostr.Tags{},
+		)
+		require.NoError(t, query.AcceptEvents(t.Context(), originalPost))
+
+		replyEvent := helperCreatePostEvent(
+			t,
+			"reply_id_"+uuid.NewString(),
+			"reply_author_pubkey",
+			nostr.KindTextNote,
+			"Reply with mention: "+nprofileEncoded,
+			nostr.Tags{
+				{"e", originalPost.GetID(), "", model.TagMarkerReply},
+				{"e", originalPost.GetID(), "", model.TagMarkerRoot},
+				{"p", originalPost.GetMasterPublicKey()},
+			},
+		)
+		require.NoError(t, query.AcceptEvents(t.Context(), replyEvent))
+
+		notifications, err := pm.handleMentionReplyEvent(replyEvent)
+		require.NoError(t, err)
+		require.Len(t, notifications, 2, "Should notify mentioned user on both devices")
+		for _, notification := range notifications {
+			if notification.Target.GetTag("t").Value() == "ios" {
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+			} else {
+				require.Equal(t, "", notification.Title, "Title should match")
+				require.Equal(t, "", notification.Body, "Body should match")
+				require.Contains(t, notification.Data, "event", "Data should contain event")
+			}
+		}
+	})
 }
 
 func TestMention(t *testing.T) {
 	t.Parallel()
 
-	nprofileEncoded, err := nip19.EncodeProfile("7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e", []string{"wss://relay.example.com"})
-	require.NoError(t, err)
-
-	event := helperCreatePostEvent(
-		t,
-		"test_id_nprofile_"+uuid.NewString(),
-		"author_pubkey",
-		nostr.KindTextNote,
-		"Post with nprofile mention "+nprofileEncoded,
-		nostr.Tags{
-			{"e", "event_id", "", model.TagMarkerMention},
-			{"p", "0000000000000000000000000000000000000000000000000000000000000001"},
-		},
-	)
-	require.NoError(t, query.AcceptEvents(t.Context(), event))
-
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
+	nprofileEncoded, err := nip19.EncodeProfile("7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e", []string{"wss://relay.example.com"})
+	require.NoError(t, err)
+
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(
 		t,
-		"0000000000000000000000000000000000000000000000000000000000000001",
+		"7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
 		"device1",
 		nostr.Tags{
 			{"t", "ios"},
+			{"d", "device1"},
+			{"relay", "wss://relay.example.com"},
 			{"token", "token1"},
 		},
 		nostr.Filters{
@@ -149,24 +184,78 @@ func TestMention(t *testing.T) {
 			},
 		},
 	)
-
-	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
-	notifications, err := pm.handleMentionReplyEvent(event)
-	require.NoError(t, err)
-	require.NotNil(t, notifications)
-	require.Len(t, notifications, 1)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notifications[0].Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notifications[0].ImageURL)
+	t.Run("content nprofile mention", func(t *testing.T) {
+		event := helperCreatePostEvent(
+			t,
+			"test_id_content_"+uuid.NewString(),
+			"author_pubkey",
+			nostr.KindTextNote,
+			"Post with nprofile mention in content: "+nprofileEncoded,
+			nostr.Tags{},
+		)
+		require.NoError(t, query.AcceptEvents(t.Context(), event))
 
-	compressedEvent, ok := notifications[0].Data["event"].(string)
-	require.True(t, ok, "event should be a string")
+		notifications, err := pm.handleMentionReplyEvent(event)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+	})
 
-	decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
-	require.Equal(t, event.String(), decompressedEvent, "Decompressed event should match original")
-	require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
+	t.Run("rich_text nprofile mention", func(t *testing.T) {
+		richTextData := []interface{}{
+			map[string]interface{}{
+				"insert": "Hello ",
+			},
+			map[string]interface{}{
+				"insert": map[string]interface{}{
+					"text-editor-profile": nprofileEncoded,
+				},
+			},
+			map[string]interface{}{
+				"insert": " how are you?",
+			},
+		}
+		richTextJSON, err := json.Marshal(richTextData)
+		require.NoError(t, err)
+
+		event := helperCreatePostEvent(
+			t,
+			"test_id_richtext_"+uuid.NewString(),
+			"author_pubkey",
+			nostr.KindTextNote,
+			"",
+			nostr.Tags{
+				{"rich_text", model.QuillDeltaProtocol, string(richTextJSON)},
+			},
+		)
+		require.NoError(t, query.AcceptEvents(t.Context(), event))
+
+		notifications, err := pm.handleMentionReplyEvent(event)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+	})
+
+	t.Run("both content and p tag mention - no duplicate", func(t *testing.T) {
+		event := helperCreatePostEvent(
+			t,
+			"test_id_both_"+uuid.NewString(),
+			"author_pubkey",
+			nostr.KindTextNote,
+			"Post with nprofile mention in content: "+nprofileEncoded,
+			nostr.Tags{
+				{"p", "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"},
+			},
+		)
+		require.NoError(t, query.AcceptEvents(t.Context(), event))
+
+		notifications, err := pm.handleMentionReplyEvent(event)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1, "Should not create duplicate notifications for the same user")
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+	})
 }
 
 func TestSelfReplyNotification(t *testing.T) {

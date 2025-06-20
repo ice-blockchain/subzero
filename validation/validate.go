@@ -250,8 +250,17 @@ func validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Even
 	if err := validateEventTags(e, KindSupportedTags); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)
 	}
-	if actualSize, maxSize := len(e.Content), globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && actualSize > maxSize {
-		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", actualSize, maxSize)
+	var contentSize int
+	if e.Content != "" {
+		contentSize = len(e.Content)
+	} else {
+		richTextTag := e.GetTag(model.CustomIONTagRichText)
+		if richTextTag != nil && len(richTextTag) >= 3 {
+			contentSize = len(richTextTag[2])
+		}
+	}
+	if maxSize := globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && contentSize > maxSize {
+		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", contentSize, maxSize)
 	}
 	if v, ok := KindSupportedTags[e.Kind]; ok {
 		if err := v.Execute(e); err != nil {

@@ -79,17 +79,30 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	return globalSender.sender.processEvents(events...)
 }
 
+func hasHashtagInRichText(e *model.Event) bool {
+	richTextTag := e.GetTag(model.CustomIONTagRichText)
+	if richTextTag == nil || len(richTextTag) < 3 || richTextTag.Value() != model.QuillDeltaProtocol {
+		return false
+	}
+
+	return hashtagRegex.MatchString(richTextTag[2])
+}
+
 func (p *sender) processEvents(events ...*model.Event) error {
 	validEvents := make([]*model.Event, 0, len(events))
 	for _, event := range events {
 		if event.Kind != nostr.KindTextNote && event.Kind != model.CustomIONKindEditableTextNote && event.Kind != nostr.KindArticle {
 			continue
 		}
-		matched := hashtagRegex.FindString(event.Content)
-		if matched == "" {
+		var hasHashtag bool
+		if event.Content != "" {
+			hasHashtag = hashtagRegex.MatchString(event.Content)
+		} else {
+			hasHashtag = hasHashtagInRichText(event)
+		}
+		if !hasHashtag {
 			continue
 		}
-
 		validEvents = append(validEvents, event)
 	}
 

@@ -96,6 +96,8 @@ const (
 
 	ExtensionTextMRF = `most relevant followers`
 
+	QuillDeltaProtocol string = "quill_delta"
+
 	KindJobTextExtraction            = 5000
 	KindJobSummarization             = 5001
 	KindJobTranslation               = 5002

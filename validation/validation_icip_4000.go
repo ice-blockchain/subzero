@@ -5,8 +5,10 @@ package validation
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +19,19 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+)
+
+type (
+	deltaOperation struct {
+		Insert json.RawMessage `json:"insert"`
+	}
+	deltaInsertObject struct {
+		TextEditorProfile string `json:"text-editor-profile,omitempty"`
+	}
+)
+
+var (
+	nprofileRegex = regexp.MustCompile(`(?:nostr:)?nprofile1[a-z0-9]+`)
 )
 
 func validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...*model.Event) error {
@@ -85,20 +100,82 @@ func checkFollowingWhoCanReplySettings(ctx context.Context, rootPost, e *model.E
 	return false, nil
 }
 
+func ExtractMentionedPubkeys(e *model.Event) ([]string, error) {
+	if e.Event.Content != "" {
+		return extractPubkeysFromContent(e.Content), nil
+	}
+	richTextPubkeys, err := extractPubkeysFromRichText(e)
+	if err != nil {
+		return nil, err
+	}
+
+	return richTextPubkeys, nil
+}
+
+func extractPubkeysFromContent(content string) []string {
+	var pubkeys []string
+	matches := nprofileRegex.FindAllString(content, -1)
+	for _, match := range matches {
+		if pubkey := decodePubkeyFromNprofile(match); pubkey != "" {
+			pubkeys = append(pubkeys, pubkey)
+		}
+
+	}
+
+	return pubkeys
+}
+
+func extractPubkeysFromRichText(e *model.Event) ([]string, error) {
+	var pubkeys []string
+	richTextTag := e.GetTag(model.CustomIONTagRichText)
+	if len(richTextTag) < 3 || richTextTag.Value() != model.QuillDeltaProtocol {
+		return pubkeys, nil
+	}
+	var delta []deltaOperation
+	if err := json.Unmarshal([]byte(richTextTag[2]), &delta); err != nil {
+		return pubkeys, nil
+	}
+	for _, op := range delta {
+		var insertObj deltaInsertObject
+		if err := json.Unmarshal(op.Insert, &insertObj); err == nil {
+			if insertObj.TextEditorProfile != "" {
+				for _, match := range nprofileRegex.FindAllString(insertObj.TextEditorProfile, -1) {
+					if pubkey := decodePubkeyFromNprofile(match); pubkey != "" {
+						pubkeys = append(pubkeys, pubkey)
+					}
+				}
+			}
+		}
+	}
+
+	return pubkeys, nil
+}
+
+func decodePubkeyFromNprofile(nprofileMatch string) string {
+	nprofileStr := strings.TrimPrefix(nprofileMatch, "nostr:")
+	prefix, data, err := nip19.Decode(nprofileStr)
+	if err != nil || prefix != "nprofile" {
+		return ""
+	}
+	profile, ok := data.(nostr.ProfilePointer)
+	if !ok {
+		return ""
+	}
+
+	return profile.PublicKey
+}
+
 func checkMentionWhoCanReplySettings(rootPost, e *model.Event) (bool, error) {
-	words := strings.Split(rootPost.Content, " ")
-	for _, word := range words {
-		if !strings.HasPrefix(word, "npub") {
-			continue
-		}
-		prefix, pubkey, err := nip19.Decode(word)
-		if err != nil {
-			return false, errors.Wrapf(ErrWrongEventParams, "can't decode the content: %v", e.Content)
-		}
-		if prefix == "npub" && pubkey.(string) == e.GetMasterPublicKey() {
+	mentionedPubkeys, err := ExtractMentionedPubkeys(rootPost)
+	if err != nil {
+		return false, err
+	}
+	for _, pubkey := range mentionedPubkeys {
+		if pubkey == e.GetMasterPublicKey() {
 			return true, nil
 		}
 	}
+
 	return false, nil
 }
 
