@@ -117,15 +117,17 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 		return errors.Wrap(err, "failed to write AUTH message")
 	}
 
-	err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-		SubscriptionID: sub.ID,
-		Reason:         errAuthRequired.Error(),
-	})
+	err = h.closeSubscriptionWithReason(ctx, respWriter, sub, errAuthRequired.Error())
 
 	return errors.Wrap(err, "failed to write CLOSED message")
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
+	if sub.OneShot {
+		// OneShot subscriptions are not stored, they are processed immediately.
+		return
+	}
+
 	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
 		return connSubscriptions{
 			Subscriptions: xsync.NewMap[string, *model.Subscription](),
@@ -362,8 +364,6 @@ func compareStringPointers(a, b *string) int {
 }
 
 func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
-	sub = h.prepareSubscription(ctx, sub)
-
 	applySubscriptionLimit(sub)
 
 	filters := sub.Filters
@@ -390,11 +390,11 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	getterCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	for i, getter := range wsSubscriptionListeners {
-		for event, err := range getter(ctx, filters...) {
+		for event, err := range getter(getterCtx, filters...) {
 			if err != nil {
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
@@ -417,7 +417,42 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	return nil
 }
 
-func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+func (h *handler) closeSubscriptionWithReason(ctx context.Context, respWriter Writer, sub *model.Subscription, reason string) error {
+	h.unlinkSubscription(respWriter, &sub.ID)
+
+	return h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
+		SubscriptionID: sub.ID,
+		Reason:         reason,
+	})
+}
+
+func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	bufferedEvents := sub.GetPending()
+
+	if len(bufferedEvents) == 0 {
+		// No buffered events to send.
+		return nil
+	}
+
+	log.Printf("INFO: subscription %s has %d buffered events", sub.ID, len(bufferedEvents))
+	for i := range bufferedEvents {
+		err := h.writeResponse(
+			ctx,
+			respWriter,
+			&nostr.EventEnvelope{
+				SubscriptionID: &sub.ID,
+				Events:         []*nostr.Event{&bufferedEvents[i].Event},
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) (err error) {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
 			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
@@ -428,15 +463,21 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 			if !status.Authenticated {
 				return h.authRequiredReq(ctx, respWriter, sub, status.Challenge)
 			} else if !status.IsFilterAllowed(sub.Filters...) {
-				return h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-					SubscriptionID: sub.ID,
-					Reason:         "error: not allowed to access the requested data",
-				})
+				return h.closeSubscriptionWithReason(ctx, respWriter, sub,
+					"error: not allowed to access the requested data")
 			}
 		}
 	}
 
-	var err error
+	sub = h.prepareSubscription(ctx, sub)
+	h.linkSubscription(respWriter, sub)
+
+	defer func() {
+		if err != nil && !sub.OneShot {
+			h.unlinkSubscription(respWriter, &sub.ID)
+		}
+	}()
+
 	if wsSubscriptionListeners != nil {
 		err = h.streamEvents(ctx, respWriter, sub)
 	} else {
@@ -444,25 +485,21 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 	}
 
 	if err != nil {
-		return errors.Join(err, h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-			SubscriptionID: sub.ID,
-			Reason:         err.Error(),
-		}))
+		return errors.Join(err, h.closeSubscriptionWithReason(ctx, respWriter, sub, err.Error()))
 	}
 
 	err = h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.ID)))
-	if err == nil {
-		if sub.OneShot {
-			err = h.writeResponse(ctx, respWriter, &nostr.ClosedEnvelope{
-				SubscriptionID: sub.ID,
-				Reason:         "processed: single request only subscription",
-			})
-		} else {
-			h.linkSubscription(respWriter, sub)
-		}
+	if err != nil {
+		return errors.Wrap(err, "failed to write EOS message")
 	}
 
-	return err
+	if sub.OneShot {
+		return h.closeSubscriptionWithReason(ctx, respWriter, sub, "processed: single request only subscription")
+	}
+
+	sub.SetLive()
+
+	return errors.Wrap(h.streamEventsBuffered(ctx, respWriter, sub), "failed to stream buffered events")
 }
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event) error {
@@ -521,7 +558,11 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 					!canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
 					continue
 				}
-				envelope.Events = append(envelope.Events, &event.Event)
+				if sub.IsLive() {
+					envelope.Events = append(envelope.Events, &event.Event)
+				} else {
+					sub.Push(event)
+				}
 			}
 			if len(envelope.Events) > 0 {
 				broadcast[writer] = append(broadcast[writer], envelope)
@@ -530,6 +571,10 @@ func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*
 		})
 		return true
 	})
+
+	if len(broadcast) == 0 {
+		return nil
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(broadcast))
