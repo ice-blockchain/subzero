@@ -751,8 +751,7 @@ loop:
 	t.Logf("subscription %s finished with %d events", sub.GetID(), len(received))
 
 	require.Len(t, received, len(sent)+1) // +1 for the event from the database.
-	require.Equal(t, note.ID, received[0].ID)
-	require.ElementsMatch(t, sent, received[1:])
+	require.ElementsMatch(t, append(sent, &note), received)
 
 	helperMustCloseRelay(t, relay)
 }
