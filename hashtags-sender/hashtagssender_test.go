@@ -137,6 +137,113 @@ func TestTimeoutTriggeredIntegration(t *testing.T) {
 	require.Equal(t, eventsCount, sentEventsCount, "Not all events were sent to the endpoint")
 }
 
+func TestProcessEventsWithRichText(t *testing.T) {
+	t.Parallel()
+
+	processor := &sender{
+		eventsQueue:  make([]*model.Event, 0, 100),
+		eventsToSend: make(chan []*model.Event, 10),
+		config: &Config{
+			MaxEventsQueueSize: 100,
+			SendInterval:       1 * time.Hour,
+		},
+		lastSent: time.Now(),
+	}
+
+	tests := []struct {
+		name          string
+		events        []*model.Event
+		expectedCount int
+		description   string
+	}{
+		{
+			name: "content with hashtags",
+			events: []*model.Event{
+				{
+					Event: nostr.Event{
+						Kind:    nostr.KindTextNote,
+						Content: "Hello #world",
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "Should detect hashtags in content",
+		},
+		{
+			name: "rich_text with hashtags when content is empty",
+			events: []*model.Event{
+				{
+					Event: nostr.Event{
+						Kind:    nostr.KindTextNote,
+						Content: "",
+						Tags: nostr.Tags{
+							{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Hello #blockchain and #crypto"}]`},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "Should detect hashtags in rich_text when content is empty",
+		},
+		{
+			name: "content takes priority over rich_text",
+			events: []*model.Event{
+				{
+					Event: nostr.Event{
+						Kind:    nostr.KindTextNote,
+						Content: "Content #priority",
+						Tags: nostr.Tags{
+							{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Rich text #secondary"}]`},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "Should use content hashtags when both content and rich_text have hashtags",
+		},
+		{
+			name: "no hashtags in either content or rich_text",
+			events: []*model.Event{
+				{
+					Event: nostr.Event{
+						Kind:    nostr.KindTextNote,
+						Content: "",
+						Tags: nostr.Tags{
+							{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"No hashtags here"}]`},
+						},
+					},
+				},
+			},
+			expectedCount: 0,
+			description:   "Should not include events without hashtags",
+		},
+		{
+			name: "unsupported event kind",
+			events: []*model.Event{
+				{
+					Event: nostr.Event{
+						Kind:    nostr.KindFollowList,
+						Content: "Hello #world",
+					},
+				},
+			},
+			expectedCount: 0,
+			description:   "Should not include unsupported event kinds",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor.eventsQueue = processor.eventsQueue[:0]
+
+			err := processor.processEvents(tt.events...)
+			require.NoError(t, err)
+
+			require.Equal(t, tt.expectedCount, len(processor.eventsQueue), tt.description)
+		})
+	}
+}
+
 func helperGenerateEvent(t *testing.T, index int, hashtags []string) *model.Event {
 	t.Helper()
 

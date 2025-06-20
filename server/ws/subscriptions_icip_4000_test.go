@@ -59,6 +59,7 @@ func TestWhoCanReplySettings_FollowingSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
+				{"e", post.GetID(), "", model.TagMarkerReply},
 				{"e", post.GetID(), "", model.TagMarkerRoot},
 				{"p", post.GetMasterPublicKey(), pubkeyUser1},
 			},
@@ -96,12 +97,12 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 
 	var post *model.Event
 	t.Run("create post with mentioned settings", func(t *testing.T) {
-		pkey, err := nip19.EncodePublicKey(pubkeyUser1)
+		pkey, err := nip19.EncodeProfile(pubkeyUser1, []string{})
 		require.NoError(t, err)
 		post = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
-			Content:   fmt.Sprintf("hello world: %v", pkey),
+			Content:   fmt.Sprintf("hello world: nostr:%v", pkey),
 			Tags: nostr.Tags{
 				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
@@ -122,15 +123,62 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
 	t.Run("create reply for the initial post by user2 that was not mentioned, forbidden", func(t *testing.T) {
-		post = &model.Event{Event: nostr.Event{
+		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
-				{"e", post.ID, "", model.TagMarkerRoot},
+				{"e", post.GetID(), "", model.TagMarkerReply},
+				{"e", post.GetID(), "", model.TagMarkerRoot},
 			},
 		}}
-		helperSignWithMinLeadingZeroBits(t, post, privkeyUser2)
-		require.Error(t, relay.Publish(ctx, post.Event))
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+
+	var richTextPost *model.Event
+	t.Run("create post with mentioned settings using rich_text", func(t *testing.T) {
+		pkey, err := nip19.EncodeProfile(pubkeyUser1, []string{})
+		require.NoError(t, err)
+		richTextDelta := fmt.Sprintf(`[{"insert": {"text-editor-profile": "nostr:%v"}}]`, pkey)
+		richTextPost = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "",
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+				{model.CustomIONTagRichText, model.QuillDeltaProtocol, richTextDelta},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, richTextPost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, richTextPost.Event))
+	})
+	t.Run("create reply for rich_text post by mentioned user1", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "Reply to rich_text mention post",
+			Tags: nostr.Tags{
+				{"e", richTextPost.GetID(), "", model.TagMarkerReply},
+				{"e", richTextPost.GetID(), "", model.TagMarkerRoot},
+				{"p", richTextPost.GetMasterPublicKey(), pubkeyUser1},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("create reply for rich_text post by user2 that was not mentioned, forbidden", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "Reply from non-mentioned user",
+			Tags: nostr.Tags{
+				{"e", richTextPost.GetID(), "", model.TagMarkerReply},
+				{"e", richTextPost.GetID(), "", model.TagMarkerRoot},
+				{"p", richTextPost.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser2)
+		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
 	helperMustCloseRelay(t, relay)
 }
@@ -252,10 +300,10 @@ func TestWhoCanReplySettings_SelfReply(t *testing.T) {
 	})
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	var post *model.Event
+	var badgePost *model.Event
 	dBadgeTagVal := "verified"
 	t.Run("create post with badge restrictions by post owner", func(t *testing.T) {
-		post = &model.Event{Event: nostr.Event{
+		badgePost = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Content:   "This post has badge restrictions",
@@ -263,35 +311,120 @@ func TestWhoCanReplySettings_SelfReply(t *testing.T) {
 				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
-		helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
-		require.NoError(t, relay.Publish(ctx, post.Event))
+		helperSignWithMinLeadingZeroBits(t, badgePost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, badgePost.Event))
 	})
-	t.Run("post owner can reply to their own restricted post", func(t *testing.T) {
+	t.Run("post owner can reply to their own badge-restricted post", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
-			Content:   "I can reply to my own post",
+			Content:   "I can reply to my own badge-restricted post",
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerRoot},
-				{"p", post.GetMasterPublicKey()},
+				{"e", badgePost.GetID(), "", model.TagMarkerReply},
+				{"e", badgePost.GetID(), "", model.TagMarkerRoot},
+				{"p", badgePost.GetMasterPublicKey()},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
-	t.Run("different user cannot reply to restricted post without badge", func(t *testing.T) {
+	t.Run("different user cannot reply to badge-restricted post without badge", func(t *testing.T) {
 		ev := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Content:   "I cannot reply without badge",
 			Tags: nostr.Tags{
-				{"e", post.GetID(), "", model.TagMarkerRoot},
-				{"p", post.GetMasterPublicKey()},
+				{"e", badgePost.GetID(), "", model.TagMarkerReply},
+				{"e", badgePost.GetID(), "", model.TagMarkerRoot},
+				{"p", badgePost.GetMasterPublicKey()},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.Error(t, relay.Publish(ctx, ev.Event))
 	})
+	var followingPost *model.Event
+	t.Run("create post with following restrictions by post owner", func(t *testing.T) {
+		followingPost = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "This post has following restrictions",
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, followingPost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, followingPost.Event))
+	})
+	t.Run("post owner can reply to their own following-restricted post", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "I can reply to my own following-restricted post",
+			Tags: nostr.Tags{
+				{"e", followingPost.GetID(), "", model.TagMarkerReply},
+				{"e", followingPost.GetID(), "", model.TagMarkerRoot},
+				{"p", followingPost.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("different user cannot reply to following-restricted post without being followed", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "I cannot reply without being followed",
+			Tags: nostr.Tags{
+				{"e", followingPost.GetID(), "", model.TagMarkerReply},
+				{"e", followingPost.GetID(), "", model.TagMarkerRoot},
+				{"p", followingPost.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+	var mentionPost *model.Event
+	t.Run("create post with mention restrictions by post owner", func(t *testing.T) {
+		mentionPost = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "This post has mention restrictions",
+			Tags: nostr.Tags{
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, mentionPost, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, mentionPost.Event))
+	})
+	t.Run("post owner can reply to their own mention-restricted post", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "I can reply to my own mention-restricted post",
+			Tags: nostr.Tags{
+				{"e", mentionPost.GetID(), "", model.TagMarkerReply},
+				{"e", mentionPost.GetID(), "", model.TagMarkerRoot},
+				{"p", mentionPost.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyPostOwner)
+		require.NoError(t, relay.Publish(ctx, ev.Event))
+	})
+	t.Run("different user cannot reply to mention-restricted post without being mentioned", func(t *testing.T) {
+		ev := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Content:   "I cannot reply without being mentioned",
+			Tags: nostr.Tags{
+				{"e", mentionPost.GetID(), "", model.TagMarkerReply},
+				{"e", mentionPost.GetID(), "", model.TagMarkerRoot},
+				{"p", mentionPost.GetMasterPublicKey()},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
+		require.Error(t, relay.Publish(ctx, ev.Event))
+	})
+
 	helperMustCloseRelay(t, relay)
 }
 
@@ -374,6 +507,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags: nostr.Tags{
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"e", post.GetID(), "", model.TagMarkerRoot},
 					{"p", post.GetMasterPublicKey()},
 				},
@@ -387,6 +521,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags: nostr.Tags{
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"e", post.GetID(), "", model.TagMarkerRoot},
 					{"p", post.GetMasterPublicKey()},
 				},
@@ -415,6 +550,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags: nostr.Tags{
+					{"e", post2.GetID(), "", model.TagMarkerReply},
 					{"e", post2.GetID(), "", model.TagMarkerRoot},
 					{"p", post2.GetMasterPublicKey()},
 				},
@@ -473,6 +609,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags: nostr.Tags{
+					{"e", post2.GetID(), "", model.TagMarkerReply},
 					{"e", post2.GetID(), "", model.TagMarkerRoot},
 					{"p", post2.GetMasterPublicKey()},
 				},
@@ -514,6 +651,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
+				{"e", restrictedPost.GetID(), "", model.TagMarkerReply},
 				{"e", restrictedPost.GetID(), "", model.TagMarkerRoot},
 				{"p", restrictedPost.GetMasterPublicKey()},
 			},
