@@ -19,29 +19,38 @@ func GetStoredEvents(ctx context.Context, filters ...model.Filter) query.EventIt
 
 func (d *dvm) searchDVMEvents(ctx context.Context, filters model.Filters) query.EventIterator {
 	return func(yield func(*model.Event, error) bool) {
+		var doStop bool
 		for index, f := range filters {
+			if ctx.Err() != nil && !doStop {
+				yield(nil, ctx.Err())
+				return
+			} else if doStop {
+				// If we already stopped, we don't need to continue.
+				return
+			}
+
 			if f.Tags.HasValues("p") {
 				for _, e := range d.findByFilterTag(filters, index, "p") {
 					if !yield(e, nil) {
 						return
 					}
 				}
-			} else {
-				d.responseCache.Range(func(item *ttlcache.Item[string, *xsync.Map[string, *model.Event]]) bool {
-					if ctx.Err() != nil {
-						return yield(nil, ctx.Err())
-					}
-					item.Value().Range(func(key string, value *model.Event) bool {
-						if filters.Match(&value.Event) {
-							if !yield(value, nil) {
-								return false
-							}
-						}
-						return true
-					})
-					return true
-				})
+				// We are done with this filter, continue to the next one.
+				continue
 			}
+
+			d.responseCache.Range(func(item *ttlcache.Item[string, *xsync.Map[string, *model.Event]]) bool {
+				item.Value().Range(func(key string, value *model.Event) bool {
+					if model.FiltersMatch(filters, value, "", "") {
+						if !yield(value, nil) {
+							doStop = true
+							return false // Stop iterating over xsync.Map.
+						}
+					}
+					return ctx.Err() == nil && !doStop
+				})
+				return ctx.Err() == nil && !doStop
+			})
 		}
 	}
 }
