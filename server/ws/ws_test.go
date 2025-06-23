@@ -94,7 +94,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(15 * time.Second)
 		if err := goleak.Find(); err != nil {
 			log.Printf("goleak: %v", err)
-			//code = 1
+			code = 1
 		}
 	}
 
