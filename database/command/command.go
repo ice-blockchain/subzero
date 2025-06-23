@@ -55,7 +55,7 @@ func (c *consensus) waitForStop(ctx context.Context) {
 	var err error
 	if c.Server != nil {
 		c.Logger.Debug("stopping consensus server")
-		err = c.Server.Close()
+		err = c.Server.Stop()
 		c.Logger.Debug("stopped consensus server")
 	}
 	if ch != nil {
