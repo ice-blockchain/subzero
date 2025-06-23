@@ -3,6 +3,7 @@
 package ws
 
 import (
+	"context"
 	"errors"
 
 	"github.com/puzpuzpuz/xsync/v4"
@@ -14,9 +15,12 @@ import (
 )
 
 type (
-	Writer         = adapters.WSWriter
-	Config         = config.Config
-	WSHandler      = adapters.WSHandler
+	Writer  = adapters.WSWriter
+	Config  = config.Config
+	Handler interface {
+		adapters.WSHandler
+		BroadcastNewEvents(ctx context.Context, events ...*model.Event) error
+	}
 	Server         = internal.Server
 	RegisterRoutes = internal.RegisterRoutes
 	Router         = internal.Router
@@ -37,10 +41,12 @@ type (
 		// SubscriptionID -> Subscription
 		Subscriptions *xsync.Map[string, *model.Subscription]
 	}
+	router struct {
+	}
 	handler struct {
-		connSubs *xsync.Map[Writer, connSubscriptions]
-		connAuth *xsync.Map[Writer, connAuthData]
-		relayURL string
+		ConnSubs *xsync.Map[Writer, connSubscriptions]
+		ConnAuth *xsync.Map[Writer, connAuthData]
+		RelayURL string
 	}
 )
 

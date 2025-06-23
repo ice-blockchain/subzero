@@ -128,7 +128,7 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 		return
 	}
 
-	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
+	conn, _ := h.ConnSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
 		return connSubscriptions{
 			Subscriptions: xsync.NewMap[string, *model.Subscription](),
 		}, false
@@ -139,12 +139,12 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	if ID == nil {
 		// Connection is closing, remove all subscriptions.
-		h.connSubs.Delete(respWriter)
+		h.ConnSubs.Delete(respWriter)
 
 		return false
 	}
 
-	conn, ok := h.connSubs.Load(respWriter)
+	conn, ok := h.ConnSubs.Load(respWriter)
 	if !ok {
 		return false
 	}
@@ -220,7 +220,7 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Event) *nostr.OKEnvelope {
 	var resp = nostr.OKEnvelope{EventID: e.Event.ID}
 
-	state, ok := h.connAuth.Load(respWriter)
+	state, ok := h.ConnAuth.Load(respWriter)
 	if !ok {
 		resp.Reason = "received unexpected auth message: no challenge was sent"
 
@@ -234,7 +234,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	_, err := nip42.ValidateAuthEvent(
 		&e.Event,
 		state.Challenge,
-		h.relayURL,
+		h.RelayURL,
 		nip42.WithCustomVerificator(func(nostrEvent *nostr.Event) (bool, error) {
 			return (&model.Event{Event: *nostrEvent}).CheckSignature()
 		}))
@@ -258,7 +258,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	userdata.PublicKey = e.PubKey
 	userdata.Authenticated = true
 
-	h.connAuth.Store(respWriter, userdata)
+	h.ConnAuth.Store(respWriter, userdata)
 
 	resp.OK = true
 
@@ -455,7 +455,7 @@ func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, s
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) (err error) {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
+			status, _ := h.ConnAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
 					Challenge: generateChallenge(sub.ID),
 				}, false
@@ -513,7 +513,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if eventMustAuth != nil {
 		if authRequired := eventMustAuth(ctx, events...); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
+			status, _ := h.ConnAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
 					Challenge: generateChallenge(),
 				}, false
@@ -536,19 +536,19 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
 
-	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {
+	if err := h.BroadcastNewEvents(ctx, events...); err != nil {
 		return errors.Wrap(ErrNotifyFailed, err.Error())
 	}
 
 	return nil
 }
 
-func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
+func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) error {
 	var broadcast = map[Writer][]nostr.EventEnvelope{}
 
 	// Collect events for each subscription.
-	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
-		authData, _ := h.connAuth.Load(writer)
+	h.ConnSubs.Range(func(writer Writer, conn connSubscriptions) bool {
+		authData, _ := h.ConnAuth.Load(writer)
 		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
 			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.ID}
 			for _, event := range events {
