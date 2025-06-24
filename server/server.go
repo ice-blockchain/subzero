@@ -13,6 +13,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command"
+	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip96"
@@ -20,69 +21,109 @@ import (
 )
 
 type (
-	config struct {
+	Server interface {
+		wsserver.Server
+		wsserver.EventBroadcaster
+	}
+	Config struct {
 		TLSCert            string `yaml:"tls-cert"`
 		TLSKey             string `yaml:"tls-key"`
 		RelayURL           string `yaml:"relay-url"     validate:"required,url"`
 		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
-		Debug              bool   `yaml:"debug"`
 		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
+		Debug              bool   `yaml:"debug"`
 		PrivateKey         string `yaml:"private-key"`
 		ACME               struct {
 			APIKey string `yaml:"api-key"`
 		} `yaml:"acme"`
 	}
-	router struct {
-	}
-)
+	Option func(*router)
 
-var (
-	globalConfig *config
-	globalRouter *router
+	router struct {
+		Config  *Config
+		Handler wsserver.Handler
+		Server  wsserver.Server
+	}
 )
 
 func extractServerNameFromRelayURL(relayURL string) string {
-	pared, err := url.Parse(relayURL)
+	parsed, err := url.Parse(relayURL)
 	if err != nil {
 		log.Panic(err)
 	}
-	return pared.Hostname()
+	return parsed.Hostname()
 }
 
-func MustListenAndServe(ctx context.Context) {
-	var serverTLS *tls.Config
+func WithConfig(cfg *Config) Option {
+	return func(s *router) {
+		if cfg == nil {
+			log.Panic("config cannot be nil")
+		}
+		s.Config = cfg
+	}
+}
 
-	globalConfig = cfg.MustGet[config]()
-	if (globalConfig.TLSCert == "" && globalConfig.TLSKey == "") || (globalConfig.TLSCert == "-" && globalConfig.TLSKey == "-") {
-		log.Printf("using ACME to obtain TLS certificate for %v", globalConfig.RelayURL)
-		if globalConfig.ACME.APIKey == "" {
+func New(ctx context.Context, opts ...Option) Server {
+	var r router
+
+	if cfg, err := cfg.Get[Config](); err == nil {
+		r.Config = cfg
+	} else {
+		log.Printf("[WARN] failed to load config: %v", err)
+	}
+
+	for _, opt := range opts {
+		opt(&r)
+	}
+
+	if r.Config == nil {
+		log.Panic("server: config cannot be nil")
+	} else if err := cfg.Validate(r.Config); err != nil {
+		log.Panicf("failed to validate config: %v", err)
+	}
+
+	var tls *tls.Config
+	if (r.Config.TLSCert == "" && r.Config.TLSKey == "") || (r.Config.TLSCert == "-" && r.Config.TLSKey == "-") {
+		log.Printf("using ACME to obtain TLS certificate for %v", r.Config.RelayURL)
+		if r.Config.ACME.APIKey == "" {
 			log.Panic("API key is required for ACME DNS challenge")
 		}
-		serverTLS = MustLoadTLSConfigFromACMEWithDNS(ctx, extractServerNameFromRelayURL(globalConfig.RelayURL), globalConfig.ACME.APIKey)
+		tls = MustLoadTLSConfigFromACMEWithDNS(ctx, extractServerNameFromRelayURL(r.Config.RelayURL), r.Config.ACME.APIKey)
 	} else {
-		serverTLS = wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey)
+		tls = wsserver.LoadTLSConfig(r.Config.TLSCert, r.Config.TLSKey)
 	}
 
-	globalRouter = &router{}
-	internalCfg := &wsserver.Config{
-		Port:      globalConfig.Port,
-		Debug:     globalConfig.Debug,
-		TLSConfig: serverTLS,
-	}
-	wsserver.New(internalCfg, globalRouter).
-		MustListenAndServe(ctx)
+	r.Handler = wsserver.NewHandler(r.Config.RelayURL)
+	r.Server = wsserver.New(
+		&wsserver.Config{
+			Port:      r.Config.Port,
+			Debug:     r.Config.Debug,
+			TLSConfig: tls,
+		},
+		&r,
+	)
+
+	return &r
+}
+
+func (r *router) MustListenAndServe(ctx context.Context) {
+	r.Server.MustListenAndServe(ctx)
+}
+
+func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
+	r.Handler.BroadcastNewEvents(ctx, events...)
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
-	uploader := nip96.NewUploadHandler(ctx, globalConfig.IONLibertyDisabled)
+	uploader := nip96.NewUploadHandler(ctx, r.Config.IONLibertyDisabled)
 	androidConfigs, iosConfigs, webConfigs := pushnotifications.GetFCMConfigs()
 
-	wsroutes.Any("/", wsserver.WithWS(wsserver.NewHandler(globalConfig.RelayURL), nip11.NewNIP11Handler(ctx, &nip11.Config{
+	wsroutes.Any("/", wsserver.WithWS(r.Handler, nip11.NewNIP11Handler(ctx, &nip11.Config{
 		MinLeadingZeroBits: 1111,
 		FCMAndroidConfigs:  androidConfigs,
 		FCMIOSConfigs:      iosConfigs,
 		FCMWebConfigs:      webConfigs,
-		PrivateKey:         globalConfig.PrivateKey,
+		PrivateKey:         r.Config.PrivateKey,
 	}, uploader.RootPath(), command.RootPath()))).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).

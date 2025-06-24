@@ -57,7 +57,7 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(relayURL string) WSHandler {
+func NewHandler(relayURL string) Handler {
 	return newHandler(relayURL)
 }
 
@@ -67,9 +67,9 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 
 func newHandler(relayURL string) *handler {
 	return &handler{
-		connSubs: xsync.NewMap[Writer, connSubscriptions](),
-		connAuth: xsync.NewMap[Writer, connAuthData](),
-		relayURL: relayURL,
+		Subscriptions: xsync.NewMap[string, subscription](),
+		ConnAuth:      xsync.NewMap[Writer, connAuthData](),
+		RelayURL:      relayURL,
 	}
 }
 
@@ -98,7 +98,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 }
 
 func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
-	if v, ok := h.connAuth.Load(respWriter); ok {
+	if v, ok := h.ConnAuth.Load(respWriter); ok {
 		return model.SetUserDataInContext(ctx, v.MasterPublicKey, v.PublicKey, v.Authenticated, v.Kinds)
 	}
 	return ctx
@@ -110,7 +110,7 @@ func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Durat
 	}
 
 	prefix := "[WS]: stats: duration: [" + duration.String() + "]"
-	if v, ok := h.connAuth.Load(respWriter); ok && v.Authenticated {
+	if v, ok := h.ConnAuth.Load(respWriter); ok && v.Authenticated {
 		prefix += " master: [" + v.MasterPublicKey + "]"
 	}
 	prefix += ": "
@@ -134,11 +134,6 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
 		err = h.handleEvents(h.populateContext(context.WithoutCancel(ctx), respWriter), respWriter, events)
-		if errors.Is(err, ErrNotifyFailed) {
-			// Not critical, just log it.
-			log.Printf("WARN: notification failed: %v", err)
-			err = nil
-		}
 		if err != nil {
 			log.Printf("ERROR: cannot process events: %s: %v", model.Events(events).String(), err)
 		}

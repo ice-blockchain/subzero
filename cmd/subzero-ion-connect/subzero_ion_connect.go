@@ -8,11 +8,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -29,17 +31,14 @@ import (
 )
 
 var (
-	configPath  string
-	showVersion bool
-	subzero     = &cobra.Command{
-		Use:   "subzero",
-		Short: "subzero",
+	configPath string
+	antsPool   *ants.Pool
+	webserver  server.Server
+	subzero    = &cobra.Command{
+		Use:     "subzero",
+		Short:   "subzero",
+		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
-			if showVersion {
-				printVersion()
-				return
-			}
-
 			cfg.MustInit(configPath)
 			validation.MustInit()
 			query.MustInit(cmd.Context())
@@ -48,12 +47,12 @@ var (
 			dvm.MustInit(cmd.Context())
 			pushnotifications.MustInit()
 			hashtagssender.MustInit(cmd.Context())
-			server.MustListenAndServe(cmd.Context())
+			webserver = server.New(cmd.Context())
+			webserver.MustListenAndServe(cmd.Context())
 		},
 	}
 	initFlags = func() {
 		subzero.Flags().StringVar(&configPath, "config", cfg.DefaultYAMLConfigurationFilePath, "absolute path to the service config yaml file")
-		subzero.Flags().BoolVar(&showVersion, "version", false, "show version")
 	}
 
 	// Do not require authentication for these kinds of events (publishing).
@@ -63,23 +62,23 @@ var (
 	}
 )
 
-func printVersion() {
+func getVersion() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		fmt.Println("no build info")
-		return
+		return "unknown"
 	}
 
-	fmt.Println("Package:", info.Main.Path)
-	fmt.Println("Version:", info.Main.Version)
+	var revision, commitDate string
 	for _, v := range info.Settings {
 		switch v.Key {
 		case "vcs.revision":
-			fmt.Println("Revision:", v.Value)
+			revision = v.Value
 		case "vcs.time":
-			fmt.Println("Build Time:", v.Value)
+			commitDate = v.Value
 		}
 	}
+
+	return fmt.Sprintf("%s: %v (%s / %s)", info.Main.Path, info.Main.Version, revision, commitDate)
 }
 
 func init() {
@@ -99,6 +98,9 @@ func init() {
 		if err := query.CommitEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to delete outdated replaced events")
 		}
+
+		antsPool.Submit(func() { webserver.BroadcastNewEvents(ctx, events...) })
+
 		return nil
 	})
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
@@ -136,16 +138,18 @@ func init() {
 			return errors.Wrap(err, "storage.AcceptEvents failed")
 		}
 
-		go func() {
+		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		}()
-		go func() {
+		})
+		antsPool.Submit(func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		}()
+		})
+
+		antsPool.Submit(func() { webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...) })
 
 		return nil
 	})
@@ -175,7 +179,14 @@ func newContext() context.Context {
 }
 
 func main() {
-	err := subzero.ExecuteContext(newContext())
+	pool, err := ants.NewPool(10_000 * runtime.NumCPU())
+	if err != nil {
+		log.Panicf("failed to create ants pool: %v", err)
+	}
+	defer pool.Release()
+
+	antsPool = pool
+	err = subzero.ExecuteContext(newContext())
 	if err != nil {
 		log.Panic(err)
 	}

@@ -30,7 +30,7 @@ var (
 			cfg.MustInit(configPath)
 			query.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
-			server.MustListenAndServe(cmd.Context())
+			server.New(cmd.Context()).MustListenAndServe(cmd.Context())
 		},
 	}
 	initFlags = func() {

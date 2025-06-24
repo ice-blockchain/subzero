@@ -12,13 +12,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip42"
-	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -128,28 +126,28 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 		return
 	}
 
-	conn, _ := h.connSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
-		return connSubscriptions{
-			Subscriptions: xsync.NewMap[string, *model.Subscription](),
-		}, false
+	_, loaded := h.Subscriptions.LoadAndStore(sub.ID, subscription{
+		Source: sub,
+		Writer: respWriter,
 	})
-	conn.Subscriptions.Store(sub.ID, sub)
+	if loaded {
+		log.Printf("WARN: subscription %s already exists, overwriting it", sub.ID)
+	}
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	if ID == nil {
 		// Connection is closing, remove all subscriptions.
-		h.connSubs.Delete(respWriter)
-
+		h.Subscriptions.Range(func(_ string, sub subscription) bool {
+			if sub.Writer == respWriter {
+				h.Subscriptions.Delete(sub.Source.ID)
+			}
+			return true
+		})
 		return false
 	}
 
-	conn, ok := h.connSubs.Load(respWriter)
-	if !ok {
-		return false
-	}
-
-	_, ok = conn.Subscriptions.LoadAndDelete(*ID)
+	_, ok := h.Subscriptions.LoadAndDelete(*ID)
 
 	return ok
 }
@@ -220,7 +218,7 @@ func validateOnBehalfAccess(ctx context.Context, e *model.Event) (map[int]struct
 func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Event) *nostr.OKEnvelope {
 	var resp = nostr.OKEnvelope{EventID: e.Event.ID}
 
-	state, ok := h.connAuth.Load(respWriter)
+	state, ok := h.ConnAuth.Load(respWriter)
 	if !ok {
 		resp.Reason = "received unexpected auth message: no challenge was sent"
 
@@ -234,7 +232,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	_, err := nip42.ValidateAuthEvent(
 		&e.Event,
 		state.Challenge,
-		h.relayURL,
+		h.RelayURL,
 		nip42.WithCustomVerificator(func(nostrEvent *nostr.Event) (bool, error) {
 			return (&model.Event{Event: *nostrEvent}).CheckSignature()
 		}))
@@ -258,7 +256,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	userdata.PublicKey = e.PubKey
 	userdata.Authenticated = true
 
-	h.connAuth.Store(respWriter, userdata)
+	h.ConnAuth.Store(respWriter, userdata)
 
 	resp.OK = true
 
@@ -455,7 +453,7 @@ func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, s
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) (err error) {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
+			status, _ := h.ConnAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
 					Challenge: generateChallenge(sub.ID),
 				}, false
@@ -513,7 +511,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if eventMustAuth != nil {
 		if authRequired := eventMustAuth(ctx, events...); authRequired {
-			status, _ := h.connAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
+			status, _ := h.ConnAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
 				return connAuthData{
 					Challenge: generateChallenge(),
 				}, false
@@ -536,76 +534,37 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
 
-	if err := h.notifyListenersAboutNewEvents(ctx, events...); err != nil {
-		return errors.Wrap(ErrNotifyFailed, err.Error())
-	}
-
 	return nil
 }
 
-func (h *handler) notifyListenersAboutNewEvents(ctx context.Context, events ...*model.Event) error {
-	var broadcast = map[Writer][]nostr.EventEnvelope{}
+func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.Event, data *model.UserDataContext) bool {
+	return model.FiltersMatch(filters, in, data.MasterPublicKey, data.PublicKey) &&
+		canForwardEvent(in, data.Kinds, data.MasterPublicKey, data.PublicKey) &&
+		canForwardCommunityEvent(ctx, in, data.MasterPublicKey)
+}
 
-	// Collect events for each subscription.
-	h.connSubs.Range(func(writer Writer, conn connSubscriptions) bool {
-		authData, _ := h.connAuth.Load(writer)
-		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
-			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.ID}
-			for _, event := range events {
-				if !model.FiltersMatch(sub.Filters, event, authData.MasterPublicKey, authData.PublicKey) {
-					continue
-				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) ||
-					!canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
-					continue
-				}
-				if sub.IsLive() {
-					envelope.Events = append(envelope.Events, &event.Event)
-				} else {
-					sub.Push(event)
-				}
+func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
+	h.Subscriptions.Range(func(_ string, sub subscription) bool {
+		authData, _ := h.ConnAuth.Load(sub.Writer)
+		for _, event := range events {
+			if !canForwardLiveEvent(ctx, sub.Source.Filters, event, &authData.UserDataContext) {
+				continue
 			}
-			if len(envelope.Events) > 0 {
-				broadcast[writer] = append(broadcast[writer], envelope)
+
+			if sub.Source.IsLive() {
+				err := h.writeResponse(ctx, sub.Writer, &nostr.EventEnvelope{
+					Events:         []*nostr.Event{&event.Event},
+					SubscriptionID: &sub.Source.ID,
+				})
+				if err != nil {
+					log.Printf("WARN: failed to write event %s to subscription %s: %v", event.ID, sub.Source.ID, err)
+				}
+			} else {
+				sub.Source.Push(event)
 			}
-			return true
-		})
+		}
 		return true
 	})
-
-	if len(broadcast) == 0 {
-		return nil
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(len(broadcast))
-	ch := make(chan error, len(broadcast))
-	for writer, envelopes := range broadcast {
-		go func() {
-			defer wg.Done()
-
-			for i := range envelopes {
-				if ctx.Err() != nil {
-					break
-				}
-
-				err := h.writeResponse(ctx, writer, &envelopes[i])
-				if err != nil {
-					ch <- errors.Wrapf(err, "failed to write events for subscription %v", envelopes[i].SubscriptionID)
-					break // Stop writing events for this writer.
-				}
-			}
-		}()
-	}
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-
-	var err error
-	for writeErr := range ch {
-		err = errors.Join(err, writeErr)
-	}
-	return err
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {

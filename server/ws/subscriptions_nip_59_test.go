@@ -33,6 +33,7 @@ func TestSelfChat(t *testing.T) {
 		}
 
 		t.Logf("received events: %v", events)
+		pubsubServers[0].Broadcaster.BroadcastNewEvents(ctx, events...)
 
 		return nil
 	})

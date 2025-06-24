@@ -3,6 +3,7 @@
 package ws
 
 import (
+	"context"
 	"errors"
 
 	"github.com/puzpuzpuz/xsync/v4"
@@ -14,17 +15,21 @@ import (
 )
 
 type (
-	Writer         = adapters.WSWriter
-	Config         = config.Config
-	WSHandler      = adapters.WSHandler
+	Writer           = adapters.WSWriter
+	Config           = config.Config
+	EventBroadcaster interface {
+		BroadcastNewEvents(ctx context.Context, events ...*model.Event)
+	}
+	Handler interface {
+		adapters.WSHandler
+		EventBroadcaster
+	}
 	Server         = internal.Server
 	RegisterRoutes = internal.RegisterRoutes
 	Router         = internal.Router
 )
 
 var (
-	ErrNotifyFailed = errors.New("failed to notify about new events")
-
 	WithWS = internal.WithWS
 )
 
@@ -33,14 +38,14 @@ type (
 		Challenge string
 		model.UserDataContext
 	}
-	connSubscriptions struct {
-		// SubscriptionID -> Subscription
-		Subscriptions *xsync.Map[string, *model.Subscription]
+	subscription struct {
+		Source *model.Subscription
+		Writer Writer
 	}
 	handler struct {
-		connSubs *xsync.Map[Writer, connSubscriptions]
-		connAuth *xsync.Map[Writer, connAuthData]
-		relayURL string
+		Subscriptions *xsync.Map[string, subscription] // Subscriptions ID -> subscription.
+		ConnAuth      *xsync.Map[Writer, connAuthData]
+		RelayURL      string
 	}
 )
 

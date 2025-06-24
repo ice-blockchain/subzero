@@ -114,17 +114,19 @@ func helperCreateWsInstance(
 	node, releaseNode := command.NewConsensusNode(ctx, nil, consensusPort,
 		command.WithQuery(db.SelectEvents))
 
+	nostrHandler := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort))
 	srv := fixture.NewTestServer(ctx,
 		&Config{
 			Port:      wsPort,
 			TLSConfig: tlsConfig,
 		},
-		newHandler(fmt.Sprintf("wss://localhost:%v", wsPort)).Handle,
+		nostrHandler.Handle,
 		nil,
 		map[string]gin.HandlerFunc{},
 	)
 	srv.Consensus = node
 	srv.DB = db
+	srv.Broadcaster = nostrHandler
 
 	return srv, func() error {
 		return errors.Join(releaseNode(), releaseDB())

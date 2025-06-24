@@ -5,6 +5,7 @@ package ws
 import (
 	"context"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,7 +42,12 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		return helperNewIterator(t, storedEvents)
 	})
 	helperSignWithMinLeadingZeroBits(t, storedEvents[len(storedEvents)-1], privkey)
-	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		storedEvents = append(storedEvents, events...)
+		pubsubServers[0].Broadcaster.BroadcastNewEvents(ctx, events...)
+
+		return nil
+	})
 	pubsubServers[0].Reset()
 	connsCount := 10
 	subsPerConnectionCount := 10
@@ -694,7 +700,8 @@ func TestBufferAndStremEvents(t *testing.T) {
 		t.Logf("DB request unblocked, returning stored events")
 		return helperNewIterator(t, []*model.Event{&note})
 	})
-	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		pubsubServers[0].Broadcaster.BroadcastNewEvents(ctx, events...)
 		return nil
 	})
 
@@ -718,7 +725,10 @@ loop:
 			t.Logf("subscription %s reached end of stored events", sub.GetID())
 			// Must be the event from the database.
 			require.NotEmpty(t, received)
-			require.Equal(t, note.ID, received[0].ID)
+			require.True(t,
+				slices.ContainsFunc(received, func(ev *model.Event) bool {
+					return ev.ID == note.ID
+				}))
 
 		case <-signal:
 			t.Logf("sending %d events to relay", cap(sent))
@@ -731,6 +741,7 @@ loop:
 				ev.Content = "test note " + strconv.Itoa(len(sent)+1)
 				helperSignWithMinLeadingZeroBits(t, &ev, model.GeneratePrivateKey())
 				require.NoError(t, relay.Publish(t.Context(), ev.Event))
+				t.Logf("sending event %s / %s", ev.ID, ev.Content)
 				sent = append(sent, &ev)
 			}
 			// Unblock the subscription to start receiving events.
@@ -738,7 +749,7 @@ loop:
 			t.Logf("unblocked subscription %s", sub.GetID())
 
 		case ev := <-sub.Events:
-			t.Logf("received event %s from subscription %s", ev.ID, sub.GetID())
+			t.Logf("received event %s / %s from subscription %s", ev.ID, ev.Content, sub.GetID())
 			received = append(received, &model.Event{Event: *ev})
 			if len(received) == cap(sent)+1 { // +1 for the event from the database.
 				t.Logf("received all %d events", len(received))
