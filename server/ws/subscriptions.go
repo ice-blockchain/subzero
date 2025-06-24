@@ -24,10 +24,6 @@ import (
 	"github.com/ice-blockchain/subzero/validation"
 )
 
-const (
-	maxSubsPerTask = 100
-)
-
 var (
 	protectedEventKindsE2E = map[int]struct{}{
 		nostr.KindGiftWrap: {},
