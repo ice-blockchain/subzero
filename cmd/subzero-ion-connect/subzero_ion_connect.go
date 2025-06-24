@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -95,7 +96,10 @@ func init() {
 		if err := query.CommitEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to delete outdated replaced events")
 		}
-		webserver.BroadcastNewEvents(ctx, events...)
+
+		ants.Submit(func() {
+			webserver.BroadcastNewEvents(ctx, events...)
+		})
 
 		return nil
 	})

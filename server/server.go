@@ -93,7 +93,7 @@ func New(ctx context.Context, opts ...Option) Server {
 		tls = wsserver.LoadTLSConfig(r.Config.TLSCert, r.Config.TLSKey)
 	}
 
-	r.Handler = wsserver.NewHandler(ctx, r.Config.RelayURL)
+	r.Handler = wsserver.NewHandler(r.Config.RelayURL)
 	r.Server = wsserver.New(
 		&wsserver.Config{
 			Port:      r.Config.Port,

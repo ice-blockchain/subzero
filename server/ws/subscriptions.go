@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip42"
+	"github.com/panjf2000/ants/v2"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -538,8 +539,10 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
 
-	// Remove cancelation from the client's context, so that we can broadcast events even if the client disconnected.
-	h.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+	ants.Submit(func() {
+		// Remove cancelation from the client's context, so that we can broadcast events even if the client disconnected.
+		h.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+	})
 
 	return nil
 }
@@ -550,25 +553,7 @@ func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.E
 		canForwardCommunityEvent(ctx, in, data.MasterPublicKey)
 }
 
-func (h *handler) ForwardEventToWriter(ctx context.Context, event *model.Event, writer Writer, subIDs []string) {
-	envelope := nostr.EventEnvelope{
-		Events: []*nostr.Event{&event.Event},
-	}
-
-	for idx := range subIDs {
-		envelope.SubscriptionID = &subIDs[idx]
-		err := h.writeResponse(ctx, writer, &envelope)
-		if err != nil {
-			log.Printf("WARN: failed to write event %s to subscription %s: %v", event.ID, subIDs[idx], err)
-			return // Stop writing to this writer on error.
-		}
-	}
-}
-
 func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
-	eventBatches := make(map[string][]subscription, len(events)) // Event.ID -> subscriptions.
-
-	// Collect subscriptions that can receive these events.
 	h.Subscriptions.Range(func(_ string, sub subscription) bool {
 		authData, _ := h.ConnAuth.Load(sub.Writer)
 		for _, event := range events {
@@ -577,42 +562,21 @@ func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event
 			}
 
 			if sub.Source.IsLive() {
-				eventBatches[event.ID] = append(eventBatches[event.ID], sub)
+				ants.Submit(func() {
+					err := h.writeResponse(ctx, sub.Writer, &nostr.EventEnvelope{
+						Events:         []*nostr.Event{&event.Event},
+						SubscriptionID: &sub.Source.ID,
+					})
+					if err != nil {
+						log.Printf("WARN: failed to write event %s to subscription %s: %v", event.ID, sub.Source.ID, err)
+					}
+				})
 			} else {
 				sub.Source.Push(event)
 			}
 		}
 		return true
 	})
-
-	eventMap := make(map[string]*model.Event, len(events))
-	for _, event := range events {
-		eventMap[event.ID] = event
-	}
-
-	for eventID, subs := range eventBatches {
-		event := eventMap[eventID]
-
-		// Group by writer.
-		writerSubs := make(map[Writer][]string)
-		for _, sub := range subs {
-			writerSubs[sub.Writer] = append(writerSubs[sub.Writer], sub.Source.ID)
-		}
-
-		// Submit tasks to the thread pool.
-		for writer, subIDs := range writerSubs {
-			if len(subIDs) <= maxSubsPerTask {
-				h.ThreadPool.Go(func() { h.ForwardEventToWriter(ctx, event, writer, subIDs) })
-				continue
-			}
-
-			// Split large batches.
-			batches := model.SplitBatch(subIDs, maxSubsPerTask)
-			for _, batch := range batches {
-				h.ThreadPool.Go(func() { h.ForwardEventToWriter(ctx, event, writer, batch) })
-			}
-		}
-	}
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {

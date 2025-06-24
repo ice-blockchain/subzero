@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alitto/pond/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -58,21 +57,18 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(ctx context.Context, relayURL string) Handler {
-	return newHandler(ctx, relayURL)
+func NewHandler(relayURL string) Handler {
+	return newHandler(relayURL)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func newHandler(ctx context.Context, relayURL string) *handler {
-	const maxConcurrency = 1000
-
+func newHandler(relayURL string) *handler {
 	return &handler{
 		Subscriptions: xsync.NewMap[string, subscription](),
 		ConnAuth:      xsync.NewMap[Writer, connAuthData](),
-		ThreadPool:    pond.NewPool(maxConcurrency, pond.WithContext(ctx)),
 		RelayURL:      relayURL,
 	}
 }

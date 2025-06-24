@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
+	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -90,6 +91,8 @@ func TestMain(m *testing.M) {
 		closeFuncs[i]()
 	}
 
+	ants.Release()
+
 	if code == 0 {
 		time.Sleep(15 * time.Second)
 		if err := goleak.Find(); err != nil {
@@ -119,7 +122,7 @@ func helperCreateWsInstance(
 			Port:      wsPort,
 			TLSConfig: tlsConfig,
 		},
-		newHandler(ctx, fmt.Sprintf("wss://localhost:%v", wsPort)).Handle,
+		newHandler(fmt.Sprintf("wss://localhost:%v", wsPort)).Handle,
 		nil,
 		map[string]gin.HandlerFunc{},
 	)

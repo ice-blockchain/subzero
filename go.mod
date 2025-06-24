@@ -41,6 +41,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.51.12
+	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.52.0
 	github.com/quic-go/webtransport-go v0.8.1-0.20250617154214-d62037919799
