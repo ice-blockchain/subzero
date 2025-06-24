@@ -138,16 +138,16 @@ func init() {
 			return errors.Wrap(err, "storage.AcceptEvents failed")
 		}
 
-		go func() {
+		ants.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		}()
-		go func() {
+		})
+		ants.Submit(func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		}()
+		})
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
