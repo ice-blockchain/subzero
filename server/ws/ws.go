@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"io"
 	"log"
+	"runtime"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -57,16 +59,25 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(relayURL string) Handler {
-	return newHandler(relayURL)
+func NewHandler(ctx context.Context, relayURL string) Handler {
+	return newHandler(ctx, relayURL)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func newHandler(relayURL string) *handler {
+func newHandler(ctx context.Context, relayURL string) *handler {
+	pool, err := ants.NewPool(10_000 * runtime.NumCPU())
+	if err != nil {
+		log.Panicf("failed to create ants pool: %v", err)
+	}
+	go func() {
+		<-ctx.Done()
+		pool.ReleaseTimeout(time.Second)
+	}()
 	return &handler{
+		Pool:          pool,
 		Subscriptions: xsync.NewMap[string, subscription](),
 		ConnAuth:      xsync.NewMap[Writer, connAuthData](),
 		RelayURL:      relayURL,

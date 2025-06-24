@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/panjf2000/ants/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -97,9 +96,7 @@ func init() {
 			return errors.Wrapf(err, "failed to delete outdated replaced events")
 		}
 
-		ants.Submit(func() {
-			webserver.BroadcastNewEvents(ctx, events...)
-		})
+		webserver.BroadcastNewEvents(ctx, events...)
 
 		return nil
 	})
@@ -138,16 +135,17 @@ func init() {
 			return errors.Wrap(err, "storage.AcceptEvents failed")
 		}
 
-		ants.Submit(func() {
+		go func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		})
-		ants.Submit(func() {
+		}()
+		func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		})
+		}()
+
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)

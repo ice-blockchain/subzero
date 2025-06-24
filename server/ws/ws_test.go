@@ -122,7 +122,7 @@ func helperCreateWsInstance(
 			Port:      wsPort,
 			TLSConfig: tlsConfig,
 		},
-		newHandler(fmt.Sprintf("wss://localhost:%v", wsPort)).Handle,
+		newHandler(ctx, fmt.Sprintf("wss://localhost:%v", wsPort)).Handle,
 		nil,
 		map[string]gin.HandlerFunc{},
 	)
