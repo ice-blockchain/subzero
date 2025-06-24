@@ -731,6 +731,7 @@ loop:
 				ev.Content = "test note " + strconv.Itoa(len(sent)+1)
 				helperSignWithMinLeadingZeroBits(t, &ev, model.GeneratePrivateKey())
 				require.NoError(t, relay.Publish(t.Context(), ev.Event))
+				t.Logf("sending event %s / %s", ev.ID, ev.Content)
 				sent = append(sent, &ev)
 			}
 			// Unblock the subscription to start receiving events.
@@ -738,7 +739,7 @@ loop:
 			t.Logf("unblocked subscription %s", sub.GetID())
 
 		case ev := <-sub.Events:
-			t.Logf("received event %s from subscription %s", ev.ID, sub.GetID())
+			t.Logf("received event %s / %s from subscription %s", ev.ID, ev.Content, sub.GetID())
 			received = append(received, &model.Event{Event: *ev})
 			if len(received) == cap(sent)+1 { // +1 for the event from the database.
 				t.Logf("received all %d events", len(received))
