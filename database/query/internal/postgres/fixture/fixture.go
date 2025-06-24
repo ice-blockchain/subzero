@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	pgImage    = "postgres:17-alpine"
+	pgImage    = "groonga/pgroonga:4.0.1-alpine-17"
 	pgPass     = "postgres"
 	pgDatabase = "postgres"
 	dbPort     = "5432/tcp"

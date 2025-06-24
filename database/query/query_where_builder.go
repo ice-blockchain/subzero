@@ -560,13 +560,11 @@ func replaceSpecialChars(input string) string {
 	}
 
 	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSymbol('_') {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
 			return r
-		} else if unicode.IsSpace(r) {
-			return -1
 		}
 
-		return '_'
+		return -1
 	}, input)
 }
 
@@ -576,12 +574,11 @@ func (b *queryBuilder) ApplyTextSearch(filter *databaseFilterSearch) {
 	}
 
 	text := replaceSpecialChars(filter.SearchText)
-	text = text + ":*"
 
 	b.MaybeAND()
-	b.WriteString("(e.lookup @@ to_tsquery(:")
+	b.WriteString("(e.lookup &@ :")
 	b.WriteValue(filter.ID, "fts", text)
-	b.WriteString(`))`)
+	b.WriteString(")")
 }
 
 func (b *queryBuilder) MaybeApplyTextSearch(filter *databaseFilterSearch) {

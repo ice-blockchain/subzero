@@ -192,6 +192,70 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		stored := helperSelectEvents(t, db, filters...)
 		require.Len(t, stored, 3) // Coulbe with duplicate events.
 	})
+
+	t.Run("contains search - partial word in middle", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"ummar"`,
+		})
+		require.Len(t, stored, 2)
+		require.EqualValues(t, expectedEvents[0], stored[1])
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
+	t.Run("contains search - partial content", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"ogu"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
+	t.Run("contains search - case insensitive", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"BOGU"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
+	t.Run("contains search - tag content partial", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"lt2"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
+	t.Run("contains search - beginning of word", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"summ"`,
+		})
+		require.Len(t, stored, 2)
+		require.EqualValues(t, expectedEvents[0], stored[1])
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
+	t.Run("contains search - end of word", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"ary1"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[0], stored[0])
+	})
+
+	t.Run("contains search - no results", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"nonexistent"`,
+		})
+		require.Len(t, stored, 0)
+	})
 	t.Run("delete events", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
