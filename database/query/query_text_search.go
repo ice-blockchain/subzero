@@ -49,41 +49,19 @@ func extractProfileContentMetadata(contentJSON string) []string {
 	return []string{content.Name, content.DisplayName}
 }
 
-func extractTagValues(ev *model.Event) (data []string) {
-	hasImeta := false
-	for _, tag := range ev.Tags {
-		switch tag.Key() {
-		case "alt", "summary":
-			data = append(data, strings.TrimSpace(tag.Value()))
-		case "imeta":
-			hasImeta = true
-		}
-	}
-
-	if hasImeta {
-		data = append(data, extractIMetaTagValues(ev)...)
-	}
-
-	return data
-}
-
 func prepareSearchContent(ev *model.Event) string {
 	var fields []string
 
 	switch ev.Kind {
 	case nostr.KindProfileMetadata:
 		fields = append(fields, extractProfileContentMetadata(ev.Content)...)
-		fields = append(fields, extractTagValues(ev)...)
 
 	case nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-		fields = append(fields, extractTagValues(ev)...)
 		if ev.Content != "" {
 			fields = append(fields, ev.Content)
 		} else if richTextContent := model.ExtractRichTextContent(ev); richTextContent != "" {
 			fields = append(fields, richTextContent)
 		}
-	case nostr.KindFileMetadata:
-		fields = append(fields, extractTagValues(ev)...)
 	}
 
 	return strings.Join(fields, " ")

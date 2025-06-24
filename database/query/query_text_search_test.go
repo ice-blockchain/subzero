@@ -25,8 +25,8 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 	expectedEvents := []*model.Event{}
 	searchPubkey := "bogusssss" + uuid.NewString()
 	searchID := "normal, 3nd event" + uuid.NewString()
-	t.Run("Create events with text note kind with imeta alt and summary tags", func(t *testing.T) {
-		var tags1 nostr.Tags
+	t.Run("create events", func(t *testing.T) {
+		var tags1 model.Tags
 		tags1 = append(tags1, nostr.Tag{
 			"imeta",
 			"url https://alicerelay.example.com",
@@ -46,7 +46,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				CreatedAt: now,
 				Kind:      nostr.KindTextNote,
 				Tags:      tags1,
-				Content:   "end, and, ond",
+				Content:   "Hello world! This is my first message. Looking forward to connecting with everyone.",
 				Sig:       "end" + uuid.NewString(),
 			},
 		})
@@ -59,7 +59,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				CreatedAt: now + 1,
 				Kind:      nostr.KindTextNote,
 				Tags:      model.Tags{},
-				Content:   "post",
+				Content:   "Just posted a new update about my project progress!",
 				Sig:       "bogus" + uuid.NewString(),
 			},
 		})
@@ -84,7 +84,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 				CreatedAt: now + 2,
 				Kind:      nostr.KindTextNote,
 				Tags:      tags2,
-				Content:   "bogusssss",
+				Content:   "Exploring blockchain technology and decentralized networks. Very exciting developments!",
 				Sig:       "bogusssss" + uuid.NewString(),
 			},
 		})
@@ -98,79 +98,26 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		require.EqualValues(t, expectedEvents[1], stored[1])
 		require.EqualValues(t, expectedEvents[0], stored[2])
 	})
-	t.Run("search event bogus", func(t *testing.T) {
+	t.Run("search by content - blockchain", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"bogu"`,
+			Search: `"blockchain"`,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
-	t.Run("search by imeta alt tag alt1 value", func(t *testing.T) {
+	t.Run("search by content - blockchain", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"alt1"`,
+			Search: `"bl"`,
 		})
 		require.Len(t, stored, 1)
-
-		require.EqualValues(t, expectedEvents[0], stored[0])
-	})
-	t.Run("search by imeta alt tag - alt2 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"alt2"`,
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-	t.Run("search by imeta alt tag", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"alt"`,
-		})
-		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[0], stored[1])
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-	t.Run("search by imeta alt tag summary1 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summary1"`,
-		})
-		require.Len(t, stored, 1)
-
-		require.EqualValues(t, expectedEvents[0], stored[0])
-	})
-	t.Run("search by imeta summary tag - summary2 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summary2"`,
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-	t.Run("search kind text note by imeta summary tag", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summ"`,
-		})
-		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[0], stored[1])
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-	t.Run("search kind text note by imeta summary tag", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summ"`,
-		})
-		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[0], stored[1])
 		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
 	t.Run("search kind text note by content and pubkey", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summ"`,
+			Search: `"blockchain"`,
 			Authors: []string{
 				searchPubkey,
 			},
@@ -182,73 +129,56 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		filters := model.Filters{
 			model.Filter{
 				Kinds:  []int{nostr.KindTextNote},
-				Search: `"summ"`,
+				Search: `"blockchain"`,
 			},
 			model.Filter{
 				Kinds:  []int{nostr.KindTextNote},
-				Search: `"end"`,
+				Search: `"Hello"`,
 			},
 		}
 		stored := helperSelectEvents(t, db, filters...)
-		require.Len(t, stored, 3) // Coulbe with duplicate events.
+		require.Len(t, stored, 2)
 	})
-
 	t.Run("contains search - partial word in middle", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"ummar"`,
+			Search: `"ckcha"`,
 		})
-		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[0], stored[1])
+		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[2], stored[0])
 	})
-
 	t.Run("contains search - partial content", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"ogu"`,
+			Search: `"project"`,
 		})
 		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[2], stored[0])
+		require.EqualValues(t, expectedEvents[1], stored[0])
 	})
-
 	t.Run("contains search - case insensitive", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"BOGU"`,
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-
-	t.Run("contains search - tag content partial", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"lt2"`,
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-
-	t.Run("contains search - beginning of word", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summ"`,
-		})
-		require.Len(t, stored, 2)
-		require.EqualValues(t, expectedEvents[0], stored[1])
-		require.EqualValues(t, expectedEvents[2], stored[0])
-	})
-
-	t.Run("contains search - end of word", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindTextNote},
-			Search: `"ary1"`,
+			Search: `"HELLO"`,
 		})
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[0], stored[0])
 	})
-
+	t.Run("contains search - beginning of word", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"decen"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+	t.Run("contains search - end of word", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindTextNote},
+			Search: `"world"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[0], stored[0])
+	})
 	t.Run("contains search - no results", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
@@ -270,7 +200,7 @@ func TestSearchEvents_KindTextNote(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), ev))
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindTextNote},
-			Search: `"summ"`,
+			Search: `"blockchain"`,
 			Authors: []string{
 				searchPubkey,
 			},
@@ -309,7 +239,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 				CreatedAt: now,
 				Kind:      model.CustomIONKindEditableTextNote,
 				Tags:      tags1,
-				Content:   "Test post 12345\n",
+				Content:   "Test pos 12345\n",
 				Sig:       "1" + uuid.NewString(),
 			},
 		})
@@ -322,7 +252,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 				CreatedAt: now + 1,
 				Kind:      model.CustomIONKindEditableTextNote,
 				Tags:      model.Tags{},
-				Content:   "lalala hey",
+				Content:   "lalalala hey",
 				Sig:       "2" + uuid.NewString(),
 			},
 		})
@@ -458,107 +388,6 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 	})
 }
 
-func TestSearchEvents_KindFileMetadata(t *testing.T) {
-	t.Parallel()
-
-	db := helperNewDatabase(t)
-	defer db.Close()
-	expectedEvents := []*model.Event{}
-	t.Run("Events with KindFileMetadata", func(t *testing.T) {
-		expectedEvents = append(expectedEvents, &model.Event{
-			Event: nostr.Event{
-				ID:        "ev1" + uuid.NewString(),
-				PubKey:    "ev1" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindFileMetadata,
-				Tags:      nostr.Tags{{"alt", "alt1 text"}, {"summary", "dummy summary1 content"}},
-				Sig:       "ev1" + uuid.NewString(),
-			},
-		})
-		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[0]))
-		expectedEvents = append(expectedEvents, &model.Event{
-			Event: nostr.Event{
-				ID:        "ev2" + uuid.NewString(),
-				PubKey:    "ev2" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindFileMetadata,
-				Tags:      nostr.Tags{{"alt", "alt2 text"}, {"summary", "dummy summary2 content"}},
-				Sig:       "ev2" + uuid.NewString(),
-			},
-		})
-		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[1]))
-		expectedEvents = append(expectedEvents, &model.Event{
-			Event: nostr.Event{
-				ID:        "ev3" + uuid.NewString(),
-				PubKey:    "ev3" + uuid.NewString(),
-				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindFileMetadata,
-				Tags:      nostr.Tags{{"alt", "alt3 text"}, {"summary", "dummy summary3 content"}},
-				Sig:       "ev3" + uuid.NewString(),
-			},
-		})
-		require.NoError(t, db.AcceptEvents(t.Context(), expectedEvents[2]))
-
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds: []int{nostr.KindFileMetadata},
-		})
-		require.Len(t, stored, 3)
-		require.ElementsMatch(t, expectedEvents, stored)
-	})
-	t.Run("search by imeta alt tag alt1 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindFileMetadata},
-			Search: `"alt1"`,
-		})
-		require.Len(t, stored, 1)
-
-		require.EqualValues(t, expectedEvents[0], stored[0])
-	})
-	t.Run("search by imeta alt tag alt2 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindFileMetadata},
-			Search: `"alt2"`,
-		})
-		require.Len(t, stored, 1)
-
-		require.EqualValues(t, expectedEvents[1], stored[0])
-	})
-	t.Run("search by imeta alt tag alt value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindFileMetadata},
-			Search: `"al"`,
-		})
-		require.Len(t, stored, 3)
-		require.ElementsMatch(t, expectedEvents, stored)
-	})
-	t.Run("search by imeta alt tag summary1 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindFileMetadata},
-			Search: `"summary1"`,
-		})
-		require.Len(t, stored, 1)
-
-		require.EqualValues(t, expectedEvents[0], stored[0])
-	})
-	t.Run("search by imeta alt tag summary2 value", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindFileMetadata},
-			Search: `"summary2"`,
-		})
-		require.Len(t, stored, 1)
-
-		require.EqualValues(t, expectedEvents[1], stored[0])
-	})
-	t.Run("search by imeta summary tag", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindFileMetadata},
-			Search: `"summ"`,
-		})
-		require.Len(t, stored, 3)
-		require.ElementsMatch(t, expectedEvents, stored)
-	})
-}
-
 func TestSearchEvents_KindGenericRepost(t *testing.T) {
 	t.Parallel()
 
@@ -621,24 +450,6 @@ func TestSearchEvents_KindGenericRepost(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindGenericRepost},
 			Search: `"end"`,
-			Limit:  100,
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[1], stored[0])
-	})
-	t.Run("search repost by reposted article tag alt", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindGenericRepost},
-			Search: `"alt1"`,
-			Limit:  100,
-		})
-		require.Len(t, stored, 1)
-		require.EqualValues(t, expectedEvents[1], stored[0])
-	})
-	t.Run("search repost by reposted article tag summary", func(t *testing.T) {
-		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:  []int{nostr.KindGenericRepost},
-			Search: `"summary1"`,
 			Limit:  100,
 		})
 		require.Len(t, stored, 1)
@@ -882,19 +693,6 @@ func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 	})
 }
 
-func TestExtractIMetaTagValues(t *testing.T) {
-	t.Parallel()
-
-	var ev model.Event
-	ev.Tags = model.Tags{
-		{"imeta", "url https://alicerelay.example.com", "m image/jpg", "dim 3024x4032", "i foobar", "alt alt1 text", "summary dummy summary1 content"},
-	}
-
-	data := extractIMetaTagValues(&ev)
-	require.NotEmpty(t, data)
-	require.Equal(t, []string{"alt1", "text", "dummy", "summary1", "content"}, data)
-}
-
 func TestSearchEvents_WithNestedDependencyKind3Kind0(t *testing.T) {
 	t.Parallel()
 
@@ -1058,5 +856,258 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
 		require.Equal(t, "Main Title Some bold text and italic text. List item 1 List item 2", prepareSearchContent(&ev))
+	})
+}
+
+func TestSearchEvents_ComprehensiveMultilingualSearch(t *testing.T) {
+	t.Parallel()
+
+	privKey, _ := model.GenerateKeyPair()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	testCases := []struct {
+		name           string
+		content        string
+		searchTerms    []string
+		substringTerms []string
+		failTerms      []string
+		language       string
+		description    string
+	}{
+		{
+			name:           "Japanese_Hiragana_Katakana_Kanji",
+			content:        "こんにちは世界！カタカナでテストします。日本語の検索機能をテストしています。",
+			searchTerms:    []string{"こんにちは", "世界", "カタカナ", "日本語"},
+			substringTerms: []string{"こんに", "世", "カタ", "日本"},
+			failTerms:      []string{"英語", "中国", "韓国", "ドイツ"},
+			language:       "ja",
+			description:    "Japanese mixed scripts (Hiragana, Katakana, Kanji)",
+		},
+		{
+			name:           "Chinese_Simplified",
+			content:        "你好世界！这是中文简体字测试。搜索功能正常工作。",
+			searchTerms:    []string{"你好", "世界", "中文", "简体字", "搜索"},
+			substringTerms: []string{"你", "世", "中", "简体", "搜"},
+			failTerms:      []string{"英文", "日语", "韩语", "德语"},
+			language:       "zh-CN",
+			description:    "Chinese Simplified characters",
+		},
+		{
+			name:           "Chinese_Traditional",
+			content:        "你好世界！這是中文繁體字測試。搜索功能正常工作。",
+			searchTerms:    []string{"你好", "世界", "中文", "繁體字", "搜索"},
+			substringTerms: []string{"你", "世", "中", "繁體", "搜"},
+			failTerms:      []string{"英文", "日語", "韓語", "德語"},
+			language:       "zh-TW",
+			description:    "Chinese Traditional characters",
+		},
+		{
+			name:           "Arabic_With_Diacritics",
+			content:        "مرحباً بالعالم! هذا اختبار للنص العربي. البحث يعمل بشكل صحيح.",
+			searchTerms:    []string{"مرحباً", "بالعالم", "العربي", "البحث"},
+			substringTerms: []string{"مرح", "بال", "العرب", "البح"},
+			failTerms:      []string{"الإنجليزية", "الفرنسية", "الألمانية", "الروسية"},
+			language:       "ar",
+			description:    "Arabic with diacritics and complex forms",
+		},
+		{
+			name:           "Hebrew_With_Vowels",
+			content:        "שלום עולם! זהו מבחן לטקסט עברי. החיפוש עובד כראוי.",
+			searchTerms:    []string{"שלום", "עולם", "עברי", "החיפוש"},
+			substringTerms: []string{"של", "עול", "עבר", "החיפ"},
+			failTerms:      []string{"אנגלית", "צרפתית", "גרמנית", "רוסית"},
+			language:       "he",
+			description:    "Hebrew with vowel marks",
+		},
+		{
+			name:           "Russian_Cyrillic",
+			content:        "Привет мир! Это тест русского текста. Поиск работает правильно.",
+			searchTerms:    []string{"Привет", "русского", "текста", "работает"},
+			substringTerms: []string{"Прив", "русск", "текс", "работ"},
+			failTerms:      []string{"английский", "французский", "немецкий", "японский"},
+			language:       "ru",
+			description:    "Russian Cyrillic script",
+		},
+		{
+			name:           "Hindi_Devanagari_Complex",
+			content:        "नमस्ते दुनिया! यह हिंदी पाठ का परीक्षण है। खोज कार्यक्षमता सही तरीके से काम करती है।",
+			searchTerms:    []string{"नमस्ते", "दुनिया", "हिंदी", "परीक्षण", "कार्यक्षमता"},
+			substringTerms: []string{"नमस", "दुनि", "हिंद", "परीक्ष", "कार्यक्षम"},
+			failTerms:      []string{"अंग्रेजी", "फ्रेंच", "जर्मन", "रूसी"},
+			language:       "hi",
+			description:    "Hindi Devanagari with complex conjuncts and matras",
+		},
+		{
+			name:           "French_Diacritics_Complete",
+			content:        "Bonjour le monde! Voici un test avec des caractères spéciaux: café, naïve, être, où, ça marche très bien.",
+			searchTerms:    []string{"café", "naïve", "être", "où", "très"},
+			substringTerms: []string{},
+			failTerms:      []string{"cafe", "naive", "etre", "xyz", "tres"},
+			language:       "fr",
+			description:    "French with all major diacritics",
+		},
+	}
+
+	var events []*model.Event
+	for i, tc := range testCases {
+		event := &model.Event{
+			Event: nostr.Event{
+				ID:        fmt.Sprintf("test-%d-%s", i, uuid.New().String()[:8]),
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Tags:      model.Tags{},
+				Content:   tc.content,
+			},
+		}
+		event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
+		events = append(events, event)
+		require.NoError(t, db.AcceptEvents(t.Context(), event))
+	}
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Logf("Testing: %s", tc.description)
+			t.Logf("Content: %s", tc.content)
+
+			foundCount := 0
+			for _, term := range tc.searchTerms {
+				stored := helperSelectEvents(t, db, model.Filter{
+					Kinds:  []int{nostr.KindTextNote},
+					Search: fmt.Sprintf(`"%s"`, term),
+					IDs:    []string{events[i].ID},
+				})
+				if len(stored) > 0 {
+					t.Logf("✅ FOUND (expected full term): '%s'", term)
+					foundCount++
+				} else {
+					t.Errorf("❌ NOT FOUND (should be found): '%s' in %s", term, tc.language)
+				}
+			}
+			substringFoundCount := 0
+			for _, term := range tc.substringTerms {
+				stored := helperSelectEvents(t, db, model.Filter{
+					Kinds:  []int{nostr.KindTextNote},
+					Search: fmt.Sprintf(`"%s"`, term),
+					IDs:    []string{events[i].ID},
+				})
+
+				if len(stored) > 0 {
+					t.Logf("✅ FOUND (expected substring): '%s'", term)
+					substringFoundCount++
+				} else {
+					t.Errorf("❌ NOT FOUND (substring should be found): '%s' in %s", term, tc.language)
+				}
+			}
+
+			notFoundCount := 0
+			for _, term := range tc.failTerms {
+				stored := helperSelectEvents(t, db, model.Filter{
+					Kinds:  []int{nostr.KindTextNote},
+					Search: fmt.Sprintf(`"%s"`, term),
+					IDs:    []string{events[i].ID},
+				})
+
+				if len(stored) == 0 {
+					t.Logf("✅ NOT FOUND (expected, term not in text): '%s'", term)
+					notFoundCount++
+				} else {
+					t.Errorf("❌ FOUND (should not be found, term not in text): '%s' in %s", term, tc.language)
+				}
+			}
+
+			expectedFound := len(tc.searchTerms)
+			expectedSubstringFound := len(tc.substringTerms)
+			expectedNotFound := len(tc.failTerms)
+
+			if foundCount != expectedFound {
+				t.Errorf("Full term search failed for %s: found %d/%d expected terms",
+					tc.language, foundCount, expectedFound)
+			}
+			if substringFoundCount != expectedSubstringFound {
+				t.Errorf("Substring search failed for %s: found %d/%d expected substrings",
+					tc.language, substringFoundCount, expectedSubstringFound)
+			}
+			if notFoundCount != expectedNotFound {
+				t.Errorf("Negative search failed for %s: correctly not found %d/%d expected absent terms",
+					tc.language, notFoundCount, expectedNotFound)
+			}
+		})
+	}
+
+	t.Run("Edge_Cases", func(t *testing.T) {
+		edgeCases := []struct {
+			name        string
+			content     string
+			searchTerm  string
+			shouldFind  bool
+			description string
+		}{
+			{
+				name:        "Hindi_Halant_Preservation",
+				content:     "नमस्ते दोस्त",
+				searchTerm:  "नमस्ते",
+				shouldFind:  true,
+				description: "Hindi halant (्) must be preserved",
+			},
+			{
+				name:        "Arabic_Shadda_Preservation",
+				content:     "مرحبّا بكم",
+				searchTerm:  "مرحبّا",
+				shouldFind:  true,
+				description: "Arabic shadda (ّ) must be preserved",
+			},
+			{
+				name:        "French_Cedilla_Exact",
+				content:     "français garçon",
+				searchTerm:  "français",
+				shouldFind:  true,
+				description: "French cedilla (ç) must be exact",
+			},
+			{
+				name:        "French_Without_Cedilla_Should_Not_Match",
+				content:     "français garçon",
+				searchTerm:  "francais",
+				shouldFind:  false,
+				description: "Without cedilla should not match",
+			},
+		}
+
+		for _, ec := range edgeCases {
+			t.Run(ec.name, func(t *testing.T) {
+				event := &model.Event{
+					Event: nostr.Event{
+						ID:        "edge-" + uuid.New().String()[:8],
+						CreatedAt: nostr.Now(),
+						Kind:      nostr.KindTextNote,
+						Tags:      model.Tags{},
+						Content:   ec.content,
+					},
+				}
+				event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
+				require.NoError(t, db.AcceptEvents(t.Context(), event))
+
+				stored := helperSelectEvents(t, db, model.Filter{
+					Kinds:  []int{nostr.KindTextNote},
+					Search: fmt.Sprintf(`"%s"`, ec.searchTerm),
+					IDs:    []string{event.ID},
+				})
+
+				found := len(stored) > 0
+				if found == ec.shouldFind {
+					if found {
+						t.Logf("✅ FOUND (expected): '%s' - %s", ec.searchTerm, ec.description)
+					} else {
+						t.Logf("✅ NOT FOUND (expected): '%s' - %s", ec.searchTerm, ec.description)
+					}
+				} else {
+					if ec.shouldFind {
+						t.Errorf("❌ Should find but didn't: '%s' - %s", ec.searchTerm, ec.description)
+					} else {
+						t.Errorf("❌ Should not find but did: '%s' - %s", ec.searchTerm, ec.description)
+					}
+				}
+			})
+		}
 	})
 }

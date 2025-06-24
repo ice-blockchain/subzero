@@ -37,7 +37,6 @@ CREATE INDEX IF NOT EXISTS idx_events_expiration_id ON events(expiration, id) WH
 -- PGroonga index for text search.
 -- TODO: after the migration, remove this check and leave just the index creation.
 CREATE EXTENSION IF NOT EXISTS pgroonga;
-
 DO $$
 BEGIN
     IF EXISTS(
@@ -52,6 +51,6 @@ BEGIN
         AND indexdef LIKE '%pgroonga%'
     ) THEN
         DROP INDEX IF EXISTS idx_events_lookup;
-        CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenNgram("unify_alphabet", false, "unify_symbol", false, "unify_digit", false)');
+        CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit');
     END IF;
 END $$;

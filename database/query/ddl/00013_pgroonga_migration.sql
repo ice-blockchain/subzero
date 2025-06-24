@@ -26,6 +26,6 @@ BEGIN
         ALTER TABLE events ALTER COLUMN lookup SET NOT NULL;
         ALTER TABLE events ALTER COLUMN lookup SET DEFAULT '';
 
-        CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenNgram("unify_alphabet", false, "unify_symbol", false, "unify_digit", false)');
+        CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit');
     END IF;
 END $$; 
