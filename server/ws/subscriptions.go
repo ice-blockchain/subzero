@@ -534,9 +534,6 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
 
-	// Remove cancelation from the client's context, so that we can broadcast events even if the client disconnected.
-	h.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
-
 	return nil
 }
 
@@ -546,7 +543,7 @@ func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.E
 		canForwardCommunityEvent(ctx, in, data.MasterPublicKey)
 }
 
-func (h *handler) broadcastNewEvents(ctx context.Context, events ...*model.Event) {
+func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
 	h.Subscriptions.Range(func(_ string, sub subscription) bool {
 		authData, _ := h.ConnAuth.Load(sub.Writer)
 		for _, event := range events {
@@ -567,12 +564,6 @@ func (h *handler) broadcastNewEvents(ctx context.Context, events ...*model.Event
 			}
 		}
 		return true
-	})
-}
-
-func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
-	h.Pool.Submit(func() {
-		h.broadcastNewEvents(ctx, events...)
 	})
 }
 

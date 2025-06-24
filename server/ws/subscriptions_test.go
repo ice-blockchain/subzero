@@ -42,7 +42,12 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		return helperNewIterator(t, storedEvents)
 	})
 	helperSignWithMinLeadingZeroBits(t, storedEvents[len(storedEvents)-1], privkey)
-	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		storedEvents = append(storedEvents, events...)
+		pubsubServers[0].Broadcaster.BroadcastNewEvents(ctx, events...)
+
+		return nil
+	})
 	pubsubServers[0].Reset()
 	connsCount := 10
 	subsPerConnectionCount := 10
@@ -695,7 +700,8 @@ func TestBufferAndStremEvents(t *testing.T) {
 		t.Logf("DB request unblocked, returning stored events")
 		return helperNewIterator(t, []*model.Event{&note})
 	})
-	RegisterWSEventListener(func(context.Context, ...*model.Event) error {
+	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		pubsubServers[0].Broadcaster.BroadcastNewEvents(ctx, events...)
 		return nil
 	})
 

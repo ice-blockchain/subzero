@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -44,7 +43,6 @@ type (
 		Writer Writer
 	}
 	handler struct {
-		Pool          *ants.Pool
 		Subscriptions *xsync.Map[string, subscription] // Subscriptions ID -> subscription.
 		ConnAuth      *xsync.Map[Writer, connAuthData]
 		RelayURL      string

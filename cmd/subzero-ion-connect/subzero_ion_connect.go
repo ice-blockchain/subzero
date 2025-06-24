@@ -8,11 +8,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -30,6 +32,7 @@ import (
 
 var (
 	configPath string
+	antsPool   *ants.Pool
 	webserver  server.Server
 	subzero    = &cobra.Command{
 		Use:     "subzero",
@@ -96,7 +99,7 @@ func init() {
 			return errors.Wrapf(err, "failed to delete outdated replaced events")
 		}
 
-		webserver.BroadcastNewEvents(ctx, events...)
+		antsPool.Submit(func() { webserver.BroadcastNewEvents(ctx, events...) })
 
 		return nil
 	})
@@ -135,16 +138,18 @@ func init() {
 			return errors.Wrap(err, "storage.AcceptEvents failed")
 		}
 
-		go func() {
+		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		}()
-		go func() {
+		})
+		antsPool.Submit(func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
-		}()
+		})
+
+		antsPool.Submit(func() { webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...) })
 
 		return nil
 	})
@@ -174,7 +179,14 @@ func newContext() context.Context {
 }
 
 func main() {
-	err := subzero.ExecuteContext(newContext())
+	pool, err := ants.NewPool(10_000 * runtime.NumCPU())
+	if err != nil {
+		log.Panicf("failed to create ants pool: %v", err)
+	}
+	defer pool.Release()
+
+	antsPool = pool
+	err = subzero.ExecuteContext(newContext())
 	if err != nil {
 		log.Panic(err)
 	}

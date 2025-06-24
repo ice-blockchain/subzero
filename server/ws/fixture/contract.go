@@ -24,6 +24,9 @@ import (
 )
 
 type (
+	EventBroadcaster interface {
+		BroadcastNewEvents(ctx context.Context, events ...*model.Event)
+	}
 	MockCallback func(ctx context.Context, w adapters.WSWriter, in []byte)
 	TestDB       interface {
 		AcceptEvents(ctx context.Context, events ...*model.Event) error
@@ -40,6 +43,7 @@ type (
 		readerWg          *sync.WaitGroup
 		port              int
 		DB                TestDB
+		Broadcaster       EventBroadcaster
 		Consensus         command.TestConsensus
 	}
 	Client interface {
