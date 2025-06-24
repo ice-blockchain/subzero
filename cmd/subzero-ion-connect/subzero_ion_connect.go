@@ -140,7 +140,7 @@ func init() {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		}()
-		func() {
+		go func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
