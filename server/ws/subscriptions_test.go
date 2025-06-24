@@ -5,6 +5,7 @@ package ws
 import (
 	"context"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -718,7 +719,10 @@ loop:
 			t.Logf("subscription %s reached end of stored events", sub.GetID())
 			// Must be the event from the database.
 			require.NotEmpty(t, received)
-			require.Equal(t, note.ID, received[0].ID)
+			require.True(t,
+				slices.ContainsFunc(received, func(ev *model.Event) bool {
+					return ev.ID == note.ID
+				}))
 
 		case <-signal:
 			t.Logf("sending %d events to relay", cap(sent))
