@@ -23,7 +23,7 @@ import (
 type (
 	Server interface {
 		wsserver.Server
-		BroadcastNewEvents(ctx context.Context, events ...*model.Event) error
+		wsserver.EventBroadcaster
 	}
 	Config struct {
 		TLSCert            string `yaml:"tls-cert"`
@@ -93,7 +93,7 @@ func New(ctx context.Context, opts ...Option) Server {
 		tls = wsserver.LoadTLSConfig(r.Config.TLSCert, r.Config.TLSKey)
 	}
 
-	r.Handler = wsserver.NewHandler(r.Config.RelayURL)
+	r.Handler = wsserver.NewHandler(ctx, r.Config.RelayURL)
 	r.Server = wsserver.New(
 		&wsserver.Config{
 			Port:      r.Config.Port,
@@ -110,8 +110,8 @@ func (r *router) MustListenAndServe(ctx context.Context) {
 	r.Server.MustListenAndServe(ctx)
 }
 
-func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event) error {
-	return r.Handler.BroadcastNewEvents(ctx, events...)
+func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
+	r.Handler.BroadcastNewEvents(ctx, events...)
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {

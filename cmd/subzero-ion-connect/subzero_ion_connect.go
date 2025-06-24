@@ -95,9 +95,8 @@ func init() {
 		if err := query.CommitEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to delete outdated replaced events")
 		}
-		if err := webserver.BroadcastNewEvents(ctx, events...); err != nil {
-			log.Printf("failed to webserver.BroadcastNewEvents(%s): %v", model.Events(events).String(), err)
-		}
+		webserver.BroadcastNewEvents(ctx, events...)
+
 		return nil
 	})
 	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/alitto/pond/v2"
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -15,11 +16,14 @@ import (
 )
 
 type (
-	Writer  = adapters.WSWriter
-	Config  = config.Config
+	Writer           = adapters.WSWriter
+	Config           = config.Config
+	EventBroadcaster interface {
+		BroadcastNewEvents(ctx context.Context, events ...*model.Event)
+	}
 	Handler interface {
 		adapters.WSHandler
-		BroadcastNewEvents(ctx context.Context, events ...*model.Event) error
+		EventBroadcaster
 	}
 	Server         = internal.Server
 	RegisterRoutes = internal.RegisterRoutes
@@ -27,8 +31,6 @@ type (
 )
 
 var (
-	ErrNotifyFailed = errors.New("failed to notify about new events")
-
 	WithWS = internal.WithWS
 )
 
@@ -37,16 +39,15 @@ type (
 		Challenge string
 		model.UserDataContext
 	}
-	connSubscriptions struct {
-		// SubscriptionID -> Subscription
-		Subscriptions *xsync.Map[string, *model.Subscription]
-	}
-	router struct {
+	subscription struct {
+		Source *model.Subscription
+		Writer Writer
 	}
 	handler struct {
-		ConnSubs *xsync.Map[Writer, connSubscriptions]
-		ConnAuth *xsync.Map[Writer, connAuthData]
-		RelayURL string
+		ThreadPool    pond.Pool
+		Subscriptions *xsync.Map[string, subscription] // Subscriptions ID -> subscription.
+		ConnAuth      *xsync.Map[Writer, connAuthData]
+		RelayURL      string
 	}
 )
 

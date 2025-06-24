@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alitto/pond/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -57,19 +58,22 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(relayURL string) Handler {
-	return newHandler(relayURL)
+func NewHandler(ctx context.Context, relayURL string) Handler {
+	return newHandler(ctx, relayURL)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func newHandler(relayURL string) *handler {
+func newHandler(ctx context.Context, relayURL string) *handler {
+	const maxConcurrency = 1000
+
 	return &handler{
-		ConnSubs: xsync.NewMap[Writer, connSubscriptions](),
-		ConnAuth: xsync.NewMap[Writer, connAuthData](),
-		RelayURL: relayURL,
+		Subscriptions: xsync.NewMap[string, subscription](),
+		ConnAuth:      xsync.NewMap[Writer, connAuthData](),
+		ThreadPool:    pond.NewPool(maxConcurrency, pond.WithContext(ctx)),
+		RelayURL:      relayURL,
 	}
 }
 
@@ -134,11 +138,6 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
 		err = h.handleEvents(h.populateContext(context.WithoutCancel(ctx), respWriter), respWriter, events)
-		if errors.Is(err, ErrNotifyFailed) {
-			// Not critical, just log it.
-			log.Printf("WARN: notification failed: %v", err)
-			err = nil
-		}
 		if err != nil {
 			log.Printf("ERROR: cannot process events: %s: %v", model.Events(events).String(), err)
 		}

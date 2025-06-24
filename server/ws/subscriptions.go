@@ -12,17 +12,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip42"
-	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/validation"
+)
+
+const (
+	maxSubsPerTask = 100
 )
 
 var (
@@ -128,28 +130,28 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 		return
 	}
 
-	conn, _ := h.ConnSubs.LoadOrCompute(respWriter, func() (connSubscriptions, bool) {
-		return connSubscriptions{
-			Subscriptions: xsync.NewMap[string, *model.Subscription](),
-		}, false
+	_, loaded := h.Subscriptions.LoadAndStore(sub.ID, subscription{
+		Source: sub,
+		Writer: respWriter,
 	})
-	conn.Subscriptions.Store(sub.ID, sub)
+	if loaded {
+		log.Printf("WARN: subscription %s already exists, overwriting it", sub.ID)
+	}
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	if ID == nil {
 		// Connection is closing, remove all subscriptions.
-		h.ConnSubs.Delete(respWriter)
-
+		h.Subscriptions.Range(func(_ string, sub subscription) bool {
+			if sub.Writer == respWriter {
+				h.Subscriptions.Delete(sub.Source.ID)
+			}
+			return true
+		})
 		return false
 	}
 
-	conn, ok := h.ConnSubs.Load(respWriter)
-	if !ok {
-		return false
-	}
-
-	_, ok = conn.Subscriptions.LoadAndDelete(*ID)
+	_, ok := h.Subscriptions.LoadAndDelete(*ID)
 
 	return ok
 }
@@ -536,76 +538,81 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
 
-	if err := h.BroadcastNewEvents(ctx, events...); err != nil {
-		return errors.Wrap(ErrNotifyFailed, err.Error())
-	}
+	// Remove cancelation from the client's context, so that we can broadcast events even if the client disconnected.
+	h.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
 
 	return nil
 }
 
-func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) error {
-	var broadcast = map[Writer][]nostr.EventEnvelope{}
+func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.Event, data *model.UserDataContext) bool {
+	return model.FiltersMatch(filters, in, data.MasterPublicKey, data.PublicKey) &&
+		canForwardEvent(in, data.Kinds, data.MasterPublicKey, data.PublicKey) &&
+		canForwardCommunityEvent(ctx, in, data.MasterPublicKey)
+}
 
-	// Collect events for each subscription.
-	h.ConnSubs.Range(func(writer Writer, conn connSubscriptions) bool {
-		authData, _ := h.ConnAuth.Load(writer)
-		conn.Subscriptions.Range(func(_ string, sub *model.Subscription) bool {
-			var envelope = nostr.EventEnvelope{SubscriptionID: &sub.ID}
-			for _, event := range events {
-				if !model.FiltersMatch(sub.Filters, event, authData.MasterPublicKey, authData.PublicKey) {
-					continue
-				} else if !canForwardEvent(event, authData.Kinds, authData.MasterPublicKey, authData.PublicKey) ||
-					!canForwardCommunityEvent(ctx, event, authData.MasterPublicKey) {
-					continue
-				}
-				if sub.IsLive() {
-					envelope.Events = append(envelope.Events, &event.Event)
-				} else {
-					sub.Push(event)
-				}
+func (h *handler) ForwardEventToWriter(ctx context.Context, event *model.Event, writer Writer, subIDs []string) {
+	envelope := nostr.EventEnvelope{
+		Events: []*nostr.Event{&event.Event},
+	}
+
+	for idx := range subIDs {
+		envelope.SubscriptionID = &subIDs[idx]
+		err := h.writeResponse(ctx, writer, &envelope)
+		if err != nil {
+			log.Printf("WARN: failed to write event %s to subscription %s: %v", event.ID, subIDs[idx], err)
+			return // Stop writing to this writer on error.
+		}
+	}
+}
+
+func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
+	eventBatches := make(map[string][]subscription, len(events)) // Event.ID -> subscriptions.
+
+	// Collect subscriptions that can receive these events.
+	h.Subscriptions.Range(func(_ string, sub subscription) bool {
+		authData, _ := h.ConnAuth.Load(sub.Writer)
+		for _, event := range events {
+			if !canForwardLiveEvent(ctx, sub.Source.Filters, event, &authData.UserDataContext) {
+				continue
 			}
-			if len(envelope.Events) > 0 {
-				broadcast[writer] = append(broadcast[writer], envelope)
+
+			if sub.Source.IsLive() {
+				eventBatches[event.ID] = append(eventBatches[event.ID], sub)
+			} else {
+				sub.Source.Push(event)
 			}
-			return true
-		})
+		}
 		return true
 	})
 
-	if len(broadcast) == 0 {
-		return nil
+	eventMap := make(map[string]*model.Event, len(events))
+	for _, event := range events {
+		eventMap[event.ID] = event
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(len(broadcast))
-	ch := make(chan error, len(broadcast))
-	for writer, envelopes := range broadcast {
-		go func() {
-			defer wg.Done()
+	for eventID, subs := range eventBatches {
+		event := eventMap[eventID]
 
-			for i := range envelopes {
-				if ctx.Err() != nil {
-					break
-				}
+		// Group by writer.
+		writerSubs := make(map[Writer][]string)
+		for _, sub := range subs {
+			writerSubs[sub.Writer] = append(writerSubs[sub.Writer], sub.Source.ID)
+		}
 
-				err := h.writeResponse(ctx, writer, &envelopes[i])
-				if err != nil {
-					ch <- errors.Wrapf(err, "failed to write events for subscription %v", envelopes[i].SubscriptionID)
-					break // Stop writing events for this writer.
-				}
+		// Submit tasks to the thread pool.
+		for writer, subIDs := range writerSubs {
+			if len(subIDs) <= maxSubsPerTask {
+				h.ThreadPool.Go(func() { h.ForwardEventToWriter(ctx, event, writer, subIDs) })
+				continue
 			}
-		}()
-	}
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
 
-	var err error
-	for writeErr := range ch {
-		err = errors.Join(err, writeErr)
+			// Split large batches.
+			batches := model.SplitBatch(subIDs, maxSubsPerTask)
+			for _, batch := range batches {
+				h.ThreadPool.Go(func() { h.ForwardEventToWriter(ctx, event, writer, batch) })
+			}
+		}
 	}
-	return err
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
