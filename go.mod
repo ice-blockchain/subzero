@@ -56,7 +56,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.13.0
-	github.com/xssnick/tonutils-storage v1.1.0
+	github.com/xssnick/tonutils-storage v1.1.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.41.0
 	google.golang.org/api v0.238.0
@@ -168,7 +168,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinms/leakybucket-go v0.0.0-20200115003610-082473db97ca // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
