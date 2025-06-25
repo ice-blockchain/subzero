@@ -23,6 +23,7 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/quic-go/quic-go"
+
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/webtransport-go"
@@ -30,7 +31,6 @@ import (
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
-	connectwsupgrader "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
 )
 
 func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
@@ -72,6 +72,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	req = req.WithContext(ctx)
 	tlsconf := ClientTLS()
 	tlsconf.NextProtos = []string{http3.NextProtoH3}
+
 	qconn, err := quic.DialAddrEarly(ctx, u.Host, tlsconf, &quic.Config{
 		EnableDatagrams:      true,
 		MaxIdleTimeout:       600 * time.Second,
@@ -96,7 +97,11 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
 		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
-	conn := connectwsupgrader.NewHttp3Proxy(stream, v3conn)
+
+	conn := &requestStreamConn{
+		RequestStream: stream,
+		qconn:         qconn,
+	}
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go func() {
 		defer c.Close()
@@ -104,6 +109,19 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	}()
 
 	return c, nil
+}
+
+type requestStreamConn struct {
+	*http3.RequestStream
+	qconn *quic.Conn
+}
+
+func (c *requestStreamConn) LocalAddr() net.Addr {
+	return c.qconn.LocalAddr()
+}
+
+func (c *requestStreamConn) RemoteAddr() net.Addr {
+	return c.qconn.RemoteAddr()
 }
 
 func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error) {
@@ -141,6 +159,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 
 	return c, nil
 }
+
 func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {

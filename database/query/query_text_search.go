@@ -11,31 +11,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func extractIMetaTagValues(ev *model.Event) (data []string) {
-	valuesToExtract := map[string]struct{}{
-		"alt":     {},
-		"summary": {},
-	}
-	for _, tag := range ev.Tags {
-		if tag.Key() != "imeta" {
-			continue
-		}
-		for _, val := range tag {
-			fields := strings.Fields(val)
-			if len(fields) == 0 {
-				continue
-			} else if _, ok := valuesToExtract[fields[0]]; !ok {
-				continue
-			}
-
-			if len(fields) > 1 {
-				data = append(data, fields[1:]...)
-			}
-		}
-	}
-	return data
-}
-
 func extractProfileContentMetadata(contentJSON string) []string {
 	var content struct {
 		Name        string `json:"name"`
