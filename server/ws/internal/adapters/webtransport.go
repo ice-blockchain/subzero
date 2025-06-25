@@ -13,7 +13,7 @@ import (
 	"github.com/quic-go/webtransport-go"
 )
 
-func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, stream Stream, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
+func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, stream webtransport.Stream, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
 	wt := &WebtransportAdapter{
 		stream:       stream,
 		session:      session,

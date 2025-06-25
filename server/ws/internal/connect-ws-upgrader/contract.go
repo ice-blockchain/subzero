@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/gobwas/httphead"
-	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go"
 )
 
 // Implements PFC 8441.
@@ -34,7 +34,7 @@ type (
 		RemoteAddr() net.Addr
 	}
 	http3StreamProxy struct {
-		stream     *http3.Stream
+		stream     quic.Stream
 		connection conn
 	}
 )

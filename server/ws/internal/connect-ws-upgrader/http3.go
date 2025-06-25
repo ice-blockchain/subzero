@@ -11,7 +11,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
-func NewHttp3Proxy(stream *http3.Stream, conn *quic.Conn) net.Conn {
+func NewHttp3Proxy(stream quic.Stream, conn quic.Connection) net.Conn {
 	return &http3StreamProxy{stream: stream, connection: conn}
 }
 func (h *http3StreamProxy) Read(b []byte) (n int, err error) {

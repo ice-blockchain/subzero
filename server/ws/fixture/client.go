@@ -30,6 +30,7 @@ import (
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	connectwsupgrader "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
 )
 
 func NewWebTransportClientHttp3(ctx context.Context, url string) (Client, error) {
@@ -97,10 +98,8 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
 
-	conn := &requestStreamConn{
-		RequestStream: stream,
-		qconn:         qconn,
-	}
+	conn := connectwsupgrader.NewHttp3Proxy(stream, v3conn)
+
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go func() {
 		defer c.Close()
@@ -108,19 +107,6 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	}()
 
 	return c, nil
-}
-
-type requestStreamConn struct {
-	*http3.RequestStream
-	qconn *quic.Conn
-}
-
-func (c *requestStreamConn) LocalAddr() net.Addr {
-	return c.qconn.LocalAddr()
-}
-
-func (c *requestStreamConn) RemoteAddr() net.Addr {
-	return c.qconn.RemoteAddr()
 }
 
 func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error) {
