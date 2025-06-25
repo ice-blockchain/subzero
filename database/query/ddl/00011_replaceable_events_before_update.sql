@@ -1,8 +1,11 @@
 -- SPDX-License-Identifier: ice License 1.0
 
 CREATE TABLE IF NOT EXISTS replaceable_events_before_update AS TABLE events;
---------
-DO $$ BEGIN
+
+DO $$ 
+DECLARE
+    lookup_type_name text;
+BEGIN
     ALTER TABLE replaceable_events_before_update
         ADD COLUMN IF NOT EXISTS replaced_by_id TEXT NOT NULL DEFAULT '';
     if NOT exists (select constraint_name from information_schema.table_constraints where table_name = 'replaceable_events_before_update' and constraint_type = 'PRIMARY KEY') then
@@ -10,6 +13,25 @@ DO $$ BEGIN
             ADD CONSTRAINT replaceable_events_before_update_pkey PRIMARY KEY(id, replaced_by_id);
     end if;
     ALTER TABLE replaceable_events_before_update ALTER COLUMN replaced_by_id DROP DEFAULT;
+
+    SELECT data_type INTO lookup_type_name
+    FROM information_schema.columns 
+    WHERE table_name = 'replaceable_events_before_update' 
+    AND column_name = 'lookup';
+
+    IF lookup_type_name = 'tsvector' THEN
+        ALTER TABLE replaceable_events_before_update ADD COLUMN lookup_text text;
+
+        UPDATE replaceable_events_before_update 
+        SET lookup_text = array_to_string(tsvector_to_array(lookup), ' ') 
+        WHERE lookup IS NOT NULL;
+
+        ALTER TABLE replaceable_events_before_update DROP COLUMN lookup;
+        ALTER TABLE replaceable_events_before_update RENAME COLUMN lookup_text TO lookup;
+
+        ALTER TABLE replaceable_events_before_update ALTER COLUMN lookup SET NOT NULL;
+        ALTER TABLE replaceable_events_before_update ALTER COLUMN lookup SET DEFAULT '';
+    END IF;
 END $$;
 --------
 ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS expiration bigint;

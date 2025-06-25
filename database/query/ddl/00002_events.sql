@@ -1,18 +1,12 @@
 -- SPDX-License-Identifier: ice License 1.0
 
-DO
-$$BEGIN
-   CREATE TEXT SEARCH CONFIGURATION fts ( COPY = pg_catalog.english );
-EXCEPTION
-   WHEN unique_violation THEN NULL;
-END;$$;
 --------
 CREATE TABLE IF NOT EXISTS events (
     created_at        BIGINT NOT NULL,
     lookup_created_at BIGINT GENERATED ALWAYS AS (to_timestamp_nano(created_at)) STORED,
     expiration        BIGINT,
     kind           INTEGER   NOT NULL,
-    lookup         tsvector NOT NULL DEFAULT to_tsvector('fts', ''),
+    lookup         TEXT    NOT NULL DEFAULT '',
     key_alg        TEXT    NOT NULL DEFAULT '',
     content        TEXT    NOT NULL,
     d_tag          TEXT    NOT NULL DEFAULT '',

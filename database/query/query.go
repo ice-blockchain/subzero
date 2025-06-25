@@ -609,7 +609,6 @@ WITH replaced AS (
 			},
 			{
 				Name:  "lookup",
-				Func:  "to_tsvector",
 				Value: events[i].Lookup,
 			},
 			{

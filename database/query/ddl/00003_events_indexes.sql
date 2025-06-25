@@ -10,7 +10,6 @@
 --   created_at
 -- Order by:
 --   created_at DESC
-CREATE INDEX IF NOT EXISTS idx_events_lookup ON events USING GIN(lookup);
 DROP INDEX IF EXISTS idx_events_address;
 CREATE INDEX IF NOT EXISTS idx_events_lookup_created_at ON events(lookup_created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_id_lookup_created_at ON events(id, lookup_created_at DESC) WHERE hidden = FALSE;
@@ -34,3 +33,24 @@ CREATE INDEX IF NOT EXISTS idx_events_ttags ON events USING GIN(t_tags);
 
 -- Expiration.
 CREATE INDEX IF NOT EXISTS idx_events_expiration_id ON events(expiration, id) WHERE expiration IS NOT NULL;
+
+-- PGroonga index for text search.
+-- TODO: after the migration, remove this check and leave just the index creation.
+CREATE EXTENSION IF NOT EXISTS pgroonga;
+DO $$
+BEGIN
+    IF EXISTS(
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'events' 
+        AND column_name = 'lookup' 
+        AND data_type = 'text'
+    ) AND NOT EXISTS(
+        SELECT 1 FROM pg_indexes 
+        WHERE tablename = 'events' 
+        AND indexname = 'idx_events_lookup'
+        AND indexdef LIKE '%pgroonga%'
+    ) THEN
+        DROP INDEX IF EXISTS idx_events_lookup;
+        CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit');
+    END IF;
+END $$;

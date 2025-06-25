@@ -72,6 +72,7 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	req = req.WithContext(ctx)
 	tlsconf := ClientTLS()
 	tlsconf.NextProtos = []string{http3.NextProtoH3}
+
 	qconn, err := quic.DialAddrEarly(ctx, u.Host, tlsconf, &quic.Config{
 		EnableDatagrams:      true,
 		MaxIdleTimeout:       600 * time.Second,
@@ -96,7 +97,9 @@ func NewWebsocketClientHttp3(ctx context.Context, urlStr string) (Client, error)
 	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
 		return nil, errors.Errorf("received status %d", rsp.StatusCode)
 	}
+
 	conn := connectwsupgrader.NewHttp3Proxy(stream, v3conn)
+
 	c, _ := clientWebSocketAdapter(ctx, conn, 0, 0)
 	go func() {
 		defer c.Close()
@@ -141,6 +144,7 @@ func NewWebsocketClientHttp2(ctx context.Context, urlStr string) (Client, error)
 
 	return c, nil
 }
+
 func NewWebtransportClientHttp2(ctx context.Context, urlStr string) (Client, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
