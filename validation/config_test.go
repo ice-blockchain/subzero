@@ -12,6 +12,12 @@ import (
 func TestGlobalMaxPostSizeOf(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, 0, globalConfig.MaxContentSizeOf(0))
-	require.Equal(t, 0xffff, globalConfig.MaxContentSizeOf(nostr.KindArticle))
+	cfg := &Config{
+		MaxContentSizes: map[int]int{
+			nostr.KindArticle: 0xffff,
+		},
+	}
+
+	require.Equal(t, 0, cfg.MaxContentSizeOf(0))
+	require.Equal(t, 0xffff, cfg.MaxContentSizeOf(nostr.KindArticle))
 }

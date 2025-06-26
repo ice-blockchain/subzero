@@ -17,7 +17,7 @@ import (
 
 	"github.com/ice-blockchain/cometbft/multiplex/client"
 	"github.com/ice-blockchain/subzero/database/command/fixture"
-	"github.com/ice-blockchain/subzero/database/query"
+	dbfix "github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -101,7 +101,7 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 		Content:   "{\"name\": \"bogus\", \"about\":\"bogus\", \"picture\": \"https://bogus.com/pic.jpg\"}",
 	}}
 	require.NoError(t, profileEvent.SignWithAlg(delegatedPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	var memdb query.MemDB
+	var memdb dbfix.MemDB
 	require.NoError(t, memdb.AcceptEvents(t.Context(), attestationEvent, relaysList, profileEvent))
 	consensusClient := fixture.NewCallbackClient(func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Accept should not be called")
@@ -124,7 +124,7 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 }
 
 func TestBroadcastLinkedEvent(t *testing.T) {
-	var memdb query.MemDB
+	var memdb dbfix.MemDB
 	masterPrivKey, masterPubkey := model.GenerateKeyPair()
 	priv, pk := model.GenerateKeyPair()
 	attestationEvent := &model.Event{Event: nostr.Event{
@@ -275,7 +275,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 func TestServerRestart(t *testing.T) {
 	t.Parallel()
 
-	var memdb query.MemDB
+	var memdb dbfix.MemDB
 	node, release := newConsensusNode(t.Context(), nil, 13999, WithQuery(memdb.SelectEvents))
 	defer release()
 
@@ -286,7 +286,7 @@ func TestServerRestart(t *testing.T) {
 }
 
 func TestBroadcastUserEvents_BasicFunctionality(t *testing.T) {
-	var memdb query.MemDB
+	var memdb dbfix.MemDB
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	relaysList := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Now(),
@@ -385,7 +385,7 @@ func TestBroadcastUserEvents_BasicFunctionality(t *testing.T) {
 }
 
 func TestBroadcastUserEvents_MasterKeyDetection(t *testing.T) {
-	var memdb query.MemDB
+	var memdb dbfix.MemDB
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	otherUserPrivKey, otherUserPubkey := model.GenerateKeyPair()
 	userRelaysList := &model.Event{Event: nostr.Event{
@@ -467,7 +467,7 @@ func TestBroadcastUserEvents_MasterKeyDetection(t *testing.T) {
 }
 
 func TestBroadcastUserEvents_BadgeEvents(t *testing.T) {
-	var memdb query.MemDB
+	var memdb dbfix.MemDB
 	userPrivKey, userPubkey := model.GenerateKeyPair()
 	badgeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
 

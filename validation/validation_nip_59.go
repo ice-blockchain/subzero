@@ -12,7 +12,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateKindGiftWrapEvent(e *model.Event) error {
+func validateKindGiftWrapEvent(v *eventValidator, e *model.Event) error {
 	subkindNoExpiration := map[int]struct{}{
 		model.CustomIONKindUserBlock:      {},
 		model.CustomIONKindFundReceive:    {},
@@ -30,8 +30,8 @@ func validateKindGiftWrapEvent(e *model.Event) error {
 		if err != nil {
 			return errors.Wrapf(ErrWrongEventParams, "gift wrap: invalid expiration value: %q: %v", expiresAt, err)
 		}
-		if globalConfig != nil && globalConfig.MaxWrappedEventExpiration > 0 && ts.Time().After(time.Now().Add(globalConfig.MaxWrappedEventExpiration)) {
-			return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is too far in the future, max is %s", globalConfig.MaxWrappedEventExpiration)
+		if v.Config != nil && v.Config.MaxWrappedEventExpiration > 0 && ts.Time().After(time.Now().Add(v.Config.MaxWrappedEventExpiration)) {
+			return errors.Wrapf(ErrWrongEventParams, "gift wrap: expiration is too far in the future, max is %s", v.Config.MaxWrappedEventExpiration)
 		}
 	} else if _, ok := subkindNoExpiration[int(subkind)]; !ok {
 		// If expiresAt is empty and subkind is not in the exception list, return an error.

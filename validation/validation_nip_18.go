@@ -13,7 +13,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateKindRepostEvent(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
 	var repostedEvent model.Event
 
 	if !json.Valid([]byte(e.Content)) {
@@ -50,10 +50,10 @@ func validateKindRepostEvent(ctx context.Context, e *model.Event, incomingEvents
 			"nip-18: repost must include p tag with pubkey of the event being reposted: found %q, expected %q",
 			pTag.Value(), repostedEvent.GetMasterPublicKey())
 	}
-	if err := validatePostCommunityEvent(ctx, e); err != nil {
+	if err := ev.validatePostCommunityEvent(ctx, e); err != nil {
 		return err
 	}
-	if err := validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
+	if err := ev.validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
 		return err
 	}
 

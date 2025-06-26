@@ -11,7 +11,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
 	richText := e.GetTag(model.CustomIONTagRichText)
 	if richText != nil && len(e.Content) > 0 {
 		return errors.Wrap(ErrWrongEventParams, "rich text tag is set, but content is not empty")
@@ -31,10 +31,10 @@ func validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*mo
 		// This is a `soft delete`, accept empty content.
 	} else {
 
-		if err := validatePostCommunityEvent(ctx, e); err != nil {
+		if err := ev.validatePostCommunityEvent(ctx, e); err != nil {
 			return errors.Wrap(err, "validate post community event")
 		}
-		if err := validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
+		if err := ev.validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
 			return errors.Wrap(err, "validate who can reply settings")
 		}
 	}

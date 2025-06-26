@@ -14,12 +14,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...*model.Event) error {
-	rootPost, err := findRootPost(ctx, e)
+func (ev *eventValidator) validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...*model.Event) error {
+	rootPost, err := ev.findRootPost(ctx, e)
 	if err != nil {
 		return err
 	}
@@ -35,7 +34,7 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...
 	passed := false
 
 	for _, value := range values {
-		if passed, err = checkWhoCanReplySettings(ctx, value, rootPost, e, settingsTag, events...); err != nil {
+		if passed, err = ev.checkWhoCanReplySettings(ctx, value, rootPost, e, settingsTag, events...); err != nil {
 			return err
 		}
 		if passed {
@@ -49,16 +48,16 @@ func validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...
 	return nil
 }
 
-func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *model.Event, settingsTag model.Tag, events ...*model.Event) (bool, error) {
+func (ev *eventValidator) checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *model.Event, settingsTag model.Tag, events ...*model.Event) (bool, error) {
 	switch {
 	case value == model.FollowingWhoCanReplySettings:
-		return checkFollowingWhoCanReplySettings(ctx, rootPost, e)
+		return ev.checkFollowingWhoCanReplySettings(ctx, rootPost, e)
 
 	case value == model.MentionWhoCanReplySettings:
 		return checkMentionWhoCanReplySettings(rootPost, e)
 
 	case strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix):
-		if err := handleTextNoteVerifiedOnlyReply(ctx, e, settingsTag, events...); err != nil {
+		if err := ev.handleTextNoteVerifiedOnlyReply(ctx, e, settingsTag, events...); err != nil {
 			return false, err
 		}
 
@@ -69,8 +68,8 @@ func checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *mo
 	return true, nil
 }
 
-func checkFollowingWhoCanReplySettings(ctx context.Context, rootPost, e *model.Event) (bool, error) {
-	for _, err := range query.GetStoredEvents(ctx, model.Filter{
+func (ev *eventValidator) checkFollowingWhoCanReplySettings(ctx context.Context, rootPost, e *model.Event) (bool, error) {
+	for _, err := range ev.QueryFunc(ctx, model.Filter{
 		Authors: []string{rootPost.GetMasterPublicKey()},
 		Kinds:   []int{nostr.KindFollowList},
 		Tags:    model.TagMap{}.SetLiterals("p", e.GetMasterPublicKey()),
@@ -98,7 +97,7 @@ func checkMentionWhoCanReplySettings(rootPost, e *model.Event) (bool, error) {
 	return false, nil
 }
 
-func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
+func (ev *eventValidator) findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
 	filter, err := createRootPostFilter(e)
 	if err != nil {
 		return nil, err
@@ -106,7 +105,7 @@ func findRootPost(ctx context.Context, e *model.Event) (*model.Event, error) {
 	if filter == nil {
 		return nil, nil
 	}
-	rootPosts := query.GetStoredEvents(ctx, *filter)
+	rootPosts := ev.QueryFunc(ctx, *filter)
 	for ev, err := range rootPosts {
 		if err != nil {
 			return nil, err
@@ -156,17 +155,17 @@ func isRootTag(tag nostr.Tag) bool {
 	return len(tag) >= 4 && (tag)[3] == model.TagMarkerRoot
 }
 
-func validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event) error {
+func (ev *eventValidator) validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event) error {
 	hTag := incomingEvent.GetTag(model.CustomIONTagCommunity)
 	if hTag == nil {
 		return nil
 	}
 
-	communityDefinitionEvent, err := GetCommunityDefinition(ctx, hTag.Value())
+	communityDefinitionEvent, err := ev.getCommunityDefinition(ctx, hTag.Value())
 	if err != nil {
 		return err
 	}
-	if err := IsUserBanned(ctx, incomingEvent.GetMasterPublicKey(), hTag.Value()); err != nil {
+	if err := ev.IsUserBanned(ctx, incomingEvent.GetMasterPublicKey(), hTag.Value()); err != nil {
 		return errors.Wrapf(err, "user:%v banned", incomingEvent.GetMasterPublicKey())
 	}
 
@@ -177,7 +176,7 @@ func validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event)
 	} else if requiredRole == model.AdminRole && replyRole != model.OwnerRole && replyRole != model.AdminRole {
 		return errors.Wrapf(ErrActionForbidden, "only %v can post in this community", cmp.Or(requiredRole, "admin or owner"))
 	} else if requiredRole == model.RegularRole && replyRole == model.RegularRole {
-		if err := IsUserPartOfCommunity(ctx, communityDefinitionEvent, incomingEvent.GetMasterPublicKey()); err != nil {
+		if err := ev.IsUserPartOfCommunity(ctx, communityDefinitionEvent, incomingEvent.GetMasterPublicKey()); err != nil {
 			return errors.Wrapf(err, "user:%v not part of the community", incomingEvent.GetMasterPublicKey())
 		}
 	}
@@ -190,7 +189,7 @@ func validatePostCommunityEvent(ctx context.Context, incomingEvent *model.Event)
 	return nil
 }
 
-func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
+func (ev *eventValidator) validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	var ids []string
 	for _, eTag := range e.GetTags("e") {
 		ids = append(ids, eTag.Value())
@@ -200,7 +199,7 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	}
 
 	var communityEventsToCheck []*model.Event
-	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
+	for ev, err := range ev.QueryFunc(ctx, model.Filter{
 		IDs:  ids,
 		Tags: model.TagMap{}.SetLiterals(model.CustomIONTagCommunity),
 	}) {
@@ -209,8 +208,8 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 		}
 		communityEventsToCheck = append(communityEventsToCheck, ev)
 	}
-	for _, ev := range communityEventsToCheck {
-		if err := validateCommunityDeleteEvent(ctx, ev, e); err != nil {
+	for _, event := range communityEventsToCheck {
+		if err := ev.validateCommunityDeleteEvent(ctx, event, e); err != nil {
 			return errors.Wrap(err, "failed to validate delete event")
 		}
 	}
@@ -218,8 +217,8 @@ func validateDeleteCommunityEvents(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
-func validateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
-	communityDefinitionEvent, err := GetCommunityDefinition(ctx, event.GetTag(model.CustomIONTagCommunity).Value())
+func (ev *eventValidator) validateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model.Event) error {
+	communityDefinitionEvent, err := ev.getCommunityDefinition(ctx, event.GetTag(model.CustomIONTagCommunity).Value())
 	if err != nil {
 		return err
 	}
@@ -238,8 +237,8 @@ func validateCommunityDeleteEvent(ctx context.Context, event, deleteEvent *model
 	return nil
 }
 
-func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
-	eventIterator := query.GetStoredEvents(ctx, model.Filter{
+func (ev *eventValidator) IsUserBanned(ctx context.Context, pubkey, communityID string) error {
+	eventIterator := ev.QueryFunc(ctx, model.Filter{
 		Kinds: []int{model.CustomIONKindCommunityBanUser},
 		Tags:  model.TagMap{}.SetLiterals("p", pubkey).SetLiterals(model.CustomIONTagCommunity, communityID),
 	})
@@ -254,8 +253,8 @@ func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
 	return nil
 }
 
-func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.Event, masterPubkey string) error {
-	eventIterator := query.GetStoredEvents(ctx, model.Filter{
+func (ev *eventValidator) IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.Event, masterPubkey string) error {
+	eventIterator := ev.QueryFunc(ctx, model.Filter{
 		Kinds: []int{model.CustomIONKindCommunityJoin},
 		Tags: model.TagMap{}.
 			SetLiterals("p", masterPubkey).
@@ -300,7 +299,7 @@ func getLatestSettingsTag(event *model.Event, settingsName string) model.Tag {
 }
 
 func isCommunityCommentsEnabled(event *model.Event) bool {
-	if settings := getLatestSettingsTag(event, "comments_enabled"); settings != nil && len(settings) > 3 {
+	if settings := getLatestSettingsTag(event, "comments_enabled"); len(settings) > 3 {
 		val, err := strconv.ParseBool(settings[2])
 		if err != nil {
 			return false
@@ -313,15 +312,15 @@ func isCommunityCommentsEnabled(event *model.Event) bool {
 }
 
 func roleRequiredForPosting(event *model.Event) model.Role {
-	if settings := getLatestSettingsTag(event, model.RoleRequiredForPostingSettings); settings != nil && len(settings) > 3 && (model.Role(settings[2]) == model.AdminRole || model.Role(settings[2]) == model.ModeratorRole) {
+	if settings := getLatestSettingsTag(event, model.RoleRequiredForPostingSettings); len(settings) > 3 && (model.Role(settings[2]) == model.AdminRole || model.Role(settings[2]) == model.ModeratorRole) {
 		return model.Role(settings[2])
 	}
 
 	return ""
 }
 
-func GetCommunityDefinition(ctx context.Context, hTag string) (*model.Event, error) {
-	eventIterator := query.GetStoredEvents(ctx, model.Filter{
+func (ev *eventValidator) getCommunityDefinition(ctx context.Context, hTag string) (*model.Event, error) {
+	eventIterator := ev.QueryFunc(ctx, model.Filter{
 		Kinds: []int{model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition},
 		Tags:  model.TagMap{}.SetLiterals(model.CustomIONTagCommunity, hTag),
 	})
@@ -514,7 +513,7 @@ func hasReplyTag(e *model.Event) bool {
 	return false
 }
 
-func handleTextNoteVerifiedOnlyReply(ctx context.Context, ev *model.Event, settingsTag model.Tag, events ...*model.Event) error {
+func (ev *eventValidator) handleTextNoteVerifiedOnlyReply(ctx context.Context, e *model.Event, settingsTag model.Tag, events ...*model.Event) error {
 	ephemeralAckEvents, err := model.ParseEphemeralEmbeddingEvents(events...)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ephemeral ack events")
@@ -522,11 +521,11 @@ func handleTextNoteVerifiedOnlyReply(ctx context.Context, ev *model.Event, setti
 
 	var acks []*model.EphemeralEmbeddingEvent
 	var hasAck bool
-	if acks, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck || len(acks) == 0 {
-		return checkReplyPermissions(ctx, settingsTag, ev, nil)
+	if acks, hasAck = ephemeralAckEvents[e.Address()]; !hasAck || len(acks) == 0 {
+		return ev.checkReplyPermissions(ctx, settingsTag, e, nil)
 	}
 
-	return checkReplyPermissions(ctx, settingsTag, ev, acks)
+	return ev.checkReplyPermissions(ctx, settingsTag, e, acks)
 }
 
 func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePubkey, badgeDTag, userPubkey string) bool {
@@ -581,8 +580,8 @@ func checkBadgeInEphemeralEvents(acks []*model.EphemeralEmbeddingEvent, badgePub
 	return badgeDefinitionFound && badgeAwardFound
 }
 
-func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string) bool {
-	it := query.GetStoredEvents(ctx, model.Filter{
+func (ev *eventValidator) hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string) bool {
+	it := ev.QueryFunc(ctx, model.Filter{
 		Authors: []string{badgePubkey},
 		Kinds:   []int{nostr.KindBadgeDefinition},
 		Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
@@ -607,7 +606,7 @@ func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string
 	}
 
 	badgeATagRef := fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgePubkey, badgeDTag)
-	it = query.GetStoredEvents(ctx, model.Filter{
+	it = ev.QueryFunc(ctx, model.Filter{
 		Authors: []string{badgePubkey},
 		Kinds:   []int{nostr.KindBadgeAward},
 		Tags:    nostr.TagMap{}.SetLiterals("a", badgeATagRef).SetLiterals("p", userPubkey),
@@ -630,21 +629,19 @@ func hasUserBadge(ctx context.Context, badgePubkey, badgeDTag, userPubkey string
 	return false
 }
 
-func checkReplyPermissions(ctx context.Context, settingsTag model.Tag, ev *model.Event, acks []*model.EphemeralEmbeddingEvent) error {
+func (ev *eventValidator) checkReplyPermissions(ctx context.Context, settingsTag model.Tag, e *model.Event, acks []*model.EphemeralEmbeddingEvent) error {
 	if len(settingsTag) < 3 {
 		return errors.New("invalid settings tag format")
 	}
 	settingsConfig := (settingsTag)[2]
 	settings := strings.Split(settingsConfig, ",")
 
-	userPubkey := ev.GetMasterPublicKey()
+	userPubkey := e.GetMasterPublicKey()
 
 	for _, setting := range settings {
 		if strings.HasPrefix(setting, model.BadgeWhoCanReplySettingsPrefix) {
 			badgeRef := strings.TrimPrefix(setting, model.BadgeWhoCanReplySettingsPrefix)
-			if strings.HasPrefix(badgeRef, "badge|") {
-				badgeRef = strings.TrimPrefix(badgeRef, "badge|")
-			}
+			badgeRef = strings.TrimPrefix(badgeRef, "badge|")
 			parts := strings.Split(badgeRef, ":")
 			if len(parts) != 3 {
 				continue
@@ -652,12 +649,12 @@ func checkReplyPermissions(ctx context.Context, settingsTag model.Tag, ev *model
 
 			badgePubkey := parts[1]
 			dtag := parts[2]
-			if acks != nil && len(acks) > 0 {
+			if len(acks) > 0 {
 				if checkBadgeInEphemeralEvents(acks, badgePubkey, dtag, userPubkey) {
 					return nil
 				}
 			}
-			if hasUserBadge(ctx, badgePubkey, dtag, userPubkey) {
+			if ev.hasUserBadge(ctx, badgePubkey, dtag, userPubkey) {
 				return nil
 			}
 		}

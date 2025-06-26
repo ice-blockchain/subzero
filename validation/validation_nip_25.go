@@ -28,21 +28,21 @@ func validateKindReactionToWebsiteEvent(e *model.Event) error {
 	return nil
 }
 
-func validateProfileMetadataNameChange(ctx context.Context, ev *model.Event, masterKey string) (bool, string, error) {
+func (ev *eventValidator) validateProfileMetadataNameChange(ctx context.Context, e *model.Event, masterKey string) (bool, string, error) {
 	profileAddress := fmt.Sprintf("%d:%s:", nostr.KindProfileMetadata, masterKey)
-	oldProfile, err := getEvent(ctx, profileAddress)
+	oldProfile, err := ev.getEvent(ctx, profileAddress)
 	if err != nil {
 		return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to get old profile metadata")
 	}
 	var oldProfileMetadata model.ProfileMetadataContent
 	var newProfileMetadata model.ProfileMetadataContent
-	oldProfileFound := oldProfile != nil && oldProfile.ID != ev.ID
+	oldProfileFound := oldProfile != nil && oldProfile.ID != e.ID
 	if oldProfileFound {
 		if err := json.Unmarshal([]byte(oldProfile.Content), &oldProfileMetadata); err != nil {
 			return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to unmarshal old profile metadata")
 		}
 	}
-	if err := json.Unmarshal([]byte(ev.Content), &newProfileMetadata); err != nil {
+	if err := json.Unmarshal([]byte(e.Content), &newProfileMetadata); err != nil {
 		return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to unmarshal new profile metadata")
 	}
 	if !oldProfileFound || oldProfileMetadata.Name != newProfileMetadata.Name {

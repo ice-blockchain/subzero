@@ -6,13 +6,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestValidateDeviceRegistration(t *testing.T) {
 	t.Parallel()
 
+	const relayURL = "wss://example.com"
+
 	key := model.GeneratePrivateKey()
+	validator := newEventValidator(
+		&Config{
+			RelayURL: relayURL,
+		},
+		WithQueryFunc(new(fixture.MemDB).SelectEvents),
+	)
 
 	t.Run("valid event with minimal filter", func(t *testing.T) {
 		t.Parallel()
@@ -21,13 +30,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSAndroid},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("relay url matches configuration", func(t *testing.T) {
@@ -43,7 +52,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("relay url doesn't match configuration", func(t *testing.T) {
@@ -59,7 +68,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		err := Validate(t.Context(), &ev)
+		err := validator.Validate(t.Context(), &ev)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "relay tag value")
 		require.Contains(t, err.Error(), "does not match configured relay URL")
@@ -72,13 +81,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSIOS},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("valid event with web platform", func(t *testing.T) {
@@ -88,13 +97,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSWeb},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("missing d tag", func(t *testing.T) {
@@ -103,13 +112,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"t", model.DeviceTokenOSAndroid},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("missing t tag", func(t *testing.T) {
@@ -118,13 +127,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Kind = model.CustomIONKindDeviceRegistration
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("invalid t tag value", func(t *testing.T) {
@@ -134,13 +143,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", "windows"},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("missing relay tag", func(t *testing.T) {
@@ -155,7 +164,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("invalid relay tag value", func(t *testing.T) {
@@ -171,7 +180,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("missing token tag", func(t *testing.T) {
@@ -181,12 +190,12 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSAndroid},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("empty content", func(t *testing.T) {
@@ -196,13 +205,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSAndroid},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = ""
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("invalid JSON content", func(t *testing.T) {
@@ -212,13 +221,13 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSAndroid},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `{invalid json`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, validator.Validate(t.Context(), &ev))
 	})
 
 	t.Run("skip giftwrap test", func(t *testing.T) {
@@ -228,12 +237,12 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSAndroid},
-			{"relay", globalConfig.RelayURL},
+			{"relay", relayURL},
 			{"token", "device-token"},
 		}
 		ev.Content = `[{"kinds":[1]}]`
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, validator.Validate(t.Context(), &ev))
 	})
 }

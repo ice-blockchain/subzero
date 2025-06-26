@@ -7,16 +7,18 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type Validator interface {
-	Validate(ctx context.Context, events ...*model.Event) error
-}
+type (
+	Option func(*eventValidator)
 
-type eventValidator struct {
-	config *config
-}
+	eventValidator struct {
+		Config    *Config
+		QueryFunc func(context.Context, ...model.Filter) query.EventIterator
+	}
+)
 
 func (v *eventValidator) Validate(ctx context.Context, events ...*model.Event) error {
 	if events == nil {
@@ -33,12 +35,12 @@ func (v *eventValidator) Validate(ctx context.Context, events ...*model.Event) e
 			return ErrEventInvalidSign
 		}
 
-		if err := validate(ctx, e, events...); err != nil {
+		if err := v.validate(ctx, e, events...); err != nil {
 			return errors.Wrap(err, "validation failed")
 		}
 
-		if v.config != nil && v.config.NIP13MinLeadingZeroBits > 0 {
-			if err := e.CheckNIP13Difficulty(v.config.NIP13MinLeadingZeroBits); err != nil {
+		if v.Config != nil && v.Config.NIP13MinLeadingZeroBits > 0 {
+			if err := e.CheckNIP13Difficulty(v.Config.NIP13MinLeadingZeroBits); err != nil {
 				return errors.Wrap(err, "wrong event difficulty")
 			}
 		}
@@ -47,19 +49,21 @@ func (v *eventValidator) Validate(ctx context.Context, events ...*model.Event) e
 	return nil
 }
 
-func NewEventValidator(cfg *Config) Validator {
-	if cfg == nil {
-		return &eventValidator{}
+func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator) Option {
+	return func(v *eventValidator) {
+		v.QueryFunc = f
+	}
+}
+
+func newEventValidator(cfg *Config, opts ...Option) *eventValidator {
+	validator := eventValidator{
+		Config:    cfg,
+		QueryFunc: query.GetStoredEvents,
 	}
 
-	internalConfig := &config{
-		MaxWrappedEventExpiration: cfg.MaxWrappedEventExpiration,
-		MaxContentSizes:           cfg.MaxContentSizes,
-		NIP13MinLeadingZeroBits:   cfg.NIP13MinLeadingZeroBits,
-		RelayURL:                  cfg.RelayURL,
+	for _, opt := range opts {
+		opt(&validator)
 	}
 
-	return &eventValidator{
-		config: internalConfig,
-	}
+	return &validator
 }

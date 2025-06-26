@@ -43,7 +43,7 @@ type (
 		// Additional flags for given kind.
 		Flags uint
 		// Additional validation function.
-		Validate func(e *model.Event) error
+		Validate func(v *eventValidator, e *model.Event) error
 	}
 )
 
@@ -95,8 +95,8 @@ var (
 		nostr.KindGiftWrap: newKindValidatorBuilder().
 			Required("p", "k").
 			Optional("expiration").
-			Validate(func(e *model.Event) error {
-				return validateKindGiftWrapEvent(e)
+			Validate(func(v *eventValidator, e *model.Event) error {
+				return validateKindGiftWrapEvent(v, e)
 			}).
 			Build(),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
@@ -164,7 +164,7 @@ var (
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
-			Validate(func(e *model.Event) error {
+			Validate(func(v *eventValidator, e *model.Event) error {
 				return validateKindFundReceive(e)
 			}).
 			Build(),
@@ -175,7 +175,7 @@ var (
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
-			Validate(func(e *model.Event) error {
+			Validate(func(v *eventValidator, e *model.Event) error {
 				return validateKindFundSendNotify(e)
 			}).
 			Build(),
@@ -183,8 +183,12 @@ var (
 		model.CustomIONKindDeviceRegistration: newKindValidatorBuilder().
 			ContentNotEmpty().
 			Required("d", "t", "relay", "token").
-			Validate(func(e *model.Event) error {
-				return validateKindDeviceRegistration(e)
+			Validate(func(v *eventValidator, e *model.Event) error {
+				var relayURL string
+				if v.Config != nil {
+					relayURL = v.Config.RelayURL
+				}
+				return validateKindDeviceRegistration(e, relayURL)
 			}).
 			Build(),
 	}
@@ -243,7 +247,7 @@ func extractTagValueFromPairs(tag model.Tag, key string) (value string, err erro
 	return "", errors.Wrapf(ErrWrongEventParams, "tag %q does not have key %q", tag.Key(), key)
 }
 
-func validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	}
@@ -256,33 +260,33 @@ func validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Even
 	} else {
 		contentSize = len(model.ExtractRichTextContent(e))
 	}
-	if maxSize := globalConfig.MaxContentSizeOf(e.Kind); maxSize > 0 && contentSize > maxSize {
+	if maxSize := ev.Config.MaxContentSizeOf(e.Kind); maxSize > 0 && contentSize > maxSize {
 		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", contentSize, maxSize)
 	}
 	if v, ok := KindSupportedTags[e.Kind]; ok {
-		if err := v.Execute(e); err != nil {
+		if err := v.Execute(ev, e); err != nil {
 			return errors.Wrap(ErrWrongEventParams, err.Error())
 		}
 	}
 	switch e.Kind {
 	case nostr.KindProfileMetadata:
-		return validateKindProfileMetadataEvent(ctx, e, incomingEvents)
+		return ev.validateKindProfileMetadataEvent(ctx, e, incomingEvents)
 	case nostr.KindTextNote:
-		return validateKindTextNoteEvent(ctx, e, incomingEvents...)
+		return ev.validateKindTextNoteEvent(ctx, e, incomingEvents...)
 	case nostr.KindDeletion:
-		return validateKindDeletionEvent(ctx, e)
+		return ev.validateKindDeletionEvent(ctx, e)
 	case nostr.KindRepost, nostr.KindGenericRepost:
-		return validateKindRepostEvent(ctx, e, incomingEvents...)
+		return ev.validateKindRepostEvent(ctx, e, incomingEvents...)
 	case nostr.KindFollowList:
 		return validateFollowListEvent(e)
 	case nostr.KindBadgeAward:
-		return validateKindBadgeAwardEvent(ctx, e, incomingEvents)
+		return ev.validateKindBadgeAwardEvent(ctx, e, incomingEvents)
 	case nostr.KindDirectMessage, nostr.KindSeal:
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	case nostr.KindReactionToWebsite:
 		return validateKindReactionToWebsiteEvent(e)
 	case model.CustomIONKindPollVote:
-		return validatePollVote(ctx, e)
+		return ev.validatePollVote(ctx, e)
 	case nostr.KindCommunityList:
 		return validateATags(e, model.CustomIONKindCommunityDefinition)
 	case nostr.KindInterestList:
@@ -343,11 +347,11 @@ func validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Even
 	case nostr.KindRelayListMetadata:
 		return validateKindRelayListMetadataEvent(e)
 	case nostr.KindProfileBadges:
-		return validateKindProfileBadgesEvent(ctx, e, incomingEvents)
+		return ev.validateKindProfileBadgesEvent(ctx, e, incomingEvents)
 	case nostr.KindBadgeDefinition:
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-		return validateTextNote(ctx, e, incomingEvents...)
+		return ev.validateTextNote(ctx, e, incomingEvents...)
 	case model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition:
 		return validateCustomIONKindCommunityDefinitionEvent(ctx, e)
 	case model.CustomIONKindCommunityJoin:
@@ -561,7 +565,7 @@ func (t *kindValidatorBuilder) OneOfSingle(tags ...string) *kindValidatorBuilder
 	return t
 }
 
-func (t *kindValidatorBuilder) Validate(f func(e *model.Event) error) *kindValidatorBuilder {
+func (t *kindValidatorBuilder) Validate(f func(v *eventValidator, e *model.Event) error) *kindValidatorBuilder {
 	t.Validator.Validate = f
 
 	return t
@@ -571,12 +575,12 @@ func (t *kindValidatorBuilder) Build() kindValidator {
 	return t.Validator
 }
 
-func (v *kindValidator) Execute(e *model.Event) (err error) {
+func (v *kindValidator) Execute(ev *eventValidator, e *model.Event) (err error) {
 	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
 		err = errors.Join(err, ErrContentEmpty)
 	}
 	if v.Validate != nil {
-		err = errors.Join(err, v.Validate(e))
+		err = errors.Join(err, v.Validate(ev, e))
 	}
 	return err
 }
