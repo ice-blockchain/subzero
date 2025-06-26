@@ -310,11 +310,11 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 	if acks, hasAck = ephemeralAckEvents[ev.Address()]; !hasAck || len(acks) == 0 {
 		switch ev.Kind {
 		case nostr.KindGiftWrap:
-			if pTag := ev.GetTag("p"); pTag != nil && len(pTag) > 2 {
+			if pTag := ev.GetTag("p"); len(pTag) > 2 {
 				return pTag.Value(), nil
 			}
 		case nostr.KindBadgeAward:
-			if pTag := ev.GetTag("p"); pTag != nil && pTag.Value() != "" {
+			if pTag := ev.GetTag("p"); pTag.Value() != "" {
 				masterKey = pTag.Value()
 			}
 
@@ -327,7 +327,7 @@ func (c *consensus) broadcastMasterKey(ctx context.Context, ev *model.Event, eph
 				return "", errors.Wrapf(ErrUserIsNotPresentedOnRelay, "[badge-definition] no badge award found in events or no p tag %v", ev.ID)
 			}
 			badgeAward := incomingEvents[badgeAwardIndex]
-			if pTag := badgeAward.GetTag("p"); pTag != nil && pTag.Value() != "" {
+			if pTag := badgeAward.GetTag("p"); pTag.Value() != "" {
 				masterKey = pTag.Value()
 			}
 

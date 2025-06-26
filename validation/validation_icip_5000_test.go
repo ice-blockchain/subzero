@@ -10,7 +10,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ice-blockchain/subzero/database/query"
+	"github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -64,6 +64,9 @@ func TestValidatePollTag(t *testing.T) {
 func TestValidatePollVote(t *testing.T) {
 	t.Parallel()
 
+	var db fixture.MemDB
+	v := newEventValidator(global.Validator.Config, WithQueryFunc(db.SelectEvents))
+
 	var pollSingle, pollMulti, pollExpired model.Event
 	t.Run("CreatePolls", func(t *testing.T) {
 		deadline := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
@@ -73,23 +76,23 @@ func TestValidatePollVote(t *testing.T) {
 			{model.CustomIONTagPoll, "type single", "ttl " + deadline, "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollSingle.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &pollSingle))
+		require.NoError(t, v.Validate(t.Context(), &pollSingle))
 
 		pollMulti.Kind = nostr.KindTextNote
 		pollMulti.Tags = model.Tags{
 			{model.CustomIONTagPoll, "type multi", "ttl " + deadline, "title Test multi Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollMulti.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &pollMulti))
+		require.NoError(t, v.Validate(t.Context(), &pollMulti))
 
 		pollExpired.Kind = nostr.KindTextNote
 		pollExpired.Tags = model.Tags{
 			{model.CustomIONTagPoll, "type single", "ttl 1", "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollExpired.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &pollExpired)) // pollExpired is not valid.
+		require.Error(t, v.Validate(t.Context(), &pollExpired)) // pollExpired is not valid.
 
-		require.NoError(t, query.AcceptEvents(t.Context(), &pollSingle, &pollMulti, &pollExpired))
+		require.NoError(t, db.AcceptEvents(t.Context(), &pollSingle, &pollMulti, &pollExpired))
 	})
 
 	tests := []struct {
@@ -219,10 +222,10 @@ func TestValidatePollVote(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.event.CreatedAt = nostr.Timestamp(time.Now().Unix())
+			tt.event.CreatedAt = nostr.Now()
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			err := Validate(t.Context(), tt.event)
+			err := v.Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

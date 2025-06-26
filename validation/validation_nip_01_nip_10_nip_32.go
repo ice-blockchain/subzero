@@ -11,7 +11,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateKindTextNoteEvent(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validateKindTextNoteEvent(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
 	if json.Valid([]byte(e.Content)) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be plain text: %q", e.Content)
 	}
@@ -44,10 +44,10 @@ func validateKindTextNoteEvent(ctx context.Context, e *model.Event, incomingEven
 			}
 		}
 	}
-	if err := validatePostCommunityEvent(ctx, e); err != nil {
+	if err := ev.validatePostCommunityEvent(ctx, e); err != nil {
 		return err
 	}
-	if err := validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
+	if err := ev.validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
 		return err
 	}
 

@@ -11,7 +11,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateKindProfileMetadataEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
 	if !json.Valid([]byte(e.Content)) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be stringified json: %+v", e)
 	}
@@ -23,7 +23,7 @@ func validateKindProfileMetadataEvent(ctx context.Context, e *model.Event, incom
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
 	}
 	masterKey := e.GetMasterPublicKey()
-	nameChanged, username, err := validateProfileMetadataNameChange(ctx, e, masterKey)
+	nameChanged, username, err := ev.validateProfileMetadataNameChange(ctx, e, masterKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to validate profile metadata name change")
 	}

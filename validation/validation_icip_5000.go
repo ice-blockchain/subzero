@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -66,14 +65,14 @@ func validatePollTag(tag model.Tag) error {
 	return nil
 }
 
-func validatePollVote(ctx context.Context, e *model.Event) error {
+func (ev *eventValidator) validatePollVote(ctx context.Context, e *model.Event) error {
 	pollAddress := cmp.Or(e.GetTag("e").Value(), e.GetTag("a").Value())
 	if pollAddress == "" {
 		return errors.Wrapf(ErrWrongEventParams, "vote: missing poll address")
 	}
 
 	var poll *model.Event
-	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
+	for ev, err := range ev.QueryFunc(ctx, model.Filter{
 		Addresses: []string{pollAddress},
 		Limit:     1,
 	}) {

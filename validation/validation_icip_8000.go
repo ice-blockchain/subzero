@@ -10,14 +10,14 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateKindDeviceRegistration(e *model.Event) error {
+func validateKindDeviceRegistration(e *model.Event, expectedRelayURL string) error {
 	tTag := e.GetTag("t").Value()
 	if tTag != model.DeviceTokenOSAndroid && tTag != model.DeviceTokenOSIOS && tTag != model.DeviceTokenOSWeb {
 		return errors.Wrapf(ErrWrongEventParams, "wrong t tag value: %v", tTag)
 	}
 	relayTag := e.GetTag("relay").Value()
-	if globalConfig != nil && relayTag != globalConfig.RelayURL {
-		return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, globalConfig.RelayURL)
+	if expectedRelayURL != "" && relayTag != expectedRelayURL {
+		return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, expectedRelayURL)
 	}
 
 	var filters model.Filters

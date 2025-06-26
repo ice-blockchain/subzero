@@ -6,7 +6,6 @@ package query
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/errors"
 
@@ -70,35 +69,5 @@ func NewTestDatabase(ctx context.Context) (string, func() error) {
 
 	return container.ConnectionString(ctx, ""), func() error {
 		return container.Close(context.Background())
-	}
-}
-
-type MemDB struct {
-	mu     sync.RWMutex
-	events []*model.Event
-}
-
-func (m *MemDB) AcceptEvents(_ context.Context, events ...*model.Event) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.events = append(m.events, events...)
-
-	return nil
-}
-
-func (m *MemDB) SelectEvents(_ context.Context, filters ...model.Filter) EventIterator {
-	return func(yield func(*model.Event, error) bool) {
-		m.mu.RLock()
-		defer m.mu.RUnlock()
-
-		for i := range m.events {
-			if !model.Filters(filters).Match(&m.events[i].Event) {
-				continue
-			}
-			if !yield(m.events[i], nil) {
-				return
-			}
-		}
 	}
 }

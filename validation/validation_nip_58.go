@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -27,7 +26,7 @@ func validateKindBadgeDefinitionEvent(e *model.Event) error {
 	return nil
 }
 
-func validateKindBadgeAwardEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindBadgeAwardEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
 	if len(e.Tags.GetAll([]string{"a"})) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: a tag is required")
 	}
@@ -61,14 +60,14 @@ func validateKindBadgeAwardEvent(ctx context.Context, e *model.Event, incomingEv
 	if len(e.Tags.GetAll([]string{"p"})) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: p tag is required")
 	}
-	if err := validateKindBadgeAwardOwnership(ctx, e, incomingEvents); err != nil {
+	if err := ev.validateKindBadgeAwardOwnership(ctx, e, incomingEvents); err != nil {
 		return errors.Wrap(err, "can't validate badge award ownership")
 	}
 
 	return nil
 }
 
-func validateKindProfileBadgesEvent(ctx context.Context, e *model.Event, imcomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, e *model.Event, imcomingEvents []*model.Event) error {
 	if dTag := e.Tags.GetD(); dTag != model.ProfileBadgesIdentifier {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: no required d tag/wrong value: expected %q, got %q", model.ProfileBadgesIdentifier, dTag)
 	}
@@ -95,7 +94,7 @@ func validateKindProfileBadgesEvent(ctx context.Context, e *model.Event, imcomin
 		if i < len(eTags) && len(eTags[i]) >= 2 {
 			badgeAwardID := eTags[i][1]
 			if badgeAwardID != "" {
-				if err := validateProfileBadgeAward(ctx, badgeRef, badgeAwardID, userPubkey, imcomingEvents); err != nil {
+				if err := ev.validateProfileBadgeAward(ctx, badgeRef, badgeAwardID, userPubkey, imcomingEvents); err != nil {
 					return errors.Wrapf(err, "invalid badge award reference %s", badgeAwardID)
 				}
 			}
@@ -105,7 +104,7 @@ func validateKindProfileBadgesEvent(ctx context.Context, e *model.Event, imcomin
 	return nil
 }
 
-func validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
 	aTag := e.GetTag("a")
 	if aTag == nil || aTag.Value() == "" {
 		return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award missing a tag %v", e.ID)
@@ -130,7 +129,7 @@ func validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomi
 		badgePubkey := parts[1]
 		badgeDTag := parts[2]
 
-		it := query.GetStoredEvents(ctx, model.Filter{
+		it := ev.QueryFunc(ctx, model.Filter{
 			Authors: []string{badgePubkey},
 			Kinds:   []int{nostr.KindBadgeDefinition},
 			Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
@@ -161,7 +160,7 @@ func validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomi
 func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
 	const usernameProofOfOwnership = "username_proof_of_ownership"
 	if ev.Kind == nostr.KindBadgeAward {
-		if aTag := ev.GetTag("a"); aTag != nil && len(aTag) >= 2 {
+		if aTag := ev.GetTag("a"); len(aTag) >= 2 {
 			parts := strings.Split(aTag.Value(), ":")
 			// For badge award: kind:pubkey:username_proof_of_ownership~username
 			if len(parts) >= 3 && strings.HasPrefix(parts[2], usernameProofOfOwnership+"~") {
@@ -172,7 +171,7 @@ func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
 			}
 		}
 	} else if ev.Kind == nostr.KindBadgeDefinition {
-		if dTag := ev.GetTag("d"); dTag != nil && len(dTag) >= 2 {
+		if dTag := ev.GetTag("d"); len(dTag) >= 2 {
 			// For badge definition d-tag: username_proof_of_ownership~username
 			if strings.HasPrefix(dTag.Value(), usernameProofOfOwnership+"~") {
 				username := strings.TrimPrefix(dTag.Value(), usernameProofOfOwnership+"~")
@@ -223,10 +222,8 @@ func checkProofOfOwnershipBadges(username string, masterKey string, incomingEven
 	return nil
 }
 
-func getEvent(ctx context.Context, address string) (event *model.Event, err error) {
-	for e, err := range query.GetStoredEvents(ctx, model.Filter{
-		Addresses: []string{address},
-	}) {
+func (ev *eventValidator) getEvent(ctx context.Context, address string) (event *model.Event, err error) {
+	for e, err := range ev.QueryFunc(ctx, model.Filter{Addresses: []string{address}}) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to fetch linked event for by filter %v ", address)
 		}
@@ -237,7 +234,7 @@ func getEvent(ctx context.Context, address string) (event *model.Event, err erro
 	return nil, nil
 }
 
-func validateProfileBadgeAward(ctx context.Context, badgeRef, badgeAwardID, userPubkey string, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, badgeRef, badgeAwardID, userPubkey string, incomingEvents []*model.Event) error {
 	for _, event := range incomingEvents {
 		if event.Kind == nostr.KindBadgeAward && event.GetID() == badgeAwardID {
 			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
@@ -251,7 +248,7 @@ func validateProfileBadgeAward(ctx context.Context, badgeRef, badgeAwardID, user
 		}
 	}
 
-	it := query.GetStoredEvents(ctx, model.Filter{
+	it := ev.QueryFunc(ctx, model.Filter{
 		IDs:   []string{badgeAwardID},
 		Kinds: []int{nostr.KindBadgeAward},
 		Limit: 1,
