@@ -37,11 +37,13 @@ func (c *consensus) Start(ctx context.Context) {
 		panic("the server is already running")
 	}
 	c.ServerConfig.Instrumentation.Namespace = uuid.NewString()
-	server, err := multiplex.NewServer(c, c.ServerConfig, c.Logger)
+	server, err := multiplex.NewServer(ctx, c, c.ServerConfig, c.Logger)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}
-	server.MustStart()
+	if err = server.Start(); err != nil {
+		panic(errors.Wrapf(err, "failed to start consensus server"))
+	}
 	c.Server = server
 	go c.waitForStop(ctx)
 }

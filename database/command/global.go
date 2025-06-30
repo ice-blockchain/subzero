@@ -159,11 +159,13 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
-	cometbftServer, err := multiplex.NewServer(c, serverCfg, c.Logger)
+	cometbftServer, err := multiplex.NewServer(ctx, c, serverCfg, c.Logger)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}
-	cometbftServer.MustStart()
+	if err = cometbftServer.Start(); err != nil {
+		panic(errors.Wrapf(err, "failed to start consensus server"))
+	}
 	c.Server = cometbftServer
 
 	if c.Client == nil {
