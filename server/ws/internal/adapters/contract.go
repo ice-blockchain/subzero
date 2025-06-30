@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/webtransport-go"
 )
 
@@ -38,7 +39,7 @@ type (
 		Write(ctx context.Context)
 	}
 	WebtransportAdapter struct {
-		stream       webtransport.Stream
+		stream       Stream
 		session      *webtransport.Session
 		reader       *bufio.Reader
 		closeChannel chan struct{}
@@ -61,6 +62,21 @@ type (
 		readTimeout  time.Duration
 	}
 )
+
+type Stream interface {
+	io.Writer
+	io.Reader
+	io.Closer
+
+	CancelWrite(webtransport.StreamErrorCode)
+
+	SetWriteDeadline(time.Time) error
+	StreamID() quic.StreamID
+	CancelRead(webtransport.StreamErrorCode)
+
+	SetReadDeadline(time.Time) error
+	SetDeadline(time.Time) error
+}
 
 const CtxKeyServer = "ws-server"
 

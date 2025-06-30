@@ -30,7 +30,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 			Addr:    fmt.Sprintf(":%v", s.cfg.Port),
 			Port:    int(s.cfg.Port),
 			Handler: s.router,
-			ConnContext: func(connCtx context.Context, c quic.Connection) context.Context {
+			ConnContext: func(connCtx context.Context, c *quic.Conn) context.Context {
 				wsserver := ctx.Value(adapters.CtxKeyServer)
 				ctx = context.WithValue(connCtx, adapters.CtxKeyServer, wsserver)
 				ctx = context.WithValue(ctx, "serverPort", s.cfg.Port)
