@@ -651,8 +651,20 @@ func TestQueryFuzzDependencies(t *testing.T) {
 		t.Logf("generic[%d]: %s", i, generic[i])
 	}
 
+	t.Logf("generating combinations for %d generic and %d extensions", len(generic), len(extensions))
 	deps := generateValidSearchCombinations(generic, extensions)
+	slices.SortStableFunc(deps, slices.Compare)
 	t.Logf("found %d total dependency combination(s)", len(deps)) // ~10G of RAM, ~47_775_015 elements.
+	if v := os.Getenv("TEST_FUZZ_DEPS_START_AT"); v != "" {
+		startAt, err := strconv.Atoi(v)
+		require.NoError(t, err)
+		if startAt < len(deps) {
+			t.Logf("starting at %d", startAt)
+			deps = deps[startAt:]
+			t.Logf("remaining %d combinations", len(deps))
+		}
+	}
+
 	posts := helperCreatePosts(t, db, keys, 100_0)
 	helperCreatePostsReactions(t, db, keys, posts, 100_0)
 
@@ -674,25 +686,25 @@ func TestQueryFuzzDependencies(t *testing.T) {
 				}
 				sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
 				if err != nil {
-					errCh <- testReselt{Err: errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i+1, set, err)}
+					errCh <- testReselt{Err: errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i, set, err)}
 					return
 				}
 
 				sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
 				result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
 				if err != nil {
-					errCh <- testReselt{Err: errors.Errorf("failed to execute query for set #%d: %w", i+1, err)}
+					errCh <- testReselt{Err: errors.Errorf("failed to execute query for set #%d: %w", i, err)}
 					return
 				}
 				if result == nil {
-					errCh <- testReselt{Err: errors.Errorf("nil result for set #%d", i+1)}
+					errCh <- testReselt{Err: errors.Errorf("nil result for set #%d", i)}
 					return
 				}
 
 				var q []Query
 				err = json.Unmarshal([]byte(*result), &q)
 				if err != nil {
-					errCh <- testReselt{Err: errors.Errorf("failed to unmarshal query result for set #%d: %w", i+1, err)}
+					errCh <- testReselt{Err: errors.Errorf("failed to unmarshal query result for set #%d: %w", i, err)}
 					return
 				}
 
@@ -701,7 +713,7 @@ func TestQueryFuzzDependencies(t *testing.T) {
 					if !nostr.FilterEqual(filter, emptyFilter) {
 						errCh <- testReselt{
 							Filter:  &filter,
-							Err:     errors.Errorf("set #%d: found SCAN without INDEX; sql: %s; params: %#v", i+1, sql, params),
+							Err:     errors.Errorf("set #%d: found SCAN without INDEX", i),
 							Explain: *result,
 						}
 					}
