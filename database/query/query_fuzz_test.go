@@ -624,7 +624,12 @@ func TestQueryFuzzDependencies(t *testing.T) {
 			"expiration:true", "expiration:false",
 		}
 	)
-	_ = extensions
+
+	type testReselt struct {
+		Filter  *model.Filter
+		Err     error
+		Explain string
+	}
 
 	db := helperNewDatabase(t)
 	defer db.Close()
@@ -657,7 +662,7 @@ func TestQueryFuzzDependencies(t *testing.T) {
 		t.Logf("testing %d sets with %d workers", len(deps), w)
 		bar := progressbar.Default(int64(len(deps)), "testing sets")
 		pool := pond.NewPool(w)
-		errCh := make(chan error, w)
+		errCh := make(chan testReselt, w)
 
 		for i, set := range deps {
 			i, set := i, set
@@ -669,32 +674,36 @@ func TestQueryFuzzDependencies(t *testing.T) {
 				}
 				sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
 				if err != nil {
-					errCh <- errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i+1, set, err)
+					errCh <- testReselt{Err: errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i+1, set, err)}
 					return
 				}
 
 				sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
 				result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
 				if err != nil {
-					errCh <- errors.Errorf("failed to execute query for set #%d: %w", i+1, err)
+					errCh <- testReselt{Err: errors.Errorf("failed to execute query for set #%d: %w", i+1, err)}
 					return
 				}
 				if result == nil {
-					errCh <- errors.Errorf("nil result for set #%d", i+1)
+					errCh <- testReselt{Err: errors.Errorf("nil result for set #%d", i+1)}
 					return
 				}
 
 				var q []Query
 				err = json.Unmarshal([]byte(*result), &q)
 				if err != nil {
-					errCh <- errors.Errorf("failed to unmarshal query result for set #%d: %w", i+1, err)
+					errCh <- testReselt{Err: errors.Errorf("failed to unmarshal query result for set #%d: %w", i+1, err)}
 					return
 				}
 
 				if helperQueryHas(t, q, "Seq Scan") {
 					var emptyFilter model.Filter
 					if !nostr.FilterEqual(filter, emptyFilter) {
-						errCh <- errors.Errorf("set #%d: found SCAN without INDEX; sql: %s; params: %#v; result: %q", i+1, sql, params, *result)
+						errCh <- testReselt{
+							Filter:  &filter,
+							Err:     errors.Errorf("set #%d: found SCAN without INDEX; sql: %s; params: %#v", i+1, sql, params),
+							Explain: *result,
+						}
 					}
 				}
 			})
@@ -707,7 +716,14 @@ func TestQueryFuzzDependencies(t *testing.T) {
 		}()
 
 		for err := range errCh {
-			t.Fatalf("error: %v", err) // Fail fast on the first error.
+			t.Errorf("error: %v", err.Err)
+			if err.Explain != "" {
+				t.Errorf("explain: %s", err.Explain)
+			}
+			if err.Filter != nil {
+				t.Errorf("filter: %s", err.Filter.String())
+			}
+			t.FailNow() // Fail fast on the first error.
 		}
 	})
 }
