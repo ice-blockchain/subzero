@@ -127,6 +127,10 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "query.AcceptEvent failed")
 		}
+		ctxWithOldEvents, err := pushnotifications.InjectPreviousEventState(ctx, events...)
+		if err != nil {
+			return errors.Wrap(err, "failed to inject previous event state")
+		}
 		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrap(err, "dvm.AcceptEvent failed")
 		}
@@ -139,7 +143,7 @@ func init() {
 		}
 
 		antsPool.Submit(func() {
-			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
+			if err := pushnotifications.AcceptEvents(ctxWithOldEvents, events); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		})

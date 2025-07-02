@@ -1920,3 +1920,138 @@ func TestAcceptEventsWithOldVersion(t *testing.T) {
 	require.NotNil(t, replaceableUpdated.Previous)
 	require.Equal(t, replaceable.Event, replaceableUpdated.Previous.Event)
 }
+
+func TestGetReplaceableEventBeforeUpdate(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("should return nil when event not found", func(t *testing.T) {
+		oldEvent, err := db.getReplaceableEventBeforeUpdate(t.Context(), "non-existent-id")
+		require.NoError(t, err)
+		require.Nil(t, oldEvent)
+	})
+	t.Run("should return old replaceable event after update", func(t *testing.T) {
+		privKey, _ := model.GenerateKeyPair()
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindFollowList,
+				Tags:      model.Tags{{"p", "user1", "wss://relay1.com/"}, {"p", "user2", "wss://relay2.com/"}},
+				Content:   "original content",
+			},
+		}
+		require.NoError(t, ev1.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev1))
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindFollowList,
+				Tags:      model.Tags{{"p", "user3", "wss://relay3.com/"}, {"p", "user4", "wss://relay4.com/"}},
+				Content:   "updated content",
+			},
+		}
+		require.NoError(t, ev2.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev2))
+
+		oldEvent, err := db.getReplaceableEventBeforeUpdate(t.Context(), ev2.ID)
+		require.NoError(t, err)
+		require.NotNil(t, oldEvent)
+
+		require.Equal(t, ev1.ID, oldEvent.ID)
+		require.Equal(t, ev1.PubKey, oldEvent.PubKey)
+		require.Equal(t, ev1.CreatedAt, oldEvent.CreatedAt)
+		require.Equal(t, ev1.Kind, oldEvent.Kind)
+		require.Equal(t, ev1.Content, oldEvent.Content)
+		require.Equal(t, ev1.Tags, oldEvent.Tags)
+	})
+	t.Run("should return old parametrized replaceable event after update", func(t *testing.T) {
+		privKey, _ := model.GenerateKeyPair()
+
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindArticle,
+				Tags:      model.Tags{{"d", "my-article"}, {"title", "Original Title"}},
+				Content:   "Original article content",
+			},
+		}
+		require.NoError(t, ev1.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev1))
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindArticle,
+				Tags:      model.Tags{{"d", "my-article"}, {"title", "Updated Title"}},
+				Content:   "Updated article content",
+			},
+		}
+		require.NoError(t, ev2.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev2))
+
+		oldEvent, err := db.getReplaceableEventBeforeUpdate(t.Context(), ev2.ID)
+		require.NoError(t, err)
+		require.NotNil(t, oldEvent)
+
+		require.Equal(t, ev1.ID, oldEvent.ID)
+		require.Equal(t, ev1.PubKey, oldEvent.PubKey)
+		require.Equal(t, ev1.CreatedAt, oldEvent.CreatedAt)
+		require.Equal(t, ev1.Kind, oldEvent.Kind)
+		require.Equal(t, ev1.Content, oldEvent.Content)
+		require.Equal(t, ev1.Tags, oldEvent.Tags)
+	})
+	t.Run("should handle multiple replacements correctly", func(t *testing.T) {
+		privKey, _ := model.GenerateKeyPair()
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindFollowList,
+				Tags:      model.Tags{{"p", "follower1"}},
+				Content:   "first version",
+			},
+		}
+		require.NoError(t, ev1.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev1))
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindFollowList,
+				Tags:      model.Tags{{"p", "follower1"}, {"p", "follower2"}},
+				Content:   "second version",
+			},
+		}
+		require.NoError(t, ev2.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev2))
+
+		ev3 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindFollowList,
+				Tags:      model.Tags{{"p", "follower1"}, {"p", "follower2"}, {"p", "follower3"}},
+				Content:   "third version",
+			},
+		}
+		require.NoError(t, ev3.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), ev3))
+
+		oldEvent, err := db.getReplaceableEventBeforeUpdate(t.Context(), ev3.ID)
+		require.NoError(t, err)
+		require.NotNil(t, oldEvent)
+		require.Equal(t, ev2.ID, oldEvent.ID)
+		require.Equal(t, ev2.Content, oldEvent.Content)
+
+		oldEvent, err = db.getReplaceableEventBeforeUpdate(t.Context(), ev2.ID)
+		require.NoError(t, err)
+		require.NotNil(t, oldEvent)
+		require.Equal(t, ev1.ID, oldEvent.ID)
+		require.Equal(t, ev1.Content, oldEvent.Content)
+
+		oldEvent, err = db.getReplaceableEventBeforeUpdate(t.Context(), ev1.ID)
+		require.NoError(t, err)
+		require.Nil(t, oldEvent)
+	})
+}

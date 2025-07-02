@@ -3,8 +3,10 @@
 package pushnotifications
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
@@ -34,7 +36,7 @@ func helperCreateFollowListEvent(t *testing.T, id string, pubKey string, followe
 	}
 }
 
-func TestGetNewFollowerPubkeys(t *testing.T) {
+func TestGetNewlyFollowedPubkeys(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{}
 
@@ -45,7 +47,7 @@ func TestGetNewFollowerPubkeys(t *testing.T) {
 		[]string{},
 	)
 
-	recipients := pm.getNewFollowerPubkeys(emptyTagsEvent, nil)
+	recipients := pm.getNewlyFollowedPubkeys(emptyTagsEvent, nil)
 	require.Empty(t, recipients, "Recipients should be empty when no p-tags")
 
 	singleTagEvent := helperCreateFollowListEvent(
@@ -55,7 +57,7 @@ func TestGetNewFollowerPubkeys(t *testing.T) {
 		[]string{"follower_pubkey"},
 	)
 
-	recipients = pm.getNewFollowerPubkeys(singleTagEvent, nil)
+	recipients = pm.getNewlyFollowedPubkeys(singleTagEvent, nil)
 	require.Len(t, recipients, 1, "Should return one recipient when there's only one p-tag and no old event")
 	require.Equal(t, "follower_pubkey", recipients[0], "Recipient should be the only p-tag")
 
@@ -73,7 +75,7 @@ func TestGetNewFollowerPubkeys(t *testing.T) {
 		[]string{"pubkey1", "pubkey2"},
 	)
 
-	recipients = pm.getNewFollowerPubkeys(newReducedEvent, oldEvent)
+	recipients = pm.getNewlyFollowedPubkeys(newReducedEvent, oldEvent)
 	require.Empty(t, recipients, "Recipients should be empty when follow list reduced")
 
 	newExtendedEvent := helperCreateFollowListEvent(
@@ -83,7 +85,7 @@ func TestGetNewFollowerPubkeys(t *testing.T) {
 		[]string{"pubkey1", "pubkey2", "pubkey3", "new_pubkey"},
 	)
 
-	recipients = pm.getNewFollowerPubkeys(newExtendedEvent, oldEvent)
+	recipients = pm.getNewlyFollowedPubkeys(newExtendedEvent, oldEvent)
 	require.Len(t, recipients, 1, "Should return one new recipient")
 	require.Equal(t, "new_pubkey", recipients[0], "Recipient should be the new pubkey")
 
@@ -94,7 +96,7 @@ func TestGetNewFollowerPubkeys(t *testing.T) {
 		[]string{"pubkey1", "new_pubkey1", "pubkey2", "new_pubkey2", "pubkey3"},
 	)
 
-	recipients = pm.getNewFollowerPubkeys(multipleNewEvent, oldEvent)
+	recipients = pm.getNewlyFollowedPubkeys(multipleNewEvent, oldEvent)
 	require.Len(t, recipients, 2, "Should return all new recipients")
 	require.Contains(t, recipients, "new_pubkey1", "Should contain first new pubkey")
 	require.Contains(t, recipients, "new_pubkey2", "Should contain second new pubkey")
@@ -553,4 +555,155 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsCompressed)
 	require.Equal(t, `[`+string(profileJSON)+`]`, decompressed, "Decompressed relevant event should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
+}
+
+func TestHandleNewFollowerEventWithOldEventContext(t *testing.T) {
+	t.Parallel()
+
+	testSuffix := uuid.NewString()
+
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+	}
+
+	privKey, pubKey := model.GenerateKeyPair()
+	recipientPubKey1 := "recipient1_" + testSuffix
+	recipientPubKey2 := "recipient2_" + testSuffix
+	recipientPubKey3 := "recipient3_" + testSuffix
+
+	filters := nostr.Filters{
+		{
+			Kinds: []int{nostr.KindFollowList},
+		},
+	}
+
+	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		recipientPubKey1,
+		"device1_"+testSuffix,
+		nostr.Tags{
+			{"t", "ios"},
+			{"d", "device1_" + testSuffix},
+			{"token", "token1_" + testSuffix},
+		},
+		filters,
+	)
+	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+
+	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		recipientPubKey2,
+		"device2_"+testSuffix,
+		nostr.Tags{
+			{"t", "android"},
+			{"d", "device2_" + testSuffix},
+			{"token", "token2_" + testSuffix},
+		},
+		filters,
+	)
+	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+
+	deviceEvent3 := helperCreateTestDeviceRegistrationEvent(
+		t,
+		recipientPubKey3,
+		"device3_"+testSuffix,
+		nostr.Tags{
+			{"t", "web"},
+			{"d", "device3_" + testSuffix},
+			{"token", "token3_" + testSuffix},
+		},
+		filters,
+	)
+	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent3))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
+
+	require.Len(t, pm.userDevicesMap, 3, "Should have three users in device map")
+	require.Contains(t, pm.userDevicesMap, recipientPubKey1, "Should have recipient1 in device map")
+	require.Contains(t, pm.userDevicesMap, recipientPubKey2, "Should have recipient2 in device map")
+	require.Contains(t, pm.userDevicesMap, recipientPubKey3, "Should have recipient3 in device map")
+
+	initialEvent := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindFollowList,
+			PubKey:    pubKey,
+			Tags:      model.Tags{{"p", "existing_follower1"}, {"p", recipientPubKey1}},
+			Content:   "initial follow list",
+		},
+	}
+	require.NoError(t, initialEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), initialEvent))
+
+	updatedEvent := &model.Event{
+		Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindFollowList,
+			PubKey:    pubKey,
+			Tags: model.Tags{
+				{"p", "existing_follower1"},
+				{"p", recipientPubKey1},
+				{"p", recipientPubKey2},
+				{"p", recipientPubKey3},
+				{"p", "existing_follower2"},
+			},
+			Content: "updated follow list with new followers",
+		},
+	}
+	require.NoError(t, updatedEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), updatedEvent))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	enrichedCtx, err := InjectPreviousEventState(ctx, updatedEvent)
+	require.NoError(t, err, "Hook should not return error")
+
+	oldEvent, ok := enrichedCtx.Value(model.ReplaceableEventsCtxKey).(*model.Event)
+	require.True(t, ok, "Context should contain old event")
+	require.NotNil(t, oldEvent, "Old event should not be nil")
+	require.Equal(t, initialEvent.ID, oldEvent.ID, "Old event should be the initial event")
+
+	notifications, err := pm.handleNewFollowerEvent(enrichedCtx, updatedEvent)
+	require.NoError(t, err, "handleNewFollowerEvent should not return error")
+
+	require.Len(t, notifications, 2, "Should have two notifications for the two new followers")
+
+	deviceTargets := make(map[string]*model.Event)
+	platformCounts := make(map[string]int)
+
+	for _, notification := range notifications {
+		targetPubKey := notification.Target.GetMasterPublicKey()
+		deviceTargets[targetPubKey] = notification.Target
+		deviceType := notification.Target.GetTag("t").Value()
+		platformCounts[deviceType]++
+
+		if deviceType == model.DeviceTokenOSAndroid {
+			require.Equal(t, "", notification.Title, "Android notifications should have empty title")
+			require.Equal(t, "", notification.Body, "Android notifications should have empty body")
+			require.Equal(t, "", notification.ImageURL, "Android notifications should have empty image URL")
+		} else {
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body)
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
+		}
+		require.Contains(t, notification.Data, "event", "Data should contain event")
+		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Should use zlib compression")
+
+		compressedEvent, ok := notification.Data["event"].(string)
+		require.True(t, ok, "Event should be a compressed string")
+
+		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
+		require.Equal(t, updatedEvent.String(), decompressedEvent, "Decompressed event should match original")
+	}
+	require.Contains(t, deviceTargets, recipientPubKey2, "Should have notification for recipient2 (new follower)")
+	require.Contains(t, deviceTargets, recipientPubKey3, "Should have notification for recipient3 (new follower)")
+	require.NotContains(t, deviceTargets, recipientPubKey1, "Should NOT have notification for recipient1 (already existed)")
+
+	require.Equal(t, deviceEvent2, deviceTargets[recipientPubKey2], "Notification for recipient2 should target correct device")
+	require.Equal(t, deviceEvent3, deviceTargets[recipientPubKey3], "Notification for recipient3 should target correct device")
+
+	require.Equal(t, 1, platformCounts["android"], "Should have one Android notification")
+	require.Equal(t, 1, platformCounts["web"], "Should have one Web notification")
+	require.Equal(t, 0, platformCounts["ios"], "Should have no iOS notifications (recipient1 with iOS was already following)")
 }
