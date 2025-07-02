@@ -41,7 +41,7 @@ func validatePollTag(tag model.Tag) error {
 			} else if v < 0 {
 				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time", value)
 			} else if v > 0 && v.Time().Before(time.Now()) {
-				return errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time in the future", value)
+				return errors.Join(ErrPollTTLExpired, errors.Wrapf(ErrWrongEventParams, "poll: invalid ttl value: %q, want unix time in the future", value))
 			}
 		case "title":
 		case "options":

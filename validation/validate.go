@@ -49,6 +49,7 @@ type (
 
 var (
 	ErrWrongEventParams = errors.New("wrong event params")
+	ErrPollTTLExpired   = errors.New("expiration timestamp is in the past")
 	ErrUnsupportedTag   = errors.New("unsupported tag")
 	ErrUnsupportedJob   = errors.New("unsupported job")
 	ErrUnsupportedKind  = errors.New("unsupported kind")

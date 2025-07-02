@@ -34,6 +34,16 @@ func TestValidateKindRepostEvent(t *testing.T) {
 	}
 	require.NoError(t, addressableEvent.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
+	expiredPollEvent := &model.Event{
+		Event: nostr.Event{
+			Kind: nostr.KindTextNote,
+			Tags: model.Tags{
+				{model.CustomIONTagPoll, "type single", "ttl 1", "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
+			},
+		},
+	}
+	require.NoError(t, expiredPollEvent.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
 	tests := []struct {
 		name    string
 		event   *model.Event
@@ -64,6 +74,20 @@ func TestValidateKindRepostEvent(t *testing.T) {
 				},
 			},
 			wantErr: false,
+		},
+		{
+			name: "valid repost of the expired poll",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind:    nostr.KindRepost,
+					Content: expiredPollEvent.String(),
+					Tags: model.Tags{
+						{"e", expiredPollEvent.Address()},
+						{"p", expiredPollEvent.PubKey},
+						{"k", strconv.Itoa(expiredPollEvent.Kind)},
+					},
+				},
+			},
 		},
 		{
 			name: "invalid content - not JSON",

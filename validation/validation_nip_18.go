@@ -21,7 +21,7 @@ func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, e *model.
 	}
 	if err := repostedEvent.UnmarshalJSON([]byte(e.Content)); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong json fields: %v", err)
-	} else if err := Validate(ctx, &repostedEvent); err != nil {
+	} else if err := ev.validate(ctx, &repostedEvent); err != nil && !errors.IsAny(err, ErrPollTTLExpired) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: invalid reposted event: %v", err)
 	}
 
