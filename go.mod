@@ -24,12 +24,12 @@ require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/pprof v1.5.3
 	github.com/gin-gonic/gin v1.10.1
-	github.com/go-playground/validator/v10 v10.26.0
+	github.com/go-playground/validator/v10 v10.27.0
 	github.com/go-viper/mapstructure/v2 v2.3.0
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250701132212-8d05f4cca6d9
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250702113138-0126c9114527
 	github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830
 	github.com/imroc/req/v3 v3.54.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -156,7 +156,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250701132212-8d05f4cca6d9 // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250702113138-0126c9114527 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
