@@ -78,37 +78,71 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 					err = errors.Join(err, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
 				}
 			}
+		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+			if len(event.Content) < 1 && event.GetTag(model.CustomIONTagRichText) == nil {
+				val, err := nostr.ParseTimestamp(event.GetTag("published_at").Value())
+				softDelete := err == nil && event.CreatedAt.After(val)
+				if softDelete {
+					err = errors.Join(err, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
+				}
+			}
 		}
+
 	}
 
 	return err
 }
 
 func acceptDeletion(ctx context.Context, event *model.Event) error {
-	refs, err := model.ParseEventReference(event.Tags)
-	if err != nil {
-		return errors.Wrapf(err, "failed to detect events for delete")
-	}
-	filters := model.Filters{}
-	for _, r := range refs {
-		filters = append(filters, r.Filter())
-	}
-	events := query.GetStoredEvents(ctx, filters...)
 	var originalEvent *model.Event
-	for fileEvent, err := range events {
+	switch event.Kind {
+	case nostr.KindDeletion:
+		refs, err := model.ParseEventReference(event.Tags)
 		if err != nil {
-			return errors.Wrapf(err, "failed to query referenced deletion file event")
+			return errors.Wrapf(err, "failed to detect events for delete")
 		}
-		if fileEvent.Kind != nostr.KindFileMetadata {
-			if fileEvent.GetTag("imeta") == nil {
+		filters := model.Filters{}
+		for _, r := range refs {
+			filters = append(filters, r.Filter())
+		}
+		events := query.GetStoredEvents(ctx, filters...)
+		for fileEvent, err := range events {
+			if err != nil {
+				return errors.Wrapf(err, "failed to query referenced deletion file event")
+			}
+			if fileEvent.Kind != nostr.KindFileMetadata {
+				if fileEvent.GetTag("imeta") == nil {
+					continue
+				}
+			}
+			if fileEvent.GetMasterPublicKey() != event.GetMasterPublicKey() {
+				return errors.Errorf("user mismatch: event %v is signed by %v not %v", fileEvent.ID, fileEvent.PubKey, event.PubKey)
+			}
+			originalEvent = fileEvent
+			break
+		}
+	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+		events := query.GetStoredEvents(ctx, model.Filter{
+			Kinds:   []int{event.Kind},
+			Authors: []string{event.GetMasterPublicKey()},
+			Tags:    model.TagMap{}.SetLiterals("d", event.Tags.GetD()),
+		})
+		for fileEvent, err := range events {
+			if err != nil {
+				return errors.Wrapf(err, "failed to query referenced deletion file event")
+			}
+			if fileEvent.GetMasterPublicKey() != event.GetMasterPublicKey() {
+				return errors.Errorf("user mismatch: event %v is signed by %v not %v", fileEvent.ID, fileEvent.PubKey, event.PubKey)
+			}
+			if fileEvent.Previous == nil {
 				continue
 			}
+			if fileEvent.Previous.GetTag("imeta") == nil {
+				continue
+			}
+			originalEvent = fileEvent.Previous
+			break
 		}
-		if fileEvent.GetMasterPublicKey() != event.GetMasterPublicKey() {
-			return errors.Errorf("user mismatch: event %v is signed by %v not %v", fileEvent.ID, fileEvent.PubKey, event.PubKey)
-		}
-		originalEvent = fileEvent
-		break
 	}
 	if originalEvent == nil {
 		return nil
@@ -131,6 +165,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 			fileHashes = append(fileHashes, hash)
 		}
 	}
+	var err error
 	for _, fh := range fileHashes {
 		err = errors.Join(err, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey))
 	}
@@ -175,7 +210,7 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}
-	log.Printf("[STORAGE] INFO: bag %x replaced by %v due to file deletion %+v", bag.BagID, bagID, fileHash)
+	log.Printf("[STORAGE] INFO: bag %x replaced by %v due to file deletion %+v for user %v", bag.BagID, bagID, fileHash, masterPubkey)
 	return nil
 }
 

@@ -50,7 +50,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 		}
 	}
 	_, existed = existingHD.FileHash[hash]
-	if existed {
+	if existed && newFile != nil {
 		if existingBagForUser != nil {
 			url, err = c.DownloadUrl(masterPubKey, hash)
 			if err != nil {
@@ -176,7 +176,7 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 		return nil, nil, errors.Wrap(err, "failed to start bag upload")
 	}
 	wg.Wait()
-	err = c.saveUploadTorrent(tr, master)
+	err = c.saveUploadTorrent(tr, master, fileMeta == nil)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to save updated bag")
 	}
@@ -227,8 +227,8 @@ func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bo
 	return url, nil
 }
 
-func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string) error {
-	if err := c.saveTorrent(tr, &userPubKey, nil); err != nil {
+func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string, deletion bool) error {
+	if err := c.saveTorrent(tr, &userPubKey, nil, deletion); err != nil {
 		return errors.Wrap(err, "failed to save upload torrent into storage")
 	}
 	c.newFilesMx.Lock()
