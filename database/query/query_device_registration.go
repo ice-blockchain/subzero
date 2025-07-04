@@ -50,7 +50,7 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 			}
 
 			for _, event := range events {
-				if yield(&event.Event, nil) {
+				if yield(event.Event, nil) {
 					lastTagID = event.TagID
 				} else {
 					return

@@ -40,12 +40,19 @@ type (
 	EventIterator = connector.Iterator[*model.Event]
 
 	databaseEvent struct {
-		model.Event
+		*model.Event
 		LookupCreatedAt int64
 		TagID           int64
+		OldKind         sql.NullInt32
+		OldCreatedAt    sql.Null[model.Timestamp]
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
 		GiftReceiver    sql.NullString
+		OldID           sql.NullString
+		OldPubKey       sql.NullString
+		OldContent      sql.NullString
+		OldTags         sql.Null[model.Tags]
+		OldSignature    sql.NullString
 		Ttags           []string
 		SigAlg          string
 		KeyAlg          string
@@ -144,7 +151,7 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	event := databaseEvent{
-		Event:        *e,
+		Event:        e,
 		Ttags:        []string{},
 		MasterPubKey: e.GetMasterPublicKey(),
 		Dtag:         e.Tags.GetD(),
@@ -441,6 +448,12 @@ func (db *dbClient) saveEvents(
 		replaceableEventsIDs = append(replaceableEventsIDs, evID)
 	}
 
+	var isReplay string
+	if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
+		isReplay = model.ConsensusReplayCtxKey
+	}
+	builder.PushValue("model", "_consensuskey", model.ConsensusReplayCtxKey)
+
 	fields := []string{
 		"kind",
 		"created_at",
@@ -475,22 +488,13 @@ WITH replaced AS (
 	DELETE FROM replaceable_events_before_update
 	WHERE
 		replaced_by_id = ANY(:` + builder.PushValue("merge", "replaceableID", replaceableEventsIDs) + `)
-	RETURNING *
-)`)
-	builder.WriteString(` MERGE INTO events AS target USING (SELECT `)
-	for i, field := range fields {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(field)
-	}
-	builder.WriteString(` FROM replaced `)
-	var isReplay string
-	if replay := ctx.Value(model.ConsensusReplayCtxKey); replay != nil && replay.(bool) {
-		isReplay = model.ConsensusReplayCtxKey
-	}
+	RETURNING `)
+	builder.WriteFields(fields...)
+	builder.WriteString(`), source_data (`) // `source_data` contains the events to merge.
+	builder.WriteFields(fields...)
+	builder.WriteString(`) AS (SELECT * from replaced `)
 	if len(events) > 0 {
-		builder.WriteString(` UNION ALL VALUES `)
+		builder.WriteString(`UNION ALL VALUES `)
 	}
 	for i := range events {
 		name := "merge_event" + strconv.Itoa(i)
@@ -622,15 +626,13 @@ WITH replaced AS (
 			},
 		})
 	}
-	builder.WriteString(`) AS source (`)
-	for i, field := range fields {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(field)
-	}
-	builder.PushValue("model", "_consensuskey", model.ConsensusReplayCtxKey)
-	builder.WriteString(`)
+	// `pre_merge_data` contains the OLD state of the events that are being replaced.
+	// Once postgres 18 gets released, we can use `MERGE ... RETURNING NEW.*, OLD.*` syntax.
+	builder.WriteString(`),
+pre_merge_data AS (SELECT t.* FROM source_data sd LEFT JOIN events AS t ON t.address = sd.address),`)
+	builder.WriteString(`
+merged_result AS (
+MERGE INTO events AS target USING source_data AS source
 	ON (
 		target.id = source.id
 		OR (target.address = source.address and target.hidden=false)
@@ -736,14 +738,25 @@ WHEN NOT MATCHED THEN
 		target.created_at,
 		target.id,
 		target.pubkey,
-		target.master_pubkey,
+		target.address,
 		target.sig,
 		target.content,
-		target.d_tag,
-		target.h_tag,
-		target.lookup,
 		target.tags,
-		merge_action() as savemergeaction;
+		merge_action() as savemergeaction
+)
+SELECT
+	mr.*,
+	pmd.id as old_id,
+	pmd.kind as old_kind,
+	pmd.created_at as old_created_at,
+	pmd.pubkey as old_pubkey,
+	pmd.content as old_content,
+	pmd.tags as old_tags,
+	pmd.sig as old_sig
+FROM
+	merged_result AS mr
+LEFT JOIN pre_merge_data AS pmd
+	ON mr.address = pmd.address
 `)
 	return connector.ExecNamedManyWithCustomRetry[databaseEvent](
 		ctx,
@@ -765,9 +778,27 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		sErr = errors.Wrap(handleError(sErr), "failed to exec insert event sql")
 	}
 	replaceableEvents = map[string]bool{}
+	oldEvents := make(map[string]*model.Event, len(events))
 	for i := range events {
 		if events[i].IsReplaceable() || events[i].IsAddressable() {
 			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
+		}
+		if events[i].OldID.Valid && events[i].SaveMergeAction == "UPDATE" {
+			var ev model.Event
+			ev.ID = events[i].OldID.String
+			ev.PubKey = events[i].OldPubKey.String
+			ev.Kind = int(events[i].OldKind.Int32)
+			ev.CreatedAt = events[i].OldCreatedAt.V
+			ev.Content = events[i].OldContent.String
+			ev.Tags = events[i].OldTags.V
+			ev.Sig = events[i].OldSignature.String
+			oldEvents[ev.Address()] = &ev
+		}
+	}
+	for i := range req.InsertOrReplace {
+		addr := req.InsertOrReplace[i].Address()
+		if oldEvent, hasOldEvent := oldEvents[addr]; hasOldEvent {
+			req.InsertOrReplace[i].Previous = oldEvent
 		}
 	}
 	if len(replaceableEvents) > 0 {
@@ -868,7 +899,7 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 		db.MustSignEvent(event)
 
 	case model.KindDVMCountResponse:
-		var ev databaseEvent
+		ev := databaseEvent{Event: new(model.Event)}
 		pubkey, _ := model.GetPublicKey(db.relayPrivateKey)
 		ev.Kind = model.KindJobNostrEventCount
 		ev.CreatedAt = event.CreatedAt
@@ -908,7 +939,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 		}
 
 		for i := range data {
-			if !yield(&db.eventTransform(data[i]).Event, nil) {
+			if !yield(db.eventTransform(data[i]).Event, nil) {
 				return
 			}
 		}

@@ -20,6 +20,7 @@ import (
 type (
 	Event struct {
 		nostr.Event
+		Previous *Event `db:"-"` // Previous version of the event, if any.
 	}
 	Events                  []*Event
 	EventSignAlg            string

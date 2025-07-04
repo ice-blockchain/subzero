@@ -139,6 +139,15 @@ func (b *queryBuilder) PushValue(filterID, name string, value any) (key string) 
 	return key
 }
 
+func (b *queryBuilder) WriteFields(fields ...string) {
+	for i, field := range fields {
+		if i > 0 {
+			b.WriteRune(',')
+		}
+		b.WriteString(field)
+	}
+}
+
 func (b *queryBuilder) WriteValues(filterID string, values []queryBuilderValue) {
 	if len(values) == 0 {
 		return

@@ -920,7 +920,7 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 	})
 }
 
-func helperEventsMatch(t *testing.T, events []*model.Event, expectedCount int, filters ...model.Filter) {
+func helperEventsMatchFilter(t *testing.T, events []*model.Event, expectedCount int, filters ...model.Filter) {
 	t.Helper()
 
 	var matched int
@@ -1042,14 +1042,14 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 	require.Len(t, events, 15) // 5 articles, 10 genereted events, where 10 = (kind10000 + kind10002) * 5 (total event count).
 
 	// pk1 has no KindRelayListMetadata and no KindMuteList.
-	helperEventsMatch(t, events, 2,
+	helperEventsMatchFilter(t, events, 2,
 		model.Filter{
 			Kinds: []int{model.CustomIONKindRelayListMetadata},
 			Tags:  model.TagMap{}.SetLiterals("p", "pk1"),
 		})
 
 	// pk2 has both KindRelayListMetadata and KindMuteList.
-	helperEventsMatch(t, events, 2,
+	helperEventsMatchFilter(t, events, 2,
 		model.Filter{
 			Kinds:   []int{nostr.KindRelayListMetadata},
 			Authors: []string{"pk2"},
@@ -1061,7 +1061,7 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 	)
 
 	// pk3 has KindRelayListMetadata only.
-	helperEventsMatch(t, events, 2,
+	helperEventsMatchFilter(t, events, 2,
 		model.Filter{
 			Kinds:   []int{nostr.KindRelayListMetadata},
 			Authors: []string{"pk3"},
@@ -1073,7 +1073,7 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 	)
 
 	// pk4 has KindMuteList only.
-	helperEventsMatch(t, events, 2,
+	helperEventsMatchFilter(t, events, 2,
 		model.Filter{
 			Kinds:   []int{nostr.KindMuteList},
 			Authors: []string{"pk4"},
@@ -1085,7 +1085,7 @@ func TestDepMetadaAndMuteList(t *testing.T) {
 	)
 
 	// pk5 has KindMuteList only.
-	helperEventsMatch(t, events, 2,
+	helperEventsMatchFilter(t, events, 2,
 		model.Filter{
 			Kinds:   []int{nostr.KindMuteList},
 			Authors: []string{"pk5"},

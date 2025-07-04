@@ -306,7 +306,7 @@ func TestSearchEvents_EditableTextNote(t *testing.T) {
 		}
 		stored := helperSelectEvents(t, db, filters...)
 		require.Len(t, stored, 2)
-		require.ElementsMatch(t, []*model.Event{expectedEvents[1], expectedEvents[0]}, stored)
+		helperEventsMatch(t, []*model.Event{expectedEvents[1], expectedEvents[0]}, stored)
 	})
 }
 
@@ -360,7 +360,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 			Kinds: []int{nostr.KindProfileMetadata},
 		})
 		require.Len(t, stored, 3)
-		require.ElementsMatch(t, expectedEvents, stored)
+		helperEventsMatch(t, expectedEvents, stored)
 	})
 	t.Run("search profile by name xyu", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
@@ -384,7 +384,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 			Search: "",
 		})
 		require.Len(t, stored, 3)
-		require.ElementsMatch(t, expectedEvents, stored)
+		helperEventsMatch(t, expectedEvents, stored)
 	})
 }
 
@@ -567,7 +567,7 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 		Kinds: []int{nostr.KindArticle},
 	})
 	require.Len(t, storedUpdated, 1)
-	require.EqualValues(t, updatedEvent, storedUpdated[0])
+	require.EqualValues(t, updatedEvent.Event, storedUpdated[0].Event)
 
 	t.Run("search updated event", func(t *testing.T) {
 		searchResult := helperSelectEvents(t, db, model.Filter{
@@ -575,7 +575,7 @@ func TestSearchEvents_Replace_Update(t *testing.T) {
 			Search: `"updated"`,
 		})
 		require.Len(t, searchResult, 1)
-		require.EqualValues(t, updatedEvent, searchResult[0])
+		require.EqualValues(t, updatedEvent.Event, searchResult[0].Event)
 	})
 }
 

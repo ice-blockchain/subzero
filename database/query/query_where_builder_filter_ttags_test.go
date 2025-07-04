@@ -61,13 +61,13 @@ func TestLookupTagsT(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			Tags: model.TagMap{}.SetLiterals("t", "music"),
 		})
-		require.ElementsMatch(t, []*model.Event{&ev1, &ev2}, events)
+		helperEventsMatch(t, []*model.Event{&ev1, &ev2}, events)
 	})
 	t.Run("Common tags", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			Tags: model.TagMap{}.SetLiterals("t", "music", "cars"),
 		})
-		require.ElementsMatch(t, []*model.Event{&ev1, &ev2}, events)
+		helperEventsMatch(t, []*model.Event{&ev1, &ev2}, events)
 	})
 	t.Run("Common tag with negative", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
@@ -75,6 +75,6 @@ func TestLookupTagsT(t *testing.T) {
 				SetLiterals("t", "dance").
 				SetLiterals("!t", "newyork"),
 		})
-		require.ElementsMatch(t, []*model.Event{&ev2}, events)
+		helperEventsMatch(t, []*model.Event{&ev2}, events)
 	})
 }
