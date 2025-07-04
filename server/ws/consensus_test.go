@@ -139,6 +139,7 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Len(t, receivedEventsFromFirstRelay, 1)
 		require.Contains(t, receivedEventsFromFirstRelay, ev)
+		time.Sleep(1 * time.Second)
 		receivedEventsFromSecondRelay := helperQueryEvents(t, t.Context(), secondRelay, nostr.Filter{Kinds: []int{model.CustomIONKindEditableTextNote}})
 		require.Len(t, receivedEventsFromSecondRelay, 1)
 		require.Equal(t, receivedEventsFromFirstRelay, receivedEventsFromSecondRelay)
