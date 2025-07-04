@@ -113,6 +113,7 @@ func TestConsensusEvents(t *testing.T) {
 				{"r", pubsubServers[0].Endpoint()},
 				{"r", pubsubServers[1].Endpoint()},
 				{"r", pubsubServers[2].Endpoint()},
+				{"r", pubsubServers[3].Endpoint()},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
@@ -168,7 +169,7 @@ func TestConsensusEvents(t *testing.T) {
 				break
 			}
 		}
-		if hasFailedTx && (ctx.Value("consensusPort").(uint16) == 19977 || ctx.Value("consensusPort").(uint16) == 19966) {
+		if hasFailedTx && (ctx.Value("consensusPort").(uint16) == 19977 || ctx.Value("consensusPort").(uint16) == 19966 || ctx.Value("consensusPort").(uint16) == 19955) {
 			return errors.New("simulating remote relay did not accept tx - it should be rolled back")
 		}
 		if _, ok := accepted.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
@@ -193,6 +194,7 @@ func TestConsensusEvents(t *testing.T) {
 		}
 		command.RegisterRollbackListener(func(ctx context.Context, event ...*model.Event) error {
 			err := mapPort(ctx).DB.RollbackEvents(ctx, event...)
+			t.Log("ROLLED BACK0", mapPort(ctx).Endpoint(), event[0].Kind, event[0].Content)
 			rolledBack[mapPort(ctx).Endpoint()] <- true
 			t.Log("ROLLED BACK", mapPort(ctx).Endpoint(), event[0].Kind, event[0].Content)
 

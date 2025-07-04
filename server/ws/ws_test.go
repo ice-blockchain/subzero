@@ -65,7 +65,7 @@ func TestMain(m *testing.M) {
 	validation.MustInit()
 	dvm.MustInit(ctx)
 
-	for _, wsPort := range []uint16{9988, 9977, 9966} {
+	for _, wsPort := range []uint16{9988, 9977, 9966, 9955} {
 		const discoveryPortDelta = 10_000
 		log.Printf("Starting server on port %d / %d", wsPort, wsPort+discoveryPortDelta)
 		server, release := helperCreateWsInstance(ctx, container, wsPort, wsPort+discoveryPortDelta)
@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Used in `TestConsensusEvents`.
-	for _, wsPort := range []uint16{9955, 9944} {
+	for _, wsPort := range []uint16{9944} {
 		const discoveryPortDelta = 10_000
 		log.Printf("Starting server on port %d / %d", wsPort, wsPort+discoveryPortDelta)
 		server, release := helperCreateWsInstance(ctx, container, wsPort, wsPort+discoveryPortDelta)
