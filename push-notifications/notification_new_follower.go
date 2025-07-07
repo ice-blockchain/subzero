@@ -6,25 +6,19 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
-	oldEvent, err := pm.getOldFollowListEvent(ctx, event.GetMasterPublicKey())
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get old follow list event")
-	}
-	newFollowerPubKeys := pm.getNewFollowerPubkeys(event, oldEvent)
-	if len(newFollowerPubKeys) == 0 {
+	newlyFollowedPubKeys := pm.getNewlyFollowedPubkeys(event, event.Previous)
+	if len(newlyFollowedPubKeys) == 0 {
 		return nil, nil
 	}
 
 	var allNotifications []*pn.Notification[*DeviceRegistrationEvent]
-	for _, recipientPubKey := range newFollowerPubKeys {
+	for _, recipientPubKey := range newlyFollowedPubKeys {
 		notifications, err := pm.createNewFollowerNotification(event, recipientPubKey, relevantEvents...)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create new follower notification")
@@ -35,26 +29,7 @@ func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, e
 	return allNotifications, nil
 }
 
-func (pm *PushNotificationManager) getOldFollowListEvent(ctx context.Context, authorPubKey string) (*model.Event, error) {
-	var oldEvent *model.Event
-
-	it := query.GetStoredEvents(ctx, model.Filter{
-		Kinds:   []int{nostr.KindFollowList},
-		Authors: []string{authorPubKey},
-	})
-	for ev, err := range it {
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get old follow list event")
-		}
-		oldEvent = ev
-
-		break
-	}
-
-	return oldEvent, nil
-}
-
-func (pm *PushNotificationManager) getNewFollowerPubkeys(event *model.Event, oldEvent *model.Event) []string {
+func (pm *PushNotificationManager) getNewlyFollowedPubkeys(event *model.Event, oldEvent *model.Event) []string {
 	currentPTags := event.GetTags("p")
 	if len(currentPTags) == 0 {
 		return nil
@@ -90,6 +65,10 @@ func (pm *PushNotificationManager) getNewFollowerPubkeys(event *model.Event, old
 }
 
 func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+	if recipientPubKey == event.GetMasterPublicKey() {
+		return nil, nil
+	}
+
 	devices := pm.collectUserValidDevices(recipientPubKey, event)
 	notifications, err := pm.createNotifications(devices, NotificationTypeNewFollower, event, relevantEvents...)
 	if err != nil {

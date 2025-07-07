@@ -139,7 +139,7 @@ func init() {
 		}
 
 		antsPool.Submit(func() {
-			if err := pushnotifications.AcceptEvents(ctx, events); err != nil {
+			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		})

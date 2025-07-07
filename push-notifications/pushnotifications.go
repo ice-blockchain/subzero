@@ -237,7 +237,7 @@ func GetFCMConfigs() (androidConfigs, iosConfigs, webConfigs []string) {
 	return config.FCMAndroidConfigs, config.FCMIOSConfigs, config.FCMWebConfigs
 }
 
-func AcceptEvents(ctx context.Context, events []*model.Event) error {
+func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	var errs error
 	errs = errors.Join(errs,
 		globalPushNotificationManager.AcceptEvents(ctx, events),

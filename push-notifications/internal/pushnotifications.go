@@ -174,8 +174,13 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 	err := retry(ctx, func() error {
 		var err error
 		id, err = s.client.Send(ctx, message)
-		if err != nil && strings.Contains(err.Error(), "message is too big") {
-			return &backoff.PermanentError{Err: ErrMessageTooLarge}
+		if err != nil {
+			if strings.Contains(err.Error(), "message is too big") {
+				return &backoff.PermanentError{Err: ErrMessageTooLarge}
+			}
+			if isUnregisteredByContent(err) {
+				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
+			}
 		}
 
 		return err
@@ -185,7 +190,7 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 		if IsMessageTooLarge(err) {
 			return "", errors.Wrapf(err, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
 		}
-		if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) || isUnregisteredByContent(err) {
+		if IsInvalidDeviceToken(err) || messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
 			return "", ErrInvalidDeviceToken
 		}
 		return "", fmt.Errorf("fcm send failed for %#v: %w", message, err)
