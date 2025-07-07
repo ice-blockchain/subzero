@@ -3,10 +3,8 @@
 package pushnotifications
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
@@ -557,7 +555,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }
 
-func TestHandleNewFollowerEventWithOldEventContext(t *testing.T) {
+func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	t.Parallel()
 
 	testSuffix := uuid.NewString()
@@ -653,18 +651,10 @@ func TestHandleNewFollowerEventWithOldEventContext(t *testing.T) {
 	}
 	require.NoError(t, updatedEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, query.AcceptEvents(t.Context(), updatedEvent))
+	require.NotNil(t, updatedEvent.Previous, "Updated event should have previous version")
+	require.Equal(t, initialEvent.Event, updatedEvent.Previous.Event, "Previous event should match initial event")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	enrichedCtx, err := InjectPreviousEventState(ctx, updatedEvent)
-	require.NoError(t, err, "Hook should not return error")
-
-	oldEvent, ok := enrichedCtx.Value(model.ReplaceableEventsCtxKey).(*model.Event)
-	require.True(t, ok, "Context should contain old event")
-	require.NotNil(t, oldEvent, "Old event should not be nil")
-	require.Equal(t, initialEvent.ID, oldEvent.ID, "Old event should be the initial event")
-
-	notifications, err := pm.handleNewFollowerEvent(enrichedCtx, updatedEvent)
+	notifications, err := pm.handleNewFollowerEvent(t.Context(), updatedEvent)
 	require.NoError(t, err, "handleNewFollowerEvent should not return error")
 
 	require.Len(t, notifications, 2, "Should have two notifications for the two new followers")

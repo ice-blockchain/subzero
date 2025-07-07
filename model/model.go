@@ -125,8 +125,7 @@ const (
 )
 
 const (
-	ConsensusReplayCtxKey   = "replay"
-	ReplaceableEventsCtxKey = "replaceable_events_before_update"
+	ConsensusReplayCtxKey = "replay"
 )
 
 const (

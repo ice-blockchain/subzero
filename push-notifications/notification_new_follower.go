@@ -6,19 +6,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
-	var oldEvent *model.Event
-	if oldEventFromCtx, ok := ctx.Value(model.ReplaceableEventsCtxKey).(*model.Event); ok {
-		oldEvent = oldEventFromCtx
-	}
-	newlyFollowedPubKeys := pm.getNewlyFollowedPubkeys(event, oldEvent)
+	newlyFollowedPubKeys := pm.getNewlyFollowedPubkeys(event, event.Previous)
 	if len(newlyFollowedPubKeys) == 0 {
 		return nil, nil
 	}
@@ -82,20 +76,4 @@ func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Ev
 	}
 
 	return notifications, nil
-}
-
-func InjectPreviousEventState(ctx context.Context, events ...*model.Event) (context.Context, error) {
-	for _, event := range events {
-		if event.Kind == nostr.KindFollowList {
-			oldEvent, err := query.GetReplaceableEventBeforeUpdate(ctx, event.ID)
-			if err != nil {
-				return ctx, errors.Wrapf(err, "failed to get old event for %s", event.ID)
-			}
-			if oldEvent != nil {
-				return context.WithValue(ctx, model.ReplaceableEventsCtxKey, oldEvent), nil
-			}
-		}
-	}
-
-	return ctx, nil
 }

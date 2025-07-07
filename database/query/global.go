@@ -187,7 +187,3 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 func CollectDeviceRegistrationEvents(ctx context.Context) EventIterator {
 	return globalDB.Client.collectDeviceRegistrationEvents(ctx)
 }
-
-func GetReplaceableEventBeforeUpdate(ctx context.Context, newEventID string) (*model.Event, error) {
-	return globalDB.Client.getReplaceableEventBeforeUpdate(ctx, newEventID)
-}

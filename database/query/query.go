@@ -1253,29 +1253,3 @@ func (db *dbClient) queryDatabaseSize(ctx context.Context) (uint64, error) {
 	}
 	return *sizePtr, nil
 }
-
-func (db *dbClient) getReplaceableEventBeforeUpdate(ctx context.Context, newEventID string) (*model.Event, error) {
-	sql := `SELECT 
-				kind,
-				created_at,
-				id,
-				pubkey,
-				master_pubkey,
-				sig,
-				content,
-				d_tag,
-				tags
-			FROM replaceable_events_before_update 
-			WHERE replaced_by_id = $1
-			LIMIT 1`
-	data, err := connector.Get[databaseEvent](ctx, db.db, sql, newEventID)
-	if err != nil {
-		if errors.Is(err, connector.ErrNotFound) {
-			return nil, nil
-		}
-
-		return nil, errors.Wrap(err, "failed to query replaceable event before update")
-	}
-
-	return &db.eventTransform(data).Event, nil
-}
