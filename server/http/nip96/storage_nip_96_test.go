@@ -60,7 +60,6 @@ func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 
 	addr, release := query.NewTestDatabase(serverCtx)
-	fmt.Println(addr)
 	query.MustInit(serverCtx, query.WithConfig(&query.Config{
 		URL: addr,
 	}))
@@ -396,7 +395,10 @@ func TestNIP96(t *testing.T) {
 		}
 		require.NoError(t, deletedPost.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(ctx, deletedPost))
-		require.NoError(t, storage.AcceptEvents(ctx, deletedPost))
+		cpy := new(model.Event)
+		*cpy = *deletedPost
+		require.NoError(t, query.CommitEvents(ctx, cpy))
+		require.NoError(t, storage.AcceptEvents(ctx, cpy))
 		fileName := "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1.jpg"
 		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 	})

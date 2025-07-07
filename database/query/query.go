@@ -263,7 +263,7 @@ func (db *dbClient) CommitEvents(ctx context.Context, events ...*model.Event) er
 		if val := ctx.Value(model.ConsensusReplayCtxKey); val != nil && val.(bool) {
 			return nil
 		}
-		if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents); err != nil {
+		if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents, events...); err != nil {
 			return errors.Wrap(err, "failed to delete tmp replaceableEvents")
 		}
 		return nil
@@ -376,8 +376,27 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	return deletedEvents, dependencies, nil
 }
 
-func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool) error {
-	const sqlQuery = `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY($1)`
+func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool, events ...*model.Event) error {
+	const sqlQuery = `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY($1)
+RETURNING kind,
+		created_at,
+		id,
+		address,
+		pubkey,
+		master_pubkey,
+		sig,
+		sig_alg,
+		key_alg,
+		content,
+		tags,
+		d_tag,
+		h_tag,
+		deleted,
+		has_images,
+		has_videos,
+		has_references,
+		lookup,
+		expiration`
 
 	if len(replaceableEventsToDelete) == 0 {
 		return nil
@@ -387,11 +406,21 @@ func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replac
 		replaceableEventsIDs = append(replaceableEventsIDs, evID)
 	}
 
-	actual, err := connector.Exec(ctx, db.db, sqlQuery, replaceableEventsIDs)
+	deleted, err := connector.ExecMany[databaseEvent](ctx, db.db, sqlQuery, replaceableEventsIDs)
 	if err != nil {
 		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql")
-	} else if actual != uint64(len(replaceableEventsToDelete)) {
-		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), actual)
+	} else if uint64(len(deleted)) != uint64(len(replaceableEventsToDelete)) {
+		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), len(deleted))
+	}
+	oldEvents := make(map[string]*model.Event)
+	for i := range deleted {
+		oldEvents[deleted[i].Address()] = deleted[i].Event
+	}
+	for i := range events {
+		addr := events[i].Address()
+		if oldEvent, hasOldEvent := oldEvents[addr]; hasOldEvent {
+			events[i].Previous = oldEvent
+		}
 	}
 	return nil
 }
@@ -735,11 +764,12 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 	replaceableEvents = map[string]bool{}
 	oldEvents := make(map[string]*model.Event, len(events))
 	for i := range events {
-		if events[i].IsReplaceable() || events[i].IsAddressable() {
-			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
-		}
 		if events[i].SaveMergeAction == "OLD" {
 			oldEvents[events[i].Address()] = events[i].Event
+			continue
+		}
+		if events[i].IsReplaceable() || events[i].IsAddressable() {
+			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
 		}
 	}
 	for i := range req.InsertOrReplace {

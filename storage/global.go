@@ -122,27 +122,7 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 			break
 		}
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-		events := query.GetStoredEvents(ctx, model.Filter{
-			Kinds:   []int{event.Kind},
-			Authors: []string{event.GetMasterPublicKey()},
-			Tags:    model.TagMap{}.SetLiterals("d", event.Tags.GetD()),
-		})
-		for fileEvent, err := range events {
-			if err != nil {
-				return errors.Wrapf(err, "failed to query referenced deletion file event")
-			}
-			if fileEvent.GetMasterPublicKey() != event.GetMasterPublicKey() {
-				return errors.Errorf("user mismatch: event %v is signed by %v not %v", fileEvent.ID, fileEvent.PubKey, event.PubKey)
-			}
-			if fileEvent.Previous == nil {
-				continue
-			}
-			if fileEvent.Previous.GetTag("imeta") == nil {
-				continue
-			}
-			originalEvent = fileEvent.Previous
-			break
-		}
+		originalEvent = event.Previous
 	}
 	if originalEvent == nil {
 		return nil
