@@ -48,6 +48,20 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func helperEventsMatch(t *testing.T, a, b []*model.Event, msgAndArgs ...any) {
+	t.Helper()
+
+	for i := range a {
+		a[i].Previous = nil
+	}
+
+	for i := range b {
+		b[i].Previous = nil
+	}
+
+	require.ElementsMatch(t, a, b, msgAndArgs...)
+}
+
 func TestReplaceableEvents(t *testing.T) {
 	t.Parallel()
 
@@ -172,8 +186,8 @@ func TestReplaceableEvents(t *testing.T) {
 			Kinds: []int{nostr.KindFollowList},
 		})
 		require.Len(t, stored, 2)
-		require.Equal(t, ev3, stored[0], "event 3")
-		require.Equal(t, ev2, stored[1], "event 2")
+		require.Equal(t, ev3.Event, stored[0].Event, "event 3")
+		require.Equal(t, ev2.Event, stored[1].Event, "event 2")
 
 		// Rollback
 		require.NoError(t, db.RollbackEvents(t.Context(), ev2, ev3))
@@ -192,13 +206,13 @@ func TestReplaceableEvents(t *testing.T) {
 			Kinds: []int{nostr.KindFollowList},
 		})
 		require.Len(t, stored, 1)
-		require.Equal(t, ev2, stored[0], "event 2")
+		require.Equal(t, ev2.Event, stored[0].Event, "event 2")
 		require.NoError(t, db.RollbackEvents(t.Context(), ev2)) // No-op.
 		stored = helperSelectEvents(t, db, model.Filter{
 			Kinds: []int{nostr.KindFollowList},
 		})
 		require.Len(t, stored, 1)
-		require.Equal(t, ev2, stored[0], "event 2")
+		require.Equal(t, ev2.Event, stored[0].Event, "event 2")
 	})
 }
 
@@ -271,9 +285,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 			Kinds: []int{nostr.KindRepositoryAnnouncement},
 		})
 		require.Len(t, stored, 3)
-		require.Contains(t, stored, expectedEvents[0])
-		require.Contains(t, stored, expectedEvents[1])
-		require.Contains(t, stored, expectedEvents[2])
+		helperEventsMatch(t, stored, expectedEvents, "should return all events")
 	})
 }
 
@@ -1182,7 +1194,7 @@ func TestSelectRepostWithSpecialKind(t *testing.T) {
 			Kinds: []int{nostr.KindGenericRepost, model.CustomIONKindRepostOfEditableTextNote},
 		})
 		require.Len(t, events, 2)
-		require.ElementsMatch(t, []*model.Event{&repost1, &repost2}, events)
+		helperEventsMatch(t, []*model.Event{&repost1, &repost2}, events)
 	})
 }
 
@@ -1474,13 +1486,13 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 	t.Run("Fetch without filters", func(t *testing.T) {
 		events := helperSelectEvents(t, db)
 		require.Len(t, events, 2, "should return only non-deleted posts and no reposts")
-		require.ElementsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
+		helperEventsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
 	})
 
 	t.Run("Fetch without ID filters", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{Kinds: []int{nostr.KindArticle, model.CustomIONKindEditableTextNote}})
 		require.Len(t, events, 2, "should return only non-deleted posts")
-		require.ElementsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
+		helperEventsMatch(t, events, []*model.Event{posts[0], posts[2]}, "deleted post should not be included")
 	})
 
 	t.Run("Fetch with ID filters", func(t *testing.T) {
@@ -1488,7 +1500,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 			IDs: []string{posts[0].ID, posts[1].ID, posts[2].ID},
 		})
 		require.Len(t, events, 3, "should return all posts including deleted")
-		require.ElementsMatch(t, posts, events)
+		helperEventsMatch(t, posts, events)
 	})
 
 	t.Run("Fetch with addressable filters", func(t *testing.T) {
@@ -1504,7 +1516,7 @@ func TestSelectSoftDeletedPosts(t *testing.T) {
 			},
 		)
 		require.Len(t, events, 3, "should return all posts including deleted")
-		require.ElementsMatch(t, posts, events)
+		helperEventsMatch(t, posts, events)
 	})
 }
 
@@ -1780,7 +1792,7 @@ func TestReplaceEventCheckSignature(t *testing.T) {
 
 	events = helperSelectEvents(t, db)
 	require.Len(t, events, 1)
-	require.Equal(t, &ev, events[0])
+	require.Equal(t, ev.Event, events[0].Event)
 	ok, err = events[0].CheckSignature()
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -1873,5 +1885,38 @@ func TestQueryDependencyWithReply(t *testing.T) {
 	}
 
 	events := helperSelectEvents(t, db, f)
-	require.ElementsMatch(t, events, []*model.Event{&replyEvent, &rootEvent}, "should return both events") // root post, and reply using the dependency.
+	helperEventsMatch(t, events, []*model.Event{&replyEvent, &rootEvent}, "should return both events") // root post, and reply using the dependency.
+}
+
+func TestAcceptEventsWithOldVersion(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	pk := model.GeneratePrivateKey()
+
+	var regular, replaceable model.Event
+	regular.CreatedAt = nostr.Now()
+	regular.Kind = nostr.KindTextNote
+	regular.Content = "regular event"
+	require.NoError(t, regular.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	replaceable.Kind = nostr.KindFollowList
+	replaceable.CreatedAt = nostr.Now()
+	replaceable.Content = "replaceable event"
+	replaceable.Tags = model.Tags{{"p", "foobar"}}
+	require.NoError(t, replaceable.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	require.NoError(t, db.AcceptEvents(t.Context(), &regular, &replaceable))
+
+	var replaceableUpdated model.Event
+	replaceableUpdated.Kind = replaceable.Kind
+	replaceableUpdated.CreatedAt = replaceable.CreatedAt + 1
+	replaceableUpdated.Content = "updated replaceable event"
+	replaceableUpdated.Tags = model.Tags{{"p", "ababagalamaga"}}
+	require.NoError(t, replaceableUpdated.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &replaceableUpdated))
+	require.NotNil(t, replaceableUpdated.Previous)
+	require.Equal(t, replaceable.Event, replaceableUpdated.Previous.Event)
 }

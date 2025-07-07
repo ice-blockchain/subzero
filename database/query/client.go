@@ -32,6 +32,22 @@ type (
 var (
 	//go:embed ddl/*.sql
 	ddl embed.FS
+
+	databaseEventFieldMap = map[string]string{
+		"createdat":       "created_at",
+		"referenceid":     "reference_id",
+		"sigalg":          "sig_alg",
+		"keyalg":          "key_alg",
+		"masterpubkey":    "master_pubkey",
+		"dtag":            "d_tag",
+		"htag":            "h_tag",
+		"hasimages":       "has_images",
+		"hasvideos":       "has_videos",
+		"addressvalue":    "address",
+		"tagid":           "tag_id",
+		"lookupcreatedat": "lookup_created_at",
+		"hasreferences":   "has_references",
+	}
 )
 
 func readDDL() string {
@@ -86,39 +102,12 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 	options := []connector.Option{
 		connector.WithMaster(target),
 		connector.WithReplicas(replicas),
-		connector.WithFieldNameMapper(func(in string) (out string) {
+		connector.WithFieldNameMapper(func(in string) string {
 			n := strings.ToLower(in)
-			switch n {
-			case "createdat":
-				out = "created_at"
-			case "referenceid":
-				out = "reference_id"
-			case "sigalg":
-				out = "sig_alg"
-			case "keyalg":
-				out = "key_alg"
-			case "masterpubkey":
-				out = "master_pubkey"
-			case "dtag":
-				out = "d_tag"
-			case "htag":
-				out = "h_tag"
-			case "hasimages":
-				out = "has_images"
-			case "hasvideos":
-				out = "has_videos"
-			case "addressvalue":
-				out = "address"
-			case "tagid":
-				out = "tag_id"
-			case "lookupcreatedat":
-				out = "lookup_created_at"
-			case "hasreferences":
-				out = "has_references"
-			default:
-				out = n
+			if mapped, ok := databaseEventFieldMap[n]; ok {
+				return mapped
 			}
-			return out
+			return n
 		}),
 	}
 
