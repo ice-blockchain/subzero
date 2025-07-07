@@ -33,7 +33,7 @@ var (
 	//go:embed ddl/*.sql
 	ddl embed.FS
 
-	fieldMap = map[string]string{
+	databaseEventFieldMap = map[string]string{
 		"createdat":       "created_at",
 		"referenceid":     "reference_id",
 		"sigalg":          "sig_alg",
@@ -47,13 +47,6 @@ var (
 		"tagid":           "tag_id",
 		"lookupcreatedat": "lookup_created_at",
 		"hasreferences":   "has_references",
-		"oldid":           "old_id",
-		"oldkind":         "old_kind",
-		"oldcreatedat":    "old_created_at",
-		"oldpubkey":       "old_pubkey",
-		"oldcontent":      "old_content",
-		"oldtags":         "old_tags",
-		"oldsignature":    "old_sig",
 	}
 )
 
@@ -111,7 +104,7 @@ func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...s
 		connector.WithReplicas(replicas),
 		connector.WithFieldNameMapper(func(in string) string {
 			n := strings.ToLower(in)
-			if mapped, ok := fieldMap[n]; ok {
+			if mapped, ok := databaseEventFieldMap[n]; ok {
 				return mapped
 			}
 			return n

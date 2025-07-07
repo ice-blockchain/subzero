@@ -43,16 +43,9 @@ type (
 		*model.Event
 		LookupCreatedAt int64
 		TagID           int64
-		OldKind         sql.NullInt32
-		OldCreatedAt    sql.Null[model.Timestamp]
 		Expiration      sql.NullInt64
 		ReferenceID     sql.NullString
 		GiftReceiver    sql.NullString
-		OldID           sql.NullString
-		OldPubKey       sql.NullString
-		OldContent      sql.NullString
-		OldTags         sql.Null[model.Tags]
-		OldSignature    sql.NullString
 		Ttags           []string
 		SigAlg          string
 		KeyAlg          string
@@ -738,25 +731,29 @@ WHEN NOT MATCHED THEN
 		target.created_at,
 		target.id,
 		target.pubkey,
-		target.address,
 		target.sig,
 		target.content,
 		target.tags,
 		merge_action() as savemergeaction
 )
 SELECT
-	mr.*,
-	pmd.id as old_id,
-	pmd.kind as old_kind,
-	pmd.created_at as old_created_at,
-	pmd.pubkey as old_pubkey,
-	pmd.content as old_content,
-	pmd.tags as old_tags,
-	pmd.sig as old_sig
+	*
 FROM
 	merged_result AS mr
-LEFT JOIN pre_merge_data AS pmd
-	ON mr.address = pmd.address
+UNION ALL
+SELECT
+	pmd.kind,
+	pmd.created_at,
+	pmd.id,
+	pmd.pubkey,
+	pmd.sig,
+	pmd.content,
+	pmd.tags,
+	'OLD' as savemergeaction
+FROM
+	pre_merge_data pmd
+WHERE
+	pmd.id is not null
 `)
 	return connector.ExecNamedManyWithCustomRetry[databaseEvent](
 		ctx,
@@ -783,16 +780,8 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 		if events[i].IsReplaceable() || events[i].IsAddressable() {
 			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
 		}
-		if events[i].OldID.Valid && events[i].SaveMergeAction == "UPDATE" {
-			var ev model.Event
-			ev.ID = events[i].OldID.String
-			ev.PubKey = events[i].OldPubKey.String
-			ev.Kind = int(events[i].OldKind.Int32)
-			ev.CreatedAt = events[i].OldCreatedAt.V
-			ev.Content = events[i].OldContent.String
-			ev.Tags = events[i].OldTags.V
-			ev.Sig = events[i].OldSignature.String
-			oldEvents[ev.Address()] = &ev
+		if events[i].SaveMergeAction == "OLD" {
+			oldEvents[events[i].Address()] = events[i].Event
 		}
 	}
 	for i := range req.InsertOrReplace {
