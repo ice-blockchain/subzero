@@ -22,7 +22,9 @@ func TestQueryBatchProcessor(t *testing.T) {
 	require.NotEmpty(t, pk)
 
 	var req databaseBatchRequest
-	mockHash := "hash"
+	var mockHash eventHash
+	mockHash[0] = 0x01
+
 	t.Run("Insert", func(t *testing.T) {
 		const num = int64(10)
 		for i := range num {
