@@ -5,7 +5,6 @@ package query
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
 	"slices"
 	"strconv"
@@ -63,11 +62,6 @@ type (
 		IsReply         bool
 		IsQuote         bool
 		IsRootReply     bool
-	}
-	databaseEventAddress struct {
-		Kind   int
-		Pubkey string
-		Dtag   string
 	}
 	databaseRollbackRequest struct {
 		databaseBatchRequest
@@ -315,16 +309,15 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 					genericFilter.Tags.Append("e", &id)
 				}
 				genericFilters = append(genericFilters, genericFilter)
-			} else if len(f.Events) > 0 {
+			} else if len(f.Addresses) > 0 {
 				filterA, filterQ := model.Filter{
 					Tags: model.TagMap{},
 				}, model.Filter{
 					Tags: model.TagMap{},
 				}
-				for _, e := range f.Events {
-					tag := fmt.Sprintf("%d:%s:%s", e.Kind, e.Pubkey, e.Dtag)
-					filterA.Tags.Append("a", &tag)
-					filterQ.Tags.Append("Q", &tag)
+				for i := range f.Addresses {
+					filterA.Tags.Append("a", &f.Addresses[i])
+					filterQ.Tags.Append("Q", &f.Addresses[i])
 					genericFilters = append(genericFilters, filterA, filterQ)
 				}
 			}
@@ -360,15 +353,10 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		var f databaseFilterDelete
 
 		f.Author = ev.PubKey
-		switch {
-		case ev.IsReplaceable():
-			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
-
-		case ev.IsAddressable():
-			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
-
-		case ev.IsRegular():
+		if ev.IsRegular() {
 			f.IDs = append(f.IDs, ev.ID)
+		} else {
+			f.Addresses = append(f.Addresses, ev.Address())
 		}
 		dependencies = append(dependencies, f)
 	}
@@ -786,15 +774,10 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 			var f databaseFilterDelete
 
 			f.Author = ev.PubKey
-			switch {
-			case ev.IsReplaceable():
-				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
-
-			case ev.IsAddressable():
-				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
-
-			case ev.IsRegular():
+			if ev.IsRegular() {
 				f.IDs = append(f.IDs, ev.ID)
+			} else {
+				f.Addresses = append(f.Addresses, ev.Address())
 			}
 			inserted = append(inserted, f)
 		}

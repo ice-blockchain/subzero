@@ -75,9 +75,9 @@ type (
 		Extra             []string // Extra `where` clauses, ANDed to the main filter.
 	}
 	databaseFilterDelete struct {
-		Author string
-		IDs    []string
-		Events []databaseEventAddress
+		Author    string
+		IDs       []string
+		Addresses []string
 	}
 	databaseFilterMarker struct {
 		Tag     string
@@ -105,21 +105,9 @@ func parseEventAsFilterForDelete(e *model.Event) (*databaseFilterDelete, error) 
 			}
 
 		case "a":
-			vals := strings.Split(tag.Value(), ":")
-			if len(vals) != 3 {
-				return nil, errors.Errorf("failed to parse replaceable event reference, len != 3: %v", tag.Value())
+			if v := tag.Value(); v != "" {
+				filter.Addresses = append(filter.Addresses, v)
 			}
-
-			kind, err := strconv.ParseInt(vals[0], 10, 64)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse replaceable event kind %v", tag.Value())
-			}
-
-			filter.Events = append(filter.Events, databaseEventAddress{
-				Kind:   int(kind),
-				Pubkey: vals[1],
-				Dtag:   vals[2],
-			})
 		}
 	}
 
@@ -1312,18 +1300,14 @@ func (b *queryBuilder) ApplyDeleteFilter(idx int, filter *databaseFilterDelete) 
 	//   - By master pubkey.
 	//   - By onbehalf attestations.
 	b.WriteRune('(')
-	if len(filter.IDs) > 0 || len(filter.Events) > 0 {
+	if len(filter.IDs) > 0 || len(filter.Addresses) > 0 {
 		b.WriteRune('(')
 		buildFromSlice(b, sqlOpCodeNONE, filterID, filter.IDs, "id", "")
-		for i := range filter.Events {
+		for i := range filter.Addresses {
 			idxStr := strconv.Itoa(i)
 			b.MaybeOR()
-			b.WriteString("(kind = :")
-			b.WriteValue(filterID, "kind"+idxStr, filter.Events[i].Kind)
-			b.WriteString(" AND pubkey = :")
-			b.WriteValue(filterID, "author"+idxStr, filter.Events[i].Pubkey)
-			b.WriteString(" AND d_tag = :")
-			b.WriteValue(filterID, "dtag"+idxStr, filter.Events[i].Dtag)
+			b.WriteString("(address = :")
+			b.WriteValue(filterID, "address"+idxStr, filter.Addresses[i])
 			b.WriteRune(')')
 		}
 		b.WriteString(") AND ")
