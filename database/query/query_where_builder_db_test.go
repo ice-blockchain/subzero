@@ -1039,3 +1039,25 @@ func TestBuilderLookupByAddress(t *testing.T) {
 	})
 	require.Equal(t, []*model.Event{&eventAddressable, &eventRegular}, events)
 }
+
+func TestBuilderMultiKindWithDependencies(t *testing.T) {
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	filters := model.Filters{
+		{
+			Kinds:   []int{nostr.KindProfileMetadata},
+			Authors: []string{"pubkey1"},
+			Search:  "include:dependencies:kind0>kind10100 include:dependencies:kind0>kind30008+profile_badges>kind30009>kind8",
+		},
+		{
+			Kinds:   []int{nostr.KindProfileMetadata},
+			Authors: []string{"pubkey2"},
+			Search:  "include:dependencies:kind0>kind10100 include:dependencies:kind0>kind30008+profile_badges>kind30009>kind8",
+		},
+	}
+
+	for _, err := range db.SelectEvents(t.Context(), filters...) {
+		require.NoError(t, err)
+	}
+}
