@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -180,5 +181,9 @@ func IsUnexpected(err error) bool {
 	var pgConnErr *pgconn.PgError
 	var netOpErr *net.OpError
 
-	return errors.As(err, &pgConnErr) || errors.As(err, &netOpErr)
+	if errors.As(err, &pgConnErr) {
+		return pgConnErr.SQLState() != pgerrcode.SyntaxError
+	}
+
+	return errors.As(err, &netOpErr)
 }
