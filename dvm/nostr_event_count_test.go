@@ -4,7 +4,9 @@ package dvm
 
 import (
 	"context"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
@@ -982,5 +984,59 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 		result, err := helperExecuteJob(t, t.Context(), &ev)
 		require.ErrorIs(t, err, model.ErrNotAuthorized)
 		require.Nil(t, result)
+	})
+}
+
+func TestCountUserStories(t *testing.T) {
+	t.Parallel()
+
+	const storiesCount = 5
+	pk := model.GeneratePrivateKey()
+
+	t.Run("Create user stories", func(t *testing.T) {
+		for i := range storiesCount {
+			var ev model.Event
+			ev.Kind = model.CustomIONKindEditableTextNote
+			ev.Content = "user story content " + strconv.Itoa(i)
+			ev.CreatedAt = nostr.Now()
+			ev.Tags = model.Tags{
+				{"d", "story_" + strconv.Itoa(i)},
+				{"expiration", ev.CreatedAt.Add(time.Hour).String()},
+			}
+			require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			var note model.Event
+			note.Kind = model.CustomIONKindEditableTextNote
+			note.Content = "user story note " + strconv.Itoa(i)
+			note.CreatedAt = ev.CreatedAt.Add(time.Minute)
+			note.Tags = model.Tags{
+				{"d", "note_" + strconv.Itoa(i)},
+			}
+			require.NoError(t, note.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, query.AcceptEvents(t.Context(), &note, &ev))
+		}
+	})
+	t.Run("Count user stories", func(t *testing.T) {
+		var ev model.Event
+
+		pub, err := model.GetPublicKey(pk)
+		require.NoError(t, err)
+
+		ev.Kind = model.KindJobNostrEventCount
+		ev.Tags = model.Tags{
+			{"param", "relay", globalConfig.RelayURL},
+		}
+		ev.Content = model.Filters{
+			{
+				Kinds:   []int{model.CustomIONKindEditableTextNote},
+				Authors: []string{pub},
+				Search:  "expiration:true",
+			},
+		}.String()
+
+		result, err := helperExecuteJob(t, t.Context(), &ev)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equalf(t, strconv.Itoa(storiesCount), result.Content, "expected %d user stories", storiesCount)
 	})
 }
