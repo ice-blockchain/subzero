@@ -6,6 +6,7 @@ replace (
 	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250618110920-2070eacdb5f5
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250526200347-5fdf966dbe09
+
 )
 
 require (
@@ -29,7 +30,7 @@ require (
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
 	github.com/google/uuid v1.6.0
-	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250708143828-00dc6db78ee2
+	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250710113510-9226980ad65a
 	github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830
 	github.com/imroc/req/v3 v3.54.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -156,7 +157,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250708143828-00dc6db78ee2 // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20250710113510-9226980ad65a // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
