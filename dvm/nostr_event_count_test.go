@@ -1006,9 +1006,12 @@ func TestCountUserStories(t *testing.T) {
 			require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 			var note model.Event
-			note.Kind = nostr.KindTextNote
+			note.Kind = model.CustomIONKindEditableTextNote
 			note.Content = "user story note " + strconv.Itoa(i)
 			note.CreatedAt = ev.CreatedAt.Add(time.Minute)
+			note.Tags = model.Tags{
+				{"d", "note_" + strconv.Itoa(i)},
+			}
 			require.NoError(t, note.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, query.AcceptEvents(t.Context(), &note, &ev))
 		}
