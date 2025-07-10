@@ -31,6 +31,7 @@ var (
 	ErrOnBehalfAccessDenied      = model.ErrOnBehalfAccessDenied
 	ErrRepostOfDeletedPost       = errors.New("repost of deleted post")
 	ErrInvalidEvent              = errors.New("invalid event")
+	ErrInvalidRequest            = errors.New("invalid request")
 	ErrRaceCondition             = errors.New("race condition")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
@@ -920,6 +921,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 
 		data, err := connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
 		if err != nil {
+			err = handleError(err)
 			if errors.Is(err, connector.ErrNotFound) {
 				err = nil
 			}
@@ -956,6 +958,9 @@ func handleError(err error) error {
 		}
 	case errors.Is(err, connector.ErrInvalidData):
 		return ErrInvalidEvent
+	case errors.Is(err, connector.ErrInternal):
+		log.Printf("[DB] error: %v: %s", err, errors.FlattenDetails(err))
+		return ErrInvalidRequest
 	case errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation):
 		return ErrRaceCondition
 	}

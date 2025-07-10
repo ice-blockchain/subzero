@@ -59,6 +59,8 @@ func parseError(err error) error {
 			return errors.Join(ErrException, err)
 		case pgerrcode.CharacterNotInRepertoire:
 			return ErrInvalidData
+		case pgerrcode.SyntaxError:
+			return errors.WithDetail(ErrInternal, dbErr.Error())
 		}
 	}
 

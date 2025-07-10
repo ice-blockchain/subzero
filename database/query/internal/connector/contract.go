@@ -26,6 +26,7 @@ var (
 	ErrOperatorError        = errors.New("operator error")
 	ErrException            = errors.New("exception")
 	ErrInvalidData          = errors.New("invalid data")
+	ErrInternal             = errors.New("internal error")
 )
 
 type (
