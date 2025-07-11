@@ -4,9 +4,6 @@ package dvm
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	_ "embed"
 	"fmt"
 	"log"
 	"strconv"
@@ -22,159 +19,137 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 type (
-	JobFeedbackStatus = string
-	JobItem           interface {
+	Config struct {
+		PrivateKey string `yaml:"private-key" validate:"required"`
+		RelayURL   string `yaml:"relay-url"   validate:"required,url"`
+	}
+
+	Option func(*dvm)
+
+	jobItem interface {
 		Process(ctx context.Context, e *model.Event) (result string, err error)
 		RequiredPaymentAmount() float64
 		IsBidAmountEnough(amount string) bool
 	}
 
 	jobInfo struct {
-		Event        *model.Event
-		OutputRelays []string
-		Cancel       context.CancelFunc
+		Result chan *model.Event
+		Event  *model.Event
+		Cancel context.CancelFunc
 	}
 
 	dvm struct {
-		Jobs            *xsync.Map[string, *jobInfo]
-		RelayConnectTLS *tls.Config
-		PrivateKey      string
-		responseCache   *ttlcache.Cache[string, *xsync.Map[string, *model.Event]]
-	}
-	config struct {
-		PrivateKey string `yaml:"private-key" validate:"required"`
-		TLSCert    string `yaml:"tls-cert"`
-		TLSKey     string `yaml:"tls-key"`
-		RelayURL   string `yaml:"relay-url" validate:"required,url"`
+		WG            *sync.WaitGroup
+		Jobs          *xsync.Map[string, *jobInfo]
+		ResponseCache *ttlcache.Cache[string, *xsync.Map[string, *model.Event]]
+		Config        *Config
+		PublicKey     string
 	}
 )
 
-var (
+const (
 	jobTimeoutDeadline = 1 * time.Minute
-	globalDVM          *dvm
-	globalConfig       *config
+	logThreshold       = 100 * time.Millisecond
 )
 
-func MustInit(ctx context.Context) {
-	globalConfig = cfg.MustGet[config]()
-	globalDVM = &dvm{
+func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
+	var err error
+
+	server := &dvm{
+		WG:            new(sync.WaitGroup),
+		Config:        cfg.MustGet[Config](),
 		Jobs:          xsync.NewMap[string, *jobInfo](),
-		PrivateKey:    globalConfig.PrivateKey,
-		responseCache: ttlcache.New(ttlcache.WithTTL[string, *xsync.Map[string, *model.Event]](model.DVMJobResultExpiration)),
+		ResponseCache: ttlcache.New(ttlcache.WithTTL[string, *xsync.Map[string, *model.Event]](model.DVMJobResultExpiration)),
 	}
-	go globalDVM.responseCache.Start()
-	if globalConfig.TLSKey != "-" && globalConfig.TLSCert != "-" {
-		globalDVM.RelayConnectTLS = buildTLS()
+
+	for i := range opts {
+		opts[i](server)
 	}
+
+	server.PublicKey, err = model.GetPublicKey(server.Config.PrivateKey)
+	if err != nil {
+		log.Panicf("DVM: can't get public key from private key: %v", err)
+	}
+
+	go server.ResponseCache.Start()
 	go func() {
 		<-ctx.Done()
-		globalDVM.responseCache.Stop()
+		log.Printf("DVM: shutting down")
+		server.WG.Wait()
+		server.ResponseCache.Stop()
 	}()
+
+	return server
 }
 
-func buildTLS() *tls.Config {
-	cert, err := tls.X509KeyPair([]byte(globalConfig.TLSCert), []byte(globalConfig.TLSKey))
-	if err != nil {
-		log.Panic(err)
-	}
-	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM([]byte(globalConfig.TLSCert)); !ok {
-		log.Panic(errors.New("failed to append tls to cert pool"))
-	}
-
-	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		RootCAs:      caCertPool,
-		Certificates: []tls.Certificate{cert},
+func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Event) {
+	d.acceptDVMResponseEvent(result)
+	select {
+	case <-time.After(time.Minute):
+		log.Printf("DVM: job %v: result submission timeout", task.Event.ID)
+	case <-ctx.Done():
+	case task.Result <- result:
 	}
 }
 
-func AcceptJob(ctx context.Context, event *model.Event) error {
-	return globalDVM.AcceptJob(ctx, event)
-}
-
-func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) error {
-	if (event.Kind < 5000 && event.Kind != nostr.KindDeletion) || event.Kind > 7000 {
-		return nil
-	}
-	if event.IsJobResponse() {
-		return errors.Wrapf(d.acceptDVMResponseEvent(event), "failed to accept dvm response")
-	}
-
-	if err := validation.Validate(ctx, event); err != nil {
-		return errors.Wrapf(err, "wrong dvm job: %v", event)
+func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.Event, error) {
+	if (event.Kind < 5000 && event.Kind != nostr.KindDeletion) || event.Kind > nostr.KindJobFeedback {
+		return nil, nil
 	}
 
 	if event.Kind == nostr.KindDeletion {
-		log.Printf("DVM: job delete request: %v", event.GetTag("e").Value())
-
-		return d.handleDeletionEvent(ctx, event)
+		return nil, d.handleDeletionEvent(ctx, event)
 	}
 
 	// Disabled for now.
 	if false {
-		res, err := d.isServiceProviderCustomerInterestedIn(event)
-		if err != nil {
-			log.Print("can't check if service provider is interested: ", err)
-
-			return nil
-		}
-		if !res {
+		if event.GetTag("p").Value() != d.PublicKey {
 			log.Printf("dvm job is not for specified for this service provider: %v", event)
-
-			return nil
+			return nil, nil
 		}
 	}
 
-	var relayList []string
 	for _, tag := range event.Tags {
-		if tag.Key() == "relays" && len(tag) > 1 {
-			for ix := 1; ix < len(tag); ix++ {
-				relayList = append(relayList, tag[ix])
-			}
+		if tag.Key() == "relays" {
+			// TODO: remove later.
+			log.Panicf("DVM: job %v: found %q tag", event.ID, tag.Key())
 		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
 	task := &jobInfo{
-		Event:        event,
-		OutputRelays: relayList,
-		Cancel:       cancel,
+		Result: make(chan *model.Event, 1),
+		Event:  event,
+		Cancel: cancel,
 	}
 	d.Jobs.Store(event.ID, task)
 
+	d.WG.Add(1)
 	go func() {
 		defer d.Jobs.Delete(event.ID)
 		defer cancel()
 
 		d.execute(ctx, task)
+		d.WG.Done()
+		close(task.Result)
 	}()
 
-	return nil
-}
-
-func (d *dvm) isServiceProviderCustomerInterestedIn(event *model.Event) (res bool, err error) {
-	pubKey, err := model.GetPublicKey(d.PrivateKey)
-	if err != nil {
-		return false, errors.Wrap(err, "can't get public key")
-	}
-	tag := event.GetTag("p")
-
-	return tag != nil && tag.Value() == pubKey, nil
+	return task.Result, nil
 }
 
 func (d *dvm) handleDeletionEvent(ctx context.Context, event *model.Event) error {
-	stopEventID := event.GetTag("e")
-	kTag := event.GetTag("k")
-	if stopEventID == nil || kTag == nil {
+	stopEventID := event.GetTag("e").Value()
+	kTag := event.GetTag("k").Value()
+	if stopEventID == "" || kTag == "" {
 		return nil
 	}
 
-	stopEventKind, err := strconv.Atoi(kTag.Value())
+	log.Printf("DVM: job delete request: %v / %v", stopEventID, kTag)
+
+	stopEventKind, err := strconv.Atoi(kTag)
 	if err != nil {
 		return errors.Wrapf(err, "can't parse stop event kind for id: %v", stopEventID)
 	} else if stopEventKind < 5000 || stopEventKind > 5999 {
@@ -184,15 +159,15 @@ func (d *dvm) handleDeletionEvent(ctx context.Context, event *model.Event) error
 	reqCtx, reqCancel := context.WithTimeout(ctx, jobTimeoutDeadline)
 	defer reqCancel()
 
-	return errors.Wrapf(d.stopEvent(reqCtx, event, stopEventID.Value()), "dvm job deletion kind, failed to stop event with id %q and kind %d: %v", stopEventID, stopEventKind, err)
+	return errors.Wrapf(d.stopEvent(reqCtx, event, stopEventID), "dvm job deletion kind, failed to stop event with id %q and kind %d: %v", stopEventID, stopEventKind, err)
 }
 
 func (d *dvm) execute(ctx context.Context, task *jobInfo) {
-	var job JobItem
+	var job jobItem
 
 	switch task.Event.Kind {
 	case model.KindJobNostrEventCount:
-		job = newNostrEventCountJob(d.RelayConnectTLS)
+		job = newNostrEventCountJob(d)
 
 	default:
 		log.Printf("DVM: job %v: kind: %v: not supported", task.Event.ID, task.Event.Kind)
@@ -200,9 +175,16 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 		return
 	}
 
+	start := time.Now()
+	defer func() {
+		if elapsed := time.Since(start); elapsed > logThreshold {
+			log.Printf("DVM: job %v: processed in %v", task.Event.ID, elapsed)
+		}
+	}()
+
 	bidTag := task.Event.GetTag("bid")
 	if bidTag != nil && !job.IsBidAmountEnough(bidTag.Value()) {
-		if err := d.publishJobFeedback(ctx, task, task.Event, model.JobFeedbackStatusPaymentRequired, "Bid amount is not enough", job.RequiredPaymentAmount()); err != nil {
+		if err := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusPaymentRequired, "Bid amount is not enough", job.RequiredPaymentAmount()); err != nil {
 			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, err)
 		}
 		return
@@ -216,7 +198,7 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 	}
 
 	if err != nil {
-		if fErr := d.publishJobFeedback(ctx, task, task.Event, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
+		if fErr := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
 			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, fErr)
 		}
 		return
@@ -224,45 +206,38 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 
 	result, err := d.finalizeJob(task.Event, jobResult, job.RequiredPaymentAmount())
 	if err != nil {
-		if fErr := d.publishJobFeedback(ctx, task, task.Event, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
+		if fErr := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
 			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, fErr)
 		}
 		return
 	}
 
 	if err := d.publishJobResult(ctx, task, result); err != nil {
-		if fErr := d.publishJobFeedback(ctx, task, task.Event, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
+		if fErr := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
 			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, fErr)
 		}
 	}
 }
 
 func (d *dvm) finalizeJob(incomingEvent *model.Event, payload string, reqiredPaymentAmount float64) (*model.Event, error) {
-	pubKey, err := model.GetPublicKey(d.PrivateKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "can't get public key")
-	}
-	now := time.Now()
-	result := model.Event{
-		Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(now.Unix()),
-			Content:   payload,
-			Kind:      incomingEvent.Kind + 1000,
-			Tags: model.Tags{
-				{"request", incomingEvent.String()},
-				{"e", incomingEvent.ID, globalConfig.RelayURL},
-				{"expiration", strconv.FormatInt(now.Add(model.DVMJobResultExpiration).Unix(), 10)},
-				{"p", incomingEvent.GetMasterPublicKey()},
-				{model.CustomIONTagOnBehalfOf, pubKey},
-			},
-		},
+	var result model.Event
+
+	result.CreatedAt = nostr.Now()
+	result.Content = payload
+	result.Kind = incomingEvent.Kind + 1000
+	result.Tags = model.Tags{
+		{"request", incomingEvent.String()},
+		{"e", incomingEvent.ID, d.Config.RelayURL},
+		{"expiration", result.CreatedAt.Add(model.DVMJobResultExpiration).String()},
+		{"p", incomingEvent.GetMasterPublicKey()},
+		{model.CustomIONTagOnBehalfOf, d.PublicKey},
 	}
 
 	if reqiredPaymentAmount > 0 {
 		result.Tags = append(result.Tags, model.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
 	}
 
-	if err := result.SignWithAlg(d.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+	if err := result.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		return nil, errors.Wrapf(err, "failed to sign event: %v", result)
 	}
 
@@ -272,24 +247,25 @@ func (d *dvm) finalizeJob(incomingEvent *model.Event, payload string, reqiredPay
 func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model.Event) error {
 	var wg sync.WaitGroup
 
-	wg.Add(len(task.OutputRelays))
+	d.SubmitResult(ctx, task, result)
+
+	relays := connectToRelays(ctx, task.Event.ID, collectTargetRelayURLsFromEvent(task.Event))
+	if len(relays) == 0 {
+		return nil
+	}
+	defer closeRelays(relays)
+
+	wg.Add(len(relays))
 	successfull := atomic.Int32{}
-	for _, relay := range task.OutputRelays {
+	for _, relay := range relays {
 		go func() {
 			defer wg.Done()
 
-			r := nostr.NewRelay(ctx, relay)
-			if err := r.ConnectWithTLS(ctx, d.RelayConnectTLS); err != nil {
-				log.Printf("DVM: job %v: failed to connect to relay: %v, err: %v", task.Event.ID, relay, err)
-				return
-			}
-			defer r.Close()
-
-			err := r.Publish(ctx, result.Event)
+			err := relay.Publish(ctx, result.Event)
 			if err != nil && strings.Contains(err.Error(), "auth-required:") {
-				err = errors.Wrap(r.Auth(ctx, func(event *nostr.Event) error {
+				err = errors.Wrap(relay.Auth(ctx, func(event *nostr.Event) error {
 					subZeroEvent := model.Event{Event: *event}
-					if err := subZeroEvent.SignWithAlg(d.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+					if err := subZeroEvent.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 						return err
 					}
 					*event = subZeroEvent.Event
@@ -297,7 +273,7 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 					return nil
 				}), "failed to authenticate to relay")
 				if err == nil {
-					err = r.Publish(ctx, result.Event)
+					err = relay.Publish(ctx, result.Event)
 				}
 			}
 			if err != nil {
@@ -310,8 +286,8 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 
 	wg.Wait()
 
-	if len(task.OutputRelays) > 0 && successfull.Load() == 0 && ctx.Err() == nil {
-		return errors.Errorf("failed to publish job result to %d relay(s)", len(task.OutputRelays))
+	if len(relays) > 0 && successfull.Load() == 0 && ctx.Err() == nil {
+		return errors.Errorf("failed to publish job result to %d relay(s)", len(relays))
 	}
 	return nil
 }
@@ -329,50 +305,44 @@ func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID strin
 	return errors.Wrapf(d.publishJobFeedback(
 		ctx,
 		jobInfo,
-		event,
 		model.JobFeedbackStatusError,
 		fmt.Sprintf("Job %s has been stopped", stopJobID),
 		0,
 	), "can't publish error feedback: %v", event)
 }
 
-func (d *dvm) publishJobFeedback(ctx context.Context, task *jobInfo, incomingEvent *model.Event, status JobFeedbackStatus, payload string, reqiredPaymentAmount float64) error {
-	pubKey, err := model.GetPublicKey(d.PrivateKey)
-	if err != nil {
-		return errors.Wrap(err, "can't get public key")
-	}
-	now := time.Now()
-	result := model.Event{
-		Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(now.Unix()),
-			Content:   payload,
-			Kind:      nostr.KindJobFeedback,
-			Tags: model.Tags{
-				{"status", status},
-				{"expiration", strconv.FormatInt(now.Add(model.DVMJobResultExpiration).Unix(), 10)},
-				{"e", incomingEvent.ID},
-				{"p", incomingEvent.GetMasterPublicKey()},
-				{model.CustomIONTagOnBehalfOf, pubKey},
-			},
-		},
-	}
-	if reqiredPaymentAmount > 0 {
-		result.Tags = append(result.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
-	}
-	if err := result.SignWithAlg(d.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		return errors.Wrapf(err, "failed to sign event: %v", result)
+func (d *dvm) publishJobFeedback(ctx context.Context, task *jobInfo, status model.JobFeedbackStatus, payload string, reqiredPaymentAmount float64) error {
+	var event model.Event
+
+	event.Kind = nostr.KindJobFeedback
+	event.CreatedAt = nostr.Now()
+	event.Content = payload
+	event.Tags = model.Tags{
+		{"status", string(status)},
+		{"expiration", event.CreatedAt.Add(model.DVMJobResultExpiration).String()},
+		{"e", task.Event.ID},
+		{"p", task.Event.GetMasterPublicKey()},
+		{model.CustomIONTagOnBehalfOf, d.PublicKey},
 	}
 
-	return d.publishJobResult(ctx, task, &result)
+	if reqiredPaymentAmount > 0 {
+		event.Tags = append(event.Tags, nostr.Tag{"amount", strconv.FormatFloat(reqiredPaymentAmount, 'f', -1, 64)})
+	}
+
+	if err := event.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+		return errors.Wrapf(err, "failed to sign event: %v", event)
+	}
+
+	return d.publishJobResult(ctx, task, &event)
 }
 
-func connectToRelays(ctx context.Context, jobID string, relayList []string, conf *tls.Config) (resultRelays []*nostr.Relay) {
+func connectToRelays(ctx context.Context, jobID string, relayList []string) (resultRelays []*nostr.Relay) {
+	if len(relayList) == 0 {
+		return nil
+	}
+
 	for _, relayUrl := range relayList {
-		if globalConfig != nil && globalConfig.RelayURL == relayUrl {
-			// Skip connecting to self.
-			continue
-		}
-		relay, err := connectToRelay(ctx, relayUrl, conf)
+		relay, err := connectToRelay(ctx, relayUrl)
 		if err != nil {
 			log.Printf("DVM: job %v: error: failed to connect to relay: %v, err: %v", jobID, relayUrl, err)
 		} else {
@@ -382,16 +352,17 @@ func connectToRelays(ctx context.Context, jobID string, relayList []string, conf
 	return resultRelays
 }
 
-func connectToRelay(ctx context.Context, url string, conf *tls.Config) (*nostr.Relay, error) {
+func connectToRelay(ctx context.Context, url string) (*nostr.Relay, error) {
 	relay := nostr.NewRelay(ctx, url, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
 		subzeroEvent := model.Event{Event: *e}
 		ok, _ := subzeroEvent.CheckSignature()
 
 		return ok
 	}))
-	err := relay.ConnectWithTLS(ctx, conf)
+
+	err := relay.Connect(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "can't connect to the relays")
+		return nil, err
 	}
 
 	return relay, nil
@@ -400,10 +371,33 @@ func connectToRelay(ctx context.Context, url string, conf *tls.Config) (*nostr.R
 func closeRelays(relayList []*nostr.Relay) {
 	for _, r := range relayList {
 		if err := r.Close(); err != nil {
-			log.Printf("Can't close relay:%v, err:%v", r.URL, err)
-
+			log.Printf("[DVM]: can't close relay:%v, err:%v", r.URL, err)
 			continue
 		}
-		log.Printf("Closed relay:%v", r.URL)
 	}
+}
+
+func collectSourceRelayURLsFromEvent(e *model.Event, selfURL string) (relayList []string) {
+	for _, tag := range e.Tags {
+		if tag.Key() == "param" && tag.Value() == "relay" {
+			for _, relayURL := range tag[2:] {
+				if selfURL != "" && relayURL == selfURL {
+					continue
+				}
+				relayList = append(relayList, relayURL)
+			}
+		}
+	}
+	return relayList
+}
+
+func collectTargetRelayURLsFromEvent(e *model.Event) (relayList []string) {
+	for _, tag := range e.Tags {
+		if tag.Key() == "relays" && len(tag) > 1 {
+			for ix := 1; ix < len(tag); ix++ {
+				relayList = append(relayList, tag[ix])
+			}
+		}
+	}
+	return relayList
 }

@@ -57,7 +57,7 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
 		}
-		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
+		if _, err := dvm.AcceptJob(ctx, events[0]); err != nil {
 			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
 		}
 

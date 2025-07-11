@@ -58,20 +58,19 @@ func TestJobOnline(t *testing.T) {
 
 	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		for _, ev := range events {
-			if ev.Kind == model.KindDVMCountResponse {
-				jobResults <- ev
-			}
-		}
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		ch, err := dvm.AcceptJob(ctx, events[0])
+		require.NoError(t, err)
+
+		if ch != nil {
+			jobResults <- <-ch
+		}
 
 		return nil
 	})
 	privkey := model.GeneratePrivateKey()
-	servicePubkey, err := dvm.PublicKey()
-	require.NoError(t, err)
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	article1 := &model.Event{
@@ -132,9 +131,7 @@ func TestJobOnline(t *testing.T) {
 				CreatedAt: 5,
 				Kind:      model.KindJobNostrEventCount,
 				Tags: model.Tags{
-					model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
-					model.Tag{"p", servicePubkey},
-					model.Tag{"relays", pubsubServers[0].Endpoint()},
+					model.Tag{"p", dvm.PublicKey()},
 				},
 				Content: helperNewFilter(t, model.Filter{Search: "foo", Authors: []string{article1.PubKey}}),
 			},
@@ -153,10 +150,8 @@ func TestJobOnline(t *testing.T) {
 				CreatedAt: 6,
 				Kind:      model.KindJobNostrEventCount,
 				Tags: model.Tags{
-					model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
-					model.Tag{"p", servicePubkey},
+					model.Tag{"p", dvm.PublicKey()},
 					model.Tag{"param", "group", "content"},
-					model.Tag{"relays", pubsubServers[0].Endpoint()},
 				},
 				Content: helperNewFilter(t, model.Filter{
 					Kinds: []int{nostr.KindReaction},
@@ -178,10 +173,8 @@ func TestJobOnline(t *testing.T) {
 				CreatedAt: 7,
 				Kind:      model.KindJobNostrEventCount,
 				Tags: model.Tags{
-					model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
-					model.Tag{"p", servicePubkey},
+					model.Tag{"p", dvm.PublicKey()},
 					model.Tag{"param", "group", "pubkey"},
-					model.Tag{"relays", pubsubServers[0].Endpoint()},
 				},
 				Content: helperNewFilter(t, model.Filter{
 					Search: "foo",
@@ -235,76 +228,6 @@ func TestJobOnline(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
-func TestJobDeletion(t *testing.T) {
-	jobResults := make(chan *model.Event, 1)
-	wake := make(chan struct{}, 1)
-
-	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
-		select {
-		case <-wake:
-		case <-time.After(time.Second * 10):
-		case <-ctx.Done():
-		}
-		return query.GetStoredEvents(ctx, filters...)
-	})
-	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		for _, ev := range events {
-			if ev.Kind == 7000 {
-				jobResults <- ev
-			}
-		}
-		require.True(t, len(events) > 0)
-		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
-
-		return nil
-	})
-
-	privkey, pubkey := model.GenerateKeyPair()
-	servicePubkey, err := dvm.PublicKey()
-	require.NoError(t, err)
-	relay := helperMustNewRelay(t, pubsubServers[0])
-
-	jobReq := &model.Event{
-		Event: nostr.Event{
-			Kind: model.KindJobNostrEventCount,
-			Tags: model.Tags{
-				model.Tag{"p", servicePubkey},
-				model.Tag{"param", "group", "pubkey"},
-				model.Tag{"param", "relay", pubsubServers[1].Endpoint()},
-				model.Tag{"relays", pubsubServers[0].Endpoint()},
-			},
-			Content: helperNewFilter(t, model.Filter{
-				Search: "foo",
-				Kinds:  []int{nostr.KindArticle},
-				Tags:   model.TagMap{}.SetLiterals("title", "dummy"),
-			}),
-		},
-	}
-	helperSignWithMinLeadingZeroBits(t, jobReq, privkey)
-	require.NoError(t, relay.Publish(t.Context(), jobReq.Event))
-
-	jobStop := &model.Event{
-		Event: nostr.Event{
-			Kind: nostr.KindDeletion,
-			Tags: model.Tags{
-				{"e", jobReq.ID},
-				{"k", strconv.Itoa(jobReq.Kind)},
-				{"p", jobReq.PubKey},
-				{model.CustomIONTagOnBehalfOf, pubkey},
-			},
-		},
-	}
-	helperSignWithMinLeadingZeroBits(t, jobStop, privkey)
-	require.NoError(t, relay.Publish(t.Context(), jobStop.Event))
-
-	resp := helperWaitFor(t, jobResults, time.Minute)
-	wake <- struct{}{}
-	t.Logf("received DVM response: %+v", resp)
-	require.Equal(t, resp.GetTag("status").Value(), model.JobFeedbackStatusError)
-	helperMustCloseRelay(t, relay)
-}
-
 func TestErrorFeedback(t *testing.T) {
 	t.Skip("TODO: figure out how to simulate error feedback")
 
@@ -316,27 +239,29 @@ func TestErrorFeedback(t *testing.T) {
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, ev := range events {
 			t.Logf("received event: %+v", ev)
-			if ev.Kind == 7000 {
+			if ev.Kind == nostr.KindJobFeedback {
 				jobResults <- ev
 			}
 		}
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+		ch, err := dvm.AcceptJob(ctx, events[0])
+		require.NoError(t, err)
+		require.NotNil(t, ch)
+
+		jobResults <- <-ch
 
 		return nil
 	})
 
 	privkey := model.GeneratePrivateKey()
-	servicePubkey, err := dvm.PublicKey()
-	require.NoError(t, err)
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	jobReq := &model.Event{
 		Event: nostr.Event{
 			Kind: model.KindJobNostrEventCount,
 			Tags: model.Tags{
-				model.Tag{"p", servicePubkey},
+				model.Tag{"p", dvm.PublicKey()},
 				model.Tag{"param", "relay", "wss://somerandomrelay"},
 				model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
 				model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
@@ -359,165 +284,20 @@ func TestErrorFeedback(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 }
 
-func TestJobOffline(t *testing.T) {
-	jobResults := make(chan *model.Event, 1)
-
-	RegisterWSSubscriptionListener(query.GetStoredEvents)
-	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		for _, ev := range events {
-			if ev.Kind == model.KindDVMCountResponse {
-				jobResults <- ev
-			}
-		}
-		require.True(t, len(events) > 0)
-		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
-
-		return nil
-	})
-
-	privkey := model.GeneratePrivateKey()
-	servicePubkey, err := dvm.PublicKey()
-	require.NoError(t, err)
-	relay := helperMustNewRelay(t, pubsubServers[0])
-
-	article1 := &model.Event{
-		Event: nostr.Event{
-			CreatedAt: 1,
-			Kind:      nostr.KindTextNote,
-			Content:   "dummy content 1",
-		},
-	}
-	article2 := &model.Event{
-		Event: nostr.Event{
-			CreatedAt: 2,
-			Kind:      nostr.KindArticle,
-			Tags: model.Tags{
-				{"title", "dummy"},
-				{"d", "foo"},
-			},
-			Content: "dummy content 2",
-		},
-	}
-	t.Run("Send articles", func(t *testing.T) {
-		helperSignWithMinLeadingZeroBits(t, article1, privkey)
-		helperSignWithMinLeadingZeroBits(t, article2, privkey)
-		require.NoError(t, relay.PublishMany(t.Context(), &article1.Event, &article2.Event))
-	})
-
-	reaction1 := &model.Event{
-		Event: nostr.Event{
-			CreatedAt: 3,
-			Kind:      nostr.KindReaction,
-			Tags: model.Tags{
-				model.Tag{"e", article1.ID, "relay"},
-				model.Tag{"p", article1.PubKey},
-				model.Tag{"k", strconv.Itoa(article1.Kind)},
-			},
-			Content: "+",
-		},
-	}
-	reaction2 := &model.Event{
-		Event: nostr.Event{
-			CreatedAt: 4,
-			Kind:      nostr.KindReaction,
-			Tags: model.Tags{
-				model.Tag{"e", article1.ID, "relay"},
-				model.Tag{"p", article1.PubKey},
-				model.Tag{"k", strconv.Itoa(article1.Kind)},
-			},
-			Content: "-",
-		},
-	}
-	t.Run("send reactions", func(t *testing.T) {
-		helperSignWithMinLeadingZeroBits(t, reaction1, privkey)
-		helperSignWithMinLeadingZeroBits(t, reaction2, privkey)
-		require.NoError(t, relay.PublishMany(t.Context(), &reaction1.Event, &reaction2.Event))
-	})
-	t.Run("send dvm search nostr count job for author filter", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: 5,
-				Kind:      model.KindJobNostrEventCount,
-				Tags: model.Tags{
-					model.Tag{"p", servicePubkey},
-					model.Tag{"relays", pubsubServers[0].Endpoint()},
-				},
-				Content: helperNewFilter(t, model.Filter{Search: "foo", Authors: []string{article1.PubKey}}),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Minute)
-		t.Logf("received DVM response: %+v", resp)
-		require.Equal(t, ev.String(), resp.GetTag("request").Value())
-		require.Equal(t, "4", resp.Content) // 2 reactions + 2 articles.
-	})
-	t.Run("send dvm search nostr count job for kinds and #e filter groupped by content", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: 6,
-				Kind:      model.KindJobNostrEventCount,
-				Tags: model.Tags{
-					model.Tag{"p", servicePubkey},
-					model.Tag{"param", "group", "content"},
-					model.Tag{"relays", pubsubServers[0].Endpoint()},
-				},
-				Content: helperNewFilter(t, model.Filter{
-					Kinds: []int{nostr.KindReaction},
-					Tags:  model.TagMap{}.SetLiterals("e", article1.ID),
-				}),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Minute)
-		t.Logf("received DVM response: %+v", resp)
-		require.Equal(t, ev.String(), resp.GetTag("request").Value())
-		require.JSONEq(t, `{"+":1,"-":1}`, resp.Content)
-	})
-	t.Run("send dvm search nostr count job with 0 result for group", func(t *testing.T) {
-		ev := &model.Event{
-			Event: nostr.Event{
-				CreatedAt: 7,
-				Kind:      model.KindJobNostrEventCount,
-				Tags: model.Tags{
-					model.Tag{"p", servicePubkey},
-					model.Tag{"param", "group", "pubkey"},
-					model.Tag{"relays", pubsubServers[0].Endpoint()},
-				},
-				Content: helperNewFilter(t, model.Filter{
-					Search:  "foo",
-					Kinds:   []int{nostr.KindArticle},
-					Authors: []string{article1.PubKey},
-					Tags:    model.TagMap{}.SetLiterals("title", "dummy"),
-				}),
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-		require.NoError(t, relay.Publish(t.Context(), ev.Event))
-		resp := helperWaitFor(t, jobResults, time.Minute)
-		t.Logf("received DVM response: %+v", resp)
-		require.Equal(t, ev.String(), resp.GetTag("request").Value())
-		require.Equal(t, "1", resp.Content) // 1 article.
-	})
-	time.Sleep(time.Second)
-	helperMustCloseRelay(t, relay)
-}
-
 func TestJobMembersCount_OpenCommunity(t *testing.T) {
 	jobResults := make(chan *model.Event, 1)
 
 	RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 	RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		for _, ev := range events {
-			if ev.Kind == model.KindDVMCountResponse {
-				jobResults <- ev
-			}
-		}
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		ch, err := dvm.AcceptJob(ctx, events[0])
+		require.NoError(t, err)
+
+		if ch != nil {
+			jobResults <- <-ch
+		}
 
 		return nil
 	})
@@ -596,7 +376,13 @@ func TestJobMembersCount_ClosedCommunity(t *testing.T) {
 		}
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		ch, err := dvm.AcceptJob(ctx, events[0])
+		require.NoError(t, err)
+
+		if ch != nil {
+			jobResults <- <-ch
+		}
 
 		return nil
 	})
@@ -700,7 +486,13 @@ func TestJobMembersCount_CommunityDefinitionChanged(t *testing.T) {
 		}
 		require.True(t, len(events) > 0)
 		require.NoError(t, query.AcceptEvents(ctx, events...))
-		require.NoError(t, dvm.AcceptJob(ctx, events[0]))
+
+		ch, err := dvm.AcceptJob(ctx, events[0])
+		require.NoError(t, err)
+
+		if ch != nil {
+			jobResults <- <-ch
+		}
 
 		return nil
 	})
@@ -917,18 +709,14 @@ func helperCountMembers(t *testing.T, relay *nostrRelay, jobResults chan *model.
 	t.Helper()
 	responses := make([]*model.Event, 0)
 	commonUserForFirst2Reqs := model.GeneratePrivateKey()
-	servicePubkey, err := dvm.PublicKey()
-	require.NoError(t, err)
 	ev := &model.Event{
 		Event: nostr.Event{
 			CreatedAt: 5,
 			Kind:      model.KindJobNostrEventCount,
 			Tags: model.Tags{
-				model.Tag{"param", "relay", pubsubServers[0].Endpoint()},
-				model.Tag{"p", servicePubkey},
-				model.Tag{"relays", pubsubServers[0].Endpoint()},
+				{"p", dvm.PublicKey()},
 			},
-			Content: helperNewFilter(t, model.Filter{Tags: nostr.TagMap{}.SetLiterals("h", communityID), Kinds: []int{model.CustomIONKindCommunityJoin}}),
+			Content: helperNewFilter(t, model.Filter{Tags: model.TagMap{}.SetLiterals("h", communityID), Kinds: []int{model.CustomIONKindCommunityJoin}}),
 		},
 	}
 	helperSignWithMinLeadingZeroBits(t, ev, commonUserForFirst2Reqs)

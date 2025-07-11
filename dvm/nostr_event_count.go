@@ -4,7 +4,6 @@ package dvm
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"log"
 	"strconv"
@@ -21,17 +20,15 @@ import (
 const (
 	NostrEventCountGroupContent = "content"
 	NostrEventCountGroupPubkey  = "pubkey"
-	NostrEventCountGroupReply   = "reply"
-	NostrEventCountGroupRoot    = "root"
 )
 
 type nostrEventCountJob struct {
-	RelayConnectTLS *tls.Config
+	dvm *dvm
 }
 
-func newNostrEventCountJob(relayConnectTLS *tls.Config) *nostrEventCountJob {
+func newNostrEventCountJob(dvm *dvm) *nostrEventCountJob {
 	return &nostrEventCountJob{
-		RelayConnectTLS: relayConnectTLS,
+		dvm: dvm,
 	}
 }
 
@@ -43,10 +40,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 		return "0", errors.Wrapf(err, "failed to parse filters: %v", e.Content)
 	}
 
-	queryRelays := connectToRelays(ctx, e.ID, collectRelayURLsFromEvent(e), n.RelayConnectTLS)
-	defer closeRelays(queryRelays)
-
-	countString, err := n.doCount(ctx, e, filters, queryRelays)
+	countString, err := n.doCount(ctx, e, filters)
 	if err != nil {
 		return "0", errors.Wrap(err, "count failed")
 	}
@@ -54,7 +48,7 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 	return countString, nil
 }
 
-func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filters model.Filters, queryRelays []*nostr.Relay) (result string, err error) {
+func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filters model.Filters) (result string, err error) {
 	var groupBy string
 	for _, tag := range e.Tags {
 		if tag.Key() == "param" && tag.Value() == "group" && len(tag) > 2 {
@@ -63,7 +57,15 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 		}
 	}
 
-	if len(queryRelays) == 0 || (len(queryRelays) == 1 && globalConfig != nil && queryRelays[0].URL == globalConfig.RelayURL) {
+	sourceList := collectSourceRelayURLsFromEvent(e, n.dvm.Config.RelayURL)
+	if len(sourceList) == 0 {
+		return n.doCountLocal(ctx, filters, groupBy)
+	}
+
+	queryRelays := connectToRelays(ctx, e.ID, sourceList)
+	defer closeRelays(queryRelays)
+
+	if len(queryRelays) == 0 {
 		return n.doCountLocal(ctx, filters, groupBy)
 	}
 
@@ -178,15 +180,6 @@ func countBasedOnGroupsFromEvents(events []*nostr.Event, groups ...string) (stri
 	return string(data), errors.Wrap(err, "failed to marshal group counts")
 }
 
-func getMasterPublicKey(ev *nostr.Event) string {
-	for _, tag := range ev.Tags {
-		if tag.Key() == model.CustomIONTagOnBehalfOf && tag.Value() != "" {
-			return tag.Value()
-		}
-	}
-	return ev.PubKey
-}
-
 func countBasedOnGroups(evList []*nostr.Event, groups ...string) map[string]uint64 {
 	groupCounts := make(map[string]uint64, 0)
 	for _, group := range groups {
@@ -196,9 +189,10 @@ func countBasedOnGroups(evList []*nostr.Event, groups ...string) map[string]uint
 				groupCounts[ev.Content]++
 
 			case NostrEventCountGroupPubkey:
-				groupCounts[getMasterPublicKey(ev)]++
+				x := model.Event{Event: *ev}
+				groupCounts[x.GetMasterPublicKey()]++
 
-			case NostrEventCountGroupRoot, NostrEventCountGroupReply:
+			case model.TagMarkerRoot, model.TagMarkerReply:
 				for _, tag := range ev.Tags {
 					if tag.Key() == "e" && len(tag) > 3 {
 						if tag[3] == group {
@@ -240,17 +234,4 @@ func (n *nostrEventCountJob) IsBidAmountEnough(amount string) bool {
 	}
 
 	return true
-}
-
-func collectRelayURLsFromEvent(e *model.Event) []string {
-	var relayList []string
-	for _, tag := range e.Tags {
-		if tag.Key() == "param" && tag.Value() == "relay" {
-			for _, relayURL := range tag[2:] {
-				relayList = append(relayList, relayURL)
-			}
-		}
-	}
-
-	return relayList
 }

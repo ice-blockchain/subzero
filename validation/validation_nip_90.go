@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	jobFeedbackStatusValues = map[string]struct{}{
+	jobFeedbackStatusValues = map[model.JobFeedbackStatus]struct{}{
 		model.JobFeedbackStatusPaymentRequired: {},
 		model.JobFeedbackStatusProcessing:      {},
 		model.JobFeedbackStatusError:           {},
@@ -121,12 +121,12 @@ func validateKindJobResult(e *model.Event) error {
 }
 
 func validateKindFeedbackJob(e *model.Event) error {
-	statusTag := e.Tags.GetFirst([]string{"status"})
-	if statusTag == nil || len(*statusTag) < 2 {
-		return errors.Wrapf(ErrWrongEventParams, "kind:7000 job feedback, no status tag: %+v", e)
+	statusTag := e.GetTag("status").Value()
+	if statusTag == "" {
+		return errors.Wrap(ErrWrongEventParams, "kind:7000 job feedback, no status tag")
 	}
-	if _, ok := jobFeedbackStatusValues[statusTag.Value()]; !ok {
-		return errors.Wrapf(ErrWrongEventParams, "kind:7000 job feedback, wrong status tag: %+v", e)
+	if _, ok := jobFeedbackStatusValues[model.JobFeedbackStatus(statusTag)]; !ok {
+		return errors.Wrapf(ErrWrongEventParams, "kind:7000 job feedback, wrong status tag: %q", statusTag)
 	}
 	jobRequestIDTag := e.Tags.GetFirst([]string{"e"})
 	if jobRequestIDTag == nil || len(*jobRequestIDTag) != 2 {

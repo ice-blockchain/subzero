@@ -40,10 +40,10 @@ const (
 )
 
 func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
-	if (e.Kind >= 6000 && e.Kind < 7000) || e.Kind == nostr.KindJobFeedback {
+	if minLeadingZeroBits == 0 {
 		return nil
 	}
-	if minLeadingZeroBits == 0 {
+	if e.Kind >= 6000 && e.Kind <= nostr.KindJobFeedback {
 		return nil
 	}
 	if err := nip13.Check(e.ID, minLeadingZeroBits); err != nil {
@@ -211,7 +211,7 @@ func (e *Event) IsJobRequest() bool {
 }
 
 func (e *Event) IsJobResponse() bool {
-	return e.Kind >= 6000 && e.Kind < 7000
+	return e.Kind >= 6000 && e.Kind < nostr.KindJobFeedback
 }
 
 func (e *Event) Address() string {

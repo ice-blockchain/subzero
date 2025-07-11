@@ -13,7 +13,6 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 func TestCountBasedOnGroups(t *testing.T) {
@@ -28,7 +27,7 @@ func TestCountBasedOnGroups(t *testing.T) {
 		{
 			name:     "tag marker reply empty",
 			evList:   []*nostr.Event{},
-			groups:   []string{NostrEventCountGroupReply},
+			groups:   []string{model.TagMarkerReply},
 			expected: map[string]uint64{},
 		},
 		{
@@ -71,7 +70,7 @@ func TestCountBasedOnGroups(t *testing.T) {
 					},
 				},
 			},
-			groups: []string{NostrEventCountGroupReply},
+			groups: []string{model.TagMarkerReply},
 			expected: map[string]uint64{
 				"1234567890abcde1": 2,
 				"1234567890abcde2": 3,
@@ -81,7 +80,7 @@ func TestCountBasedOnGroups(t *testing.T) {
 		{
 			name:     "tag marker reply empty",
 			evList:   []*nostr.Event{},
-			groups:   []string{NostrEventCountGroupRoot},
+			groups:   []string{model.TagMarkerRoot},
 			expected: map[string]uint64{},
 		},
 		{
@@ -124,7 +123,7 @@ func TestCountBasedOnGroups(t *testing.T) {
 					},
 				},
 			},
-			groups: []string{NostrEventCountGroupRoot},
+			groups: []string{model.TagMarkerRoot},
 			expected: map[string]uint64{
 				"1234567890abcde1": 1,
 				"1234567890abcde2": 4,
@@ -340,7 +339,7 @@ func TestCountBasedOnGroups(t *testing.T) {
 					},
 				},
 			},
-			groups: []string{NostrEventCountGroupPubkey, NostrEventCountGroupRoot, NostrEventCountGroupContent, NostrEventCountGroupReply},
+			groups: []string{NostrEventCountGroupPubkey, model.TagMarkerRoot, NostrEventCountGroupContent, model.TagMarkerReply},
 			expected: map[string]uint64{
 				"":                 28,
 				"+":                1,
@@ -462,7 +461,7 @@ func TestCollectRelayURLs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := collectRelayURLsFromEvent(tt.event)
+			actual := collectSourceRelayURLsFromEvent(tt.event, "")
 			require.Equal(t, tt.expected, actual)
 		})
 	}
@@ -506,37 +505,27 @@ func TestIsBidAmountEnough(t *testing.T) {
 	})
 }
 
-func helperExecuteJob(t *testing.T, ctx context.Context, req *model.Event) (*model.Event, error) {
+func helperExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Event) (*model.Event, error) {
 	t.Helper()
 
-	pk, err := PublicKey()
-	require.NoError(t, err)
-	req.Tags = append(req.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pk})
+	req.Tags = append(req.Tags, model.Tag{model.CustomIONTagOnBehalfOf, d.PublicKey})
 
 	req.CreatedAt = nostr.Now()
-	require.NoError(t, req.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, validation.Validate(ctx, req))
+	require.NoError(t, req.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	job := newNostrEventCountJob(nil)
-	require.NotNil(t, job)
-
-	payload, err := job.Process(ctx, req)
+	ch, err := d.AcceptJob(ctx, req)
 	if err != nil {
 		return nil, err
 	}
+	require.NotNil(t, ch)
 
-	result, err := globalDVM.finalizeJob(req, payload, job.RequiredPaymentAmount())
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return <-ch, nil
 }
 
-func helperMustExecuteJob(t *testing.T, ctx context.Context, req *model.Event) *model.Event {
+func helperMustExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Event) *model.Event {
 	t.Helper()
 
-	result, err := helperExecuteJob(t, ctx, req)
+	result, err := helperExecuteJob(t, ctx, d, req)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -583,46 +572,42 @@ func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 func TestEventCountersConsistency(t *testing.T) {
 	t.Parallel()
 
-	pub, err := model.GetPublicKey(globalDVM.PrivateKey)
-	require.NoError(t, err)
+	d := mustNewDVM(t.Context())
 
 	cases := []struct {
 		Name       string
 		RequestDVM model.Event
 		RequestDB  model.Filter
 		Count      string
-		Events     func(t *testing.T) []*model.Event
-		Before     func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event)
+		Events     func(t *testing.T, d *dvm) []*model.Event
+		Before     func(t *testing.T, d *dvm, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event)
 	}{
 		{
 			Name: "For every kind 1 that the subscription finds also include the count of replies that it has",
 			RequestDB: model.Filter{
-				Authors: []string{pub},
-				Tags:    model.TagMap{}.SetLiterals("x", "y"),
-				Search:  "include:dependencies:kind1>kind6400+kind1+group+reply",
+				Tags:   model.TagMap{}.SetLiterals("x", "y"),
+				Search: "include:dependencies:kind1>kind6400+kind1+group+reply",
 			},
 			RequestDVM: model.Event{
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
-					Tags: model.Tags{
-						{"param", "relay", globalConfig.RelayURL},
-					},
 				},
 			},
-			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+			Before: func(t *testing.T, d *dvm, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+				reqDB.Authors = []string{d.PublicKey}
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{1},
 						Tags:  model.TagMap{}.Set("e", &events[0].ID, nil, model.PointerOf(model.TagMarkerReply)),
 					}}.String()
 			},
-			Events: func(t *testing.T) []*model.Event {
+			Events: func(t *testing.T, d *dvm) []*model.Event {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reply1 model.Event
 				reply1.CreatedAt = 1
@@ -631,13 +616,13 @@ func TestEventCountersConsistency(t *testing.T) {
 					{"e", ev1.ID, "", model.TagMarkerRoot},
 					{"e", ev1.ID, "", model.TagMarkerReply},
 				}
-				require.NoError(t, reply1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reply1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reply2 model.Event
 				reply2.CreatedAt = 2
 				reply2.Kind = nostr.KindTextNote
 				reply2.Tags = reply1.Tags
-				require.NoError(t, reply2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reply2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &reply1, &reply2}
 			},
@@ -646,46 +631,43 @@ func TestEventCountersConsistency(t *testing.T) {
 		{
 			Name: "For every kind 1 that the subscription finds also include the count of reposts that it has",
 			RequestDB: model.Filter{
-				Authors: []string{pub},
-				Tags:    model.TagMap{}.SetLiterals("x", "y"),
-				Search:  "include:dependencies:kind1>kind6400+kind6+group+e",
+				Tags:   model.TagMap{}.SetLiterals("x", "y"),
+				Search: "include:dependencies:kind1>kind6400+kind6+group+e",
 			},
 			RequestDVM: model.Event{
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
-					Tags: model.Tags{
-						{"param", "relay", globalConfig.RelayURL},
-					},
 				},
 			},
-			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+			Before: func(t *testing.T, d *dvm, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+				reqDB.Authors = []string{d.PublicKey}
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{6},
 						Tags:  model.TagMap{}.Set("e", &events[0].ID),
 					}}.String()
 			},
-			Events: func(t *testing.T) []*model.Event {
+			Events: func(t *testing.T, d *dvm) []*model.Event {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var repost1 model.Event
 				repost1.CreatedAt = 1
 				repost1.Kind = nostr.KindRepost
 				repost1.Content = ev1.String()
 				repost1.Tags = append(repost1.Tags, model.Tag{"e", ev1.ID})
-				require.NoError(t, repost1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, repost1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var repost2 model.Event
 				repost2.CreatedAt = 2
 				repost2.Kind = nostr.KindRepost
 				repost2.Content = ev1.String()
 				repost2.Tags = repost1.Tags
-				require.NoError(t, repost2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, repost2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &repost1, &repost2}
 			},
@@ -694,44 +676,41 @@ func TestEventCountersConsistency(t *testing.T) {
 		{
 			Name: "For every kind 1 that the subscription finds also include the count of quotes that it has",
 			RequestDB: model.Filter{
-				Authors: []string{pub},
-				Tags:    model.TagMap{}.SetLiterals("x", "y"),
-				Search:  "include:dependencies:kind1>kind6400+kind1+group+q",
+				Tags:   model.TagMap{}.SetLiterals("x", "y"),
+				Search: "include:dependencies:kind1>kind6400+kind1+group+q",
 			},
 			RequestDVM: model.Event{
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
-					Tags: model.Tags{
-						model.Tag{"param", "relay", globalConfig.RelayURL},
-					},
 				},
 			},
-			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+			Before: func(t *testing.T, d *dvm, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+				reqDB.Authors = []string{d.PublicKey}
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{1},
 						Tags:  model.TagMap{}.Set("q", &events[0].ID),
 					}}.String()
 			},
-			Events: func(t *testing.T) []*model.Event {
+			Events: func(t *testing.T, d *dvm) []*model.Event {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var quote1 model.Event
 				quote1.CreatedAt = 1
 				quote1.Kind = nostr.KindTextNote
 				quote1.Tags = append(quote1.Tags, model.Tag{"q", ev1.ID})
-				require.NoError(t, quote1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, quote1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var quote2 model.Event
 				quote2.CreatedAt = 2
 				quote2.Kind = nostr.KindTextNote
 				quote2.Tags = quote1.Tags
-				require.NoError(t, quote2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, quote2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &quote1, &quote2}
 			},
@@ -740,9 +719,8 @@ func TestEventCountersConsistency(t *testing.T) {
 		{
 			Name: "For every kind 1 that the subscription finds also include the count of reactions that it has",
 			RequestDB: model.Filter{
-				Authors: []string{pub},
-				Tags:    model.TagMap{}.SetLiterals("x", "y"),
-				Search:  "include:dependencies:kind1>kind6400+kind7+group+content",
+				Tags:   model.TagMap{}.SetLiterals("x", "y"),
+				Search: "include:dependencies:kind1>kind6400+kind7+group+content",
 			},
 			RequestDVM: model.Event{
 				Event: nostr.Event{
@@ -750,38 +728,38 @@ func TestEventCountersConsistency(t *testing.T) {
 					Tags: model.Tags{
 						{"output", "JSON"},
 						{"param", "group", "content"},
-						{"param", "relay", globalConfig.RelayURL},
 					},
 				},
 			},
-			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+			Before: func(t *testing.T, d *dvm, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+				reqDB.Authors = []string{d.PublicKey}
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{7},
 						Tags:  model.TagMap{}.Set("e", &events[0].ID),
 					}}.String()
 			},
-			Events: func(t *testing.T) []*model.Event {
+			Events: func(t *testing.T, d *dvm) []*model.Event {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindTextNote
 				ev1.Content = "Hello world!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reaction1 model.Event
 				reaction1.CreatedAt = 1
 				reaction1.Kind = nostr.KindReaction
 				reaction1.Content = "-"
 				reaction1.Tags = append(reaction1.Tags, model.Tag{"e", ev1.ID})
-				require.NoError(t, reaction1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reaction1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var reaction2 model.Event
 				reaction2.CreatedAt = 2
 				reaction2.Content = "+"
 				reaction2.Kind = nostr.KindReaction
 				reaction2.Tags = reaction1.Tags
-				require.NoError(t, reaction2.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, reaction2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &reaction1, &reaction2}
 			},
@@ -796,25 +774,22 @@ func TestEventCountersConsistency(t *testing.T) {
 			RequestDVM: model.Event{
 				Event: nostr.Event{
 					Kind: model.KindJobNostrEventCount,
-					Tags: model.Tags{
-						{"param", "relay", globalConfig.RelayURL},
-					},
 				},
 			},
-			Before: func(t *testing.T, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
+			Before: func(t *testing.T, d *dvm, events []*model.Event, reqDB *model.Filter, reqDVM *model.Event) {
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{3},
-						Tags:  model.TagMap{}.Set("p", &pub),
+						Tags:  model.TagMap{}.SetLiterals("p", d.PublicKey),
 					}}.String()
 			},
-			Events: func(t *testing.T) []*model.Event {
+			Events: func(t *testing.T, d *dvm) []*model.Event {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindProfileMetadata
 				ev1.Content = `{"name:":"Alice"}`
 				ev1.Tags = append(ev1.Tags, model.Tag{"imeta", "url https://foo.barr"})
-				require.NoError(t, ev1.SignWithAlg(globalDVM.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				events := []*model.Event{&ev1}
 				for range 42 {
@@ -835,16 +810,16 @@ func TestEventCountersConsistency(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
-			events := c.Events(t)
+			events := c.Events(t, d)
 			if c.Before != nil {
-				c.Before(t, events, &c.RequestDB, &c.RequestDVM)
+				c.Before(t, d, events, &c.RequestDB, &c.RequestDVM)
 			}
 			t.Run("Insert", func(t *testing.T) {
 				require.NoError(t, query.AcceptEvents(t.Context(), events...))
 			})
 			t.Run("Do", func(t *testing.T) {
 				resultDB := helperReadFromDB(t, c.RequestDB)
-				resultDVM := helperMustExecuteJob(t, t.Context(), &c.RequestDVM)
+				resultDVM := helperMustExecuteJob(t, t.Context(), d, &c.RequestDVM)
 				helperCompareResults(t, resultDB, resultDVM)
 				require.JSONEq(t, c.Count, resultDB.Content)
 			})
@@ -857,6 +832,8 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 	t.Cleanup(func() {
 		query.DeleteAllEvents(t.Context())
 	})
+
+	d := mustNewDVM(t.Context())
 
 	t.Run("Populate", func(t *testing.T) {
 		t.Run("Create metadata", func(t *testing.T) {
@@ -954,9 +931,6 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 	t.Run("Find most relevant followers of john with alice", func(t *testing.T) {
 		var ev model.Event
 		ev.Kind = model.KindJobNostrEventCount
-		ev.Tags = model.Tags{
-			{"param", "relay", globalConfig.RelayURL},
-		}
 		ev.Content = model.Filters{
 			{
 				Search: model.ExtensionTextMRF,
@@ -965,15 +939,12 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 		}.String()
 
 		ctx := model.SetUserDataInContext(t.Context(), "john", "john", true, nil)
-		result := helperMustExecuteJob(t, ctx, &ev)
+		result := helperMustExecuteJob(t, ctx, d, &ev)
 		require.Equal(t, "2", result.Content, "expected 2 followers") // Anna and Bob.
 	})
 	t.Run("Find most relevant followers of unknown with alice", func(t *testing.T) {
 		var ev model.Event
 		ev.Kind = model.KindJobNostrEventCount
-		ev.Tags = model.Tags{
-			{"param", "relay", globalConfig.RelayURL},
-		}
 		ev.Content = model.Filters{
 			{
 				Search: model.ExtensionTextMRF,
@@ -981,9 +952,10 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 			},
 		}.String()
 
-		result, err := helperExecuteJob(t, t.Context(), &ev)
-		require.ErrorIs(t, err, model.ErrNotAuthorized)
-		require.Nil(t, result)
+		result := helperMustExecuteJob(t, t.Context(), d, &ev)
+		require.Equal(t, nostr.KindJobFeedback, result.Kind)
+		require.Equal(t, string(model.JobFeedbackStatusError), result.GetTag("status").Value())
+		require.Contains(t, result.Content, model.ErrNotAuthorized.Error())
 	})
 }
 
@@ -992,6 +964,8 @@ func TestCountUserStories(t *testing.T) {
 
 	const storiesCount = 5
 	pk := model.GeneratePrivateKey()
+
+	d := mustNewDVM(t.Context())
 
 	t.Run("Create user stories", func(t *testing.T) {
 		for i := range storiesCount {
@@ -1023,9 +997,6 @@ func TestCountUserStories(t *testing.T) {
 		require.NoError(t, err)
 
 		ev.Kind = model.KindJobNostrEventCount
-		ev.Tags = model.Tags{
-			{"param", "relay", globalConfig.RelayURL},
-		}
 		ev.Content = model.Filters{
 			{
 				Kinds:   []int{model.CustomIONKindEditableTextNote},
@@ -1034,7 +1005,7 @@ func TestCountUserStories(t *testing.T) {
 			},
 		}.String()
 
-		result, err := helperExecuteJob(t, t.Context(), &ev)
+		result, err := helperExecuteJob(t, t.Context(), d, &ev)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equalf(t, strconv.Itoa(storiesCount), result.Content, "expected %d user stories", storiesCount)

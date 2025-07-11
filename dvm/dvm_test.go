@@ -12,7 +12,6 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/database/query"
-	"github.com/ice-blockchain/subzero/validation"
 )
 
 func TestMain(m *testing.M) {
@@ -21,8 +20,6 @@ func TestMain(m *testing.M) {
 	query.MustInit(ctx, query.WithConfig(&query.Config{
 		URL: addr,
 	}))
-	MustInit(ctx)
-	validation.MustInit()
 
 	code := m.Run()
 	cancel()
