@@ -112,13 +112,6 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.
 		}
 	}
 
-	for _, tag := range event.Tags {
-		if tag.Key() == "relays" {
-			// TODO: remove later.
-			log.Panicf("DVM: job %v: found %q tag", event.ID, tag.Key())
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
 	task := &jobInfo{
 		Result: make(chan *model.Event, 1),
@@ -249,7 +242,14 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 
 	d.SubmitResult(ctx, task, result)
 
-	relays := connectToRelays(ctx, task.Event.ID, collectTargetRelayURLsFromEvent(task.Event))
+	list := collectTargetRelayURLsFromEvent(task.Event)
+	if len(list) > 0 {
+		// TODO: review later.
+		log.Printf("DVM: job %v: found %d target relay(s): %v", task.Event.ID, len(list), list)
+		return nil
+	}
+
+	relays := connectToRelays(ctx, task.Event.ID, list)
 	if len(relays) == 0 {
 		return nil
 	}
