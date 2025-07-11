@@ -244,7 +244,7 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 
 	list := collectTargetRelayURLsFromEvent(task.Event)
 	if len(list) > 0 {
-		// TODO: review later.
+		// TODO: Ignore for now but replace with panic later.
 		log.Printf("DVM: job %v: found %d target relay(s): %v", task.Event.ID, len(list), list)
 		return nil
 	}
