@@ -127,8 +127,15 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "query.AcceptEvent failed")
 		}
-		if err := dvm.AcceptJob(ctx, events[0]); err != nil {
-			return errors.Wrap(err, "dvm.AcceptEvent failed")
+		if ch, err := dvm.AcceptJob(ctx, events[0]); err == nil && ch != nil {
+			antsPool.Submit(func() {
+				result := <-ch
+				if result != nil {
+					webserver.BroadcastNewEvents(context.WithoutCancel(ctx), result)
+				}
+			})
+		} else if err != nil {
+			log.Printf("DVM: failed to accept job for event %s: %v", events[0].ID, err)
 		}
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "command.AcceptEvent failed")

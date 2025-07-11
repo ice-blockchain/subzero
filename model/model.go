@@ -135,7 +135,7 @@ const (
 )
 
 type (
-	JobFeedbackStatus      = string
+	JobFeedbackStatus      string
 	Role                   string
 	ProfileMetadataContent struct {
 		RegisteredAt            Timestamp         `json:"registered_at" `

@@ -615,7 +615,9 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 	RegisterReqMustAuthenticate(func(context.Context, *model.Subscription) bool { return true })
 	RegisterEventMustAuthenticate(func(context.Context, ...*model.Event) bool { return true })
 	RegisterWSSubscriptionListener(query.GetStoredEvents)
-	RegisterWSEventListener(query.AcceptEvents)
+	RegisterWSEventListener(func(ctx context.Context, e ...*model.Event) error {
+		return query.AcceptEvents(ctx, e...)
+	})
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
