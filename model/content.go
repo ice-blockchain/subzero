@@ -191,11 +191,11 @@ func extractPubkeysFromRichText(e *Event) ([]string, error) {
 		return pubkeys, nil
 	}
 	for _, op := range delta {
-		var insertObj deltaInsertObject
-		if err := json.Unmarshal(op.Insert, &insertObj); err == nil {
-			if insertObj.TextEditorProfile != "" {
-				for _, match := range nprofileRegex.FindAllString(insertObj.TextEditorProfile, -1) {
-					if pubkey := decodePubkeyFromNprofile(match); pubkey != "" {
+		if op.Attributes != nil {
+			if mentionData, exists := op.Attributes["mention"]; exists {
+				var mentionStr string
+				if err := json.Unmarshal(mentionData, &mentionStr); err == nil {
+					if pubkey := decodePubkeyFromNprofile(mentionStr); pubkey != "" {
 						pubkeys = append(pubkeys, pubkey)
 					}
 				}

@@ -35,7 +35,7 @@ func TestExtractMentionedPubkeys(t *testing.T) {
 				Event: nostr.Event{
 					Content: "",
 					Tags: Tags{
-						Tag{CustomIONTagRichText, QuillDeltaProtocol, `[{"insert":"Only "},{"insert":{"text-editor-profile":"nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm"}},{"insert":" can reply"}]`},
+						Tag{CustomIONTagRichText, QuillDeltaProtocol, `[{"insert":"Only "},{"insert":"@user","attributes":{"mention":"nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm"}},{"insert":" can reply"}]`},
 					},
 				},
 			},
@@ -293,18 +293,18 @@ func TestParseQuillDeltaToPlainText_WithCustomElements(t *testing.T) {
 			{"insert":"Code block:\n"},
 			{"insert":{"text-editor-code":"console.log('hello world')"}},
 			{"insert":"Profile mention: "},
-			{"insert":{"text-editor-profile":"npub1alice123"}},
+			{"insert":"@alice123","attributes":{"mention":"nostr:npub1alice123"}},
 			{"insert":"\n"}
 		]`
-		require.Equal(t, "Header Text before image text after image. Separator below: Code block: Profile mention: console.log('hello world') npub1alice123", parseQuillDeltaToPlainText(deltaJSON))
+		require.Equal(t, "Header Text before image text after image. Separator below: Code block: Profile mention: @alice123 console.log('hello world')", parseQuillDeltaToPlainText(deltaJSON))
 	})
 	t.Run("Only custom elements with useful content", func(t *testing.T) {
 		deltaJSON := `[
 			{"insert":{"text-editor-single-image":"img1"}},
 			{"insert":{"text-editor-code":"function test() { return 42; }"}},
-			{"insert":{"text-editor-profile":"user789"}}
+			{"insert":"@user789","attributes":{"mention":"nostr:user789"}}
 		]`
-		require.Equal(t, "function test() { return 42; } user789", parseQuillDeltaToPlainText(deltaJSON))
+		require.Equal(t, "@user789 function test() { return 42; }", parseQuillDeltaToPlainText(deltaJSON))
 	})
 	t.Run("Only useless custom elements", func(t *testing.T) {
 		deltaJSON := `[

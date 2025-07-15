@@ -474,7 +474,6 @@ func (db *dbClient) saveEvents(
 		"hidden",
 		"lookup",
 		"expiration",
-		"replaced_by_id",
 	}
 
 	builder.WriteString(`
@@ -484,9 +483,20 @@ WITH replaced AS (
 		replaced_by_id = ANY(:` + builder.PushValue("merge", "replaceableID", replaceableEventsIDs) + `)
 	RETURNING `)
 	builder.WriteFields(fields...)
-	builder.WriteString(`), source_data (`) // `source_data` contains the events to merge.
+	builder.WriteString(`, replaced_by_id),
+deleted_events AS (
+	DELETE FROM events
+	WHERE
+		id = ANY(:` + builder.PushValue("merge", "rollbackID", replaceableEventsIDs) + `)
+		AND NOT EXISTS (
+			SELECT 1 FROM replaced WHERE replaced.id = events.id
+		)
+	RETURNING `)
 	builder.WriteFields(fields...)
-	builder.WriteString(`) AS (SELECT * from replaced `)
+	builder.WriteString(`, '' as replaced_by_id
+), source_data (`)
+	builder.WriteFields(fields...)
+	builder.WriteString(`, replaced_by_id) AS (SELECT * from replaced `)
 	if len(events) > 0 {
 		builder.WriteString(`UNION ALL VALUES `)
 	}
@@ -620,86 +630,12 @@ WITH replaced AS (
 			},
 		})
 	}
-	// `pre_merge_data` contains the OLD state of the events that are being replaced.
-	// Once postgres 18 gets released, we can use `MERGE ... RETURNING NEW.*, OLD.*` syntax.
+	// `pre_update_data` contains the OLD state of the events that are being replaced.
 	builder.WriteString(`),
-pre_merge_data AS (SELECT t.* FROM source_data sd LEFT JOIN events AS t ON t.address = sd.address),`)
+pre_update_data AS (SELECT t.* FROM source_data sd LEFT JOIN events AS t ON t.address = sd.address),`)
 	builder.WriteString(`
-merged_result AS (
-MERGE INTO events AS target USING source_data AS source
-	ON (
-		target.id = source.id
-		OR (target.address = source.address and target.hidden=false)
-		OR (target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != :model_consensuskey and target.hidden=false)
-	)
-WHEN MATCHED
-	AND target.id = source.id
-	AND target.hidden = source.hidden THEN
-	-- The same event is being updated, ignore it.
-	DO NOTHING
-WHEN MATCHED AND target.id = source.replaced_by_id AND source.replaced_by_id != '' AND source.replaced_by_id != :model_consensuskey THEN
-	UPDATE SET
-		id = source.id,
-		kind = source.kind,
-		created_at = source.created_at,
-		pubkey = source.pubkey,
-		master_pubkey = source.master_pubkey,
-		gift_receiver_pubkey = source.gift_receiver_pubkey,
-		sig = source.sig,
-		sig_alg = source.sig_alg,
-		key_alg = source.key_alg,
-		content = source.content,
-		tags = source.tags,
-		t_tags = source.t_tags,
-		d_tag = source.d_tag,
-		h_tag = source.h_tag,
-		deleted = source.deleted,
-		has_images = source.has_images,
-		has_videos = source.has_videos,
-		is_reply = source.is_reply,
-		is_root_reply = source.is_root_reply,
-		is_quote = source.is_quote,
-		has_references = source.has_references,
-		lookup = source.lookup,
-		expiration = source.expiration
-WHEN MATCHED
-	AND (
-		(target.id = source.id AND source.hidden = false AND target.hidden = true) -- Promote hidden event to visible and update all fields.
-			OR
-		(target.address = source.address) -- Addressable event.
-	) THEN
-	UPDATE SET
-		id = source.id,
-		kind = source.kind,
-		created_at = source.created_at,
-		pubkey = source.pubkey,
-		master_pubkey = source.master_pubkey,
-		gift_receiver_pubkey = source.gift_receiver_pubkey,
-		sig = source.sig,
-		sig_alg = source.sig_alg,
-		key_alg = source.key_alg,
-		content = source.content,
-		tags = source.tags,
-		t_tags = source.t_tags,
-		d_tag = source.d_tag,
-		h_tag = source.h_tag,
-		deleted = source.deleted,
-		has_images = source.has_images,
-		has_videos = source.has_videos,
-		is_reply = source.is_reply,
-		is_root_reply = source.is_root_reply,
-		is_quote = source.is_quote,
-		has_references = source.has_references,
-		lookup = source.lookup,
-		expiration = source.expiration,
-		hidden = false,
-		-- replaceable events dont have reference_id, so we using it to disable trigger_events_store_replaceable_data_before_update.
-		reference_id = CASE
-							WHEN source.replaced_by_id = :model_consensuskey THEN source.id
-							ELSE NULL
-						END
-WHEN NOT MATCHED THEN
-	INSERT (
+update_data AS (
+	INSERT INTO events (
 		id, kind, created_at,
 		pubkey, master_pubkey,
 		gift_receiver_pubkey,
@@ -710,51 +646,82 @@ WHEN NOT MATCHED THEN
 		deleted,
 		has_images, has_videos,
 		is_reply, is_root_reply, is_quote, has_references,
+		hidden,
 		lookup,
 		expiration
 	)
-	VALUES (
-		source.id, source.kind, source.created_at,
-		source.pubkey, source.master_pubkey,
-		source.gift_receiver_pubkey,
-		source.sig, source.sig_alg, source.key_alg,
-		source.content,
-		source.tags, source.t_tags,
-		source.d_tag, source.h_tag,
-		source.deleted,
-		source.has_images, source.has_videos,
-		source.is_reply, source.is_root_reply, source.is_quote, source.has_references,
-		source.lookup,
-		source.expiration
-	)
+	SELECT
+		sd.id, sd.kind, sd.created_at,
+		sd.pubkey, sd.master_pubkey,
+		sd.gift_receiver_pubkey,
+		sd.sig, sd.sig_alg, sd.key_alg,
+		sd.content,
+		sd.tags, sd.t_tags,
+		sd.d_tag, sd.h_tag,
+		sd.deleted,
+		sd.has_images, sd.has_videos,
+		sd.is_reply, sd.is_root_reply, sd.is_quote, sd.has_references,
+		sd.hidden,
+		sd.lookup,
+		sd.expiration
+	FROM source_data sd
+	ON CONFLICT (address) DO UPDATE SET
+		id = EXCLUDED.id,
+		kind = EXCLUDED.kind,
+		created_at = EXCLUDED.created_at,
+		pubkey = EXCLUDED.pubkey,
+		master_pubkey = EXCLUDED.master_pubkey,
+		gift_receiver_pubkey = EXCLUDED.gift_receiver_pubkey,
+		sig = EXCLUDED.sig,
+		sig_alg = EXCLUDED.sig_alg,
+		key_alg = EXCLUDED.key_alg,
+		content = EXCLUDED.content,
+		tags = EXCLUDED.tags,
+		t_tags = EXCLUDED.t_tags,
+		d_tag = EXCLUDED.d_tag,
+		h_tag = EXCLUDED.h_tag,
+		deleted = EXCLUDED.deleted,
+		has_images = EXCLUDED.has_images,
+		has_videos = EXCLUDED.has_videos,
+		is_reply = EXCLUDED.is_reply,
+		is_root_reply = EXCLUDED.is_root_reply,
+		is_quote = EXCLUDED.is_quote,
+		has_references = EXCLUDED.has_references,
+		hidden = EXCLUDED.hidden,
+		lookup = EXCLUDED.lookup,
+		expiration = EXCLUDED.expiration
 	RETURNING
-		target.kind,
-		target.created_at,
-		target.id,
-		target.pubkey,
-		target.sig,
-		target.content,
-		target.tags,
-		merge_action() as savemergeaction
-)
+		kind,
+		created_at,
+		id,
+		pubkey,
+		sig,
+		content,
+		tags,
+		CASE 
+			WHEN xmax = 0 THEN 'INSERT'
+			ELSE 'UPDATE'
+		END as savemergeaction
+)`)
+	builder.WriteString(`
 SELECT
 	*
 FROM
-	merged_result AS mr
+	update_data AS ud
 UNION ALL
 SELECT
-	pmd.kind,
-	pmd.created_at,
-	pmd.id,
-	pmd.pubkey,
-	pmd.sig,
-	pmd.content,
-	pmd.tags,
+	pud.kind,
+	pud.created_at,
+	pud.id,
+	pud.pubkey,
+	pud.sig,
+	pud.content,
+	pud.tags,
 	'OLD' as savemergeaction
 FROM
-	pre_merge_data pmd
+	pre_update_data pud
 WHERE
-	pmd.id is not null
+	pud.id is not null
 `)
 	return connector.ExecNamedManyWithCustomRetry[databaseEvent](
 		ctx,

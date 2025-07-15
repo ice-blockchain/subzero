@@ -139,7 +139,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 	t.Run("create post with mentioned settings using rich_text", func(t *testing.T) {
 		pkey, err := nip19.EncodeProfile(pubkeyUser1, []string{})
 		require.NoError(t, err)
-		richTextDelta := fmt.Sprintf(`[{"insert": {"text-editor-profile": "nostr:%v"}}]`, pkey)
+		richTextDelta := fmt.Sprintf(`[{"insert":"@user","attributes":{"mention":"nostr:%v"}}]`, pkey)
 		richTextPost = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,

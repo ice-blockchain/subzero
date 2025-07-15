@@ -214,6 +214,15 @@ func TestMention(t *testing.T) {
 				},
 			},
 			map[string]interface{}{
+				"insert": " and ",
+			},
+			map[string]interface{}{
+				"insert": "@user",
+				"attributes": map[string]interface{}{
+					"mention": nprofileEncoded,
+				},
+			},
+			map[string]interface{}{
 				"insert": " how are you?",
 			},
 		}
