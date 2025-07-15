@@ -474,6 +474,7 @@ func (db *dbClient) saveEvents(
 		"hidden",
 		"lookup",
 		"expiration",
+		"replaced_by_id",
 	}
 
 	builder.WriteString(`
@@ -483,20 +484,9 @@ WITH replaced AS (
 		replaced_by_id = ANY(:` + builder.PushValue("merge", "replaceableID", replaceableEventsIDs) + `)
 	RETURNING `)
 	builder.WriteFields(fields...)
-	builder.WriteString(`, replaced_by_id),
-deleted_events AS (
-	DELETE FROM events
-	WHERE
-		id = ANY(:` + builder.PushValue("merge", "rollbackID", replaceableEventsIDs) + `)
-		AND NOT EXISTS (
-			SELECT 1 FROM replaced WHERE replaced.id = events.id
-		)
-	RETURNING `)
+	builder.WriteString(`), source_data (`) // `source_data` contains the events to merge.
 	builder.WriteFields(fields...)
-	builder.WriteString(`, '' as replaced_by_id
-), source_data (`)
-	builder.WriteFields(fields...)
-	builder.WriteString(`, replaced_by_id) AS (SELECT * from replaced `)
+	builder.WriteString(`) AS (SELECT * from replaced `)
 	if len(events) > 0 {
 		builder.WriteString(`UNION ALL VALUES `)
 	}
