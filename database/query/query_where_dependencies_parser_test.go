@@ -841,7 +841,7 @@ func TestSelectDepsAuthorTags(t *testing.T) {
 	err = db.AcceptEvents(t.Context(),
 		&model.Event{
 			Event: nostr.Event{
-				ID:        "id1",
+				ID:        "id2",
 				Kind:      model.CustomIONKindEditableTextNote,
 				PubKey:    "pk2",
 				CreatedAt: 1,

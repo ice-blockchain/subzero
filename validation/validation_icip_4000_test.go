@@ -453,7 +453,7 @@ func TestCheckMentionWhoCanReplySettings(t *testing.T) {
 				Event: nostr.Event{
 					Content: "",
 					Tags: model.Tags{
-						model.Tag{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Only "},{"insert":{"text-editor-profile":"nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm"}},{"insert":"  and "},{"insert":{"text-editor-profile":"nostr:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj"}},{"insert":" can reply\n"}]`},
+						model.Tag{model.CustomIONTagRichText, model.QuillDeltaProtocol, `[{"insert":"Only "},{"insert":"@va55","attributes":{"mention":"nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm"}},{"insert":"  and "},{"insert":"@va57","attributes":{"mention":"nostr:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj"}},{"insert":" can reply\n"}]`},
 					},
 				},
 			},
