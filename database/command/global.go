@@ -24,7 +24,7 @@ import (
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
-var disabled = false
+var disabled = true
 
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
@@ -102,7 +102,7 @@ func WithClient(client client.Client) Option {
 
 func MustInit(ctx context.Context, opts ...Option) {
 	conf := cfg.MustGet[Config]()
-	if strings.Contains(conf.RelayUrl, ".testnet.") || (conf.RelayUrl == "" && conf.AbsoluteRootPath == "" && conf.DiscoveryPort == 0) {
+	if disabled || strings.Contains(conf.RelayUrl, ".testnet.") || (conf.RelayUrl == "" && conf.AbsoluteRootPath == "" && conf.DiscoveryPort == 0) {
 		disabled = true
 		return
 	}

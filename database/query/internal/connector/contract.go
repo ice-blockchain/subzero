@@ -27,6 +27,7 @@ var (
 	ErrException            = errors.New("exception")
 	ErrInvalidData          = errors.New("invalid data")
 	ErrInternal             = errors.New("internal error")
+	ErrReadOnly             = errors.New("relay-is-read-only: read only")
 )
 
 type (

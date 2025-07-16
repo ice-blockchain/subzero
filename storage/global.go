@@ -56,6 +56,8 @@ var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
 const threadsPerBagForDownloading = 7
 
+const triggerDownloadOnAllPeersUsingEndpoint = true
+
 func init() {
 	db.CachedFDLimit = math.MaxInt64
 }

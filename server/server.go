@@ -129,6 +129,7 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).
 		DELETE("/files/:file", uploader.Delete()).
+		HEAD("/files/:file", uploader.CrossRelayDownload()).
 		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info()).
 		GET("/health-check", func(c *gin.Context) {
 			c.JSON(http.StatusOK, map[string]any{})

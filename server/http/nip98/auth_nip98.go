@@ -5,12 +5,14 @@ package nip98
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -151,4 +153,41 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 		return model.ErrOnBehalfAccessDenied
 	}
 	return nil
+}
+
+func GenerateAuthHeader(sk, method, fileHash string, urlValue *url.URL, masterPubkey ...string) (string, error) {
+	pk, err := model.GetPublicKey(sk)
+	if err != nil {
+		return "", errors.Wrapf(err, "malformed private-key for generating auth")
+	}
+	event := model.Event{
+		Event: nostr.Event{
+			Kind:      NostrHttpAuthKind,
+			PubKey:    pk,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				model.Tag{"u", (&url.URL{
+					Scheme:   "https",
+					Host:     urlValue.Host,
+					Path:     urlValue.Path,
+					RawQuery: urlValue.RawQuery,
+					Fragment: urlValue.Fragment,
+				}).String()},
+				model.Tag{"method", method},
+				model.Tag{"payload", fileHash},
+			},
+		},
+	}
+	if len(masterPubkey) > 0 && masterPubkey[0] != "" {
+		event.Tags = append(event.Tags, model.Tag{"b", masterPubkey[0]})
+	}
+	if err = event.SignWithAlg(sk, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+		return "", errors.Wrap(err, "failed to sign auth event")
+	}
+
+	b, err := json.Marshal(event)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to encode auth event")
+	}
+	return `Nostr ` + base64.StdEncoding.EncodeToString(b), nil
 }

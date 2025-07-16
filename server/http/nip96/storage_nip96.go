@@ -34,6 +34,7 @@ type (
 		Delete() gin.HandlerFunc
 		ListFiles() gin.HandlerFunc
 		RootPath() string
+		CrossRelayDownload() gin.HandlerFunc
 	}
 )
 
@@ -352,6 +353,41 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 
 func (s *storageHandler) RootPath() string {
 	return s.storageClient.RootPath()
+}
+
+func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
+	return func(gCtx *gin.Context) {
+		now := time.Now()
+		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
+		defer cancel()
+		authHeader := nip98.GetAuthHeader(gCtx)
+		_, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		if authErr != nil {
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
+			return
+		}
+		file := gCtx.Param("file")
+		var params struct {
+			I      string `form:"i"`
+			Master string `form:"master"`
+		}
+		if err := gCtx.ShouldBindWith(&params, binding.Query); err != nil {
+			log.Printf("ERROR: failed to bind data : %v", errors.Wrap(err, "failed to bind data"))
+			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data"))
+			return
+		}
+		if params.I == "" {
+			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data: i tag not passed"))
+			return
+		}
+		if err := s.storageClient.StartDownloadNewBag(ctx, file, params.Master, params.I); err != nil {
+			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash for %v"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			return
+		}
+		gCtx.Status(http.StatusAccepted)
+	}
 }
 
 func uploadErr(message string) any {
