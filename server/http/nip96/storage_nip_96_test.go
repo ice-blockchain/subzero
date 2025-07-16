@@ -157,7 +157,7 @@ func TestNIP96(t *testing.T) {
 				AppendUnique(model.Tag{"expiration", strconv.FormatInt(time.Now().Unix()-10, 10)})
 			contentToBroadcast := resp.Nip94Event.Content
 			nip94EventToSign := &model.Event{Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindFileMetadata,
 				Tags:      tagsToBroadcast,
 				Content:   contentToBroadcast,
@@ -225,7 +225,7 @@ func TestNIP96(t *testing.T) {
 			fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
 
 			deletionEventToSign := &model.Event{Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindDeletion,
 				Tags: nostr.Tags{
 					nostr.Tag{"e", nip94ToBeDeleted.ID},
@@ -305,7 +305,7 @@ func TestNIP96(t *testing.T) {
 		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 		deletionEventToSign := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: nostr.Tags{
 				nostr.Tag{"e", nip94ToBeDeleted.ID},
@@ -330,7 +330,7 @@ func TestNIP96(t *testing.T) {
 		fileName := "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1.txt"
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
 		imetaEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
 			Tags: nostr.Tags{
 				nostr.Tag{
@@ -345,7 +345,7 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, imetaEvent.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(ctx, imetaEvent))
 		deletionEventToSign := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindDeletion,
 			Tags: nostr.Tags{
 				nostr.Tag{"e", imetaEvent.ID},
@@ -366,7 +366,7 @@ func TestNIP96(t *testing.T) {
 			}
 		}
 		imetaEvent := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Timestamp(time.Now().Unix()),
+			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEditableTextNote,
 			Tags: nostr.Tags{
 				nostr.Tag{
@@ -384,11 +384,11 @@ func TestNIP96(t *testing.T) {
 		deletedPost := &model.Event{
 			Event: nostr.Event{
 				Kind:      imetaEvent.Kind,
-				Content:   "",                       // Empty content for soft deletion.
-				CreatedAt: nostr.Timestamp(now + 1), // Should be newer than the original post.
+				Content:   "",                                    // Empty content for soft deletion.
+				CreatedAt: imetaEvent.CreatedAt.Add(time.Second), // Should be newer than the original post.
 				Tags: model.Tags{
 					{"b", masterPubKey},
-					{"published_at", strconv.FormatInt(now, 10)},
+					{"published_at", imetaEvent.CreatedAt.String()},
 					{"d", "editable post1"},
 				},
 			},
@@ -732,7 +732,7 @@ func BenchmarkUploadFiles(b *testing.B) {
 			require.NoError(b, err)
 			meter.AddTime(time.Since(start))
 			nip94Event := &model.Event{Event: nostr.Event{
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindFileMetadata,
 				Tags:      resp.Nip94Event.Tags,
 			}}

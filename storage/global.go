@@ -95,6 +95,7 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 
 func acceptDeletion(ctx context.Context, event *model.Event) error {
 	var originalEvent *model.Event
+
 	switch event.Kind {
 	case nostr.KindDeletion:
 		refs, err := model.ParseEventReference(event.Tags)
