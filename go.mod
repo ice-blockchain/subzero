@@ -10,7 +10,7 @@ replace (
 )
 
 require (
-	firebase.google.com/go/v4 v4.16.1
+	firebase.google.com/go/v4 v4.17.0
 	github.com/alitto/pond/v2 v2.5.0
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.23.0
