@@ -64,6 +64,8 @@ These are the extra fields not specified in [NIP-01](https://github.com/nostr-pr
 * `category`
   * Users can input a category for their profile that can define their main area of expertise or interest. 
     * Clients SHOULD make users select from a predefined list of categories, to standardize user interactions later on. Relays MUST not validate this information.
+* `ion_content_nft_collection_address`
+  * The address of the Ice Open Network nft collection assigned to the user where all their content nfts are added
 * `wallets`
   * A map of network<->address
     * Clients SHOULD validate this information. Relays MUST not validate this information. 
