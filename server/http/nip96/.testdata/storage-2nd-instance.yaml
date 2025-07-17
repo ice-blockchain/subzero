@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: ice License 1.0
 
 storage:
-  private-key: 256a1b43e46af6bb1ccbe0a7618ca3cbc3fb4a6746821a96d445d4011319a9f94eb029a7cbf8eaccfd49a827dd590b8a0503a9aa3c4631148fd4d9dd24be0d46
+  private-key: f2e7f1829027cf347d3ddb90e40890fcffb1ca99a3fc2564a120286570b690e548ac550ea62ab27c8c85d1f862b779b8c7dd09d733403dd9a3104be42f8ddb7b
   ion-storage-config-url: https://ton.org/testnet-global.config.json
   absolute-root-storage-path: ../../.test-uploads2
   external-adnl-address: 127.0.0.1
   external-adnl-port: 12347
   debug: true
   ion-liberty-disabled: false
-  relay-url: "-"
+  relay-url: "wss://localhost:9996"
 database:
   query:
     url: "db.sqlite"

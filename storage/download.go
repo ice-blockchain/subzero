@@ -8,15 +8,22 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/imroc/req/v3"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/xssnick/tonutils-go/adnl"
 	"github.com/xssnick/tonutils-storage/storage"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/http/nip98"
 )
 
 func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, error) {
@@ -43,16 +50,26 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 	return c.buildUrl(hex.EncodeToString(bag.BagID), file, masterPubkey, fileHash, bootstrap)
 }
 
-func acceptNewBag(ctx context.Context, event *model.Event) error {
+func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx context.Context, fh, master, infohash string) error) error {
 	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), event.String())
 	infohash := ""
-	var err error
 	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {
 		infohash = iTag.Value()
 	} else {
 		return errors.Newf("malformed i tag %v", iTag)
 	}
+	fileHash := ""
+	if oxTag := event.GetTag("ox"); oxTag != nil && len(oxTag) > 1 {
+		fileHash = oxTag.Value()
+	} else {
+		return errors.Newf("malformed ox tag %v", oxTag)
+	}
 
+	return acceptor(ctx, fileHash, event.GetMasterPublicKey(), infohash)
+}
+
+func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKey, infohash string) error {
+	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 infohash with new files for user %v: %v", userMasterKey, infohash)
 	spl := strings.Split(infohash, ":")
 	if len(spl) != 3 {
 		return errors.Newf("malformed i tag %v, cannot detect bootstrap and version", infohash)
@@ -61,11 +78,11 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 	bootstrap := spl[1]
 	version, cErr := strconv.ParseInt(spl[2], 10, 64)
 	if cErr != nil {
-		return errors.Wrapf(err, "malformed i tag %v, cannot version", infohash)
+		return errors.Wrapf(cErr, "malformed i tag %v, cannot version", infohash)
 	}
 
-	if err = globalClient.newBagIDPromoted(ctx, event.GetMasterPublicKey(), infohash, &bootstrap, version); err != nil {
-		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, event.PubKey)
+	if err := c.newBagIDPromoted(ctx, userMasterKey, infohash, &bootstrap, version); err != nil {
+		return errors.Wrapf(err, "failed to promote new bag ID %v for user %v", infohash, userMasterKey)
 	}
 	return nil
 }
@@ -312,4 +329,118 @@ outerLoop:
 		time.Sleep(100 * time.Millisecond)
 	}
 
+}
+
+func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
+	return func(ctx context.Context, fileHash, userMasterKey, infohash string) error {
+		var relays []string
+		for _, e := range events {
+			if e.Kind == nostr.KindRelayListMetadata {
+				relays = model.CollectRelaysFromRelayEvent(e)
+				break
+			}
+		}
+		if len(relays) == 0 {
+			var err error
+			relays, err = fetchUserRelays(ctx, userMasterKey)
+			if err != nil {
+				log.Printf("WARN: failed to fetch user's relays for user %v: %v", userMasterKey, err)
+				return ErrNoRelays
+			}
+		}
+		if len(relays) == 0 {
+			return ErrNoRelays
+		}
+
+		var eg errgroup.Group
+		for _, relay := range relays {
+			eg.Go(func() error {
+				if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
+					log.Printf("WARN: failed to trigger download on relay %v for user %v: %v", relay, userMasterKey, err)
+					return err
+				}
+				return nil
+			})
+		}
+		return errors.Wrapf(eg.Wait(), "failed to trigger storage download on one or more relays")
+	}
+}
+
+func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash, masterPubkey, infohash string) (err error) {
+	fullStrUrl, err := url.JoinPath(relayUrl, "/files/", masterPubkey+":"+fileHash)
+	if err != nil {
+		return errors.Wrapf(err, "invalid relay url: %v", relayUrl)
+	}
+	u, err := url.Parse(fullStrUrl)
+	if err != nil {
+		return errors.Wrapf(err, "invalid relay url: %v", relayUrl)
+	}
+	switch u.Scheme {
+	case "wss":
+		u.Scheme = "https"
+	case "ws":
+		u.Scheme = "http"
+	default:
+		return errors.Errorf("unsupported scheme %v", u.Scheme)
+	}
+	fullStrUrl = u.String()
+	values := u.Query()
+	values.Set("i", infohash)
+	u.RawQuery = values.Encode()
+	auth, err := nip98.GenerateAuthHeader(globalConfig.PrivateKey, "HEAD", "", u)
+	if err != nil {
+		return errors.Wrapf(err, "failed to generate auth header from relay's key")
+	}
+	resp, err := req.DefaultClient().R().
+		SetContext(ctx).
+		SetRetryCount(5).
+		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
+			switch {
+			case attempt <= 1:
+				return 100 * time.Millisecond
+			case attempt == 2:
+				return 1 * time.Second
+			default:
+				return 10 * time.Second
+			}
+		}).
+		SetRetryHook(func(resp *req.Response, err error) {
+			if err != nil {
+				log.Printf("failed to start storage replication of file %v : %v on %v, retrying...: %v", masterPubkey, fileHash, relayUrl, err)
+			} else {
+				log.Printf("failed to start storage replication of file %v : %v on %v:status %v, retrying...", masterPubkey, fileHash, relayUrl, resp.GetStatusCode())
+			}
+		}).
+		SetRetryCondition(func(resp *req.Response, err error) bool {
+			return err != nil || resp.GetStatusCode() != http.StatusAccepted
+		}).
+		SetHeader("Authorization", auth).
+		SetHeader("Referer", globalConfig.RelayURL).
+		SetQueryString(u.RawQuery).
+		Head(fullStrUrl)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to start storage replication")
+	}
+	if resp.GetStatusCode() != http.StatusAccepted {
+		return errors.Newf("storage replication service responded with status: %d", resp.GetStatusCode())
+	}
+	return nil
+}
+
+func fetchUserRelays(ctx context.Context, userMasterKey string) (relays []string, err error) {
+	evIt := query.GetStoredEvents(ctx,
+		model.Filter{
+			Authors: []string{userMasterKey},
+			Kinds:   []int{nostr.KindRelayListMetadata},
+		},
+	)
+	for ev, iErr := range evIt {
+		if iErr != nil {
+			return nil, errors.Wrapf(iErr, "failed to fetch user's relays for user %v", userMasterKey)
+		}
+		relays = model.CollectRelaysFromRelayEvent(ev)
+		break
+	}
+	return relays, nil
 }

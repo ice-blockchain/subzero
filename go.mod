@@ -10,7 +10,7 @@ replace (
 )
 
 require (
-	firebase.google.com/go/v4 v4.16.1
+	firebase.google.com/go/v4 v4.17.0
 	github.com/alitto/pond/v2 v2.5.0
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.23.0
@@ -29,6 +29,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
+	github.com/goccy/go-json v0.10.5
 	github.com/google/uuid v1.6.0
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250714150930-6fb404dc7d83
 	github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830
@@ -60,6 +61,7 @@ require (
 	github.com/xssnick/tonutils-storage v1.1.3
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.42.0
+	golang.org/x/sync v0.16.0
 	google.golang.org/api v0.242.0
 )
 
@@ -138,7 +140,6 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
-	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -264,7 +265,6 @@ require (
 	golang.org/x/image v0.29.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/term v0.33.0 // indirect
 	golang.org/x/text v0.27.0 // indirect

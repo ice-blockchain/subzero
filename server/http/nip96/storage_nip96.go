@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
 	"github.com/ice-blockchain/subzero/storage"
 )
@@ -34,6 +35,7 @@ type (
 		Delete() gin.HandlerFunc
 		ListFiles() gin.HandlerFunc
 		RootPath() string
+		CrossRelayDownload() gin.HandlerFunc
 	}
 )
 
@@ -43,6 +45,7 @@ var nip96Info string
 type storageHandler struct {
 	storageClient      storage.StorageClient
 	auth               nip98.AuthClient
+	nip11Fetcher       nip11.Fetcher
 	ionLibertyDisabled bool
 }
 
@@ -172,7 +175,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 
 		if err != nil {
 			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			os.Remove(uploadingFilePath)
 			return
 		}
@@ -217,14 +220,20 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("filename is required"))
 			return
 		}
-		url, err := s.storageClient.DownloadUrl(token.MasterPubKey(), file)
+		masterPubkey := token.MasterPubKey()
+		spl := strings.SplitN(file, ":", 2)
+		if len(spl) == 2 {
+			masterPubkey = spl[0]
+			file = spl[1]
+		}
+		url, err := s.storageClient.DownloadUrl(masterPubkey, file)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.Redirect(http.StatusFound, url)
@@ -238,7 +247,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 			return
 		}
 		var masterPubkey string
-		spl := strings.Split(file, ":")
+		spl := strings.SplitN(file, ":", 2)
 		if len(spl) == 2 {
 			masterPubkey = spl[0]
 			file = spl[1]
@@ -253,7 +262,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 				return
 			}
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.File(filePath)
@@ -295,7 +304,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
 			}
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.JSON(http.StatusOK, map[string]any{"status": "success", "message": "deleted"})
@@ -327,7 +336,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		total, filesList, err := s.storageClient.ListFiles(token.MasterPubKey(), params.Page, params.Count)
 		if err != nil {
 			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.MasterPubKey()))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		res := &listedFiles{
@@ -354,11 +363,72 @@ func (s *storageHandler) RootPath() string {
 	return s.storageClient.RootPath()
 }
 
+func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
+	return func(gCtx *gin.Context) {
+		now := time.Now()
+		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
+		defer cancel()
+		authHeader := nip98.GetAuthHeader(gCtx)
+		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		if authErr != nil {
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
+			return
+		}
+		senderUrl := gCtx.GetHeader("Referer")
+		if senderUrl == "" {
+			gCtx.JSON(http.StatusBadRequest, uploadErr("unknown sender"))
+			return
+		}
+		senderNIP11, err := s.nip11Fetcher.Fetch(ctx, senderUrl)
+		if err != nil {
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(err, "failed to fetch sender NIP11"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred"))
+			return
+		}
+		if token.PubKey() != senderNIP11.PubKey {
+			log.Printf("ERROR: endpoint authentification failed: sender pubkey mismatch nip11>%v, token>%v", senderNIP11.PubKey, token.PubKey())
+			gCtx.JSON(http.StatusUnauthorized, uploadErr("sender pubkey mismatch"))
+			return
+		}
+		file := gCtx.Param("file")
+		spl := strings.SplitN(file, ":", 2)
+		var masterPubkey string
+		if len(spl) == 2 {
+			masterPubkey = spl[0]
+			file = spl[1]
+		}
+		if err = storage.VerifyFileOwnershipAndAttestationForFileReplication(ctx, now, file, masterPubkey, senderUrl); err != nil {
+			log.Printf("ERROR: not owning the file: %v %v user %v req from %v", err, file, masterPubkey, senderUrl)
+			gCtx.JSON(http.StatusConflict, uploadErr("relay does not own the file"))
+			return
+		}
+		var params struct {
+			I string `form:"i"`
+		}
+		if err := gCtx.ShouldBindWith(&params, binding.Query); err != nil {
+			log.Printf("ERROR: failed to bind data : %v", errors.Wrap(err, "failed to bind data"))
+			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data"))
+			return
+		}
+		if params.I == "" {
+			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data: i tag not passed"))
+			return
+		}
+		if err := s.storageClient.StartDownloadNewBag(ctx, file, masterPubkey, params.I); err != nil {
+			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash %v for %v", params.I, masterPubkey))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
+			return
+		}
+		gCtx.Status(http.StatusAccepted)
+	}
+}
+
 func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
-func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool) Uploader {
-	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled}
+func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, fetcher nip11.Fetcher) Uploader {
+	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: fetcher}
 	return s
 }

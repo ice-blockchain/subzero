@@ -40,6 +40,7 @@ type (
 		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
 		Delete(ctx context.Context, userPubkey, masterKey string, fileSha256 string) error
 		DeleteUser(masterKey string) error
+		StartDownloadNewBag(ctx context.Context, fileHash, masterKey, infohash string) error
 	}
 	Bootstrap struct {
 		Overlay *overlay.Node
@@ -87,6 +88,7 @@ type (
 var (
 	ErrNotFound  = storage.ErrFileNotExist
 	ErrForbidden = errors.New("forbidden")
+	ErrNoRelays  = errors.New("no relays")
 )
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {

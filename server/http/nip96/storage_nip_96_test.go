@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"embed"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"math/rand/v2"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +25,7 @@ import (
 
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/gin-gonic/gin"
+	"github.com/imroc/req/v3"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip94"
@@ -52,8 +51,7 @@ const (
 )
 
 var (
-	pubsubServer    *fixture.MockService
-	privKey, pubKey = model.GenerateKeyPair()
+	pubsubServer *fixture.MockService
 )
 
 func TestMain(m *testing.M) {
@@ -66,6 +64,7 @@ func TestMain(m *testing.M) {
 
 	initServer(serverCtx, 9996)
 	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
+	req.DefaultClient().TLSClientConfig = fixture.ClientTLS()
 	code := m.Run()
 	serverCancel()
 	release()
@@ -75,18 +74,20 @@ func TestMain(m *testing.M) {
 func initServer(serverCtx context.Context, port uint16) {
 	initStorage(serverCtx)
 	type globalCfg struct {
-		TLSCert string `yaml:"tls-cert"`
-		TLSKey  string `yaml:"tls-key"`
+		TLSCert    string `yaml:"tls-cert"`
+		TLSKey     string `yaml:"tls-key"`
+		PrivateKey string `yaml:"private-key"`
 	}
 	globalConfig := cfg.MustGet[globalCfg]()
-	uploader := NewUploadHandler(serverCtx, false)
+	uploader := NewUploadHandler(serverCtx, false, nip11.NewFetcher(serverCtx))
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,
-	}, nil, nip11.NewNIP11Handler(serverCtx, &nip11.Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
+	}, nil, nip11.NewNIP11Handler(serverCtx, &nip11.Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: globalConfig.PrivateKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),
 		"GET /files/:file":    uploader.Download(),
+		"HEAD /files/:file":   uploader.CrossRelayDownload(),
 		"DELETE /files/:file": uploader.Delete(),
 	})
 	time.Sleep(100 * time.Millisecond)
@@ -118,6 +119,16 @@ func TestNIP96(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, query.AcceptEvents(ctx, &ev))
+		relaysList := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindRelayListMetadata,
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, masterPubKey},
+				{"r", "wss://localhost:9996"},
+			},
+		}}
+		require.NoError(t, relaysList.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(ctx, relaysList))
 	})
 	events := make([]*model.Event, 0)
 	const filesCount = 6
@@ -177,6 +188,7 @@ func TestNIP96(t *testing.T) {
 				defer wg.Done()
 				require.NoError(t, query.AcceptEvents(ctx, e))
 				require.NoError(t, storage.AcceptEvents(ctx, e))
+				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
 			}()
 		}
 		wg.Wait()
@@ -193,6 +205,7 @@ func TestNIP96(t *testing.T) {
 				defer wg.Done()
 				require.NoError(t, query.AcceptEvents(ctx, e))
 				require.NoError(t, storage.AcceptEvents(ctx, e))
+				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
 			}()
 		}
 		wg.Wait()
@@ -547,7 +560,9 @@ func authorizedReq(t *testing.T, ctx context.Context, sk, method, url, fileHash,
 	require.NoError(t, err)
 
 	uploadReq.Header.Set("Content-Type", contentType)
-	uploadReq.Header.Set("Authorization", generateAuthHeader(t, sk, method, fileHash, uploadReq.URL, masterKey...))
+	auth, err := nip98.GenerateAuthHeader(sk, method, fileHash, uploadReq.URL, masterKey...)
+	require.NoError(t, err)
+	uploadReq.Header.Set("Authorization", auth)
 
 	resp, err := http.DefaultClient.Do(uploadReq.WithContext(ctx))
 	require.NoError(t, err)
@@ -669,35 +684,6 @@ func initStorage(ctx context.Context) {
 	http.DefaultClient.Transport = http.DefaultTransport
 	storage.MustInit(ctx)
 	http.DefaultClient.Transport = transportOverride
-}
-
-func generateAuthHeader(t *testing.T, sk, method, fileHash string, urlValue *url.URL, masterPubkey ...string) string {
-	t.Helper()
-
-	pk, err := model.GetPublicKey(sk)
-	require.NoError(t, err)
-
-	event := model.Event{
-		Event: nostr.Event{
-			Kind:      nip98.NostrHttpAuthKind,
-			PubKey:    pk,
-			CreatedAt: nostr.Now(),
-			Tags: model.Tags{
-				model.Tag{"u", urlValue.String()},
-				model.Tag{"method", method},
-				model.Tag{"payload", fileHash},
-			},
-		},
-	}
-	if len(masterPubkey) > 0 && masterPubkey[0] != "" {
-		event.Tags = append(event.Tags, model.Tag{"b", masterPubkey[0]})
-	}
-	require.NoError(t, event.SignWithAlg(sk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
-	b, err := json.Marshal(event)
-	require.NoError(t, err)
-
-	return `Nostr ` + base64.StdEncoding.EncodeToString(b)
 }
 
 const benchParallelism = 100

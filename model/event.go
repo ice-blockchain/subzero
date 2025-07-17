@@ -290,3 +290,13 @@ func ParseEphemeralEmbeddingEventRef(ev *Event) (key string, eventContent *Event
 	}
 	return ref, eventContent, nil
 }
+
+func CollectRelaysFromRelayEvent(ev *Event) []string {
+	relays := make([]string, 0, len(ev.Tags))
+	for _, tag := range ev.Tags {
+		if tag.Key() == "r" && (len(tag) == 2 || tag[2] == RelayListWriteMarker || tag[2] == "") {
+			relays = append(relays, tag.Value())
+		}
+	}
+	return relays
+}

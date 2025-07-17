@@ -250,9 +250,9 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 	)
 	for ev, iErr := range evIt {
 		if iErr != nil {
-			return nil, errors.Wrapf(err, "failed to fetch user's relays for user %v", userMasterKey)
+			return nil, errors.Wrapf(iErr, "failed to fetch user's relays for user %v", userMasterKey)
 		}
-		relays = collectRelaysFromRelayEvent(ev)
+		relays = model.CollectRelaysFromRelayEvent(ev)
 		break
 	}
 	return relays, nil
@@ -268,7 +268,7 @@ func (c *consensus) getUserAndRelaysForBroadcast(ctx context.Context, events ...
 			continue
 		}
 		if ev.Kind == nostr.KindRelayListMetadata {
-			relays = collectRelaysFromRelayEvent(ev)
+			relays = model.CollectRelaysFromRelayEvent(ev)
 		}
 		if ev.Kind == nostr.KindDeletion && (len(ev.Tags) == 0) && ev.PubKey == ev.GetMasterPublicKey() {
 			profileDeletion = ev
@@ -426,16 +426,6 @@ func (c *consensus) getEvent(ctx context.Context, address string) (event *model.
 	}
 
 	return event, masterKey, nil
-}
-
-func collectRelaysFromRelayEvent(ev *model.Event) []string {
-	relays := make([]string, 0, len(ev.Tags))
-	for _, tag := range ev.Tags {
-		if tag.Key() == "r" {
-			relays = append(relays, tag.Value())
-		}
-	}
-	return relays
 }
 
 func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string, err error) {

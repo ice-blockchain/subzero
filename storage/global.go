@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -50,11 +51,14 @@ type (
 		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
 		RelayURL                string `yaml:"relay-url"`
 	}
+	acceptorFn func(ctx context.Context, fh, master, infohash string) error
 )
 
 var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
 const threadsPerBagForDownloading = 7
+
+const allowedTimeLagForFileReplication = 1 * time.Minute
 
 func init() {
 	db.CachedFDLimit = math.MaxInt64
@@ -65,10 +69,14 @@ func Client() StorageClient {
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
+	return acceptEvents(ctx, globalClient.StartDownloadNewBag, events...)
+}
+
+func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Event) (err error) {
 	for _, event := range events {
 		switch event.Kind {
 		case nostr.KindFileMetadata:
-			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
+			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event, acceptor), "failed to accept new bag %v", event))
 
 		case nostr.KindDeletion:
 			if (len(event.Tags) == 0 || (len(event.Tags) == 1 && event.GetTag("b").Value() != "")) && event.GetMasterPublicKey() != "" {
@@ -90,6 +98,15 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 
 	}
 
+	return err
+}
+
+func ReplicateFileOnPeers(ctx context.Context, events ...*model.Event) (err error) {
+	for _, event := range events {
+		if event.Kind == nostr.KindFileMetadata {
+			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event, globalClient.triggerDownloadOnAllPeers(events...)), "failed to accept new bag %v", event))
+		}
+	}
 	return err
 }
 
@@ -363,4 +380,75 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 
 func (c *client) RootPath() string {
 	return c.rootStoragePath
+}
+
+func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
+	fileIt := query.GetStoredEvents(ctx,
+		model.Filter{
+			Kinds:   []int{nostr.KindFileMetadata},
+			Authors: []string{masterPubkey},
+			Tags:    model.TagMap{}.Append("ox", &fileHash),
+		})
+	var attestation, relays, file *model.Event
+	for e, err := range fileIt {
+		if err != nil {
+			return errors.Wrapf(err, "failed to find events for master %v and file %v", masterPubkey, fileHash)
+		}
+		if e.Kind == nostr.KindFileMetadata && file == nil {
+			file = e
+		}
+		break
+	}
+	if file == nil {
+		return errors.Errorf("failed to verify file ownership, no file %v for user %v", fileHash, masterPubkey)
+	}
+	if now.After(file.CreatedAt.Time().Add(allowedTimeLagForFileReplication)) || now.Before(file.CreatedAt.Time().Add(-allowedTimeLagForFileReplication)) {
+		return errors.Errorf("file expired, received %v, now %v", file.CreatedAt.Time().UnixNano(), now.UnixNano())
+	}
+	eventsIt := query.GetStoredEvents(ctx,
+		model.Filter{
+			Kinds:   []int{nostr.KindRelayListMetadata},
+			Authors: []string{masterPubkey},
+		},
+		model.Filter{
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Authors: []string{masterPubkey},
+			Tags:    model.TagMap{}.SetLiterals("p", file.PubKey),
+		})
+	for e, err := range eventsIt {
+		if err != nil {
+			return errors.Wrapf(err, "failed to find events for master %v and file %v", masterPubkey, fileHash)
+		}
+		switch {
+		case e.Kind == model.CustomIONKindAttestation && attestation == nil:
+			attestation = e
+		case e.Kind == nostr.KindRelayListMetadata && relays == nil:
+			relays = e
+		case e.Kind == nostr.KindFileMetadata && file == nil:
+			file = e
+		}
+		if attestation != nil && file != nil && relays != nil {
+			break
+		}
+	}
+	if attestation == nil {
+		return errors.Errorf("failed to verify file ownership, no attestation for user %v", masterPubkey)
+	}
+	if relays == nil {
+		return errors.Errorf("failed to verify file ownership, no relays for user %v", masterPubkey)
+	}
+	allowed, err := model.OnBehalfIsAccessAllowed(attestation.Tags, file.PubKey, nostr.KindFileMetadata, file.CreatedAt)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse attestation event")
+	}
+	if !allowed {
+		return model.ErrOnBehalfAccessDenied
+	}
+	relaysList := model.CollectRelaysFromRelayEvent(relays)
+	relaysValid := slices.Contains(relaysList, senderUrl) && slices.Contains(relaysList, globalConfig.RelayURL)
+	if !relaysValid {
+		return errors.Errorf("failed to verify file ownership, invalid relays %v %v for user %v", senderUrl, globalConfig.RelayURL, masterPubkey)
+	}
+
+	return nil
 }

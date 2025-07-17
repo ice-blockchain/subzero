@@ -150,6 +150,13 @@ func init() {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		})
+
+		antsPool.Submit(func() {
+			if err := storage.ReplicateFileOnPeers(ctx, events...); err != nil {
+				log.Printf("failed to storage.ReplicateFileOnPeers(%s): %v", model.Events(events).String(), err)
+			}
+		})
+
 		antsPool.Submit(func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)

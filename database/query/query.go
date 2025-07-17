@@ -32,6 +32,7 @@ var (
 	ErrInvalidEvent              = errors.New("invalid event")
 	ErrInvalidRequest            = errors.New("invalid request")
 	ErrRaceCondition             = errors.New("race condition")
+	ErrReadOnly                  = errors.New("relay-is-read-only: read only")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
@@ -920,6 +921,8 @@ func handleError(err error) error {
 		return ErrInvalidRequest
 	case errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation):
 		return ErrRaceCondition
+	case errors.Is(err, connector.ErrReadOnly):
+		return ErrReadOnly
 	}
 
 	return err

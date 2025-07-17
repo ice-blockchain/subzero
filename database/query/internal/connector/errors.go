@@ -61,6 +61,8 @@ func parseError(err error) error {
 			return ErrInvalidData
 		case pgerrcode.SyntaxError:
 			return errors.WithDetail(ErrInternal, dbErr.Error())
+		case pgerrcode.ReadOnlySQLTransaction:
+			return ErrReadOnly
 		}
 	}
 
