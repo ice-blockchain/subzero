@@ -107,34 +107,34 @@ func (e *Event) SignWithAlg(privateKey string, signAlg EventSignAlg, keyAlg Even
 	return nil
 }
 
-func (e *Event) ExtractSignature() (signAlg EventSignAlg, keyAlg EventKeyAlg, sign string, err error) {
-	extensionEnd := strings.IndexRune(e.Sig, ':')
+func ExtractSignature(sig string) (signAlg EventSignAlg, keyAlg EventKeyAlg, sign string, err error) {
+	extensionEnd := strings.IndexRune(sig, ':')
 	if extensionEnd == -1 {
-		sign = e.Sig
+		sign = sig
 
 		return
 	}
 
-	keyStart := strings.IndexRune(e.Sig[:extensionEnd], '/')
+	keyStart := strings.IndexRune(sig[:extensionEnd], '/')
 	if keyStart == -1 {
 		err = errors.Wrap(ErrUnsupportedAlg, "key algorithm is not set")
 
 		return
 	}
 
-	signAlg = EventSignAlg(e.Sig[:keyStart])
-	keyAlg = EventKeyAlg(e.Sig[keyStart+1 : extensionEnd])
+	signAlg = EventSignAlg(sig[:keyStart])
+	keyAlg = EventKeyAlg(sig[keyStart+1 : extensionEnd])
 	if signAlg == "" || keyAlg == "" {
 		err = errors.Wrap(ErrUnsupportedAlg, "signature and key algorithms must be set together")
 
 		return
 	}
 
-	return signAlg, keyAlg, e.Sig[extensionEnd+1:], nil
+	return signAlg, keyAlg, sig[extensionEnd+1:], nil
 }
 
 func (e *Event) CheckSignature() (bool, error) {
-	signAlg, keyAlg, sign, err := e.ExtractSignature()
+	signAlg, keyAlg, sign, err := ExtractSignature(e.Sig)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get signature and key algorithms")
 	}

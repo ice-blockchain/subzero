@@ -4,9 +4,11 @@ package nip96
 
 import (
 	"context"
+	"crypto/ed25519"
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"log"
 	"mime/multipart"
@@ -175,7 +177,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 
 		if err != nil {
 			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			os.Remove(uploadingFilePath)
 			return
 		}
@@ -233,7 +235,7 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 				return
 			}
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.Redirect(http.StatusFound, url)
@@ -262,7 +264,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 				return
 			}
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.File(filePath)
@@ -304,7 +306,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
 			}
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.JSON(http.StatusOK, map[string]any{"status": "success", "message": "deleted"})
@@ -336,7 +338,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		total, filesList, err := s.storageClient.ListFiles(token.MasterPubKey(), params.Page, params.Count)
 		if err != nil {
 			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.MasterPubKey()))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		res := &listedFiles{
@@ -383,7 +385,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 		senderNIP11, err := s.nip11Fetcher.Fetch(ctx, senderUrl)
 		if err != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(err, "failed to fetch sender NIP11"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred"))
 			return
 		}
 		if token.PubKey() != senderNIP11.PubKey {
@@ -398,6 +400,12 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			masterPubkey = spl[0]
 			file = spl[1]
 		}
+		if err = checkAttestation(token.ExpectedHash(), masterPubkey); err != nil {
+			log.Printf("ERROR: endpoint authentification failed: invalid user attestation: %v> %v for key %v", err, token.ExpectedHash(), masterPubkey)
+			gCtx.JSON(http.StatusUnauthorized, uploadErr("invalid user attestation"))
+			return
+		}
+
 		var params struct {
 			I string `form:"i"`
 		}
@@ -412,10 +420,47 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 		}
 		if err := s.storageClient.StartDownloadNewBag(ctx, file, masterPubkey, params.I); err != nil {
 			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash %v for %v", params.I, masterPubkey))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
 		gCtx.Status(http.StatusAccepted)
+	}
+}
+
+func checkAttestation(attestationHashAndSignature, masterPubKey string) error {
+	if sep := strings.Split(attestationHashAndSignature, ">"); len(sep) == 2 {
+		attestationHash := sep[0]
+		attestationSignature := sep[1]
+		signAlg, keyAlg, sign, err := model.ExtractSignature(attestationSignature)
+		if err != nil {
+			return errors.Wrap(err, "failed to get signature and key algorithms")
+		}
+
+		pk, err := hex.DecodeString(masterPubKey)
+		if err != nil {
+			return errors.Wrap(err, "public key is invalid hex")
+		}
+
+		signBytes, err := hex.DecodeString(sign)
+		if err != nil {
+			return errors.Wrap(err, "attestation signature is invalid hex")
+		}
+		hash, err := hex.DecodeString(attestationHash)
+		if err != nil {
+			return errors.Wrap(err, "attestation hash is invalid hex")
+		}
+		switch {
+		case signAlg == model.SignAlgEDDSA && keyAlg == model.KeyAlgCurve25519:
+			if ed25519.Verify(pk, hash[:], signBytes) {
+				return nil
+			}
+			return errors.New("attestation invalid signature")
+		default:
+			return errors.Wrapf(model.ErrUnsupportedAlg, "signature algorithm: %q, key algorithm: %q", signAlg, keyAlg)
+		}
+
+	} else {
+		return errors.Errorf("malformed attestation")
 	}
 }
 

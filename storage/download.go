@@ -4,6 +4,7 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -351,10 +352,15 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 		if len(relays) == 0 {
 			return ErrNoRelays
 		}
+		attestationHashAndSignature, err := buildUserAttestationHashAndSignature(ctx, userMasterKey)
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch user's attestation")
+		}
+
 		var eg errgroup.Group
 		for _, relay := range relays {
 			eg.Go(func() error {
-				if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
+				if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash, attestationHashAndSignature); err != nil {
 					log.Printf("WARN: failed to trigger download on relay %v for user %v: %v", relay, userMasterKey, err)
 					return err
 				}
@@ -365,7 +371,7 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 	}
 }
 
-func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash, masterPubkey, infohash string) (err error) {
+func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash, masterPubkey, infohash, attestationHashAndSignature string) (err error) {
 	fullStrUrl, err := url.JoinPath(relayUrl, "/files/", masterPubkey+":"+fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "invalid relay url: %v", relayUrl)
@@ -386,7 +392,7 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 	values := u.Query()
 	values.Set("i", infohash)
 	u.RawQuery = values.Encode()
-	auth, err := nip98.GenerateAuthHeader(globalConfig.PrivateKey, "HEAD", "", u)
+	auth, err := nip98.GenerateAuthHeader(globalConfig.PrivateKey, "HEAD", attestationHashAndSignature, u)
 	if err != nil {
 		return errors.Wrapf(err, "failed to generate auth header from relay's key")
 	}
@@ -442,4 +448,25 @@ func fetchUserRelays(ctx context.Context, userMasterKey string) (relays []string
 		break
 	}
 	return relays, nil
+}
+
+func buildUserAttestationHashAndSignature(ctx context.Context, masterKey string) (hashAndSignature string, err error) {
+	attestationEventIt := query.GetStoredEvents(ctx, model.Filter{
+		Kinds:   []int{model.CustomIONKindAttestation},
+		Authors: []string{masterKey},
+	})
+	var attestationEvent *model.Event
+	for attestation, err := range attestationEventIt {
+		if err != nil {
+			return "", errors.Wrapf(err, "failed to read user's attestation events")
+		}
+		attestationEvent = attestation
+		break
+	}
+	if attestationEvent == nil {
+		return "", errors.Wrapf(model.ErrOnBehalfAccessDenied, "cannot find attestation event for user %v", masterKey)
+	}
+	hash := sha256.Sum256(attestationEvent.Serialize())
+	hashHex := hex.EncodeToString(hash[:])
+	return hashHex + ">" + attestationEvent.Sig, nil
 }
