@@ -5,6 +5,7 @@ package connector
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/georgysavva/scany/v2/pgxscan"
@@ -33,15 +34,34 @@ func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) erro
 		DeferrableMode: pgx.NotDeferrable,
 	}
 
+	for ctx.Err() == nil {
+		err := executeTransaction(ctx, db, txOptions, fn)
+		if shouldRetryTransaction(err) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		return err
+	}
+
+	return ctx.Err()
+}
+
+func executeTransaction(ctx context.Context, db *DB, txOptions pgx.TxOptions, fn func(conn QueryExecer) error) error {
 	_, err := withRetry(ctx, func() (any, error) {
 		txErr := parseError(pgx.BeginTxFunc(ctx, db.primary(), txOptions, func(tx pgx.Tx) error {
 			return fn(tx)
 		}))
 
-		switch {
-		case errors.IsAny(txErr, ErrReadOnly):
+		if txErr == nil {
+			return nil, retryStop(nil)
+		}
+
+		if errors.IsAny(txErr, ErrReadOnly) {
 			return nil, retryStop(txErr)
-		case IsUnexpected(txErr) || errors.IsAny(txErr, ErrSerializationFailure, ErrTxAborted):
+		}
+
+		if IsUnexpected(txErr) {
+			// Retry on unexpected errors, but not on read-only errors.
 			return nil, txErr
 		}
 
@@ -49,6 +69,10 @@ func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) erro
 	})
 
 	return err
+}
+
+func shouldRetryTransaction(err error) bool {
+	return errors.IsAny(err, ErrSerializationFailure, ErrTxAborted)
 }
 
 func Get[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, error) {
