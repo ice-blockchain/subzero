@@ -99,7 +99,7 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 
 func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
 	if v, ok := h.ConnAuth.Load(respWriter); ok {
-		return model.SetUserDataInContext(ctx, v.MasterPublicKey, v.PublicKey, v.Authenticated, v.Kinds)
+		return model.SetUserDataInContext(ctx, v.UserDataContext)
 	}
 	return ctx
 }
@@ -112,6 +112,9 @@ func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Durat
 	prefix := "[WS]: stats: duration: [" + duration.String() + "]"
 	if v, ok := h.ConnAuth.Load(respWriter); ok && v.Authenticated {
 		prefix += " master: [" + v.MasterPublicKey + "]"
+		if v.UserAgent != "" {
+			prefix += " agent: [" + v.UserAgent + "]"
+		}
 	}
 	prefix += ": "
 	log.Printf(prefix+msg, args...)

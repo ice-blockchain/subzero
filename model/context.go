@@ -10,6 +10,7 @@ type (
 	UserDataContext struct {
 		PublicKey       string
 		MasterPublicKey string
+		UserAgent       string
 		Authenticated   bool
 		Kinds           map[int]struct{}
 	}
@@ -20,20 +21,15 @@ const (
 	userKeyCtx userKey = "subzero_metadata_user"
 )
 
-func GetUserDataFromContext(ctx context.Context) (master, pub string, authenticated bool, kinds map[int]struct{}) {
+func GetUserDataFromContext(ctx context.Context) (value UserDataContext) {
 	if data, ok := ctx.Value(userKeyCtx).(*UserDataContext); ok {
-		return data.MasterPublicKey, data.PublicKey, data.Authenticated, data.Kinds
+		value = *data
 	}
-	return "", "", false, nil
+	return value
 }
 
-func SetUserDataInContext(ctx context.Context, master, pk string, authenticated bool, kinds map[int]struct{}) context.Context {
-	return context.WithValue(ctx, userKeyCtx, &UserDataContext{
-		PublicKey:       pk,
-		MasterPublicKey: master,
-		Authenticated:   authenticated,
-		Kinds:           kinds,
-	})
+func SetUserDataInContext(ctx context.Context, value UserDataContext) context.Context {
+	return context.WithValue(ctx, userKeyCtx, &value)
 }
 
 func (u UserDataContext) IsKindAllowed(kind int) bool {
