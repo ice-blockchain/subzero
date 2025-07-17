@@ -1103,7 +1103,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 	for ctx.Err() == nil {
 		events, err := connector.ExecNamed[model.Event](ctx, db.db, stmt, params)
 		if err != nil {
-			return errors.Wrap(err, "failed to exec delete expired events")
+			return errors.Wrap(handleError(err), "failed to exec delete expired events")
 		}
 
 		if notifyExpiredEvents != nil {
