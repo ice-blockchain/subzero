@@ -73,17 +73,17 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 }
 
 func (n *nostrEventCountJob) doCountMRF(ctx context.Context, filter model.Filter) (string, error) {
-	m, pk, authenticated, kinds := model.GetUserDataFromContext(ctx)
-	if !authenticated {
+	data := model.GetUserDataFromContext(ctx)
+	if !data.Authenticated {
 		return "", model.ErrNotAuthorized
-	} else if _, ok := kinds[nostr.KindFollowList]; len(kinds) > 0 && !ok {
+	} else if !data.IsFilterAllowed(filter) {
 		return "", model.ErrNotAuthorized
 	}
 
 	var total int64
 	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
 		Kinds:   []int{nostr.KindFollowList},
-		Authors: []string{m, pk},
+		Authors: []string{data.PublicKey, data.MasterPublicKey},
 		Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(filter.Tags.All("p"), ",") + "|",
 		Limit:   1,
 	}) {

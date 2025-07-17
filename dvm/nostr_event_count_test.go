@@ -938,7 +938,11 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 			},
 		}.String()
 
-		ctx := model.SetUserDataInContext(t.Context(), "john", "john", true, nil)
+		ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+			PublicKey:       "john",
+			MasterPublicKey: "john",
+			Authenticated:   true,
+		})
 		result := helperMustExecuteJob(t, ctx, d, &ev)
 		require.Equal(t, "2", result.Content, "expected 2 followers") // Anna and Bob.
 	})

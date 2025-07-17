@@ -254,6 +254,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	userdata.Challenge = state.Challenge
 	userdata.MasterPublicKey = e.GetMasterPublicKey()
 	userdata.PublicKey = e.PubKey
+	userdata.UserAgent = e.GetTag("user-agent").Value()
 	userdata.Authenticated = true
 
 	h.ConnAuth.Store(respWriter, userdata)
@@ -268,18 +269,18 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 		if !(strings.Contains(sub.Filters[i].Search, model.ExtensionTextMRF) && sub.Filters[i].Tags.HasValues("p")) {
 			continue
 		}
-		m, pk, authenticated, kinds := model.GetUserDataFromContext(ctx)
+		data := model.GetUserDataFromContext(ctx)
 		sub.OneShot = true
-		if !authenticated {
+		if !data.Authenticated {
 			// Should not happen, but just in case. Also set it to OneShot mode.
 			continue
-		} else if _, ok := kinds[nostr.KindFollowList]; len(kinds) > 0 && !ok {
+		} else if !data.IsKindAllowed(nostr.KindFollowList) {
 			// Not allowed to access the requested data.
 			continue
 		}
 		sub.Filters[i] = model.Filter{
 			Kinds:   []int{nostr.KindFollowList},
-			Authors: []string{m, pk},
+			Authors: []string{data.MasterPublicKey, data.PublicKey},
 			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(sub.Filters[i].Tags.All("p"), ",") + "|",
 			Limit:   1,
 		}
@@ -369,8 +370,8 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	// Special case for global gift wrap subscription.
 	// { "kinds":[1059], "#p": [[loggedinMasterKey, '', loggedinDevicekey]] }.
 	if idx := getGiftWrapFilterIndex(filters); idx >= 0 {
-		master, device, _, _ := model.GetUserDataFromContext(ctx)
-		if isValidGiftWrapFilter(filters[idx], master, device) {
+		data := model.GetUserDataFromContext(ctx)
+		if isValidGiftWrapFilter(filters[idx], data.MasterPublicKey, data.PublicKey) {
 			err := h.streamGiftWrapEvents(ctx, respWriter, sub, filters[idx])
 			if err != nil {
 				return errors.Wrap(err, "failed to stream gift wrap events")

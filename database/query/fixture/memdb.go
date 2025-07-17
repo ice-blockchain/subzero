@@ -29,9 +29,9 @@ func (m *MemDB) SelectEvents(ctx context.Context, filters ...model.Filter) query
 		m.mu.RLock()
 		defer m.mu.RUnlock()
 
-		master, device, _, _ := model.GetUserDataFromContext(ctx)
+		data := model.GetUserDataFromContext(ctx)
 		for i := range m.events {
-			if !model.FiltersMatch(filters, m.events[i], master, device) {
+			if !model.FiltersMatch(filters, m.events[i], data.MasterPublicKey, data.PublicKey) {
 				continue
 			}
 			if !yield(m.events[i], nil) {

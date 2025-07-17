@@ -119,11 +119,11 @@ func TestSubscriptionEventAuth(t *testing.T) {
 			t.Logf("received event: %v", event)
 			storedEvents = append(storedEvents, event)
 			if event.Kind == nostr.KindArticle {
-				master, pk, authenticated, _ := model.GetUserDataFromContext(ctx)
-				t.Logf("ctx data: user=%v/%v, auth=%v", master, pk, authenticated)
-				require.True(t, authenticated)
-				require.Equal(t, pubKey, pk)
-				require.Equal(t, pk, master)
+				data := model.GetUserDataFromContext(ctx)
+				t.Logf("ctx data: user=%v/%v, auth=%v", data.MasterPublicKey, data.PublicKey, data.Authenticated)
+				require.True(t, data.Authenticated)
+				require.Equal(t, pubKey, data.PublicKey)
+				require.Equal(t, data.PublicKey, data.MasterPublicKey)
 			}
 		}
 		return nil
@@ -221,11 +221,11 @@ func TestSubscriptionEventAuthWithEmbeddedAttesttion(t *testing.T) {
 			t.Logf("received event: %v", event)
 			storedEvents = append(storedEvents, event)
 			if event.Kind == nostr.KindArticle {
-				master, pk, authenticated, _ := model.GetUserDataFromContext(ctx)
-				t.Logf("ctx data: user=%q/%q, auth=%v", master, pk, authenticated)
-				require.True(t, authenticated)
-				require.Equal(t, pubKey, pk)
-				require.Equal(t, masterPubKey, master)
+				data := model.GetUserDataFromContext(ctx)
+				t.Logf("ctx data: user=%q/%q, auth=%v", data.MasterPublicKey, data.PublicKey, data.Authenticated)
+				require.True(t, data.Authenticated)
+				require.Equal(t, pubKey, data.PublicKey)
+				require.Equal(t, masterPubKey, data.MasterPublicKey)
 			}
 		}
 		return nil

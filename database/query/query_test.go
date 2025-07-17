@@ -1822,7 +1822,10 @@ func TestGiftWrapReceiverFilter(t *testing.T) {
 		helperSignAndSaveEvent(t, db, priv2, &ev2)
 	})
 	t.Run("User1 can see only events sent to him", func(t *testing.T) {
-		ctx := model.SetUserDataInContext(t.Context(), "", pub1, true, nil)
+		ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+			PublicKey:     pub1,
+			Authenticated: true,
+		})
 		it := db.SelectEvents(ctx)
 		var events []*model.Event
 		for ev, err := range it {
@@ -1833,7 +1836,10 @@ func TestGiftWrapReceiverFilter(t *testing.T) {
 		require.Equal(t, ev2.ID, events[0].ID)
 	})
 	t.Run("User2 can see only events sent to him", func(t *testing.T) {
-		ctx := model.SetUserDataInContext(t.Context(), "", pub2, true, nil)
+		ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+			PublicKey:     pub2,
+			Authenticated: true,
+		})
 		it := db.SelectEvents(ctx)
 		var events []*model.Event
 		for ev, err := range it {

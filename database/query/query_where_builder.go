@@ -1066,8 +1066,8 @@ group by e.master_pubkey, e.pubkey`)
 func (b *queryBuilder) ParseFilters(ctx context.Context, in ...model.Filter) (out []*databaseFilterSearch, err error) {
 	var currentUserPubkey *string
 
-	if _, pub, ok, _ := model.GetUserDataFromContext(ctx); ok && pub != "" {
-		currentUserPubkey = &pub
+	if data := model.GetUserDataFromContext(ctx); data.Authenticated && data.PublicKey != "" {
+		currentUserPubkey = &data.PublicKey
 	}
 
 	if len(in) == 0 {
