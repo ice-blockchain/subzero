@@ -102,7 +102,12 @@ func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Eve
 }
 
 func ReplicateFileOnPeers(ctx context.Context, events ...*model.Event) (err error) {
-	return acceptEvents(ctx, globalClient.triggerDownloadOnAllPeers(events...), events...)
+	for _, event := range events {
+		if event.Kind == nostr.KindFileMetadata {
+			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event, globalClient.triggerDownloadOnAllPeers(events...)), "failed to accept new bag %v", event))
+		}
+	}
+	return err
 }
 
 func acceptDeletion(ctx context.Context, event *model.Event) error {
