@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -125,6 +126,9 @@ func CountGroupedEventReactions(ctx context.Context, filters ...model.Filter) (s
 func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
@@ -145,7 +149,13 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 
 	for range ticks {
 		deleteCtx, cancel := context.WithTimeout(ctx, time.Minute)
-		if err := db.deleteExpiredEvents(deleteCtx); err != nil {
+		err := db.deleteExpiredEvents(deleteCtx)
+		if err != nil {
+			if errors.Is(err, ErrReadOnly) {
+				log.Printf("INFO: Expired events cleanup skipped because the database is in read-only mode: %v", err)
+				cancel()
+				return
+			}
 			log.Printf("failed to delete expired events: %v", err)
 		}
 		cancel()
