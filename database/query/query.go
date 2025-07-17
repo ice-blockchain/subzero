@@ -5,7 +5,6 @@ package query
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
 	"slices"
 	"strconv"
@@ -64,11 +63,6 @@ type (
 		IsQuote         bool
 		IsRootReply     bool
 	}
-	databaseEventAddress struct {
-		Kind   int
-		Pubkey string
-		Dtag   string
-	}
 	databaseRollbackRequest struct {
 		databaseBatchRequest
 		ReplaceableEvents map[string]bool
@@ -76,10 +70,9 @@ type (
 )
 
 type databaseBatchRequest struct {
-	EventsHash *string
+	EventsHash *eventHash
 	// Events to store or replace.
 	InsertOrReplace []databaseEvent
-
 	// Events to delete.
 	Delete []databaseFilterDelete
 	// IDs of replaceable events to rollback update
@@ -257,33 +250,34 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) (e
 
 func (db *dbClient) CommitEvents(ctx context.Context, events ...*model.Event) error {
 	eventsHash := hashEvents(events...)
-	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.LoadAndDelete(eventsHash); !hasEventsToRollback {
-		return nil
-	} else {
-		if val := ctx.Value(model.ConsensusReplayCtxKey); val != nil && val.(bool) {
-			return nil
-		}
-		if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents); err != nil {
-			return errors.Wrap(err, "failed to delete tmp replaceableEvents")
-		}
+	eventsToRollback, hasEventsToRollback := db.rollbackableEvents.LoadAndDelete(eventsHash)
+	if !hasEventsToRollback {
 		return nil
 	}
+
+	if val := ctx.Value(model.ConsensusReplayCtxKey); val != nil && val.(bool) {
+		return nil
+	}
+	if err := db.deleteCommittedReplaceableEvents(ctx, eventsToRollback.ReplaceableEvents, events...); err != nil {
+		return errors.Wrap(err, "failed to delete tmp replaceableEvents")
+	}
+	return nil
 }
 
 func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) error {
 	eventsHash := hashEvents(events...)
-	if eventsToRollback, hasEventsToRollback := db.rollbackableEvents.Load(eventsHash); !hasEventsToRollback {
-		return nil
-	} else {
-		if err := db.executeBatch(ctx, &databaseBatchRequest{
-			InsertOrReplace: eventsToRollback.InsertOrReplace,
-			Delete:          eventsToRollback.Delete,
-			Rollback:        eventsToRollback.ReplaceableEvents,
-		}); err != nil {
-			return errors.Wrap(err, "failed to perform rollback")
-		}
+	eventsToRollback, hasEventsToRollback := db.rollbackableEvents.Load(eventsHash)
+	if !hasEventsToRollback {
 		return nil
 	}
+
+	err := db.executeBatch(ctx, &databaseBatchRequest{
+		InsertOrReplace: eventsToRollback.InsertOrReplace,
+		Delete:          eventsToRollback.Delete,
+		Rollback:        eventsToRollback.ReplaceableEvents,
+	})
+
+	return errors.Wrap(err, "failed to perform rollback")
 }
 
 func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
@@ -315,16 +309,15 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 					genericFilter.Tags.Append("e", &id)
 				}
 				genericFilters = append(genericFilters, genericFilter)
-			} else if len(f.Events) > 0 {
+			} else if len(f.Addresses) > 0 {
 				filterA, filterQ := model.Filter{
 					Tags: model.TagMap{},
 				}, model.Filter{
 					Tags: model.TagMap{},
 				}
-				for _, e := range f.Events {
-					tag := fmt.Sprintf("%d:%s:%s", e.Kind, e.Pubkey, e.Dtag)
-					filterA.Tags.Append("a", &tag)
-					filterQ.Tags.Append("Q", &tag)
+				for i := range f.Addresses {
+					filterA.Tags.Append("a", &f.Addresses[i])
+					filterQ.Tags.Append("Q", &f.Addresses[i])
 					genericFilters = append(genericFilters, filterA, filterQ)
 				}
 			}
@@ -360,15 +353,10 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 		var f databaseFilterDelete
 
 		f.Author = ev.PubKey
-		switch {
-		case ev.IsReplaceable():
-			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
-
-		case ev.IsAddressable():
-			f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
-
-		case ev.IsRegular():
+		if ev.IsRegular() {
 			f.IDs = append(f.IDs, ev.ID)
+		} else {
+			f.Addresses = append(f.Addresses, ev.Address())
 		}
 		dependencies = append(dependencies, f)
 	}
@@ -376,8 +364,16 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 	return deletedEvents, dependencies, nil
 }
 
-func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool) error {
-	const sqlQuery = `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY($1)`
+func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replaceableEventsToDelete map[string]bool, events ...*model.Event) error {
+	const sqlQuery = `DELETE from replaceable_events_before_update WHERE replaced_by_id = ANY($1)
+RETURNING
+	kind,
+	created_at,
+	id,
+	pubkey,
+	sig,
+	content,
+	tags`
 
 	if len(replaceableEventsToDelete) == 0 {
 		return nil
@@ -387,11 +383,21 @@ func (db *dbClient) deleteCommittedReplaceableEvents(ctx context.Context, replac
 		replaceableEventsIDs = append(replaceableEventsIDs, evID)
 	}
 
-	actual, err := connector.Exec(ctx, db.db, sqlQuery, replaceableEventsIDs)
+	deleted, err := connector.ExecMany[model.Event](ctx, db.db, sqlQuery, replaceableEventsIDs)
 	if err != nil {
 		return errors.Wrap(handleError(err), "failed to exec delete committed replaceable events event sql")
-	} else if actual != uint64(len(replaceableEventsToDelete)) {
-		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), actual)
+	} else if uint64(len(deleted)) != uint64(len(replaceableEventsToDelete)) {
+		return errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", len(replaceableEventsToDelete), len(deleted))
+	}
+	oldEvents := make(map[string]*model.Event)
+	for i := range deleted {
+		oldEvents[deleted[i].Address()] = deleted[i]
+	}
+	for i := range events {
+		addr := events[i].Address()
+		if oldEvent, hasOldEvent := oldEvents[addr]; hasOldEvent {
+			events[i].Previous = oldEvent
+		}
 	}
 	return nil
 }
@@ -735,11 +741,10 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 	replaceableEvents = map[string]bool{}
 	oldEvents := make(map[string]*model.Event, len(events))
 	for i := range events {
-		if events[i].IsReplaceable() || events[i].IsAddressable() {
-			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
-		}
 		if events[i].SaveMergeAction == "OLD" {
 			oldEvents[events[i].Address()] = events[i].Event
+		} else if events[i].IsReplaceable() || events[i].IsAddressable() {
+			replaceableEvents[events[i].ID] = events[i].SaveMergeAction == "INSERT"
 		}
 	}
 	for i := range req.InsertOrReplace {
@@ -764,20 +769,15 @@ func (db *dbClient) executeSave(ctx context.Context, req *databaseBatchRequest) 
 	if expectedRows, actual := len(req.Rollback), len(events)+len(replaceableEvents); sErr == nil && actual < expectedRows {
 		sErr = errors.Wrapf(ErrUnexpectedRowsAffected, "expected %d rows affected, got %d", expectedRows, actual)
 	}
-	if sErr == nil && req.EventsHash != nil && len(events) > 0 {
+	if sErr == nil && req.EventsHash != nil && (len(events)-len(oldEvents)) > 0 {
 		for _, ev := range events {
 			var f databaseFilterDelete
 
 			f.Author = ev.PubKey
-			switch {
-			case ev.IsReplaceable():
-				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey})
-
-			case ev.IsAddressable():
-				f.Events = append(f.Events, databaseEventAddress{Kind: ev.Kind, Pubkey: ev.PubKey, Dtag: ev.Tags.GetD()})
-
-			case ev.IsRegular():
+			if ev.IsRegular() {
 				f.IDs = append(f.IDs, ev.ID)
+			} else {
+				f.Addresses = append(f.Addresses, ev.Address())
 			}
 			inserted = append(inserted, f)
 		}

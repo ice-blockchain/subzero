@@ -74,7 +74,7 @@ func TestReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Tags:      model.Tags{},
 			},
@@ -84,7 +84,7 @@ func TestReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()) + 1,
+				CreatedAt: nostr.Now() + 1,
 				Kind:      nostr.KindTextNote,
 				Tags:      model.Tags{},
 			},
@@ -105,7 +105,7 @@ func TestReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal, 1st event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindProfileMetadata,
 				Tags:      model.Tags{},
 
@@ -128,7 +128,7 @@ func TestReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "normal, 2nd event" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindProfileMetadata,
 				Tags:      model.Tags{},
 
@@ -227,7 +227,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "item to be replaced" + uuid.NewString(),
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepositoryAnnouncement,
 				Tags: model.Tags{
 					[]string{"d", "bogus"},
@@ -241,7 +241,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "param replaceable 1 " + uuid.NewString(),
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepositoryAnnouncement,
 				Tags: model.Tags{
 					[]string{"d", "bogus"},
@@ -256,7 +256,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "param replaceable 2 " + uuid.NewString(),
 				PubKey:    "bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepositoryAnnouncement,
 				Tags: model.Tags{
 					[]string{"d", "another bogus" + uuid.NewString()},
@@ -271,7 +271,7 @@ func TestParametrizedReplaceableEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "param replaceable 3 " + uuid.NewString(),
 				PubKey:    "another bogus",
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindRepositoryAnnouncement,
 				Tags: model.Tags{
 					[]string{"d", "bogus" + uuid.NewString()},
@@ -300,7 +300,7 @@ func TestEphemeralEvents(t *testing.T) {
 			Event: nostr.Event{
 				ID:        "ephemeral" + uuid.NewString(),
 				PubKey:    "bogus" + uuid.NewString(),
-				CreatedAt: nostr.Timestamp(time.Now().Unix()),
+				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindClientAuthentication,
 			},
 		}))

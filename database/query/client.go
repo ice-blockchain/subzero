@@ -3,10 +3,10 @@
 package query
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"log"
 	"path"
@@ -25,8 +25,10 @@ type (
 		db                 *connector.DB
 		relayPrivateKey    string
 		relayURL           string
-		rollbackableEvents *xsync.Map[string, *databaseRollbackRequest]
+		rollbackableEvents *xsync.Map[eventHash, *databaseRollbackRequest]
 	}
+
+	eventHash [sha256.Size]byte
 )
 
 var (
@@ -97,7 +99,7 @@ func readDDL() string {
 
 func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...string) *dbClient {
 	client := &dbClient{
-		rollbackableEvents: xsync.NewMap[string, *databaseRollbackRequest](),
+		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
 	}
 	options := []connector.Option{
 		connector.WithMaster(target),
@@ -146,13 +148,18 @@ func (client *dbClient) WithPrivateKey(privateKey string) *dbClient {
 	return client
 }
 
-func hashEvents(events ...*model.Event) (hash string) {
-	var buf bytes.Buffer
+func hashEvents(events ...*model.Event) (sum eventHash) {
+	h := sha256.New()
 
 	for _, e := range events {
-		buf.WriteString(e.String())
+		h.Write(e.Serialize())
 	}
-	sum := sha256.Sum256(buf.Bytes())
 
-	return string(sum[:])
+	h.Sum(sum[:0])
+
+	return sum
+}
+
+func (h eventHash) String() string {
+	return hex.EncodeToString(h[:])
 }

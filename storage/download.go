@@ -126,7 +126,7 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 			user:      &user,
 		}:
 		}
-		if err = c.saveTorrent(tor, &user, bootstrap); err != nil {
+		if err = c.saveTorrent(tor, &user, bootstrap, false); err != nil {
 			return errors.Wrapf(err, "failed to store new torrent %v", bagID)
 		}
 	} else {
@@ -157,7 +157,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 			delete(c.activeDownloads, hex.EncodeToString(tor.BagID))
 			c.activeDownloadsMx.Unlock()
 
-			if pErr := c.saveTorrent(tor, user, nil); pErr != nil {
+			if pErr := c.saveTorrent(tor, user, nil, false); pErr != nil {
 				log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
 			}
 
@@ -176,7 +176,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 						*user = m.Master
 					}
 				}
-				if pErr := c.saveTorrent(tor, user, nil); pErr != nil {
+				if pErr := c.saveTorrent(tor, user, nil, false); pErr != nil {
 					log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
 				}
 			}
@@ -212,7 +212,7 @@ func (c *client) connectToBootstrap(ctx context.Context, torrent *storage.Torren
 	return nil
 }
 
-func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string) error {
+func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string, deletion bool) error {
 	if err := c.progressStorage.SetTorrent(tr); err != nil {
 		return errors.Wrap(err, "failed to save torrent into storage")
 	}
@@ -228,7 +228,7 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 		if existing != nil && existing.Header != nil {
 			maxVal = max(uint32(f), existing.Header.FilesCount)
 		}
-		if tr.Header == nil || (tr.Header != nil && tr.Header.FilesCount >= maxVal) {
+		if deletion || tr.Header == nil || (tr.Header != nil && tr.Header.FilesCount >= maxVal) {
 			if err := c.saveBagPerUser(tr.BagID, userPubKey); err != nil {
 				return errors.Wrapf(err, "failed to save bag per user")
 			}
@@ -297,7 +297,7 @@ outerLoop:
 					}
 					cancel()
 				}
-				if err := c.saveTorrent(tor, q.user, q.bootstrap); err != nil {
+				if err := c.saveTorrent(tor, q.user, q.bootstrap, false); err != nil {
 					log.Printf("ERROR: failed save updated upload / download torrrent state %v: %v", hex.EncodeToString(q.tor.BagID), err)
 				}
 				c.activeDownloadsMx.Lock()

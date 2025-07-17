@@ -430,16 +430,14 @@ func TestApplyDeleteFilter(t *testing.T) {
 	})
 	t.Run("Complex", func(t *testing.T) {
 		filter := databaseFilterDelete{
-			Author: "author1",
-			IDs:    []string{"123", "456"},
-			Events: []databaseEventAddress{
-				{Kind: 13, Pubkey: "author2", Dtag: "value1"},
-			},
+			Author:    "author1",
+			IDs:       []string{"123", "456"},
+			Addresses: []string{"address1"},
 		}
 		stmt, param, err := newQueryBuilder().BuildForDelete(filter)
 		require.NoError(t, err)
 		t.Logf("stmt: %s (%+v)", stmt, param)
-		require.Len(t, param, 6)
+		require.Len(t, param, 4)
 	})
 	t.Run("TwoSimple", func(t *testing.T) {
 		filters := []databaseFilterDelete{
