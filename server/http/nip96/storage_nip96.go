@@ -8,8 +8,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -25,6 +23,8 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
 
+	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
 	"github.com/ice-blockchain/subzero/storage"
 )

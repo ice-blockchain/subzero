@@ -4,15 +4,16 @@ package nip11
 
 import (
 	"context"
+	"log"
+	"net/http"
+	"net/url"
+	"time"
+
 	"github.com/cockroachdb/errors"
 	"github.com/goccy/go-json"
 	"github.com/imroc/req/v3"
 	"github.com/jellydator/ttlcache/v3"
 	"golang.org/x/sync/singleflight"
-	"log"
-	"net/http"
-	"net/url"
-	"time"
 )
 
 type (
