@@ -385,10 +385,9 @@ func (c *client) RootPath() string {
 func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
 	fileIt := query.GetStoredEvents(ctx,
 		model.Filter{
-			Kinds:     []int{nostr.KindFileMetadata},
-			Authors:   []string{masterPubkey},
-			Addresses: nil,
-			Tags:      model.TagMap{}.Append("ox", &fileHash),
+			Kinds:   []int{nostr.KindFileMetadata},
+			Authors: []string{masterPubkey},
+			Tags:    model.TagMap{}.Append("ox", &fileHash),
 		})
 	var attestation, relays, file *model.Event
 	for e, err := range fileIt {
@@ -404,7 +403,7 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 		return errors.Errorf("failed to verify file ownership, no file %v for user %v", fileHash, masterPubkey)
 	}
 	if now.After(file.CreatedAt.Time().Add(allowedTimeLagForFileReplication)) || now.Before(file.CreatedAt.Time().Add(-allowedTimeLagForFileReplication)) {
-		return errors.Errorf("file expired, received %v, now %v", now.UnixNano(), file.CreatedAt.Time().UnixNano())
+		return errors.Errorf("file expired, received %v, now %v", file.CreatedAt.Time().UnixNano(), now.UnixNano())
 	}
 	eventsIt := query.GetStoredEvents(ctx,
 		model.Filter{

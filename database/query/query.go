@@ -282,7 +282,7 @@ func (db *dbClient) RollbackEvents(ctx context.Context, events ...*model.Event) 
 }
 
 func parseSigKeyAlg(event *model.Event) (sigAlg, keyAlg string, err error) {
-	sAlg, kAlg, _, err := model.ExtractSignature(event.Sig)
+	sAlg, kAlg, _, err := event.ExtractSignature()
 	if err != nil {
 		return "", "", errors.Wrap(err, "failed to extract signature")
 	}

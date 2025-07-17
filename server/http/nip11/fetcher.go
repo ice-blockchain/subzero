@@ -76,7 +76,7 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 	case "wss":
 		u.Scheme = "https"
 	default:
-		return nil, errors.Errorf("invalid scheme :%v", u.Scheme)
+		return nil, errors.Errorf("invalid scheme: %v", u.Scheme)
 	}
 	resp, err := req.
 		SetContext(ctx).
