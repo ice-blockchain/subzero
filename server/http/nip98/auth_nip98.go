@@ -5,7 +5,6 @@ package nip98
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"net/url"
 	"strings"
 	"time"
@@ -185,9 +184,5 @@ func GenerateAuthHeader(sk, method, fileHash string, urlValue *url.URL, masterPu
 		return "", errors.Wrap(err, "failed to sign auth event")
 	}
 
-	b, err := json.Marshal(event)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to encode auth event")
-	}
-	return `Nostr ` + base64.StdEncoding.EncodeToString(b), nil
+	return `Nostr ` + base64.StdEncoding.EncodeToString([]byte(event.String())), nil
 }

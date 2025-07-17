@@ -50,13 +50,12 @@ type (
 		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
 		RelayURL                string `yaml:"relay-url"`
 	}
+	acceptorFn func(ctx context.Context, fh, master, infohash string) error
 )
 
 var ConcurrentBagsDownloading = runtime.NumCPU() * 10
 
 const threadsPerBagForDownloading = 7
-
-const triggerDownloadOnAllPeersUsingEndpoint = true
 
 func init() {
 	db.CachedFDLimit = math.MaxInt64
@@ -67,10 +66,14 @@ func Client() StorageClient {
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
+	return acceptEvents(ctx, globalClient.StartDownloadNewBag, events...)
+}
+
+func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Event) (err error) {
 	for _, event := range events {
 		switch event.Kind {
 		case nostr.KindFileMetadata:
-			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event), "failed to accept new bag %v", event))
+			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event, acceptor), "failed to accept new bag %v", event))
 
 		case nostr.KindDeletion:
 			if (len(event.Tags) == 0 || (len(event.Tags) == 1 && event.GetTag("b").Value() != "")) && event.GetMasterPublicKey() != "" {
@@ -93,6 +96,10 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
 	}
 
 	return err
+}
+
+func SendAcceptedEventsToRemotes(ctx context.Context, events ...*model.Event) (err error) {
+	return acceptEvents(ctx, globalClient.triggerDownloadOnAllPeers(events...), events...)
 }
 
 func acceptDeletion(ctx context.Context, event *model.Event) error {

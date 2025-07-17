@@ -4,7 +4,6 @@ package storage
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -51,7 +50,7 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 	return c.buildUrl(hex.EncodeToString(bag.BagID), file, masterPubkey, fileHash, bootstrap)
 }
 
-func acceptNewBag(ctx context.Context, event *model.Event) error {
+func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx context.Context, fh, master, infohash string) error) error {
 	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), event.String())
 	infohash := ""
 	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {
@@ -60,17 +59,13 @@ func acceptNewBag(ctx context.Context, event *model.Event) error {
 		return errors.Newf("malformed i tag %v", iTag)
 	}
 	fileHash := ""
-	if oxTag := event.Tags.GetFirst([]string{"ox"}); oxTag != nil && len(*oxTag) > 1 {
+	if oxTag := event.GetTag("ox"); oxTag != nil && len(oxTag) > 1 {
 		fileHash = oxTag.Value()
 	} else {
 		return errors.Newf("malformed ox tag %v", oxTag)
 	}
-	if triggerDownloadOnAllPeersUsingEndpoint {
-		if err := globalClient.triggerDownloadOnAllPeers(ctx, fileHash, event.GetMasterPublicKey(), infohash); err != nil {
-			return errors.Wrapf(err, "failed to trigger download on all peers for file %v", fileHash)
-		}
-	}
-	return globalClient.StartDownloadNewBag(ctx, fileHash, event.GetMasterPublicKey(), infohash)
+
+	return acceptor(ctx, fileHash, event.GetMasterPublicKey(), infohash)
 }
 
 func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKey, infohash string) error {
@@ -336,41 +331,41 @@ outerLoop:
 
 }
 
-func (c *client) triggerDownloadOnAllPeers(ctx context.Context, fileHash, userMasterKey, infohash string, events ...*model.Event) error {
-	var relays []string
-	for _, e := range events {
-		if e.Kind == nostr.KindRelayListMetadata {
-			relays = model.CollectRelaysFromRelayEvent(e)
-			break
+func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
+	return func(ctx context.Context, fileHash, userMasterKey, infohash string) error {
+		var relays []string
+		for _, e := range events {
+			if e.Kind == nostr.KindRelayListMetadata {
+				relays = model.CollectRelaysFromRelayEvent(e)
+				break
+			}
 		}
-	}
-	if len(relays) == 0 {
-		var err error
-		relays, err = fetchUserRelays(ctx, userMasterKey)
-		if err != nil {
-			log.Printf("WARN: failed to fetch user's relays for user %v: %v", userMasterKey, err)
+		if len(relays) == 0 {
+			var err error
+			relays, err = fetchUserRelays(ctx, userMasterKey)
+			if err != nil {
+				log.Printf("WARN: failed to fetch user's relays for user %v: %v", userMasterKey, err)
+				return ErrNoRelays
+			}
+		}
+		if len(relays) == 0 {
 			return ErrNoRelays
 		}
+		var eg errgroup.Group
+		for _, relay := range relays {
+			eg.Go(func() error {
+				if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
+					log.Printf("WARN: failed to trigger download on relay %v for user %v: %v", relay, userMasterKey, err)
+					return err
+				}
+				return nil
+			})
+		}
+		return errors.Wrapf(eg.Wait(), "failed to trigger storage download on one or more relays")
 	}
-	if len(relays) == 0 {
-		return ErrNoRelays
-	}
-	var eg errgroup.Group
-	for _, relay := range relays {
-		eg.Go(func() error {
-			if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
-				log.Printf("WARN: failed to trigger download on relay %v for user %v: %v", relay, userMasterKey, err)
-				return err
-			}
-			return nil
-		})
-	}
-	return errors.Wrapf(eg.Wait(), "failed to trigger storage download on one or more relays")
 }
 
 func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash, masterPubkey, infohash string) (err error) {
-	req.DefaultClient().TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
 	fullStrUrl, err := url.JoinPath(relayUrl, "/files/", fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "invalid relay url: %v", relayUrl)
@@ -411,9 +406,9 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("failed to start storage replication on %v, retrying...: %v", relayUrl, err)
+				log.Printf("failed to start storage replication of file %v : %v on %v, retrying...: %v", masterPubkey, fileHash, relayUrl, err)
 			} else {
-				log.Printf("failed to start storage replication on %v:status %v, retrying...", relayUrl, resp.GetStatusCode())
+				log.Printf("failed to start storage replication of file %v : %v on %v:status %v, retrying...", masterPubkey, fileHash, relayUrl, resp.GetStatusCode())
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {
