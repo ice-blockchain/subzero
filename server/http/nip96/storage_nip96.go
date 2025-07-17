@@ -399,7 +399,9 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			file = spl[1]
 		}
 		if err = storage.VerifyFileOwnershipAndAttestationForFileReplication(ctx, now, file, masterPubkey, senderUrl); err != nil {
+			log.Printf("ERROR: not owning the file: %v %v user %v req from %v", err, file, masterPubkey, senderUrl)
 			gCtx.JSON(http.StatusConflict, uploadErr("relay does not won the file"))
+			return
 		}
 		var params struct {
 			I string `form:"i"`

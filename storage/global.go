@@ -383,13 +383,30 @@ func (c *client) RootPath() string {
 }
 
 func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
-	eventsIt := query.GetStoredEvents(ctx,
+	fileIt := query.GetStoredEvents(ctx,
 		model.Filter{
 			Kinds:     []int{nostr.KindFileMetadata},
 			Authors:   []string{masterPubkey},
 			Addresses: nil,
 			Tags:      model.TagMap{}.Append("ox", &fileHash),
-		},
+		})
+	var attestation, relays, file *model.Event
+	for e, err := range fileIt {
+		if err != nil {
+			return errors.Wrapf(err, "failed to find events for master %v and file %v", masterPubkey, fileHash)
+		}
+		if e.Kind == nostr.KindFileMetadata && file == nil {
+			file = e
+		}
+		break
+	}
+	if file == nil {
+		return errors.Errorf("failed to verify file ownership, no file %v for user %v", fileHash, masterPubkey)
+	}
+	if now.After(file.CreatedAt.Time().Add(allowedTimeLagForFileReplication)) || now.Before(file.CreatedAt.Time().Add(-allowedTimeLagForFileReplication)) {
+		return errors.Errorf("file expired, received %v, now %v", now.UnixNano(), file.CreatedAt.Time().UnixNano())
+	}
+	eventsIt := query.GetStoredEvents(ctx,
 		model.Filter{
 			Kinds:   []int{nostr.KindRelayListMetadata},
 			Authors: []string{masterPubkey},
@@ -397,8 +414,8 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 		model.Filter{
 			Kinds:   []int{model.CustomIONKindAttestation},
 			Authors: []string{masterPubkey},
+			Tags:    model.TagMap{}.SetLiterals("p", file.PubKey),
 		})
-	var attestation, relays, file *model.Event
 	for e, err := range eventsIt {
 		if err != nil {
 			return errors.Wrapf(err, "failed to find events for master %v and file %v", masterPubkey, fileHash)
@@ -418,9 +435,6 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 	if attestation == nil {
 		return errors.Errorf("failed to verify file ownership, no attestation for user %v", masterPubkey)
 	}
-	if file == nil {
-		return errors.Errorf("failed to verify file ownership, no file %v for user %v", fileHash, masterPubkey)
-	}
 	if relays == nil {
 		return errors.Errorf("failed to verify file ownership, no relays for user %v", masterPubkey)
 	}
@@ -435,9 +449,6 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 	relaysValid := slices.Contains(relaysList, senderUrl) && slices.Contains(relaysList, globalConfig.RelayURL)
 	if !relaysValid {
 		return errors.Errorf("failed to verify file ownership, invalid relays %v %v for user %v", senderUrl, globalConfig.RelayURL, masterPubkey)
-	}
-	if file.CreatedAt.Time().After(now.Add(allowedTimeLagForFileReplication)) || file.CreatedAt.Time().Before(now.Add(-allowedTimeLagForFileReplication)) {
-		return errors.Wrapf(err, "file expired, received %v, now %v", now.UnixNano(), file.CreatedAt.Time().UnixNano())
 	}
 
 	return nil
