@@ -78,7 +78,7 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 	default:
 		return nil, errors.Errorf("invalid scheme :%v", u.Scheme)
 	}
-	if resp, err := req.
+	resp, err := req.
 		SetContext(ctx).
 		SetRetryCount(3).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
@@ -86,25 +86,25 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("ERROR: %v", errors.Wrapf(err, "failed to call relay %v, retrying...", relayUrl))
+				log.Printf("ERROR: %v, failed to call relay %v, retrying...", err, relayUrl)
 			} else {
-				log.Printf("ERROR: %v", errors.Errorf("failed to call relay %v with status code:%v, retrying...", relayUrl, resp.GetStatusCode()))
+				log.Printf("ERROR: failed to call relay %v with status code:%v, retrying...", relayUrl, resp.StatusCode)
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {
 			return err != nil || resp.GetStatusCode() != http.StatusOK
 		}).
 		SetHeader("Accept", "application/nostr+json").
-		Get(u.String()); err != nil {
+		Get(u.String())
+	if err != nil {
 		return nil, errors.Wrapf(err, "failed to call relay %v", relayUrl)
-
 	} else if statusCode := resp.GetStatusCode(); statusCode != http.StatusOK {
 		return nil, errors.Errorf("failed to check relay %v with status code:%v", relayUrl, statusCode)
 	} else if data, err2 := resp.ToBytes(); err2 != nil {
 		return nil, errors.Wrapf(err2, "failed to read body of relay %v response", relayUrl)
 	} else {
 		var nip11 RelayInformationDocument
-		if err = json.UnmarshalContext(ctx, data, &nip11); err != nil {
+		if err = json.Unmarshal(data, &nip11); err != nil {
 			return nil, errors.Wrapf(err, "failed to unmarshal data: %v", string(data))
 		}
 		return &nip11, nil

@@ -152,8 +152,8 @@ func init() {
 		})
 
 		antsPool.Submit(func() {
-			if err := storage.SendAcceptedEventsToRemotes(ctx, events...); err != nil {
-				log.Printf("failed to storage.SendAcceptedEventsToRemotes(%s): %v", model.Events(events).String(), err)
+			if err := storage.ReplicateFileOnPeers(ctx, events...); err != nil {
+				log.Printf("failed to storage.ReplicateFileOnPeers(%s): %v", model.Events(events).String(), err)
 			}
 		})
 

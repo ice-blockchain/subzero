@@ -4,7 +4,6 @@ package nip96
 
 import (
 	"context"
-	"crypto/ed25519"
 	_ "embed"
 	"encoding/hex"
 	"fmt"
@@ -23,7 +22,6 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
 	"github.com/ice-blockchain/subzero/storage"
@@ -223,7 +221,7 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 			return
 		}
 		masterPubkey := token.MasterPubKey()
-		spl := strings.Split(file, ":")
+		spl := strings.SplitN(file, ":", 2)
 		if len(spl) == 2 {
 			masterPubkey = spl[0]
 			file = spl[1]
@@ -249,7 +247,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 			return
 		}
 		var masterPubkey string
-		spl := strings.Split(file, ":")
+		spl := strings.SplitN(file, ":", 2)
 		if len(spl) == 2 {
 			masterPubkey = spl[0]
 			file = spl[1]
@@ -394,18 +392,15 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			return
 		}
 		file := gCtx.Param("file")
-		spl := strings.Split(file, ":")
+		spl := strings.SplitN(file, ":", 2)
 		var masterPubkey string
 		if len(spl) == 2 {
 			masterPubkey = spl[0]
 			file = spl[1]
 		}
-		if err = checkAttestation(token.ExpectedHash(), masterPubkey); err != nil {
-			log.Printf("ERROR: endpoint authentification failed: invalid user attestation: %v> %v for key %v", err, token.ExpectedHash(), masterPubkey)
-			gCtx.JSON(http.StatusUnauthorized, uploadErr("invalid user attestation"))
-			return
+		if err = storage.VerifyFileOwnershipAndAttestationForFileReplication(ctx, now, file, masterPubkey, senderUrl); err != nil {
+			gCtx.JSON(http.StatusConflict, uploadErr("relay does not won the file"))
 		}
-
 		var params struct {
 			I string `form:"i"`
 		}
@@ -424,43 +419,6 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			return
 		}
 		gCtx.Status(http.StatusAccepted)
-	}
-}
-
-func checkAttestation(attestationHashAndSignature, masterPubKey string) error {
-	if sep := strings.Split(attestationHashAndSignature, ">"); len(sep) == 2 {
-		attestationHash := sep[0]
-		attestationSignature := sep[1]
-		signAlg, keyAlg, sign, err := model.ExtractSignature(attestationSignature)
-		if err != nil {
-			return errors.Wrap(err, "failed to get signature and key algorithms")
-		}
-
-		pk, err := hex.DecodeString(masterPubKey)
-		if err != nil {
-			return errors.Wrap(err, "public key is invalid hex")
-		}
-
-		signBytes, err := hex.DecodeString(sign)
-		if err != nil {
-			return errors.Wrap(err, "attestation signature is invalid hex")
-		}
-		hash, err := hex.DecodeString(attestationHash)
-		if err != nil {
-			return errors.Wrap(err, "attestation hash is invalid hex")
-		}
-		switch {
-		case signAlg == model.SignAlgEDDSA && keyAlg == model.KeyAlgCurve25519:
-			if ed25519.Verify(pk, hash[:], signBytes) {
-				return nil
-			}
-			return errors.New("attestation invalid signature")
-		default:
-			return errors.Wrapf(model.ErrUnsupportedAlg, "signature algorithm: %q, key algorithm: %q", signAlg, keyAlg)
-		}
-
-	} else {
-		return errors.Errorf("malformed attestation")
 	}
 }
 

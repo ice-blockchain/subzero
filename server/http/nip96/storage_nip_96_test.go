@@ -188,7 +188,7 @@ func TestNIP96(t *testing.T) {
 				defer wg.Done()
 				require.NoError(t, query.AcceptEvents(ctx, e))
 				require.NoError(t, storage.AcceptEvents(ctx, e))
-				require.NoError(t, storage.SendAcceptedEventsToRemotes(ctx, e))
+				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
 			}()
 		}
 		wg.Wait()
@@ -205,7 +205,7 @@ func TestNIP96(t *testing.T) {
 				defer wg.Done()
 				require.NoError(t, query.AcceptEvents(ctx, e))
 				require.NoError(t, storage.AcceptEvents(ctx, e))
-				require.NoError(t, storage.SendAcceptedEventsToRemotes(ctx, e))
+				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
 			}()
 		}
 		wg.Wait()
