@@ -2,9 +2,10 @@
 
 server:
   ion-liberty-disabled: false
-  private-key: 97da572f75c23bff475bc48cd3ff193a0681e82907fb97d0a2d44ec1f0fb88b1b88d40e358e8264a3b9ca2a6abc0ba7bd2035d1647af7acdb211f4a3dccab44e
+  private-key: f2e7f1829027cf347d3ddb90e40890fcffb1ca99a3fc2564a120286570b690e548ac550ea62ab27c8c85d1f862b779b8c7dd09d733403dd9a3104be42f8ddb7b
   http:
     nip96:
+      private-key: f2e7f1829027cf347d3ddb90e40890fcffb1ca99a3fc2564a120286570b690e548ac550ea62ab27c8c85d1f862b779b8c7dd09d733403dd9a3104be42f8ddb7b
       tls-cert: &ws-cert |
         -----BEGIN CERTIFICATE-----
         MIID0TCCArmgAwIBAgIUJ66CoEOD8Ud1CJpgmxdw+zgx+uEwDQYJKoZIhvcNAQEL
@@ -77,4 +78,4 @@ storage:
   external-adnl-port: 12345
   debug: true
   ion-liberty-disabled: false
-  relay-url: "-"
+  relay-url: "wss://localhost:9996"

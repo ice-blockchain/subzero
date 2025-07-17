@@ -366,7 +366,7 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 }
 
 func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash, masterPubkey, infohash string) (err error) {
-	fullStrUrl, err := url.JoinPath(relayUrl, "/files/", fileHash)
+	fullStrUrl, err := url.JoinPath(relayUrl, "/files/", masterPubkey+":"+fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "invalid relay url: %v", relayUrl)
 	}
@@ -385,7 +385,6 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 	fullStrUrl = u.String()
 	values := u.Query()
 	values.Set("i", infohash)
-	values.Set("master", masterPubkey)
 	u.RawQuery = values.Encode()
 	auth, err := nip98.GenerateAuthHeader(globalConfig.PrivateKey, "HEAD", "", u)
 	if err != nil {
@@ -437,7 +436,7 @@ func fetchUserRelays(ctx context.Context, userMasterKey string) (relays []string
 	)
 	for ev, iErr := range evIt {
 		if iErr != nil {
-			return nil, errors.Wrapf(err, "failed to fetch user's relays for user %v", userMasterKey)
+			return nil, errors.Wrapf(iErr, "failed to fetch user's relays for user %v", userMasterKey)
 		}
 		relays = model.CollectRelaysFromRelayEvent(ev)
 		break

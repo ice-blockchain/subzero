@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -44,6 +45,7 @@ var nip96Info string
 type storageHandler struct {
 	storageClient      storage.StorageClient
 	auth               nip98.AuthClient
+	nip11Fetcher       nip11.Fetcher
 	ionLibertyDisabled bool
 }
 
@@ -218,7 +220,13 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("filename is required"))
 			return
 		}
-		url, err := s.storageClient.DownloadUrl(token.MasterPubKey(), file)
+		masterPubkey := token.MasterPubKey()
+		spl := strings.Split(file, ":")
+		if len(spl) == 2 {
+			masterPubkey = spl[0]
+			file = spl[1]
+		}
+		url, err := s.storageClient.DownloadUrl(masterPubkey, file)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				gCtx.Status(http.StatusNotFound)
@@ -361,16 +369,37 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
 		authHeader := nip98.GetAuthHeader(gCtx)
-		_, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
+		senderUrl := gCtx.GetHeader("Referer")
+		if senderUrl == "" {
+			gCtx.JSON(http.StatusBadRequest, uploadErr("unknown sender"))
+			return
+		}
+		senderNIP11, err := s.nip11Fetcher.Fetch(ctx, senderUrl)
+		if err != nil {
+			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(err, "failed to fetch sender NIP11"))
+			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured"))
+			return
+		}
+		if token.PubKey() != senderNIP11.PubKey {
+			log.Printf("ERROR: endpoint authentification failed: sender pubkey mismatch nip11>%v, token>%v", senderNIP11.PubKey, token.PubKey())
+			gCtx.JSON(http.StatusUnauthorized, uploadErr("sender pubkey mismatch"))
+			return
+		}
 		file := gCtx.Param("file")
+		spl := strings.Split(file, ":")
+		var masterPubkey string
+		if len(spl) == 2 {
+			masterPubkey = spl[0]
+			file = spl[1]
+		}
 		var params struct {
-			I      string `form:"i"`
-			Master string `form:"master"`
+			I string `form:"i"`
 		}
 		if err := gCtx.ShouldBindWith(&params, binding.Query); err != nil {
 			log.Printf("ERROR: failed to bind data : %v", errors.Wrap(err, "failed to bind data"))
@@ -381,8 +410,8 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data: i tag not passed"))
 			return
 		}
-		if err := s.storageClient.StartDownloadNewBag(ctx, file, params.Master, params.I); err != nil {
-			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash for %v"))
+		if err := s.storageClient.StartDownloadNewBag(ctx, file, masterPubkey, params.I); err != nil {
+			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash %v for %v", params.I, masterPubkey))
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occured!"))
 			return
 		}
@@ -394,7 +423,7 @@ func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
-func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool) Uploader {
-	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled}
+func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, fetcher nip11.Fetcher) Uploader {
+	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: fetcher}
 	return s
 }

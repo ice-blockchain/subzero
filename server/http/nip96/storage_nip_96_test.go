@@ -51,8 +51,7 @@ const (
 )
 
 var (
-	pubsubServer    *fixture.MockService
-	privKey, pubKey = model.GenerateKeyPair()
+	pubsubServer *fixture.MockService
 )
 
 func TestMain(m *testing.M) {
@@ -75,15 +74,16 @@ func TestMain(m *testing.M) {
 func initServer(serverCtx context.Context, port uint16) {
 	initStorage(serverCtx)
 	type globalCfg struct {
-		TLSCert string `yaml:"tls-cert"`
-		TLSKey  string `yaml:"tls-key"`
+		TLSCert    string `yaml:"tls-cert"`
+		TLSKey     string `yaml:"tls-key"`
+		PrivateKey string `yaml:"private-key"`
 	}
 	globalConfig := cfg.MustGet[globalCfg]()
-	uploader := NewUploadHandler(serverCtx, false)
+	uploader := NewUploadHandler(serverCtx, false, nip11.NewFetcher(serverCtx))
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
 		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
 		Port:      port,
-	}, nil, nip11.NewNIP11Handler(serverCtx, &nip11.Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
+	}, nil, nip11.NewNIP11Handler(serverCtx, &nip11.Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: globalConfig.PrivateKey}, uploader.RootPath(), os.TempDir()), map[string]gin.HandlerFunc{
 		"POST /files":         uploader.Upload(),
 		"GET /files":          uploader.ListFiles(),
 		"GET /files/:file":    uploader.Download(),
@@ -188,6 +188,7 @@ func TestNIP96(t *testing.T) {
 				defer wg.Done()
 				require.NoError(t, query.AcceptEvents(ctx, e))
 				require.NoError(t, storage.AcceptEvents(ctx, e))
+				require.NoError(t, storage.SendAcceptedEventsToRemotes(ctx, e))
 			}()
 		}
 		wg.Wait()
@@ -204,6 +205,7 @@ func TestNIP96(t *testing.T) {
 				defer wg.Done()
 				require.NoError(t, query.AcceptEvents(ctx, e))
 				require.NoError(t, storage.AcceptEvents(ctx, e))
+				require.NoError(t, storage.SendAcceptedEventsToRemotes(ctx, e))
 			}()
 		}
 		wg.Wait()

@@ -115,16 +115,17 @@ func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event)
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
-	uploader := nip96.NewUploadHandler(ctx, r.Config.IONLibertyDisabled)
+	nip11Fetcher := nip11.NewFetcher(ctx)
+	uploader := nip96.NewUploadHandler(ctx, r.Config.IONLibertyDisabled, nip11Fetcher)
 	androidConfigs, iosConfigs, webConfigs := pushnotifications.GetFCMConfigs()
-
-	wsroutes.Any("/", wsserver.WithWS(r.Handler, nip11.NewNIP11Handler(ctx, &nip11.Config{
+	nip11Handler := nip11.NewNIP11Handler(ctx, &nip11.Config{
 		MinLeadingZeroBits: 1111,
 		FCMAndroidConfigs:  androidConfigs,
 		FCMIOSConfigs:      iosConfigs,
 		FCMWebConfigs:      webConfigs,
 		PrivateKey:         r.Config.PrivateKey,
-	}, uploader.RootPath(), command.RootPath()))).
+	}, uploader.RootPath(), command.RootPath())
+	wsroutes.Any("/", wsserver.WithWS(r.Handler, nip11Handler)).
 		POST("/files", uploader.Upload()).
 		GET("/files", uploader.ListFiles()).
 		GET("/files/:file", uploader.Download()).

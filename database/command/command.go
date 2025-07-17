@@ -250,7 +250,7 @@ func (c *consensus) fetchUserRelays(ctx context.Context, userMasterKey string) (
 	)
 	for ev, iErr := range evIt {
 		if iErr != nil {
-			return nil, errors.Wrapf(err, "failed to fetch user's relays for user %v", userMasterKey)
+			return nil, errors.Wrapf(iErr, "failed to fetch user's relays for user %v", userMasterKey)
 		}
 		relays = model.CollectRelaysFromRelayEvent(ev)
 		break
