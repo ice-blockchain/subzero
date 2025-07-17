@@ -5,6 +5,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 	"sync"
@@ -98,7 +99,11 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "ddl failed")
+			if errors.Is(err, ErrReadOnly) {
+				log.Printf("INFO: DDL failed because the database is in read-only mode: %v %s", err, errors.FlattenDetails(err))
+			} else {
+				return nil, errors.Wrap(err, "ddl failed")
+			}
 		}
 	}
 
