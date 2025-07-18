@@ -138,20 +138,25 @@ type (
 	JobFeedbackStatus      string
 	Role                   string
 	ProfileMetadataContent struct {
-		RegisteredAt                   Timestamp         `json:"registered_at" `
-		Name                           string            `json:"name" example:"username"`
-		About                          string            `json:"about" example:"about"`
-		Picture                        string            `json:"picture" example:"https://example.com/pic.jpg"`
-		DisplayName                    string            `json:"display_name" example:"John Deer"`
-		Website                        string            `json:"website" example:"https://ice.io"`
-		Banner                         string            `json:"banner" example:"https://example.com/banner.jpg"`
-		Location                       string            `json:"location" example:"New York, USA"`
-		IONContentNFTCollectionAddress string            `json:"ion_content_nft_collection_address" example:"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290"`
-		Category                       string            `json:"category" example:"Crypto"`
-		WhoCanMessageYou               string            `json:"who_can_message_you" example:"friends"`
-		WhoCanInviteYouToGroups        string            `json:"who_can_invite_you_to_groups" example:"friends"`
-		Wallets                        map[string]string `json:"wallets"`
-		Bot                            bool              `json:"bot" example:"false"`
+		RegisteredAt             Timestamp                                                       `json:"registered_at" `
+		Name                     string                                                          `json:"name" example:"username"`
+		About                    string                                                          `json:"about" example:"about"`
+		Picture                  string                                                          `json:"picture" example:"https://example.com/pic.jpg"`
+		DisplayName              string                                                          `json:"display_name" example:"John Deer"`
+		Website                  string                                                          `json:"website" example:"https://ice.io"`
+		Banner                   string                                                          `json:"banner" example:"https://example.com/banner.jpg"`
+		Location                 string                                                          `json:"location" example:"New York, USA"`
+		IONContentNFTCollections map[IONContentNFTCollectionName]IONContentNFTCollectionMetadata `json:"ion_content_nft_collections" `
+		Category                 string                                                          `json:"category" example:"Crypto"`
+		WhoCanMessageYou         string                                                          `json:"who_can_message_you" example:"friends"`
+		WhoCanInviteYouToGroups  string                                                          `json:"who_can_invite_you_to_groups" example:"friends"`
+		Wallets                  map[string]string                                               `json:"wallets"`
+		Bot                      bool                                                            `json:"bot" example:"false"`
+	}
+	IONContentNFTCollectionName     string
+	IONContentNFTCollectionMetadata struct {
+		Address   string `json:"address" example:"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290"`
+		CreatedBy string `json:"created_by" example:"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"`
 	}
 )
 
