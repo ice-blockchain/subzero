@@ -87,12 +87,12 @@ var (
 		nostr.KindBookmarkList:      tagsTable("e", "a", "t", "r"),
 		nostr.KindCommunityList:     tagsTable("a"),
 		nostr.KindPublicChatList:    tagsTable("e"),
-		nostr.KindBlockedRelayList:  tagsTable("relay"),
-		nostr.KindSearchRelayList:   tagsTable("relay"),
+		nostr.KindBlockedRelayList:  tagsTable("relay", "r"),
+		nostr.KindSearchRelayList:   tagsTable("relay", "r"),
 		nostr.KindSimpleGroupList:   tagsTable("group"),
 		nostr.KindInterestList:      tagsTable("t", "a"),
 		nostr.KindEmojiList:         tagsTable("emoji", "a"),
-		nostr.KindDMRelayList:       tagsTable("relay"),
+		nostr.KindDMRelayList:       tagsTable("relay", "r"),
 		nostr.KindGiftWrap: newKindValidatorBuilder().
 			Required("p", "k").
 			Optional("expiration").
@@ -101,9 +101,9 @@ var (
 			}).
 			Build(),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
-		nostr.KindGoodWikiRelayList:     tagsTable("relay"),
+		nostr.KindGoodWikiRelayList:     tagsTable("relay", "r"),
 		nostr.KindCategorizedPeopleList: tagsTable("p", "d", "title", "image", "description"),
-		nostr.KindRelaySets:             tagsTable("relay", "d", "title", "image", "description"),
+		nostr.KindRelaySets:             tagsTable("relay", "r", "d", "title", "image", "description"),
 		nostr.KindBookmarkSets:          tagsTable("e", "a", "t", "r", "d", "title", "image", "description", model.CustomIONTagCommunity),
 		nostr.KindCuratedSets:           tagsTable("a", "e", "d", "title", "image", "description"),
 		nostr.KindCuratedVideoSets:      tagsTable("a", "d", "title", "image", "description"),
