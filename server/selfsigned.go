@@ -11,7 +11,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"fmt"
 	"log"
 	"math/big"
 	"net"
@@ -21,10 +20,10 @@ import (
 )
 
 const (
-	selfSignedOrganization       = "ION"
-	selfSignedCommonName         = "ION"
-	selfSignedOrganizationalUnit = "subzero"
-	selfSignedValidity           = 365 * 24 * time.Hour // 1 year.
+	selfSignedOrganization       = "Ice Open Network"
+	selfSignedCommonName         = "Ice Open Network"
+	selfSignedOrganizationalUnit = "ION Connect"
+	selfSignedValidity           = 10 * 365 * 24 * time.Hour // 10 years.
 )
 
 var (
@@ -110,7 +109,7 @@ func generateTLSConfigSelfSigned(domain string) (*tls.Config, error) {
 
 	cert, err := tls.X509KeyPair(certPEM.Bytes(), keyPEM.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load X509 key pair: %w", err)
+		return nil, errors.Wrap(err, "failed to load X509 key pair")
 	}
 
 	return &tls.Config{
