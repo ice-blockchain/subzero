@@ -50,5 +50,6 @@ type (
 )
 
 var (
-	errAuthRequired = errors.New("auth-required: please authenticate first by sending AUTH message")
+	errAuthRequired  = errors.New("auth-required: please authenticate first by sending AUTH message")
+	errRelayReadOnly = errors.New("relay-is-read-only: read only")
 )
