@@ -83,13 +83,20 @@ func New(ctx context.Context, opts ...Option) Server {
 	}
 
 	var tls *tls.Config
-	if (r.Config.TLSCert == "" && r.Config.TLSKey == "") || (r.Config.TLSCert == "-" && r.Config.TLSKey == "-") {
+	switch {
+	case (r.Config.TLSCert == "" && r.Config.TLSKey == "") || (r.Config.TLSCert == "-" && r.Config.TLSKey == "-"):
 		log.Printf("using ACME to obtain TLS certificate for %v", r.Config.RelayURL)
 		if r.Config.ACME.APIKey == "" {
 			log.Panic("API key is required for ACME DNS challenge")
 		}
 		tls = MustLoadTLSConfigFromACMEWithDNS(ctx, extractServerNameFromRelayURL(r.Config.RelayURL), r.Config.ACME.APIKey)
-	} else {
+
+	case r.Config.TLSCert == "selfsigned" || r.Config.TLSKey == "selfsigned":
+		log.Printf("using self-signed TLS certificate for %v", r.Config.RelayURL)
+		tls = MustGenerateTLSConfigSelfSigned(extractServerNameFromRelayURL(r.Config.RelayURL))
+
+	default:
+		log.Println("using provided TLS certificate and key")
 		tls = wsserver.LoadTLSConfig(r.Config.TLSCert, r.Config.TLSKey)
 	}
 
