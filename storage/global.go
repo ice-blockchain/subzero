@@ -204,7 +204,7 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
-	bagID, _, _, err := globalClient.StartUpload(ctx, pubkey, masterPubkey, file, fileHash, nil)
+	bagID, _, _, err := globalClient.StartUpload(ctx, time.Now(), pubkey, masterPubkey, file, fileHash, nil)
 	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}

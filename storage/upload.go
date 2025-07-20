@@ -28,7 +28,8 @@ import (
 	"github.com/xssnick/tonutils-storage/storage"
 )
 
-func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
+func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
+	eStart := time.Now()
 	existingBagForUser, err := c.bagByUser(masterPubKey)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to find existing bag for user %s", masterPubKey)
@@ -77,14 +78,17 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 				if existingBagForUser.Header != nil {
 					version = int64(existingBagForUser.Header.FilesCount)
 				}
+				log.Printf("[STORAGE DURATION %v %v] EXISTING VERIF TOOK %v, whole %v", masterPubKey, hash, time.Since(eStart), time.Since(now))
+
 				return bagID + ":" + bootstrap + ":" + strconv.FormatInt(version, 10), url, existed, nil
 			}
 
 		}
 	}
+	log.Printf("[STORAGE DURATION %v %v] EXISTING VERIF TOOK %v, whole %v", masterPubKey, hash, time.Since(eStart), time.Since(now))
 	var bs []*Bootstrap
 	var bag *storage.Torrent
-	bag, bs, err = c.upload(ctx, userPubKey, masterPubKey, relativePathToFileForUrl, hash, newFile, &existingHD)
+	bag, bs, err = c.upload(ctx, now, userPubKey, masterPubKey, relativePathToFileForUrl, hash, newFile, &existingHD)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
@@ -111,7 +115,7 @@ func (c *client) StartUpload(ctx context.Context, userPubKey, masterPubKey, rela
 	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, err
 }
 
-func (c *client) upload(ctx context.Context, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
+func (c *client) upload(ctx context.Context, now time.Time, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
 	rootUserPath, _ := c.BuildUserPath(master, "")
 	headerMD := &headerData{
 		Master:       master,
@@ -138,6 +142,7 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 		headerMD.FileHash[hex.EncodeToString(value.Hash)] = key
 	}
 	c.newFilesMx.RUnlock()
+	rTime := time.Now()
 	var refs []storage.FileRef
 	for relativeFilePath := range headerMD.FileMetadata {
 		ref, frefErr := c.progressStorage.GetSingleFileRef(filepath.Join(rootUserPath, relativeFilePath))
@@ -150,6 +155,8 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 		}
 		refs = append(refs, ref)
 	}
+	log.Printf("[STORAGE DURATION %v %v] BUILDING REFS %v, whole %v", master, hash, time.Since(rTime), time.Since(now))
+
 	var headerMDSerialized []byte
 	headerMDSerialized, err = json.Marshal(headerMD)
 	if err != nil {
@@ -163,6 +170,7 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
+	iTime := time.Now()
 	tr, err := storage.CreateTorrentWithInitialHeader(ctx, c.rootStoragePath, master, header, c.progressStorage, c.conn, refs, func(done uint64, max uint64) {
 		if done == max {
 			wg.Done()
@@ -176,10 +184,14 @@ func (c *client) upload(ctx context.Context, user, master, relativePath, hash st
 		return nil, nil, errors.Wrap(err, "failed to start bag upload")
 	}
 	wg.Wait()
+	log.Printf("[STORAGE DURATION %v %v] BAG HASHING AND Start TOOK %v, whole %v", master, hash, time.Since(iTime), time.Since(now))
+	sTime := time.Now()
 	err = c.saveUploadTorrent(tr, master, fileMeta == nil)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to save updated bag")
 	}
+	log.Printf("[STORAGE DURATION %v %v] SAVE TOOK %v, whole %v", master, hash, time.Since(sTime), time.Since(now))
+
 	bootstrapNode, err := c.buildBootstrapNodeInfo(tr)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to build bootstrap node info")
@@ -243,7 +255,8 @@ func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string, delet
 	c.newFilesMx.Unlock()
 	return nil
 }
-func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey string, relativePath *string, input *FileMetaInput) ([]byte, error) {
+func (c *client) SaveFile(ctx context.Context, now time.Time, body io.Reader, masterPubKey string, relativePath *string, input *FileMetaInput) ([]byte, error) {
+	wTime := time.Now()
 	storagePath, _ := c.BuildUserPath(masterPubKey, "")
 	uploadingFilePath := filepath.Join(storagePath, *relativePath)
 
@@ -261,6 +274,8 @@ func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey stri
 	if err = fileUploadTo.Sync(); err != nil {
 		return nil, errors.Wrap(err, "failed to copy temp file while processing upload")
 	}
+	log.Printf("[STORAGE DURATION %v %v] WRITE %v, whole %v", masterPubKey, *relativePath, time.Since(wTime), time.Since(now))
+	rTime := time.Now()
 	hexHash := hex.EncodeToString(hash)
 	newName := hexHash + filepath.Ext(uploadingFilePath)
 	os.Rename(uploadingFilePath, filepath.Join(storagePath, newName))
@@ -271,5 +286,6 @@ func (c *client) SaveFile(ctx context.Context, body io.Reader, masterPubKey stri
 	}
 	c.newFiles[masterPubKey][newName] = input
 	c.newFilesMx.Unlock()
+	log.Printf("[STORAGE DURATION %v %v] REN %v, whole %v", masterPubKey, *relativePath, time.Since(rTime), time.Since(now))
 	return hash, nil
 }
