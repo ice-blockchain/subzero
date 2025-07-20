@@ -146,6 +146,8 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
 			return
 		}
+		log.Printf("[STORAGE DURATION %v %v] validation %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(now), time.Since(now))
+		hStart := time.Now()
 		mpFile, err := upload.File.Open()
 		if err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open upload file"))
@@ -158,12 +160,13 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			Alt:       upload.Alt,
 			CreatedAt: uint64(now.UnixNano()),
 		}
-		hash, err := s.storageClient.SaveFile(ctx, mpFile, token.MasterPubKey(), &relativePath, &input)
+		hash, err := s.storageClient.SaveFile(ctx, now, mpFile, token.MasterPubKey(), &relativePath, &input)
 		if err != nil {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to save temp file while processing upload"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
 			return
 		}
+		log.Printf("[STORAGE DURATION %v %v] SAVING HASHING TOOK %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(hStart), time.Since(now))
 		hashHex := hex.EncodeToString(hash)
 		if hashHex != token.ExpectedHash() {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash()))
@@ -171,7 +174,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			os.Remove(uploadingFilePath)
 			return
 		}
-		bagID, url, existed, err := s.storageClient.StartUpload(ctx, token.PubKey(), token.MasterPubKey(), relativePath, hex.EncodeToString(hash), &input)
+		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), relativePath, hex.EncodeToString(hash), &input)
 
 		if err != nil {
 			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))

@@ -261,7 +261,7 @@ require (
 	go.uber.org/zap/exp v0.3.0 // indirect
 	golang.org/x/arch v0.19.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/exp v0.0.0-20250717185816-542afb5b7346 // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
 	golang.org/x/image v0.29.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
