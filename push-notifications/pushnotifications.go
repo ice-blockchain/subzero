@@ -373,7 +373,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		notifications, err = pm.handleGiftWrapEvent(event)
 		err = errors.Wrap(err, "failed to handle gift wrap event")
 	case nostr.KindFollowList:
-		return pm.handleNewFollowerEvent(ctx, event)
+		return pm.handleNewFollowerEvent(ctx, event, relevantEvents...)
 	}
 	if err != nil {
 		return nil, err
