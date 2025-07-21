@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -31,7 +32,7 @@ import (
 type (
 	StorageClient interface {
 		io.Closer
-		SaveFile(ctx context.Context, now time.Time, body io.Reader, master string, uploadingPath *string, newFile *FileMetaInput) (hash []byte, err error)
+		SaveFile(ctx context.Context, now time.Time, masterPubKey string, r *http.Request, maxSize uint64) (filePath string, metaInput *FileMetaInput, hash []byte, err error)
 		StartUpload(ctx context.Context, now time.Time, userPubKey, masterKey, relativePathToFileForUrl, fileHash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error)
 		BuildUserPath(masterKey, contentType string) (string, string)
 		RootPath() string
@@ -52,11 +53,14 @@ type (
 		Master       string                    `json:"m"`
 	}
 	FileMetaInput struct {
-		Caption   string `json:"c"`
-		Alt       string `json:"a"`
-		Owner     string `json:"o"`
-		Hash      []byte `json:"h"`
-		CreatedAt uint64 `json:"cAt"`
+		Caption     string `json:"c"`
+		Alt         string `json:"a"`
+		Owner       string `json:"o"`
+		Hash        []byte `json:"h"`
+		CreatedAt   uint64 `json:"cAt"`
+		ContentType string `json:"-"`
+		FileSize    uint64 `json:"-"`
+		Filename    string `json:"-"`
 	}
 	FileMetadata struct {
 		*nip94.FileMetadata
@@ -86,10 +90,15 @@ type (
 )
 
 var (
-	ErrNotFound  = storage.ErrFileNotExist
-	ErrForbidden = errors.New("forbidden")
-	ErrNoRelays  = errors.New("no relays")
+	ErrNotFound         = storage.ErrFileNotExist
+	ErrForbidden        = errors.New("forbidden")
+	ErrNoRelays         = errors.New("no relays")
+	ErrFileTooBig       = errors.New("too big")
+	ErrValidationFailed = errors.New("validation failed")
 )
+
+const mediaTypeAvatar = "avatar"
+const mediaTypeBanner = "banner"
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData

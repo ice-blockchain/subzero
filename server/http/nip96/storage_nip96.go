@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	gomime "github.com/cubewise-code/go-mime"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
@@ -51,22 +49,8 @@ type storageHandler struct {
 
 const mediaEndpointTimeout = 60 * time.Second
 const maxUploadSize = 100 * 1024 * 1024
-const mediaTypeAvatar = "avatar"
-const mediaTypeBanner = "banner"
 
 type (
-	fileUpload struct {
-		File *multipart.FileHeader `form:"file" formMultipart:"file" swaggerignore:"true"`
-		// Optional.
-		Caption string `form:"caption" formMultipart:"caption"`
-		// Optional.
-		Expiration  string `form:"expiration" formMultipart:"expiration" swaggerignore:"expiration"`
-		Size        uint64 `form:"size" formMultipart:"size"`
-		Alt         string `form:"alt" formMultipart:"alt"`
-		MediaType   string `form:"media_type" formMultipart:"media_type"`
-		ContentType string `form:"content_type" formMultipart:"content_type"`
-		NoTransform string `form:"no_transform" formMultipart:"no_transform"`
-	}
 	fileUploadResponse struct {
 		Status        string `json:"status"`
 		Message       string `json:"message"`
@@ -112,60 +96,18 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			return
 		}
 		log.Printf("[STORAGE DURATION %v %v] validation1 %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(now), time.Since(now))
-		bStart := time.Now()
-		var upload fileUpload
-		if err := gCtx.ShouldBindWith(&upload, binding.FormMultipart); err != nil {
-			log.Printf("ERROR: failed to bind multipart form: %v", errors.Wrap(err, "failed to bind multipart form"))
-			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid multipart data"))
-			return
-		}
-		log.Printf("[STORAGE DURATION %v %v] bind %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(bStart), time.Since(now))
-		v2Start := time.Now()
-		if upload.Size > maxUploadSize {
-			gCtx.JSON(http.StatusRequestEntityTooLarge, uploadErr("file too large"))
-			return
-		}
-		if upload.File == nil {
-			gCtx.JSON(http.StatusBadRequest, uploadErr("file required"))
-			return
-		}
-		if upload.File.Filename == "" || strings.Contains(upload.File.Filename, "..") {
-			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid filename, must be provided"))
-			return
-		}
-		if upload.MediaType != "" && upload.MediaType != mediaTypeAvatar && upload.MediaType != mediaTypeBanner {
-			gCtx.JSON(http.StatusBadRequest, uploadErr(fmt.Sprintf("unsupported media type %v", upload.MediaType)))
-			return
-		}
-		if upload.ContentType == "" {
-			upload.ContentType = gomime.TypeByExtension(filepath.Ext(upload.File.Filename))
-		}
-
-		storagePath, _ := s.storageClient.BuildUserPath(token.MasterPubKey(), upload.ContentType)
-		uploadingFilePath := filepath.Join(storagePath, upload.File.Filename)
-		relativePath := upload.File.Filename
-		if err := os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open temp file while processing upload"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
-			return
-		}
-		log.Printf("[STORAGE DURATION %v %v] validation2 %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(v2Start), time.Since(now))
 		hStart := time.Now()
-		mpFile, err := upload.File.Open()
+		uploadingFilePath, input, hash, err := s.storageClient.SaveFile(ctx, now, token.MasterPubKey(), gCtx.Request, maxUploadSize)
 		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to open upload file"))
-			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open upload file"))
-			return
-		}
-		defer mpFile.Close()
-		input := storage.FileMetaInput{
-			Caption:   upload.Caption,
-			Alt:       upload.Alt,
-			CreatedAt: uint64(now.UnixNano()),
-		}
-		hash, err := s.storageClient.SaveFile(ctx, now, mpFile, token.MasterPubKey(), &relativePath, &input)
-		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to save temp file while processing upload"))
+			log.Printf("ERROR: failed to save temp file while processing upload %v", err)
+			switch {
+			case errors.Is(err, storage.ErrValidationFailed):
+				gCtx.JSON(http.StatusBadRequest, uploadErr("failed validate upload request"))
+				return
+			case errors.Is(err, storage.ErrFileTooBig):
+				gCtx.JSON(http.StatusRequestEntityTooLarge, uploadErr(fmt.Sprintf("file too large: %v", input.FileSize)))
+				return
+			}
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
 			return
 		}
@@ -177,7 +119,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			os.Remove(uploadingFilePath)
 			return
 		}
-		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), relativePath, hex.EncodeToString(hash), &input)
+		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), input.Filename, hex.EncodeToString(hash), input)
 
 		if err != nil {
 			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
@@ -199,12 +141,12 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 				Tags: nostr.Tags{
 					nostr.Tag{"url", url},
 					nostr.Tag{"ox", hashHex},
-					nostr.Tag{"m", upload.ContentType},
+					nostr.Tag{"m", input.ContentType},
 					nostr.Tag{"i", bagID},
-					nostr.Tag{"alt", upload.Alt},
-					nostr.Tag{"size", strconv.FormatUint(uint64(upload.File.Size), 10)},
+					nostr.Tag{"alt", input.Alt},
+					nostr.Tag{"size", strconv.FormatUint(uint64(input.FileSize), 10)},
 				},
-				Content: upload.Caption,
+				Content: input.Caption,
 			},
 		})
 		return
@@ -238,7 +180,7 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
+			log.Printf("ERROR: failed to build download url %v", err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -267,7 +209,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
+			log.Printf("ERROR: failed to build download url %v", err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -305,7 +247,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.Delete(ctx, token.PubKey(), token.MasterPubKey(), file); err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to delete file"))
+			log.Printf("ERROR: failed to delete file %v %v", file, err)
 			if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrForbidden) {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
@@ -341,7 +283,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		}
 		total, filesList, err := s.storageClient.ListFiles(token.MasterPubKey(), params.Page, params.Count)
 		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.MasterPubKey()))
+			log.Printf("ERROR: failed to list files for user %v %v", token.MasterPubKey(), err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -422,7 +364,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.StartDownloadNewBag(ctx, file, masterPubkey, params.I); err != nil {
-			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash %v for %v", params.I, masterPubkey))
+			log.Printf("ERROR: failed to accept new info hash %v for %v: %v", params.I, masterPubkey, err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}

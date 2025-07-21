@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -255,37 +257,120 @@ func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string, delet
 	c.newFilesMx.Unlock()
 	return nil
 }
-func (c *client) SaveFile(ctx context.Context, now time.Time, body io.Reader, masterPubKey string, relativePath *string, input *FileMetaInput) ([]byte, error) {
-	wTime := time.Now()
-	storagePath, _ := c.BuildUserPath(masterPubKey, "")
-	uploadingFilePath := filepath.Join(storagePath, *relativePath)
-
-	fileUploadTo, err := os.Create(uploadingFilePath)
+func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey string, r *http.Request, maxSize uint64) (string, *FileMetaInput, []byte, error) {
+	reader, err := r.MultipartReader()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open temp file while processing upload")
+		return "", nil, nil, err
 	}
-	defer fileUploadTo.Close()
 	hashCalc := sha256.New()
-	if _, err = io.Copy(fileUploadTo, io.TeeReader(body, hashCalc)); err != nil {
-		return nil, errors.Wrap(err, "failed to copy temp file while processing upload")
+	input := &FileMetaInput{
+		CreatedAt: uint64(now.UnixNano()),
 	}
+	parseStart := time.Now()
+	var fileName, contentType string
+	var fileSize uint64
+	storagePath, _ := c.BuildUserPath(masterPubKey, "")
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", nil, nil, errors.Wrap(err, "failed to read multipart")
+		}
+		switch part.FormName() {
+		case "file":
+			fStart := time.Now()
+			if part.FileName() == "" || !filepath.IsLocal(part.FileName()) {
+				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid filename %q, must be provided", part.FileName())
+			}
+			fileName = part.FileName()
+			if contentType == "" {
+				contentType = gomime.TypeByExtension(filepath.Ext(fileName))
+			}
+			uploadingFilePath := filepath.Join(storagePath, fileName)
+			if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
+				log.Printf("ERROR: failed to open temp file while processing upload %v", err)
+				return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
+			}
+			userDir, err := os.OpenRoot(storagePath)
+			if err != nil {
+				return "", nil, nil, errors.Wrap(err, "failed to open user folder while processing upload")
+			}
+			fileUploadTo, err := userDir.Create(fileName)
+			if err != nil {
+				return "", nil, nil, errors.Wrap(err, "failed to open temp file while processing upload")
+			}
+			defer func() {
+				fileUploadTo.Sync()
+				fileUploadTo.Close()
+			}()
+			written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
+			fileSize += uint64(written)
+			if fileSize > maxSize {
+				part.Close()
+				defer os.Remove(uploadingFilePath)
+				return "", &FileMetaInput{FileSize: fileSize}, nil, ErrFileTooBig
+			}
+			log.Printf("[STORAGE DURATION %v %v] FILE PROCESSING %v, whole %v, bytes %v", masterPubKey, fileName, time.Since(fStart), time.Since(now), written)
+
+		case "media_type":
+			var mediaType string
+			mediaType, err = readString(part, "media_type")
+			if mediaType != "" && mediaType != mediaTypeAvatar && mediaType != mediaTypeBanner {
+				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid media type %q, must be provided", mediaType)
+			}
+		case "content_type":
+			contentType, err = readString(part, "content_type")
+			if contentType == "" {
+				if fileName != "" {
+					contentType = gomime.TypeByExtension(filepath.Ext(fileName))
+				}
+			}
+		case "caption":
+			input.Caption, err = readString(part, "caption")
+		case "alt":
+			input.Alt, err = readString(part, "alt")
+		}
+		if err != nil {
+			return "", nil, nil, errors.Wrap(err, "failed read multipart")
+		}
+		part.Close()
+	}
+	log.Printf("[STORAGE DURATION %v %v] PARSE STREAMING %v, whole %v", masterPubKey, fileName, time.Since(parseStart), time.Since(now))
+	hStart := time.Now()
 	hash := hashCalc.Sum(nil)
 	input.Hash = hash
-	if err = fileUploadTo.Sync(); err != nil {
-		return nil, errors.Wrap(err, "failed to copy temp file while processing upload")
-	}
-	log.Printf("[STORAGE DURATION %v %v] WRITE %v, whole %v", masterPubKey, *relativePath, time.Since(wTime), time.Since(now))
+	input.ContentType = contentType
+	input.FileSize = fileSize
+	log.Printf("[STORAGE DURATION %v %v] HASH %v, whole %v", masterPubKey, fileName, time.Since(hStart), time.Since(now))
 	rTime := time.Now()
 	hexHash := hex.EncodeToString(hash)
-	newName := hexHash + filepath.Ext(uploadingFilePath)
-	os.Rename(uploadingFilePath, filepath.Join(storagePath, newName))
-	*relativePath = newName
+	newName := hexHash + filepath.Ext(fileName)
+	if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); err != nil {
+		log.Printf("[ERROR] Failed to rename file %v to hash %v: %v", fileName, newName, err)
+		return "", nil, nil, errors.Wrapf(err, "failed to rename file %v %v", fileName, newName)
+	}
 	c.newFilesMx.Lock()
 	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {
 		c.newFiles[masterPubKey] = make(map[string]*FileMetaInput)
 	}
 	c.newFiles[masterPubKey][newName] = input
 	c.newFilesMx.Unlock()
-	log.Printf("[STORAGE DURATION %v %v] REN %v, whole %v", masterPubKey, *relativePath, time.Since(rTime), time.Since(now))
-	return hash, nil
+	log.Printf("[STORAGE DURATION %v %v] REN %v, whole %v", masterPubKey, fileName, time.Since(rTime), time.Since(now))
+	input.Filename = newName
+	return filepath.Join(storagePath, newName), input, hash, nil
+}
+
+func readString(part *multipart.Part, name string) (string, error) {
+	bufSize := 1024
+	b := make([]byte, bufSize, bufSize)
+	read, err := part.Read(b)
+	if err != nil {
+		if err == io.EOF {
+			return string(b[:read]), nil
+		}
+		return "", errors.Wrapf(err, "failed to read %v", name)
+	}
+	return string(b[:read]), nil
 }
