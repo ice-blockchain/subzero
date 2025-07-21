@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -282,8 +281,8 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 		switch part.FormName() {
 		case "file":
 			fStart := time.Now()
-			if part.FileName() == "" || strings.Contains(part.FileName(), "..") {
-				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid filename \"%v\", must be provided", part.FileName())
+			if part.FileName() == "" || !filepath.IsLocal(part.FileName()) {
+				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid filename %q, must be provided", part.FileName())
 			}
 			fileName = part.FileName()
 			if contentType == "" {
@@ -291,10 +290,14 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 			}
 			uploadingFilePath := filepath.Join(storagePath, fileName)
 			if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
-				log.Printf("ERROR: %v", errors.Wrap(err, "failed to open temp file while processing upload"))
+				log.Printf("ERROR: failed to open temp file while processing upload %v", err)
 				return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
 			}
-			fileUploadTo, err := os.Create(uploadingFilePath)
+			userDir, err := os.OpenRoot(storagePath)
+			if err != nil {
+				return "", nil, nil, errors.Wrap(err, "failed to open user folder while processing upload")
+			}
+			fileUploadTo, err := userDir.Create(fileName)
 			if err != nil {
 				return "", nil, nil, errors.Wrap(err, "failed to open temp file while processing upload")
 			}
@@ -315,7 +318,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 			var mediaType string
 			mediaType, err = readString(part, "media_type")
 			if mediaType != "" && mediaType != mediaTypeAvatar && mediaType != mediaTypeBanner {
-				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid media type \"%v\", must be provided", mediaType)
+				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid media type %q, must be provided", mediaType)
 			}
 		case "content_type":
 			contentType, err = readString(part, "content_type")

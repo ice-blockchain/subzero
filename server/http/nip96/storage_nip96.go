@@ -99,7 +99,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		hStart := time.Now()
 		uploadingFilePath, input, hash, err := s.storageClient.SaveFile(ctx, now, token.MasterPubKey(), gCtx.Request, maxUploadSize)
 		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to save temp file while processing upload"))
+			log.Printf("ERROR: failed to save temp file while processing upload %v", err)
 			switch {
 			case errors.Is(err, storage.ErrValidationFailed):
 				gCtx.JSON(http.StatusBadRequest, uploadErr("failed validate upload request"))
@@ -180,7 +180,7 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
+			log.Printf("ERROR: failed to build download url %v", err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -209,7 +209,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to build download url"))
+			log.Printf("ERROR: failed to build download url %v", err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -247,7 +247,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.Delete(ctx, token.PubKey(), token.MasterPubKey(), file); err != nil {
-			log.Printf("ERROR: %v", errors.Wrap(err, "failed to delete file"))
+			log.Printf("ERROR: failed to delete file %v %v", file, err)
 			if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrForbidden) {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
@@ -283,7 +283,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		}
 		total, filesList, err := s.storageClient.ListFiles(token.MasterPubKey(), params.Page, params.Count)
 		if err != nil {
-			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to list files for user %v", token.MasterPubKey()))
+			log.Printf("ERROR: failed to list files for user %v %v", token.MasterPubKey(), err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -364,7 +364,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.StartDownloadNewBag(ctx, file, masterPubkey, params.I); err != nil {
-			log.Printf("ERROR: %v", errors.Wrapf(err, "failed to accept new info hash %v for %v", params.I, masterPubkey))
+			log.Printf("ERROR: failed to accept new info hash %v for %v: %v", params.I, masterPubkey, err)
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
