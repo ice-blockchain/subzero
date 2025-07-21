@@ -391,7 +391,7 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 	if err != nil {
 		return errors.Wrapf(err, "failed to generate auth header from relay's key")
 	}
-	resp, err := req.DefaultClient().R().
+	resp, err := req.DefaultClient().EnableInsecureSkipVerify().R().
 		SetContext(ctx).
 		SetRetryCount(5).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
