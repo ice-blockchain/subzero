@@ -102,7 +102,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			log.Printf("ERROR: %v", errors.Wrap(err, "failed to save temp file while processing upload"))
 			switch {
 			case errors.Is(err, storage.ErrValidationFailed):
-				gCtx.JSON(http.StatusBadRequest, uploadErr("failed validate req"))
+				gCtx.JSON(http.StatusBadRequest, uploadErr("failed validate upload request"))
 				return
 			case errors.Is(err, storage.ErrFileTooBig):
 				gCtx.JSON(http.StatusRequestEntityTooLarge, uploadErr(fmt.Sprintf("file too large: %v", input.FileSize)))

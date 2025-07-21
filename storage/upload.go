@@ -304,7 +304,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 			}()
 			written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
 			fileSize += uint64(written)
-			if uint64(fileSize) > maxSize {
+			if fileSize > maxSize {
 				part.Close()
 				defer os.Remove(uploadingFilePath)
 				return "", &FileMetaInput{FileSize: fileSize}, nil, ErrFileTooBig
@@ -344,7 +344,10 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 	rTime := time.Now()
 	hexHash := hex.EncodeToString(hash)
 	newName := hexHash + filepath.Ext(fileName)
-	os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName))
+	if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); err != nil {
+		log.Printf("[ERROR] Failed to rename file %v to hash %v: %v", fileName, newName, err)
+		return "", nil, nil, errors.Wrapf(err, "failed to rename file %v %v", fileName, newName)
+	}
 	c.newFilesMx.Lock()
 	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {
 		c.newFiles[masterPubKey] = make(map[string]*FileMetaInput)
@@ -357,7 +360,8 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 }
 
 func readString(part *multipart.Part, name string) (string, error) {
-	b := make([]byte, 1024, 1024)
+	bufSize := 1024
+	b := make([]byte, bufSize, bufSize)
 	read, err := part.Read(b)
 	if err != nil {
 		if err == io.EOF {
@@ -365,5 +369,5 @@ func readString(part *multipart.Part, name string) (string, error) {
 		}
 		return "", errors.Wrapf(err, "failed to read %v", name)
 	}
-	return string(b), nil
+	return string(b[:read]), nil
 }
