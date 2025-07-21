@@ -111,13 +111,16 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusForbidden, uploadErr("Forbidden: on-behalf attestation failed"))
 			return
 		}
-
+		log.Printf("[STORAGE DURATION %v %v] validation1 %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(now), time.Since(now))
+		bStart := time.Now()
 		var upload fileUpload
 		if err := gCtx.ShouldBindWith(&upload, binding.FormMultipart); err != nil {
 			log.Printf("ERROR: failed to bind multipart form: %v", errors.Wrap(err, "failed to bind multipart form"))
 			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid multipart data"))
 			return
 		}
+		log.Printf("[STORAGE DURATION %v %v] bind %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(bStart), time.Since(now))
+		v2Start := time.Now()
 		if upload.Size > maxUploadSize {
 			gCtx.JSON(http.StatusRequestEntityTooLarge, uploadErr("file too large"))
 			return
@@ -146,7 +149,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("failed to open temporary file"))
 			return
 		}
-		log.Printf("[STORAGE DURATION %v %v] validation %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(now), time.Since(now))
+		log.Printf("[STORAGE DURATION %v %v] validation2 %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(v2Start), time.Since(now))
 		hStart := time.Now()
 		mpFile, err := upload.File.Open()
 		if err != nil {
