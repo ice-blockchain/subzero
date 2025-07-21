@@ -28,7 +28,7 @@ func helperNewDatabase(t *testing.T) *dbClient {
 
 	connString, _ := mainTestContainer.MustTempDB(t.Context())
 
-	dbClient := openDatabase(t.Context(), connString, true).
+	dbClient := openDatabase(t.Context(), []string{connString}, []string{connString}, true).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 

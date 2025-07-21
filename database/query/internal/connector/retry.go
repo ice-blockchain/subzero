@@ -19,7 +19,7 @@ func withRetry[T any](ctx context.Context, op func() (T, error)) (T, error) {
 		ctx,
 		op,
 		backoff.WithNotify(func(err error, d time.Duration) {
-			log.Printf("[DATABASE] call failed: %v. retrying in %v... ", err, d)
+			log.Printf("[DATABASE]: ERROR: call failed: %v. retrying in %v... ", err, d)
 		}),
 		backoff.WithMaxElapsedTime(25*time.Second),
 		backoff.WithBackOff(&backoff.ExponentialBackOff{

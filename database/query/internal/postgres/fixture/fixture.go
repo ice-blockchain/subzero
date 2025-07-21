@@ -127,7 +127,7 @@ func (c *Container) Close(ctx context.Context) error {
 	return c.container.Terminate(ctx)
 }
 
-func (c *Container) MustTempDB(ctx context.Context) (string, func()) {
+func (c *Container) MustTempDB(ctx context.Context, name ...string) (string, func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -137,6 +137,9 @@ func (c *Container) MustTempDB(ctx context.Context) (string, func()) {
 	}
 
 	dbName := "subzerodbtest" + strconv.FormatUint(atomic.AddUint64(&c.seed, 1), 10)
+	if len(name) > 0 {
+		dbName = name[0]
+	}
 	stmt := `CREATE DATABASE ` + dbName + ` TEMPLATE ` + pgDatabase
 	_, err = conn.Exec(ctx, stmt)
 	if err != nil {

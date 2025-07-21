@@ -41,7 +41,11 @@ func SelectIterator[T any](ctx context.Context, db Querier, sql string, args ...
 
 func ExecIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
 	if pool, ok := db.(*DB); ok {
-		db = pool.primary()
+		var err error
+		db, err = pool.primary()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return iteratorInternal[T](ctx, db, sql, args...)
 }

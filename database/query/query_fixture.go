@@ -47,9 +47,10 @@ func NewTestDatabaseClient(ctx context.Context, container *Container) (TestDB, f
 	tempAddress, release := container.MustTempDB(ctx)
 
 	conf := mustLoadConfig(WithConfig(&Config{
-		URL: tempAddress,
+		ReadURLs:  []string{tempAddress},
+		WriteURLs: []string{tempAddress},
 	}))
-	client := openDatabase(ctx, conf.URL, true).
+	client := openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, true).
 		WithPrivateKey(conf.PrivateKey).
 		WithRelayURL(conf.RelayURL)
 

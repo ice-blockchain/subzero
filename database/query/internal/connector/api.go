@@ -48,7 +48,11 @@ func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) erro
 
 func executeTransaction(ctx context.Context, db *DB, txOptions pgx.TxOptions, fn func(conn QueryExecer) error) error {
 	_, err := withRetry(ctx, func() (any, error) {
-		txErr := parseError(pgx.BeginTxFunc(ctx, db.primary(), txOptions, func(tx pgx.Tx) error {
+		instance, err := db.primary()
+		if err != nil {
+			return nil, retryStop(err)
+		}
+		txErr := parseError(pgx.BeginTxFunc(ctx, instance, txOptions, func(tx pgx.Tx) error {
 			return fn(tx)
 		}))
 
@@ -62,7 +66,7 @@ func executeTransaction(ctx context.Context, db *DB, txOptions pgx.TxOptions, fn
 
 		if IsUnexpected(txErr) {
 			// Retry on unexpected errors, but not on read-only errors.
-			return nil, txErr
+			return nil, errors.Join(txErr, db.switchMaster(ctx))
 		}
 
 		return nil, retryStop(txErr)
@@ -122,7 +126,7 @@ func selectInternal[T any](ctx context.Context, db Querier, sql string, args ...
 func Exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, error) {
 	return withRetry(ctx, func() (uint64, error) {
 		if resp, err := exec(ctx, db, sql, args...); err != nil && IsUnexpected(err) {
-			return 0, err
+			return 0, errors.Join(err, switchMaster(ctx, db))
 		} else {
 			return resp, retryStop(err)
 		}
@@ -131,7 +135,11 @@ func Exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, erro
 
 func exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, error) {
 	if pool, ok := db.(*DB); ok {
-		db = pool.primary()
+		var err error
+		db, err = pool.primary()
+		if err != nil {
+			return 0, err
+		}
 	}
 	resp, err := db.Exec(ctx, sql, args...)
 	if err != nil {
@@ -144,7 +152,7 @@ func exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, erro
 func ExecOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, error) {
 	return withRetry(ctx, func() (*T, error) {
 		if resp, err := execOne[T](ctx, db, sql, args...); err != nil && IsUnexpected(err) {
-			return nil, err
+			return nil, errors.Join(err, switchMaster(ctx, db))
 		} else {
 			return resp, retryStop(err)
 		}
@@ -153,7 +161,11 @@ func ExecOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*
 
 func execOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, error) {
 	if pool, ok := db.(*DB); ok {
-		db = pool.primary()
+		var err error
+		db, err = pool.primary()
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp := new(T)
 	if err := pgxscan.Get(ctx, db, resp, sql, args...); err != nil {
@@ -166,7 +178,7 @@ func execOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*
 func ExecMany[T any](ctx context.Context, db Querier, sql string, args ...any) ([]*T, error) {
 	return withRetry(ctx, func() ([]*T, error) {
 		if resp, err := execMany[T](ctx, db, sql, args...); err != nil && IsUnexpected(err) {
-			return nil, err
+			return nil, errors.Join(err, switchMaster(ctx, db))
 		} else {
 			return resp, retryStop(err)
 		}
@@ -179,7 +191,7 @@ func ExecManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf fun
 		if err == nil {
 			return resp, nil
 		} else if retryIf(err) {
-			return nil, err
+			return nil, errors.Join(err, switchMaster(ctx, db))
 		}
 		return resp, retryStop(err)
 	})
@@ -187,7 +199,11 @@ func ExecManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf fun
 
 func execMany[T any](ctx context.Context, db Querier, sql string, args ...any) ([]*T, error) {
 	if pool, ok := db.(*DB); ok {
-		db = pool.primary()
+		var err error
+		db, err = pool.primary()
+		if err != nil {
+			return nil, err
+		}
 	}
 	var resp []*T
 	if err := pgxscan.Select(ctx, db, &resp, sql, args...); err != nil {
@@ -206,4 +222,12 @@ func IsUnexpected(err error) bool {
 	}
 
 	return errors.As(err, &netOpErr)
+}
+
+func switchMaster(ctx context.Context, db any) error {
+	lb, ok := db.(*DB)
+	if !ok {
+		return nil
+	}
+	return lb.switchMaster(ctx)
 }
