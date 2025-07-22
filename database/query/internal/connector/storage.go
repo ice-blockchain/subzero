@@ -20,28 +20,37 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func WithMaster(connectionString string) Option {
+func WithWriteURLs(urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
-		conn, err := poolConnect(ctx, connectionString)
-		if err != nil {
-			return errors.Wrap(err, "cannot connect to master")
+		db.writeLB.Masters = urls
+		for i, connectionString := range urls {
+			conn, err := poolConnect(ctx, connectionString)
+			if err != nil {
+				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
+				continue
+			}
+			db.writeLB.Active.Store(conn)
+			db.writeLB.CurrentIndex = uint64(i)
+			break // Use the first successfully connected master as the active one.
 		}
-
-		db.master = conn
-
+		if len(db.writeLB.Masters) == 0 {
+			return errors.New("no write URLs provided")
+		} else if db.writeLB.Active.Load() == nil {
+			return errors.Errorf("no active master was found among %d write URLs", len(db.writeLB.Masters))
+		}
 		return nil
 	}
 }
 
-func WithReplicas(connectionStrings []string) Option {
+func WithReadURLs(urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
-		for _, connectionString := range connectionStrings {
+		for _, connectionString := range urls {
 			conn, err := poolConnect(ctx, connectionString)
 			if err != nil {
 				return errors.Wrap(err, "cannot connect to replica")
 			}
 
-			db.lb.Replicas = append(db.lb.Replicas, conn)
+			db.readLB.Replicas = append(db.readLB.Replicas, conn)
 		}
 		return nil
 	}
@@ -75,8 +84,9 @@ func WithFieldNameMapper(mapper NameMapperFunc) Option {
 
 func New(ctx context.Context, opts ...Option) (*DB, error) {
 	db := &DB{
-		lb:     new(lb),
-		closed: new(atomic.Bool),
+		readLB:  new(readLB),
+		writeLB: new(writeLB),
+		closed:  new(atomic.Bool),
 	}
 
 	for i := range opts {
@@ -85,10 +95,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		}
 	}
 
-	if db.ddl != "" {
-		if db.master == nil {
-			return nil, errors.Errorf("ddl is set but master is not set")
-		}
+	if db.ddl != "" && len(db.writeLB.Masters) > 0 {
 		err := DoInTransaction(ctx, db, func(conn QueryExecer) error {
 			for statement := range strings.SplitSeq(db.ddl, "--------") {
 				_, err := conn.Exec(ctx, statement)
@@ -178,10 +185,10 @@ func poolDoAfterConnect(ctx context.Context, conn *pgx.Conn) error {
 func (db *DB) Close() error {
 	db.closed.Store(true)
 
-	if db.master != nil {
-		db.master.Close()
+	if instance := db.writeLB.Active.Swap(nil); instance != nil {
+		instance.Close()
 	}
-	for _, replica := range db.lb.Replicas {
+	for _, replica := range db.readLB.Replicas {
 		replica.Close()
 	}
 
@@ -191,19 +198,19 @@ func (db *DB) Close() error {
 func (db *DB) Ping(ctx context.Context) (err error) {
 	var wg sync.WaitGroup
 
-	errChan := make(chan error, len(db.lb.Replicas)+1)
-	if db.master != nil {
+	errChan := make(chan error, len(db.readLB.Replicas)+1)
+	if instance := db.writeLB.Active.Load(); instance != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errChan <- errors.Wrap(db.master.Ping(ctx), "ping failed for master")
+			errChan <- errors.Wrap(instance.Ping(ctx), "ping failed for master")
 		}()
 	}
-	wg.Add(len(db.lb.Replicas))
-	for ii := range db.lb.Replicas {
+	wg.Add(len(db.readLB.Replicas))
+	for ii := range db.readLB.Replicas {
 		go func(ix int) {
 			defer wg.Done()
-			errChan <- errors.Wrapf(db.lb.Replicas[ix].Ping(ctx), "ping failed for replica[%v]", ix)
+			errChan <- errors.Wrapf(db.readLB.Replicas[ix].Ping(ctx), "ping failed for replica[%v]", ix)
 		}(ii)
 	}
 
@@ -215,21 +222,78 @@ func (db *DB) Ping(ctx context.Context) (err error) {
 	return err
 }
 
-func (db *DB) primary() *pgxpool.Pool {
-	return db.master
-}
-
-func (db *DB) replica() *pgxpool.Pool {
-	if len(db.lb.Replicas) == 0 {
-		return db.primary()
+func CalculateConnectOrder(addresses []string, currentIndex int) []int {
+	all := make([]int, len(addresses))
+	for i := range all {
+		all[i] = i
 	}
-	return db.lb.Replicas[atomic.AddUint64(&db.lb.CurrentIndex, 1)%uint64(len(db.lb.Replicas))]
+	return append(all[currentIndex+1:], all[:currentIndex]...)
 }
 
-func (*DB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+func (db *DB) switchMaster(ctx context.Context, reason error) error {
+	var oldMaster *pgxpool.Pool
+
+	if len(db.writeLB.Masters) == 0 {
+		return errors.Wrap(ErrReadOnly, "no write URLs provided")
+	}
+
+	currentMaster := db.writeLB.Active.Load()
+	db.writeLB.SwitchMu.Lock()
+	defer db.writeLB.SwitchMu.Unlock()
+
+	if currentMaster != nil && currentMaster != db.writeLB.Active.Load() {
+		// Already switched to a new master, no need to switch again.
+		return nil
+	}
+
+	for _, i := range CalculateConnectOrder(db.writeLB.Masters, int(db.writeLB.CurrentIndex)) {
+		conn, err := poolConnect(ctx, db.writeLB.Masters[i])
+		if err != nil {
+			log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.writeLB.Masters[i], err)
+			continue
+		}
+		log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.writeLB.CurrentIndex, i, reason)
+		oldMaster = db.writeLB.Active.Swap(conn)
+		db.writeLB.CurrentIndex = uint64(i)
+		break
+	}
+
+	if oldMaster != nil {
+		oldMaster.Close()
+		return nil
+	}
+
+	return errors.Errorf("no active master was found among %d write URLs", len(db.writeLB.Masters))
+}
+
+func (db *DB) primary() QueryExecerTx {
+	if len(db.writeLB.Masters) == 0 {
+		return new(readOnlyDB)
+	}
+	return db.writeLB.Active.Load()
+}
+
+func (db *DB) replica() Querier {
+	next := db.readLB.Next()
+	if next == nil {
+		next = db.primary()
+	}
+	return next
+}
+
+func (*DB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	panic("should not be used because its implemented just for type matching")
 }
 
-func (*DB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+func (*DB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	panic("should not be used because its implemented just for type matching")
+}
+
+func (r *readLB) Next() Querier {
+	if len(r.Replicas) == 0 {
+		return nil
+	}
+
+	index := atomic.AddUint64(&r.CurrentIndex, 1) % uint64(len(r.Replicas))
+	return r.Replicas[index]
 }

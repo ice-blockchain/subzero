@@ -67,7 +67,10 @@ server:
 
 database:
   query:
-    url: postgresql://postgres:postgres@localhost:5432/subzero
+    read-urls:
+      - postgresql://postgres:postgres@localhost:5432/subzero
+    write-urls:
+      - postgresql://postgres:postgres@localhost:5432/subzero
     private-key: *pk
     relay-url: *self
   command:

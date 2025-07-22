@@ -24,10 +24,11 @@ var (
 
 type (
 	Config struct {
-		URL         string   `yaml:"url"`
-		ReplicaURLs []string `yaml:"replicas"   validate:"omitempty,dive,url"`
-		PrivateKey  string   `yaml:"private-key"`
-		RelayURL    string   `yaml:"relay-url" validate:"required,url"`
+		URL        string   `yaml:"omitempty,url" validate:"omitempty,url"`
+		PrivateKey string   `yaml:"private-key"`
+		RelayURL   string   `yaml:"relay-url"     validate:"required,url"`
+		WriteURLs  []string `yaml:"write-urls"    validate:"omitempty,dive,url"`
+		ReadURLs   []string `yaml:"read-urls"     validate:"omitempty,dive,url"`
 	}
 	Option func(*Config)
 )
@@ -46,8 +47,11 @@ func WithConfig(cfg *Config) Option {
 		if cfg.RelayURL != "" {
 			in.RelayURL = cfg.RelayURL
 		}
-		if len(cfg.ReplicaURLs) > 0 {
-			in.ReplicaURLs = cfg.ReplicaURLs
+		if len(cfg.ReadURLs) > 0 {
+			in.ReadURLs = cfg.ReadURLs
+		}
+		if len(cfg.WriteURLs) > 0 {
+			in.WriteURLs = cfg.WriteURLs
 		}
 	}
 }
@@ -66,6 +70,14 @@ func mustLoadConfig(opts ...Option) *Config {
 		opt(conf)
 	}
 
+	if conf.URL != "" {
+		conf.ReadURLs = []string{conf.URL}
+	}
+
+	if len(conf.WriteURLs) == 0 && len(conf.ReadURLs) == 0 {
+		log.Panic("no database URLs provided, at least one read or write URL is required")
+	}
+
 	if err := cfg.Validate(conf); err != nil {
 		log.Panic(err)
 	}
@@ -76,7 +88,7 @@ func mustLoadConfig(opts ...Option) *Config {
 func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
 		conf := mustLoadConfig(opts...)
-		globalDB.Client = openDatabase(ctx, conf.URL, true, conf.ReplicaURLs...).
+		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, true).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
 

@@ -97,13 +97,13 @@ func readDDL() string {
 	return sb.String()
 }
 
-func openDatabase(ctx context.Context, target string, runDDL bool, replicas ...string) *dbClient {
+func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool) *dbClient {
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
 	}
 	options := []connector.Option{
-		connector.WithMaster(target),
-		connector.WithReplicas(replicas),
+		connector.WithWriteURLs(writeURLs...),
+		connector.WithReadURLs(readURLs...),
 		connector.WithFieldNameMapper(func(in string) string {
 			n := strings.ToLower(in)
 			if mapped, ok := databaseEventFieldMap[n]; ok {

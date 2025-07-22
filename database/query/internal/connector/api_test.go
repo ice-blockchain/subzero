@@ -39,7 +39,7 @@ func TestAPI(t *testing.T) {
 	defer release()
 
 	conn, err := connector.New(t.Context(),
-		connector.WithMaster(addr),
+		connector.WithWriteURLs(addr),
 		connector.WithDDL(`CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, name TEXT)`),
 	)
 	require.NoError(t, err)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"sync"
 	"sync/atomic"
 
 	"github.com/georgysavva/scany/v2/dbscan"
@@ -33,10 +34,10 @@ var (
 type (
 	Option func(context.Context, *DB) error
 	DB     struct {
-		ddl    string
-		master *pgxpool.Pool
-		lb     *lb
-		closed *atomic.Bool
+		ddl     string
+		writeLB *writeLB
+		readLB  *readLB
+		closed  *atomic.Bool
 	}
 	Iterator[T any] = iter.Seq2[T, error]
 	Error           = pgconn.PgError
@@ -44,8 +45,14 @@ type (
 )
 
 type (
-	lb struct {
+	readLB struct {
 		Replicas     []*pgxpool.Pool
 		CurrentIndex uint64
+	}
+	writeLB struct {
+		Masters      []string
+		Active       atomic.Pointer[pgxpool.Pool]
+		CurrentIndex uint64
+		SwitchMu     sync.Mutex
 	}
 )

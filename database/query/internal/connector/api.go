@@ -25,6 +25,10 @@ type (
 		Querier
 		Execer
 	}
+	QueryExecerTx interface {
+		QueryExecer
+		BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+	}
 )
 
 func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) error) error {
@@ -60,8 +64,9 @@ func executeTransaction(ctx context.Context, db *DB, txOptions pgx.TxOptions, fn
 			return nil, retryStop(txErr)
 		}
 
-		if IsUnexpected(txErr) {
-			// Retry on unexpected errors, but not on read-only errors.
+		if isInstanceDead(txErr) {
+			return nil, errors.Join(txErr, db.switchMaster(ctx, txErr))
+		} else if IsUnexpected(txErr) {
 			return nil, txErr
 		}
 
@@ -121,11 +126,13 @@ func selectInternal[T any](ctx context.Context, db Querier, sql string, args ...
 
 func Exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, error) {
 	return withRetry(ctx, func() (uint64, error) {
-		if resp, err := exec(ctx, db, sql, args...); err != nil && IsUnexpected(err) {
-			return 0, err
-		} else {
-			return resp, retryStop(err)
+		resp, err := exec(ctx, db, sql, args...)
+		if isInstanceDead(err) {
+			return resp, errors.Join(err, switchMaster(ctx, db, err))
+		} else if IsUnexpected(err) {
+			return resp, err
 		}
+		return resp, retryStop(err)
 	})
 }
 
@@ -143,11 +150,13 @@ func exec(ctx context.Context, db Execer, sql string, args ...any) (uint64, erro
 
 func ExecOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, error) {
 	return withRetry(ctx, func() (*T, error) {
-		if resp, err := execOne[T](ctx, db, sql, args...); err != nil && IsUnexpected(err) {
-			return nil, err
-		} else {
-			return resp, retryStop(err)
+		resp, err := execOne[T](ctx, db, sql, args...)
+		if isInstanceDead(err) {
+			return resp, errors.Join(err, switchMaster(ctx, db, err))
+		} else if IsUnexpected(err) {
+			return resp, err
 		}
+		return resp, retryStop(err)
 	})
 }
 
@@ -165,11 +174,13 @@ func execOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*
 
 func ExecMany[T any](ctx context.Context, db Querier, sql string, args ...any) ([]*T, error) {
 	return withRetry(ctx, func() ([]*T, error) {
-		if resp, err := execMany[T](ctx, db, sql, args...); err != nil && IsUnexpected(err) {
-			return nil, err
-		} else {
-			return resp, retryStop(err)
+		resp, err := execMany[T](ctx, db, sql, args...)
+		if isInstanceDead(err) {
+			return resp, errors.Join(err, switchMaster(ctx, db, err))
+		} else if IsUnexpected(err) {
+			return resp, err
 		}
+		return resp, retryStop(err)
 	})
 }
 
@@ -178,8 +189,11 @@ func ExecManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf fun
 		resp, err := execMany[T](ctx, db, sql, args...)
 		if err == nil {
 			return resp, nil
+		}
+		if isInstanceDead(err) {
+			return resp, errors.Join(err, switchMaster(ctx, db, err))
 		} else if retryIf(err) {
-			return nil, err
+			return resp, err
 		}
 		return resp, retryStop(err)
 	})
@@ -206,4 +220,35 @@ func IsUnexpected(err error) bool {
 	}
 
 	return errors.As(err, &netOpErr)
+}
+
+func isInstanceDead(err error) bool {
+	var (
+		netOpErr  *net.OpError
+		pgErr     *pgconn.PgError
+		pgconnErr *pgconn.ConnectError
+	)
+
+	if errors.As(err, &netOpErr) || errors.As(err, &pgconnErr) {
+		return true
+	}
+
+	if errors.As(err, &pgErr) {
+		code := pgErr.SQLState()
+		return pgerrcode.IsConnectionException(code) ||
+			pgerrcode.IsSystemError(code) ||
+			pgerrcode.IsInternalError(code) ||
+			pgerrcode.IsConfigurationFileError(code) ||
+			pgerrcode.IsOperatorIntervention(code)
+	}
+
+	return false
+}
+
+func switchMaster(ctx context.Context, db any, reason error) error {
+	lb, ok := db.(*DB)
+	if !ok {
+		return nil
+	}
+	return lb.switchMaster(ctx, reason)
 }
