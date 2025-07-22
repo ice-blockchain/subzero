@@ -99,7 +99,6 @@ require (
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240816210425-c5d0cb0b6fc0 // indirect
@@ -215,7 +214,7 @@ require (
 	github.com/pterm/pterm v0.12.81 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/refraction-networking/utls v1.7.3 // indirect
+	github.com/refraction-networking/utls v1.8.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect

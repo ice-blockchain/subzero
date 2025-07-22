@@ -230,7 +230,7 @@ func CalculateConnectOrder(addresses []string, currentIndex int) []int {
 	return append(all[currentIndex+1:], all[:currentIndex]...)
 }
 
-func (db *DB) switchMaster(ctx context.Context) error {
+func (db *DB) switchMaster(ctx context.Context, reason error) error {
 	var oldMaster *pgxpool.Pool
 
 	if len(db.writeLB.Masters) == 0 {
@@ -252,7 +252,7 @@ func (db *DB) switchMaster(ctx context.Context) error {
 			log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.writeLB.Masters[i], err)
 			continue
 		}
-		log.Printf("[DATABASE]: INFO: switching master: %d -> %d", db.writeLB.CurrentIndex, i)
+		log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.writeLB.CurrentIndex, i, reason)
 		oldMaster = db.writeLB.Active.Swap(conn)
 		db.writeLB.CurrentIndex = uint64(i)
 		break
@@ -266,32 +266,32 @@ func (db *DB) switchMaster(ctx context.Context) error {
 	return errors.Errorf("no active master was found among %d write URLs", len(db.writeLB.Masters))
 }
 
-func (db *DB) primary() (*pgxpool.Pool, error) {
+func (db *DB) primary() QueryExecerTx {
 	if len(db.writeLB.Masters) == 0 {
-		return nil, errors.Wrap(ErrReadOnly, "no write URLs provided")
+		return new(readOnlyDB)
 	}
-	return db.writeLB.Active.Load(), nil
+	return db.writeLB.Active.Load()
 }
 
-func (db *DB) replica() *pgxpool.Pool {
+func (db *DB) replica() Querier {
 	next := db.readLB.Next()
 	if next == nil {
-		next, _ = db.primary()
+		next = db.primary()
 	}
 	return next
 }
 
-func (*DB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+func (*DB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	panic("should not be used because its implemented just for type matching")
 }
 
-func (*DB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+func (*DB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	panic("should not be used because its implemented just for type matching")
 }
 
-func (r *readLB) Next() *pgxpool.Pool {
+func (r *readLB) Next() Querier {
 	if len(r.Replicas) == 0 {
-		return nil
+		return new(readOnlyDB)
 	}
 
 	index := atomic.AddUint64(&r.CurrentIndex, 1) % uint64(len(r.Replicas))

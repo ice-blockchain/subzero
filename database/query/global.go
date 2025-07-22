@@ -24,11 +24,11 @@ var (
 
 type (
 	Config struct {
-		URL        string   `yaml:"url"          validate:"omitempty,url"`
+		URL        string   `yaml:"omitempty,url" validate:"omitempty,url"`
 		PrivateKey string   `yaml:"private-key"`
-		RelayURL   string   `yaml:"relay-url"    validate:"required,url"`
-		WriteURLs  []string `yaml:"write-urls"   validate:"omitempty,dive,url"`
-		ReadURLs   []string `yaml:"read-urls"    validate:"omitempty,dive,url"`
+		RelayURL   string   `yaml:"relay-url"     validate:"required,url"`
+		WriteURLs  []string `yaml:"write-urls"    validate:"omitempty,dive,url"`
+		ReadURLs   []string `yaml:"read-urls"     validate:"omitempty,dive,url"`
 	}
 	Option func(*Config)
 )

@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 
 	addr, release := query.NewTestDatabase(serverCtx)
 	query.MustInit(serverCtx, query.WithConfig(&query.Config{
-		URL: addr,
+		WriteURLs: []string{addr},
 	}))
 
 	initServer(serverCtx, 9996)
