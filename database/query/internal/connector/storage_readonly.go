@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	_ QueryExecer = (*readOnlyDB)(nil)
+	_ QueryExecerTx = (*readOnlyDB)(nil)
 )
 
 type readOnlyDB struct{}

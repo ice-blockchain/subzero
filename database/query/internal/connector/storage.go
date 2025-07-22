@@ -291,7 +291,7 @@ func (*DB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 
 func (r *readLB) Next() Querier {
 	if len(r.Replicas) == 0 {
-		return new(readOnlyDB)
+		return nil
 	}
 
 	index := atomic.AddUint64(&r.CurrentIndex, 1) % uint64(len(r.Replicas))
