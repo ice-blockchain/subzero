@@ -5,12 +5,19 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"log"
 
 	"github.com/caddyserver/certmagic"
 	"github.com/cockroachdb/errors"
 	"github.com/libdns/cloudflare"
 )
+
+func loadTLSConfigFromACME(ctx context.Context, target string, magic *certmagic.Config) (*tls.Config, error) {
+	err := magic.ManageSync(ctx, []string{target})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to manage TLS for %q", target)
+	}
+	return magic.TLSConfig(), nil
+}
 
 func LoadTLSConfigFromACMEWithDNS(ctx context.Context, domain, apiKey string) (*tls.Config, error) {
 	magic := certmagic.NewDefault()
@@ -28,22 +35,19 @@ func LoadTLSConfigFromACMEWithDNS(ctx context.Context, domain, apiKey string) (*
 						APIToken: apiKey,
 					},
 				},
-			},
-		}),
+			}}),
 	}
-
-	err := magic.ManageSync(ctx, []string{domain})
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to manage TLS for %v", domain)
-	}
-
-	return magic.TLSConfig(), nil
+	return loadTLSConfigFromACME(ctx, domain, magic)
 }
 
-func MustLoadTLSConfigFromACMEWithDNS(ctx context.Context, domain, apiKey string) *tls.Config {
-	conf, err := LoadTLSConfigFromACMEWithDNS(ctx, domain, apiKey)
-	if err != nil {
-		log.Panic(err)
-	}
-	return conf
+func LoadTLSConfigFromACMEWithHTTP(ctx context.Context, domainOrIpAddress, apiKey string) (*tls.Config, error) {
+	magic := certmagic.NewDefault()
+	magic.DefaultServerName = domainOrIpAddress
+	magic.Issuers = []certmagic.Issuer{&certmagic.ZeroSSLIssuer{
+		APIKey:       apiKey,
+		Logger:       magic.Logger,
+		Storage:      magic.Storage,
+		ValidityDays: 90,
+	}}
+	return loadTLSConfigFromACME(ctx, domainOrIpAddress, magic)
 }
