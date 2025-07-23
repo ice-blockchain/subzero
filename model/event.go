@@ -294,7 +294,7 @@ func ParseEphemeralEmbeddingEventRef(ev *Event) (key string, eventContent *Event
 func CollectRelaysFromRelayEvent(ev *Event) []string {
 	relays := make([]string, 0, len(ev.Tags))
 	for _, tag := range ev.Tags {
-		if tag.Key() == "r" && (len(tag) == 2 || tag[2] == RelayListWriteMarker || tag[2] == "") {
+		if tag.Key() == "r" {
 			relays = append(relays, tag.Value())
 		}
 	}

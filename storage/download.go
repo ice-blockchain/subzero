@@ -353,6 +353,7 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 		}
 
 		var eg errgroup.Group
+		log.Printf("INFO: triggering download on %#v relays for user %v file %v", relays, userMasterKey, fileHash)
 		for _, relay := range relays {
 			eg.Go(func() error {
 				if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
