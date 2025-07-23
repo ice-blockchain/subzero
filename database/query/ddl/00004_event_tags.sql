@@ -11,5 +11,5 @@ CREATE TABLE IF NOT EXISTS event_tags
     event_tag_value4  text not null DEFAULT '',
     event_tag_value5  text not null DEFAULT '',
     primary key (event_id, event_tag_key, event_tag_value1, event_tag_value3)
-);
+) WITH (FILLFACTOR = 90);
 

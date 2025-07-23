@@ -10,7 +10,6 @@
 --   created_at
 -- Order by:
 --   created_at DESC
-DROP INDEX IF EXISTS idx_events_address;
 CREATE INDEX IF NOT EXISTS idx_events_lookup_created_at ON events(lookup_created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_id_lookup_created_at ON events(id, lookup_created_at DESC) WHERE hidden = FALSE;
 CREATE INDEX IF NOT EXISTS idx_events_kind_lookup_created_at ON events(kind, lookup_created_at DESC) WHERE hidden = FALSE;
@@ -35,22 +34,19 @@ CREATE INDEX IF NOT EXISTS idx_events_ttags ON events USING GIN(t_tags);
 CREATE INDEX IF NOT EXISTS idx_events_expiration_id ON events(expiration, id) WHERE expiration IS NOT NULL;
 
 -- PGroonga index for text search.
--- TODO: after the migration, remove this check and leave just the index creation.
 CREATE EXTENSION IF NOT EXISTS pgroonga;
-DO $$
-BEGIN
-    IF EXISTS(
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'events' 
-        AND column_name = 'lookup' 
-        AND data_type = 'text'
-    ) AND NOT EXISTS(
-        SELECT 1 FROM pg_indexes 
-        WHERE tablename = 'events' 
-        AND indexname = 'idx_events_lookup'
-        AND indexdef LIKE '%pgroonga%'
-    ) THEN
-        DROP INDEX IF EXISTS idx_events_lookup;
-        CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit');
-    END IF;
-END $$;
+
+CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit');
+
+-- Feed request:
+--   kinds":[1, 30175, 6, 30023]
+--   !amarker:reply
+--   !emarker:reply
+--   references:false
+--   expiration:false
+CREATE INDEX IF NOT EXISTS
+    idx_events_kind_has_references_expiration_is_reply_lookup_created_at ON
+        events(kind, has_references, expiration, is_reply, lookup_created_at DESC)
+        WHERE is_reply = FALSE AND has_references = FALSE AND expiration is NULL AND hidden = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_events_gift_receiver_pubkey ON events(gift_receiver_pubkey NULLS FIRST) WHERE hidden = FALSE;
