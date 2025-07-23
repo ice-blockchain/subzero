@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 
@@ -63,6 +64,42 @@ func WithConfig(cfg *Config) Option {
 	}
 }
 
+func mustLoadTLSConfig(ctx context.Context, conf *Config) (tls *tls.Config) {
+	target := extractServerNameFromRelayURL(conf.RelayURL)
+	isIP := net.ParseIP(target) != nil
+
+	switch {
+	case (conf.TLSCert == "" && conf.TLSKey == "") || (conf.TLSCert == "-" && conf.TLSKey == "-"):
+		log.Printf("using ACME to obtain TLS certificate for %q", target)
+
+		if conf.ACME.APIKey == "" {
+			log.Panic("API key is required for ACME")
+		}
+
+		var err error
+		if isIP {
+			log.Printf("using HTTP challenge for IP address %q", target)
+			tls, err = LoadTLSConfigFromACMEWithHTTP(ctx, target, conf.ACME.APIKey)
+		} else {
+			log.Printf("using DNS challenge for domain %q", target)
+			tls, err = LoadTLSConfigFromACMEWithDNS(ctx, target, conf.ACME.APIKey)
+		}
+		if err != nil {
+			log.Panicf("failed to load TLS config from ACME: %v", err)
+		}
+
+	case conf.TLSCert == "selfsigned" || conf.TLSKey == "selfsigned":
+		log.Printf("using self-signed TLS certificate for %q", target)
+		tls = MustGenerateTLSConfigSelfSigned(target)
+
+	default:
+		log.Println("using provided TLS certificate and key")
+		tls = wsserver.LoadTLSConfig(conf.TLSCert, conf.TLSKey)
+	}
+
+	return tls
+}
+
 func New(ctx context.Context, opts ...Option) Server {
 	var r router
 
@@ -82,30 +119,12 @@ func New(ctx context.Context, opts ...Option) Server {
 		log.Panicf("failed to validate config: %v", err)
 	}
 
-	var tls *tls.Config
-	switch {
-	case (r.Config.TLSCert == "" && r.Config.TLSKey == "") || (r.Config.TLSCert == "-" && r.Config.TLSKey == "-"):
-		log.Printf("using ACME to obtain TLS certificate for %v", r.Config.RelayURL)
-		if r.Config.ACME.APIKey == "" {
-			log.Panic("API key is required for ACME DNS challenge")
-		}
-		tls = MustLoadTLSConfigFromACMEWithDNS(ctx, extractServerNameFromRelayURL(r.Config.RelayURL), r.Config.ACME.APIKey)
-
-	case r.Config.TLSCert == "selfsigned" || r.Config.TLSKey == "selfsigned":
-		log.Printf("using self-signed TLS certificate for %v", r.Config.RelayURL)
-		tls = MustGenerateTLSConfigSelfSigned(extractServerNameFromRelayURL(r.Config.RelayURL))
-
-	default:
-		log.Println("using provided TLS certificate and key")
-		tls = wsserver.LoadTLSConfig(r.Config.TLSCert, r.Config.TLSKey)
-	}
-
 	r.Handler = wsserver.NewHandler(r.Config.RelayURL)
 	r.Server = wsserver.New(
 		&wsserver.Config{
 			Port:      r.Config.Port,
 			Debug:     r.Config.Debug,
-			TLSConfig: tls,
+			TLSConfig: mustLoadTLSConfig(ctx, r.Config),
 		},
 		&r,
 	)
