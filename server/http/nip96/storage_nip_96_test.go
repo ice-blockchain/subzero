@@ -131,7 +131,7 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, query.AcceptEvents(ctx, relaysList))
 	})
 	events := make([]*model.Event, 0)
-	const filesCount = 6
+	const filesCount = 7
 	t.Run("files are uploaded, response is ok", func(t *testing.T) {
 		responsesCh := make(chan *nip96.UploadResponse, filesCount)
 		var wg sync.WaitGroup
@@ -149,6 +149,10 @@ func TestNIP96(t *testing.T) {
 			responsesCh <- resp
 		})
 		go upload(t, ctx, user1, masterPubKey, ".testdata/text.txt", "text.txt", "text file", func(resp *nip96.UploadResponse) {
+			defer wg.Done()
+			responsesCh <- resp
+		})
+		go upload(t, ctx, user1, masterPubKey, ".testdata/to-be-deleted-on-same-relay.txt", "to-be-deleted-on-same-relay.txt", "to be deleted", func(resp *nip96.UploadResponse) {
 			defer wg.Done()
 			responsesCh <- resp
 		})
@@ -217,7 +221,68 @@ func TestNIP96(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
 	})
-
+	t.Run("delete file on same relay", func(t *testing.T) {
+		var nip94ToBeDeleted *model.Event
+		for _, e := range events {
+			if e.GetTag("ox").Value() == "aca3a138e07162a8565070575b3593ee2fef404d447162f5786d5cc645d82b7a" {
+				nip94ToBeDeleted = e
+				break
+			}
+		}
+		fileHash := ""
+		if oxTag := nip94ToBeDeleted.GetTag("ox"); oxTag != nil {
+			fileHash = oxTag.Value()
+		} else {
+			t.Fatalf("malformed ox tag in nip94 event %v", nip94ToBeDeleted.ID)
+		}
+		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
+		var wg sync.WaitGroup
+		wg.Add(2)
+		imetaEvent := &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      model.CustomIONKindEditableTextNote,
+			Tags: nostr.Tags{
+				nostr.Tag{
+					"imeta",
+					"ox aca3a138e07162a8565070575b3593ee2fef404d447162f5786d5cc645d82b7a",
+					fmt.Sprintf("url %v", nip94ToBeDeleted.GetTag("url").Value()),
+				},
+				nostr.Tag{"d", "editable post1"},
+				nostr.Tag{"b", masterPubKey},
+			},
+		}}
+		require.NoError(t, imetaEvent.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, query.AcceptEvents(ctx, imetaEvent))
+		go func() {
+			defer wg.Done()
+			deletedPost := &model.Event{
+				Event: nostr.Event{
+					Kind:      imetaEvent.Kind,
+					Content:   "",                                    // Empty content for soft deletion.
+					CreatedAt: imetaEvent.CreatedAt.Add(time.Second), // Should be newer than the original post.
+					Tags: model.Tags{
+						{"b", masterPubKey},
+						{"published_at", imetaEvent.CreatedAt.String()},
+						{"d", "editable post1"},
+					},
+				},
+			}
+			require.NoError(t, deletedPost.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, query.AcceptEvents(ctx, deletedPost))
+			cpy := new(model.Event)
+			*cpy = *deletedPost
+			require.NoError(t, query.CommitEvents(ctx, cpy))
+			require.NoError(t, storage.AcceptEvents(ctx, cpy))
+		}()
+		go func() {
+			defer wg.Done()
+			status := deleteFile(t, ctx, user1, fileHash, masterPubKey)
+			require.Equal(t, http.StatusOK, status)
+			require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
+		}()
+		wg.Wait()
+		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
+	})
 	t.Run("delete file by same hash used in multiple posts does not break link", func(t *testing.T) {
 		deleteFileAndVerify := func(verify func(fileName string)) {
 			var nip94ToBeDeleted *model.Event
@@ -313,22 +378,26 @@ func TestNIP96(t *testing.T) {
 		} else {
 			t.Fatalf("malformed ox tag in nip94 event %v", nip94ToBeDeleted.ID)
 		}
-		status := deleteFile(t, ctx, user1, fileHash, masterPubKey)
-		require.Equal(t, http.StatusOK, status)
 		fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
-		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
-		deletionEventToSign := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindDeletion,
-			Tags: nostr.Tags{
-				nostr.Tag{"e", nip94ToBeDeleted.ID},
-				nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindFileMetadata), 10)},
-				nostr.Tag{"b", masterPubKey},
-			},
-		}}
-		require.NoError(t, deletionEventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
-		require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
+		go func() {
+			status := deleteFile(t, ctx, user1, fileHash, masterPubKey)
+			require.Equal(t, http.StatusOK, status)
+			require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
+		}()
+		go func() {
+			deletionEventToSign := &model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindDeletion,
+				Tags: nostr.Tags{
+					nostr.Tag{"e", nip94ToBeDeleted.ID},
+					nostr.Tag{"k", strconv.FormatInt(int64(nostr.KindFileMetadata), 10)},
+					nostr.Tag{"b", masterPubKey},
+				},
+			}}
+			require.NoError(t, deletionEventToSign.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, storage.AcceptEvents(ctx, deletionEventToSign))
+			require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
+		}()
 	})
 	t.Run("delete file owned by user 1 on behave of usr 2 (attestation) via deletion of imeta tagged post", func(t *testing.T) {
 		var nip94ToBeDeleted *model.Event
@@ -671,6 +740,23 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 					nostr.Tag{"ox", "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9"},
 					nostr.Tag{"m", "text/plain"},
 					nostr.Tag{"size", "6"},
+				},
+				Content: "master's file",
+			},
+		},
+		"to be deleted": {
+			Status:        "success",
+			Message:       "Upload successful.",
+			ProcessingURL: "",
+			Nip94Event: struct {
+				Tags    nostr.Tags `json:"tags"`
+				Content string     `json:"content"`
+			}{
+				Tags: nostr.Tags{
+					nostr.Tag{"summary", "aca3a138e07162a8565070575b3593ee2fef404d447162f5786d5cc645d82b7a.txt"},
+					nostr.Tag{"ox", "aca3a138e07162a8565070575b3593ee2fef404d447162f5786d5cc645d82b7a"},
+					nostr.Tag{"m", "text/plain"},
+					nostr.Tag{"size", "27"},
 				},
 				Content: "master's file",
 			},

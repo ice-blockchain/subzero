@@ -49,10 +49,16 @@ func (c *client) Delete(ctx context.Context, userPubKey, masterKey, fileHash str
 	}
 	file, err := c.detectFileFromMeta(bag, metadata, fileHash)
 	if err != nil {
-		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
+		if errors.Is(err, ErrNotFound) {
+			err = nil
+			file = fileHash
+		}
+		if err != nil {
+			return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
+		}
 	}
 	if userPubKey != masterKey {
-		if metadata.FileMetadata[file].Owner == masterKey {
+		if md, foundMD := metadata.FileMetadata[file]; foundMD && md.Owner == masterKey {
 			return ErrForbidden
 		}
 	}
