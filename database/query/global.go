@@ -63,10 +63,8 @@ func WithConfig(cfg *Config) Option {
 }
 
 func createPgURL(username, password, target string) (string, error) {
-	const pgSchema = "postgres://"
-
-	if !strings.HasPrefix(target, pgSchema) {
-		target = pgSchema + target
+	if !strings.HasPrefix(target, "postgres://") && !strings.HasPrefix(target, "postgresql://") {
+		target = "postgres://" + target
 	}
 
 	parsed, err := url.Parse(target)
@@ -82,8 +80,6 @@ func createPgURL(username, password, target string) (string, error) {
 }
 
 func mustLoadConfig(opts ...Option) *Config {
-	const pgSchema = "postgres://"
-
 	conf, err := cfg.Get[Config]()
 	if err != nil {
 		conf = &Config{}
@@ -96,13 +92,13 @@ func mustLoadConfig(opts ...Option) *Config {
 	for i := range conf.WriteURLs {
 		conf.WriteURLs[i], err = createPgURL(conf.Username, conf.Password, conf.WriteURLs[i])
 		if err != nil {
-			log.Panicf("failed to create write URL: %v", err)
+			log.Panicf("failed to create write URL: %q: %v", conf.WriteURLs[i], err)
 		}
 	}
 	for i := range conf.ReadURLs {
 		conf.ReadURLs[i], err = createPgURL(conf.Username, conf.Password, conf.ReadURLs[i])
 		if err != nil {
-			log.Panicf("failed to create read URL: %v", err)
+			log.Panicf("failed to create read URL: %q: %v", conf.ReadURLs[i], err)
 		}
 	}
 
