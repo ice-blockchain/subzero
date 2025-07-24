@@ -1185,8 +1185,6 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 		return hasRefTags
 	case nostr.KindFollowList:
 		return true
-	case nostr.KindFileMetadata:
-		return true
 	case nostr.KindReaction:
 		return true
 	case nostr.KindGenericRepost, nostr.KindRepost:
