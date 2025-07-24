@@ -442,7 +442,7 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 		return errors.Wrapf(err, "failed to parse attestation event")
 	}
 	if !allowed {
-		return model.ErrOnBehalfAccessDenied
+		return errors.Wrapf(model.ErrOnBehalfAccessDenied, "kind %d", nostr.KindFileMetadata)
 	}
 	relaysList := model.CollectRelaysFromRelayEvent(relays)
 	relaysValid := slices.Contains(relaysList, senderUrl) && slices.Contains(relaysList, globalConfig.RelayURL)

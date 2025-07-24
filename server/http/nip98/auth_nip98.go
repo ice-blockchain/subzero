@@ -149,7 +149,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 		break
 	}
 	if !allowed {
-		return model.ErrOnBehalfAccessDenied
+		return errors.Wrapf(model.ErrOnBehalfAccessDenied, "kind %d", kind)
 	}
 	return nil
 }

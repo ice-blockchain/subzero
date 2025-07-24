@@ -1159,7 +1159,7 @@ func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, eve
 			return errors.Wrapf(err, "failed to parse attestation event")
 		}
 		if !allowed {
-			return model.ErrOnBehalfAccessDenied
+			return errors.Wrapf(model.ErrOnBehalfAccessDenied, "event id %s / kind %d", event.ID, event.Kind)
 		}
 		return req.Save(ephemeralAttestationEvent)
 	}
@@ -1184,6 +1184,8 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 		}
 		return hasRefTags
 	case nostr.KindFollowList:
+		return true
+	case nostr.KindFileMetadata:
 		return true
 	case nostr.KindReaction:
 		return true
