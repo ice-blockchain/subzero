@@ -57,7 +57,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.14.0
-	github.com/xssnick/tonutils-storage v1.1.4
+	github.com/xssnick/tonutils-storage v1.1.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0

@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,11 +26,12 @@ var (
 
 type (
 	Config struct {
-		URL        string   `yaml:"omitempty,url" validate:"omitempty,url"`
-		PrivateKey string   `yaml:"private-key"`
-		RelayURL   string   `yaml:"relay-url"     validate:"required,url"`
-		WriteURLs  []string `yaml:"write-urls"    validate:"omitempty,dive,url"`
-		ReadURLs   []string `yaml:"read-urls"     validate:"omitempty,dive,url"`
+		Username   string   `yaml:"username,omitempty"`
+		Password   string   `yaml:"password,omitempty"`
+		PrivateKey string   `yaml:"private-key"          validate:"required"`
+		RelayURL   string   `yaml:"relay-url"            validate:"required,url"`
+		WriteURLs  []string `yaml:"write-urls"`
+		ReadURLs   []string `yaml:"read-urls"`
 	}
 	Option func(*Config)
 )
@@ -38,8 +41,11 @@ func WithConfig(cfg *Config) Option {
 		if cfg == nil {
 			return
 		}
-		if cfg.URL != "" {
-			in.URL = cfg.URL
+		if cfg.Username != "" {
+			in.Username = cfg.Username
+		}
+		if cfg.Password != "" {
+			in.Password = cfg.Password
 		}
 		if cfg.PrivateKey != "" {
 			in.PrivateKey = cfg.PrivateKey
@@ -56,11 +62,24 @@ func WithConfig(cfg *Config) Option {
 	}
 }
 
-func mustLoadConfig(opts ...Option) *Config {
-	if len(opts) == 0 {
-		return cfg.MustGet[Config]()
+func createPgURL(username, password, target string) (string, error) {
+	if !strings.HasPrefix(target, "postgres://") && !strings.HasPrefix(target, "postgresql://") {
+		target = "postgres://" + target
 	}
 
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return "", err
+	}
+
+	if parsed.User.Username() == "" {
+		parsed.User = url.UserPassword(username, password)
+	}
+
+	return parsed.String(), nil
+}
+
+func mustLoadConfig(opts ...Option) *Config {
 	conf, err := cfg.Get[Config]()
 	if err != nil {
 		conf = &Config{}
@@ -70,8 +89,17 @@ func mustLoadConfig(opts ...Option) *Config {
 		opt(conf)
 	}
 
-	if conf.URL != "" {
-		conf.ReadURLs = []string{conf.URL}
+	for i := range conf.WriteURLs {
+		conf.WriteURLs[i], err = createPgURL(conf.Username, conf.Password, conf.WriteURLs[i])
+		if err != nil {
+			log.Panicf("failed to create write URL: %q: %v", conf.WriteURLs[i], err)
+		}
+	}
+	for i := range conf.ReadURLs {
+		conf.ReadURLs[i], err = createPgURL(conf.Username, conf.Password, conf.ReadURLs[i])
+		if err != nil {
+			log.Panicf("failed to create read URL: %q: %v", conf.ReadURLs[i], err)
+		}
 	}
 
 	if len(conf.WriteURLs) == 0 && len(conf.ReadURLs) == 0 {

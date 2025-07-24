@@ -21,7 +21,6 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: &Config{
-				URL:        "http://localhost:5432",
 				PrivateKey: "private-key",
 				RelayURL:   "http://localhost:8080",
 				ReadURLs:   []string{"http://localhost:5433"},
@@ -30,7 +29,6 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "missing relay URL",
 			cfg: &Config{
-				URL:        "http://localhost:5432",
 				PrivateKey: "private-key",
 				ReadURLs:   []string{"http://localhost:5433"},
 			},
@@ -39,20 +37,9 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "no replica URLs",
 			cfg: &Config{
-				URL:        "http://localhost:5432",
 				PrivateKey: "private-key",
 				RelayURL:   "http://localhost:8080",
 			},
-		},
-		{
-			name: "invalid replica URL",
-			cfg: &Config{
-				URL:        "http://localhost:5432",
-				PrivateKey: "private-key",
-				RelayURL:   "http://localhost:8080",
-				ReadURLs:   []string{"invalid-url"},
-			},
-			err: true,
 		},
 	}
 
