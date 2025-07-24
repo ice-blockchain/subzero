@@ -3,7 +3,6 @@ module github.com/ice-blockchain/subzero
 go 1.24.5
 
 replace (
-	filippo.io/mkcert => github.com/kixelated/mkcert v1.4.4-days
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250724082344-9da341676a41
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.13.1
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250708083130-c391c71f33e4
@@ -58,7 +57,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.14.0
-	github.com/xssnick/tonutils-storage v1.1.3
+	github.com/xssnick/tonutils-storage v1.1.4
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0
