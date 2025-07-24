@@ -95,10 +95,8 @@ var (
 		nostr.KindDMRelayList:       tagsTable("relay", "r"),
 		nostr.KindGiftWrap: newKindValidatorBuilder().
 			Required("p", "k").
-			Optional("expiration").
-			Validate(func(v *eventValidator, e *model.Event) error {
-				return validateKindGiftWrapEvent(v, e)
-			}).
+			Optional("expiration", "payload-compression").
+			Validate(validateKindGiftWrapEvent).
 			Build(),
 		nostr.KindGoodWikiAuthorList:    tagsTable("p"),
 		nostr.KindGoodWikiRelayList:     tagsTable("relay", "r"),
