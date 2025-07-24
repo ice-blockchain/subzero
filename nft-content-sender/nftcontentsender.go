@@ -177,10 +177,10 @@ func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
 		Post("/v1/statistics/nft-content")
 
 	if err != nil {
-		return errors.Wrap(err, "failed to send hashtags data")
+		return errors.Wrap(err, "failed to send nft content data")
 	}
 	if resp.GetStatusCode() != http.StatusAccepted {
-		return errors.Newf("hashtags stats service responded with status: %d", resp.GetStatusCode())
+		return errors.Newf("nft content service responded with status: %d", resp.GetStatusCode())
 	}
 
 	return nil
