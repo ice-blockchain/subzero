@@ -12,6 +12,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -142,6 +143,10 @@ func TestSubscriptionEventAuth(t *testing.T) {
 	})
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	badgeDefinition, badgeAward, profileMetadata := helperCreateUsernameBadge(t, "testuser", privKey, relay)
+	require.NoError(t, query.AcceptEvents(t.Context(), badgeDefinition, badgeAward, profileMetadata))
+
 	t.Run("Regular", func(t *testing.T) {
 		var ev model.Event
 
@@ -244,6 +249,10 @@ func TestSubscriptionEventAuthWithEmbeddedAttesttion(t *testing.T) {
 	})
 
 	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	badgeDefinition, badgeAward, profileMetadata := helperCreateUsernameBadge(t, "regularuser", privKey, relay)
+	require.NoError(t, query.AcceptEvents(t.Context(), badgeDefinition, badgeAward, profileMetadata, &attestation))
+
 	t.Run("WithAuth", func(t *testing.T) {
 		var ev model.Event
 

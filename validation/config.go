@@ -12,6 +12,7 @@ type (
 		MaxContentSizes           map[int]int   `yaml:"max-content-sizes"` // Kind -> size (bytes).
 		NIP13MinLeadingZeroBits   int           `yaml:"nip13MinLeadingZeroBits"`
 		RelayURL                  string        `yaml:"relay-url" validate:"omitempty,url"`
+		AllowedNFTCollections     []string      `yaml:"allowed-nft-collections"`
 	}
 )
 

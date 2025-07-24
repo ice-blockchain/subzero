@@ -2094,6 +2094,8 @@ func TestSubscriptionPrivateCommunity(t *testing.T) {
 
 	var nonCommunityEvent model.Event
 	relay := helperMustNewRelay(t, pubsubServers[0])
+	_, _, _ = helperCreateUsernameBadge(t, "testuser", privkeyUser1, relay)
+
 	t.Run("Regular", func(t *testing.T) {
 		nonCommunityEvent.Kind = nostr.KindTextNote
 		nonCommunityEvent.CreatedAt = nostr.Timestamp(time.Now().Add(-1 * time.Hour).Unix())

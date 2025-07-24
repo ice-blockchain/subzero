@@ -300,3 +300,25 @@ func CollectRelaysFromRelayEvent(ev *Event) []string {
 	}
 	return relays
 }
+
+func (e *Event) IsComment() bool {
+	if e.Kind != nostr.KindTextNote && e.Kind != CustomIONKindEditableTextNote {
+		return false
+	}
+	eTags := e.GetTags("e")
+	for _, tag := range eTags {
+		if len(tag) > 3 && (tag[3] == TagMarkerRoot || tag[3] == TagMarkerReply) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (e *Event) IsCommunityPost() bool {
+	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("h") != nil
+}
+
+func (e *Event) IsStory() bool {
+	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("expiration") != nil
+}

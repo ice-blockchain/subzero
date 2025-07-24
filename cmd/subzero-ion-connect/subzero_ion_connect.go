@@ -23,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/dvm"
 	hashtagssender "github.com/ice-blockchain/subzero/hashtags-sender"
 	"github.com/ice-blockchain/subzero/model"
+	nftcontentsender "github.com/ice-blockchain/subzero/nft-content-sender"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -47,6 +48,7 @@ var (
 			dvm.MustInit(cmd.Context())
 			pushnotifications.MustInit()
 			hashtagssender.MustInit(cmd.Context())
+			nftcontentsender.MustInit(cmd.Context())
 			webserver = server.New(cmd.Context())
 			webserver.MustListenAndServe(cmd.Context())
 		},
@@ -166,6 +168,12 @@ func init() {
 		antsPool.Submit(func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
+			}
+		})
+
+		antsPool.Submit(func() {
+			if err := nftcontentsender.AcceptEvents(ctx, events...); err != nil {
+				log.Printf("failed to nftcontentsender.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
 		})
 

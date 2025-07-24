@@ -8,6 +8,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -17,6 +18,9 @@ func TestPublishingNIP23Events(t *testing.T) {
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
 	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	badgeDefinition, badgeAward, profileMetadata := helperCreateUsernameBadge(t, "testuser", privkey, relay)
+	require.NoError(t, query.AcceptEvents(ctx, badgeDefinition, badgeAward, profileMetadata))
 
 	var validEventKindArticle, validEventKindBlogPost *model.Event
 	t.Run("kind 30023 (Article) (NIP-23): valid event", func(t *testing.T) {
@@ -74,5 +78,6 @@ func TestPublishingNIP23Events(t *testing.T) {
 		require.Error(t, relay.Publish(ctx, invalidEvent.Event))
 	})
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validEventKindArticle, validEventKindBlogPost}, storedEvents)
+
+	require.Equal(t, []*model.Event{badgeDefinition, badgeAward, profileMetadata, validEventKindArticle, validEventKindBlogPost}, storedEvents)
 }

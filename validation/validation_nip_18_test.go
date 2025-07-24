@@ -3,12 +3,15 @@
 package validation
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -33,6 +36,15 @@ func TestValidateKindRepostEvent(t *testing.T) {
 		},
 	}
 	require.NoError(t, addressableEvent.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	profileMetadata := &model.Event{
+		Event: nostr.Event{
+			Kind:    nostr.KindProfileMetadata,
+			Content: `{"name":"testuser","display_name":"Test User","ion_content_nft_collections":{"My NFT Collection":{"address":"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290","created_by":"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"}}}`,
+			Tags:    model.Tags{{"b", addressableEvent.GetMasterPublicKey()}},
+		},
+	}
+	require.NoError(t, profileMetadata.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	expiredPollEvent := &model.Event{
 		Event: nostr.Event{
@@ -193,8 +205,23 @@ func TestValidateKindRepostEvent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
-			err := Validate(t.Context(), tt.event)
+			validator := newEventValidator(cfg.MustGet[Config](), WithQueryFunc(func(ctx context.Context, filters ...model.Filter) query.EventIterator {
+				return func(yield func(*model.Event, error) bool) {
+					for _, filter := range filters {
+						for _, kind := range filter.Kinds {
+							if kind == nostr.KindProfileMetadata {
+								for _, author := range filter.Authors {
+									if author == addressableEvent.GetMasterPublicKey() {
+										yield(profileMetadata, nil)
+										return
+									}
+								}
+							}
+						}
+					}
+				}
+			}))
+			err := validator.Validate(t.Context(), tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

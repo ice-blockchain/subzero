@@ -73,6 +73,8 @@ func TestJobOnline(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
+	_, _, _ = helperCreateUsernameBadge(t, "testuser", privkey, relay)
+
 	article1 := &model.Event{
 		Event: nostr.Event{
 			CreatedAt: 1,
@@ -142,7 +144,7 @@ func TestJobOnline(t *testing.T) {
 		responses = append(responses, resp)
 		t.Logf("received DVM response: %+v", resp)
 		require.Equal(t, ev.String(), resp.GetTag("request").Value())
-		require.Equal(t, "4", resp.Content) // 2 reactions + 2 articles.
+		require.Equal(t, "5", resp.Content) // 2 reactions + 2 articles + 1 profile metadata.
 	})
 	t.Run("send dvm search nostr count job for kinds and #e filter groupped by content", func(t *testing.T) {
 		ev := &model.Event{

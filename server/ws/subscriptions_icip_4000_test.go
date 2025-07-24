@@ -197,6 +197,10 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 	})
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
+	_, _, _ = helperCreateUsernameBadge(t, "postowner", privkeyPostOwner, relay)
+	_, _, _ = helperCreateUsernameBadge(t, "user1", privkeyUser1, relay)
+	_, _, _ = helperCreateUsernameBadge(t, "user2", privkeyUser2, relay)
+
 	var post *model.Event
 	t.Run("create post with following settings", func(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
@@ -1042,6 +1046,10 @@ func TestReplyCannotSetSettings(t *testing.T) {
 		return nil
 	})
 	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	_, _, _ = helperCreateUsernameBadge(t, "postowner2", privkeyPostOwner, relay)
+	_, _, _ = helperCreateUsernameBadge(t, "user12", privkeyUser1, relay)
+
 	var rootPost *model.Event
 	t.Run("create root post without who_can_reply settings", func(t *testing.T) {
 		rootPost = &model.Event{Event: nostr.Event{
