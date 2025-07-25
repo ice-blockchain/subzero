@@ -724,7 +724,7 @@ WHERE
 		ctx,
 		db.db,
 		func(err error) (doRetry bool) {
-			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation)
+			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation, connector.ErrSerializationFailure)
 		},
 		builder.String(),
 		builder.Params,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/cockroachdb/errors"
 )
 
 func retryStop(err error) error {
@@ -19,7 +20,7 @@ func withRetry[T any](ctx context.Context, op func() (T, error)) (T, error) {
 		ctx,
 		op,
 		backoff.WithNotify(func(err error, d time.Duration) {
-			log.Printf("[DATABASE]: ERROR: call failed: %v. retrying in %v... ", err, d)
+			log.Printf("[DATABASE]: ERROR: call failed: %v (%s). retrying in %v... ", err, errors.FlattenDetails(err), d)
 		}),
 		backoff.WithMaxElapsedTime(25*time.Second),
 		backoff.WithBackOff(&backoff.ExponentialBackOff{
