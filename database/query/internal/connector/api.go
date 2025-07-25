@@ -4,6 +4,7 @@ package connector
 
 import (
 	"context"
+	"math/rand/v2"
 	"net"
 	"time"
 
@@ -41,7 +42,7 @@ func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) erro
 	for ctx.Err() == nil {
 		err := executeTransaction(ctx, db, txOptions, fn)
 		if shouldRetryTransaction(err) {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(time.Duration(10+rand.IntN(200)) * time.Millisecond)
 			continue
 		}
 		return err
@@ -219,7 +220,7 @@ func IsUnexpected(err error) bool {
 		return pgConnErr.SQLState() != pgerrcode.SyntaxError
 	}
 
-	return errors.As(err, &netOpErr)
+	return errors.As(err, &netOpErr) || errors.IsAny(err, ErrSerializationFailure)
 }
 
 func isInstanceDead(err error) bool {

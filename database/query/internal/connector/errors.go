@@ -45,8 +45,8 @@ func parseError(err error) error {
 			column = strings.ReplaceAll(column, "_", "")
 
 			return errors.Wrap(ErrCheckFailed, column)
-		case pgerrcode.SerializationFailure:
-			return ErrSerializationFailure
+		case pgerrcode.SerializationFailure, pgerrcode.DeadlockDetected:
+			return errors.WithDetail(ErrSerializationFailure, dbErr.Error())
 		case pgerrcode.InFailedSQLTransaction:
 			return ErrTxAborted
 		case pgerrcode.AmbiguousFunction:
