@@ -372,10 +372,12 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	if idx := getGiftWrapFilterIndex(filters); idx >= 0 {
 		data := model.GetUserDataFromContext(ctx)
 		if isValidGiftWrapFilter(filters[idx], data.MasterPublicKey, data.PublicKey) {
+			now := time.Now()
 			err := h.streamGiftWrapEvents(ctx, respWriter, sub, filters[idx])
 			if err != nil {
 				return errors.Wrap(err, "failed to stream gift wrap events")
 			} else {
+				h.logOperation(respWriter, time.Since(now), "gift wrap: streamed events for subscription %s", sub.ID)
 				if len(filters) == 1 {
 					return nil // No other filters to process.
 				}
@@ -393,10 +395,13 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	defer cancel()
 
 	for i, getter := range wsSubscriptionListeners {
+		now := time.Now()
+		var n int
 		for event, err := range getter(getterCtx, filters...) {
 			if err != nil {
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
+			n++
 
 			if sub.Reduce(event) {
 				continue
@@ -411,6 +416,7 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 				return errors.Wrapf(err, "failed to write event[%s]", event.String())
 			}
 		}
+		h.logOperation(respWriter, time.Since(now), "req: getter %d: streamed [%d] events for subscription %s", i, n, sub.ID)
 	}
 
 	return nil
@@ -434,6 +440,7 @@ func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, s
 	}
 
 	log.Printf("INFO: subscription %s has %d buffered events", sub.ID, len(bufferedEvents))
+	now := time.Now()
 	for i := range bufferedEvents {
 		err := h.writeResponse(
 			ctx,
@@ -447,6 +454,7 @@ func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, s
 			return err
 		}
 	}
+	h.logOperation(respWriter, time.Since(now), "events: send [%d] buffered events", len(bufferedEvents))
 
 	return nil
 }

@@ -73,7 +73,8 @@ func mustLoadTLSConfig(ctx context.Context, conf *Config) (tls *tls.Config) {
 		log.Printf("using ACME to obtain TLS certificate for %q", target)
 
 		if conf.ACME.APIKey == "" {
-			log.Panic("API key is required for ACME")
+			log.Printf("API key is required for ACME, falling back to self-signed TLS certificate for %q", target)
+			return MustGenerateTLSConfigSelfSigned(target)
 		}
 
 		var err error
