@@ -720,12 +720,9 @@ FROM
 WHERE
 	pud.id is not null
 `)
-	return connector.ExecNamedManyWithCustomRetry[databaseEvent](
+	return connector.ExecNamed[databaseEvent](
 		ctx,
 		db.db,
-		func(err error) (doRetry bool) {
-			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation, connector.ErrSerializationFailure)
-		},
 		builder.String(),
 		builder.Params,
 	)
