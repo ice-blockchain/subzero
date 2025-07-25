@@ -1,5 +1,6 @@
 {
   "api_url": "/files",
+  "large_url": "/xfiles",
   "download_url": "/files",
   "delegated_to_url": "",
   "content_types": ["image/webp", "video/mpeg4", "application/x-brotli", "audio/opus"],
@@ -7,7 +8,7 @@
     "free": {
       "name": "Free Tier",
       "is_nip98_required": true,
-      "max_byte_size": 104857600,
+      "max_byte_size": 1048576,
       "file_expiration": [0, 0],
       "media_transformations": {}
     }

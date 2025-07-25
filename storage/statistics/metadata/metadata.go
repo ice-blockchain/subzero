@@ -23,11 +23,13 @@ type extractor struct {
 	generic              *genericMetaExtractor
 }
 
+var imageExtractor = newImageExtractor()
+
 func NewExtractor() Extractor {
 	return &extractor{
 		extractorsByFileType: map[string]Extractor{
 			"video": newVideoExtractor(),
-			"image": newImageExtractor(),
+			"image": imageExtractor,
 		},
 	}
 }

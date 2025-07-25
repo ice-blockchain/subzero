@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -25,7 +24,7 @@ type (
 		ValidateAttestation(ctx context.Context, kind int, now time.Time) error
 	}
 	AuthClient interface {
-		VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error)
+		VerifyToken(actualReqUrl *url.URL, reqMethod, token string, now time.Time) (Token, error)
 	}
 
 	nostrToken struct {
@@ -50,10 +49,9 @@ func NewAuth() AuthClient {
 	return &authNostr{}
 }
 
-func GetAuthHeader(gCtx *gin.Context) string {
+func GetAuthHeader(val string) string {
 	knownTypes := []string{"Bearer", "Nostr", "IONConnect"}
 
-	val := gCtx.GetHeader("Authorization")
 	for _, t := range knownTypes {
 		if strings.HasPrefix(val, t) {
 			return strings.TrimSpace(strings.TrimPrefix(val, t))
@@ -62,7 +60,10 @@ func GetAuthHeader(gCtx *gin.Context) string {
 	return ""
 }
 
-func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) (Token, error) {
+func (a *authNostr) VerifyToken(fullReqUrl *url.URL, reqMethod, token string, now time.Time) (Token, error) {
+	if token == "" {
+		return nil, errors.Wrapf(ErrTokenInvalid, "empty token")
+	}
 	bToken, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal auth token: malformed base64: %q", token)
@@ -91,13 +92,6 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 		if err != nil {
 			return nil, errors.Wrapf(ErrTokenInvalid, "failed to parse url tag with %q: %v", urlTag.Value(), err)
 		}
-		fullReqUrl := (&url.URL{
-			Scheme:   "https",
-			Host:     gCtx.Request.Host,
-			Path:     gCtx.Request.URL.Path,
-			RawQuery: gCtx.Request.URL.RawQuery,
-			Fragment: gCtx.Request.URL.Fragment,
-		})
 		if urlValue.String() != fullReqUrl.String() {
 			return nil, errors.Wrapf(ErrTokenInvalid, "url mismatch token>%v url>%v", urlValue, fullReqUrl)
 		}
@@ -107,8 +101,8 @@ func (a *authNostr) VerifyToken(gCtx *gin.Context, token string, now time.Time) 
 
 	if methodTag := event.Tags.GetFirst([]string{"method"}); methodTag != nil && len(*methodTag) > 1 {
 		method := methodTag.Value()
-		if method != gCtx.Request.Method {
-			return nil, errors.Wrapf(ErrTokenInvalid, "method mismatch token>%v url>%v", method, gCtx.Request.Method)
+		if method != reqMethod {
+			return nil, errors.Wrapf(ErrTokenInvalid, "method mismatch token>%v url>%v", method, reqMethod)
 		}
 	} else {
 		return nil, errors.Wrapf(ErrTokenInvalid, "malformed method tag %v", methodTag)

@@ -82,6 +82,8 @@ type (
 		activeDownloadsMx *sync.RWMutex
 		rootStoragePath   string
 		debug             bool
+		closed            bool
+		closedMx          *sync.Mutex
 	}
 	queueItem struct {
 		tor       *storage.Torrent
@@ -98,8 +100,8 @@ var (
 	ErrValidationFailed = errors.New("validation failed")
 )
 
-const mediaTypeAvatar = "avatar"
-const mediaTypeBanner = "banner"
+const MediaTypeAvatar = "avatar"
+const MediaTypeBanner = "banner"
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData
@@ -286,7 +288,14 @@ func (c *client) Close() (err error) {
 	if dErr := c.db.Close(); dErr != nil {
 		err = errors.Join(err, errors.Wrapf(dErr, "failed to close db"))
 	}
+	c.closedMx.Lock()
+	if c.closed {
+		c.closedMx.Unlock()
+		return nil
+	}
 	close(c.downloadQueue)
+	c.closed = true
+	c.closedMx.Unlock()
 	return err
 }
 

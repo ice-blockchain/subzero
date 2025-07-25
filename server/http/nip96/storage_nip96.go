@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
+	tusd "github.com/tus/tusd/v2/pkg/handler"
 
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
@@ -34,6 +36,7 @@ type (
 		ListFiles() gin.HandlerFunc
 		RootPath() string
 		CrossRelayDownload() gin.HandlerFunc
+		LargeFiles() http.Handler
 	}
 )
 
@@ -41,14 +44,19 @@ type (
 var nip96Info string
 
 type storageHandler struct {
-	storageClient      storage.StorageClient
+	storageClient storage.StorageClient
+	tus           *tusd.Handler
+	tusStorage    interface {
+		tusd.DataStore
+		tusd.TerminaterDataStore
+	}
 	auth               nip98.AuthClient
 	nip11Fetcher       nip11.Fetcher
 	ionLibertyDisabled bool
 }
 
 const mediaEndpointTimeout = 60 * time.Second
-const maxUploadSize = 100 * 1024 * 1024
+const maxUploadSize = 1 * 1024 * 1024
 
 type (
 	fileUploadResponse struct {
@@ -82,8 +90,14 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := nip98.GetAuthHeader(gCtx)
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		token, authErr := s.auth.VerifyToken(&url.URL{
+			Scheme:   "https",
+			Host:     gCtx.Request.Host,
+			Path:     gCtx.Request.URL.Path,
+			RawQuery: gCtx.Request.URL.RawQuery,
+			Fragment: gCtx.Request.URL.Fragment,
+		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -156,8 +170,14 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := nip98.GetAuthHeader(gCtx)
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		token, authErr := s.auth.VerifyToken(&url.URL{
+			Scheme:   "https",
+			Host:     gCtx.Request.Host,
+			Path:     gCtx.Request.URL.Path,
+			RawQuery: gCtx.Request.URL.RawQuery,
+			Fragment: gCtx.Request.URL.Fragment,
+		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -229,8 +249,14 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := nip98.GetAuthHeader(gCtx)
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		token, authErr := s.auth.VerifyToken(&url.URL{
+			Scheme:   "https",
+			Host:     gCtx.Request.Host,
+			Path:     gCtx.Request.URL.Path,
+			RawQuery: gCtx.Request.URL.RawQuery,
+			Fragment: gCtx.Request.URL.Fragment,
+		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -263,8 +289,14 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 func (s *storageHandler) ListFiles() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := nip98.GetAuthHeader(gCtx)
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		token, authErr := s.auth.VerifyToken(&url.URL{
+			Scheme:   "https",
+			Host:     gCtx.Request.Host,
+			Path:     gCtx.Request.URL.Path,
+			RawQuery: gCtx.Request.URL.RawQuery,
+			Fragment: gCtx.Request.URL.Fragment,
+		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -317,8 +349,14 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := nip98.GetAuthHeader(gCtx)
-		token, authErr := s.auth.VerifyToken(gCtx, authHeader, now)
+		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		token, authErr := s.auth.VerifyToken(&url.URL{
+			Scheme:   "https",
+			Host:     gCtx.Request.Host,
+			Path:     gCtx.Request.URL.Path,
+			RawQuery: gCtx.Request.URL.RawQuery,
+			Fragment: gCtx.Request.URL.Fragment,
+		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
 			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
@@ -373,11 +411,18 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 	}
 }
 
+func (s *storageHandler) LargeFiles() http.Handler {
+	return s.tus
+}
+
 func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
 func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, fetcher nip11.Fetcher) Uploader {
 	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: fetcher}
+	tus, tusStorage := mustNewTusHandler(ctx, s)
+	s.tus = tus
+	s.tusStorage = tusStorage
 	return s
 }
