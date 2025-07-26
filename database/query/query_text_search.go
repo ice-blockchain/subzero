@@ -20,8 +20,11 @@ func extractProfileContentMetadata(contentJSON string) []string {
 	if err := json.Unmarshal([]byte(contentJSON), &content); err != nil {
 		return []string{}
 	}
+	if strings.EqualFold(content.Name, content.DisplayName) {
+		return []string{strings.ToLower(content.Name)}
+	}
 
-	return []string{content.Name, content.DisplayName}
+	return []string{strings.ToLower(content.Name), strings.ToLower(content.DisplayName)}
 }
 
 func prepareSearchContent(ev *model.Event) string {

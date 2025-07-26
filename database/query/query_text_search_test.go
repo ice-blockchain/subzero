@@ -350,7 +350,7 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindProfileMetadata,
 				Tags:      model.Tags{},
-				Content:   ``,
+				Content:   `{"name":"Alice","display_name":"ALICE"}`,
 				Sig:       "ev3" + uuid.NewString(),
 			},
 		})
@@ -378,6 +378,34 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 		require.Len(t, stored, 1)
 		require.EqualValues(t, expectedEvents[0], stored[0])
 	})
+
+	t.Run("search profile by display_name efgh", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"efgh"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[0], stored[0])
+	})
+
+	t.Run("search profile with same name and display_name (case insensitive)", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"alice"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
+	t.Run("search profile with same name and display_name (uppercase)", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"ALICE"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[2], stored[0])
+	})
+
 	t.Run("search profile by name empty value", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},
@@ -385,6 +413,24 @@ func TestSearchEvents_KindProfileMetadata(t *testing.T) {
 		})
 		require.Len(t, stored, 3)
 		helperEventsMatch(t, expectedEvents, stored)
+	})
+
+	t.Run("search profile by partial name", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"abc"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[0], stored[0])
+	})
+
+	t.Run("search profile by partial display_name", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"spr"`,
+		})
+		require.Len(t, stored, 1)
+		require.EqualValues(t, expectedEvents[1], stored[0])
 	})
 }
 
@@ -835,7 +881,7 @@ func TestPrepareSearchContent_WithRichText(t *testing.T) {
 		ev.Tags = model.Tags{
 			{model.CustomIONTagRichText, model.QuillDeltaProtocol, deltaJSON},
 		}
-		require.Equal(t, "testuser Test User", prepareSearchContent(&ev))
+		require.Equal(t, "testuser test user", prepareSearchContent(&ev))
 	})
 	t.Run("Complex Quill Delta with various formats", func(t *testing.T) {
 		deltaJSON := `[{"insert":"Main Title"},{"insert":"\n","attributes":{"header":1}},{"insert":"Some "},{"insert":"bold","attributes":{"bold":true}},{"insert":" text and "},{"insert":"italic","attributes":{"italic":true}},{"insert":" text.\n"},{"insert":"List item 1"},{"insert":"\n","attributes":{"list":"bullet"}},{"insert":"List item 2 with "},{"insert":"link","attributes":{"link":"https://example.com"}},{"insert":"\n","attributes":{"list":"bullet"}},{"insert":"Image: "},{"insert":{"image":"https://example.com/img.jpg"}},{"insert":"\n"},{"insert":"Quote text"},{"insert":"\n","attributes":{"blockquote":true}}]`
