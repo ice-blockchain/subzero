@@ -83,6 +83,20 @@ func TestCollectDeviceRegistrationEvents(t *testing.T) {
 			t.Logf("All %d events created", totalEventsCount)
 		})
 
+		t.Run("verify_token_tags_in_db", func(t *testing.T) {
+			t.Logf("Verify that token tags are present in event_tags table")
+
+			tokenCount, err := connector.Get[int](t.Context(), db.db, `
+				SELECT COUNT(*) FROM event_tags 
+				WHERE event_tag_key = 'token'
+			`)
+			require.NoError(t, err)
+			require.NotNil(t, tokenCount)
+			require.Equal(t, totalEventsCount, *tokenCount, "All events must have token tags")
+
+			t.Logf("Found %d token tags for %d events", *tokenCount, totalEventsCount)
+		})
+
 		t.Run("verify_events_in_db", func(t *testing.T) {
 			count := helperCountEvents(t, db, model.CustomIONKindDeviceRegistration)
 			require.Equal(t, totalEventsCount, count, "Events count in DB must be equal to expected")
@@ -153,7 +167,6 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 		event := helperCreateDeviceRegistrationEvent(t, "pubkey1", "device1", "token_value1")
 		require.NoError(t, db.AcceptEvents(t.Context(), event))
 
-		helperAddTokenTag(t, db, event.ID, "token_value1")
 		helperCheckTokenStatus(t, db, event.ID, "")
 
 		err := db.markTokenAsInvalidInEventTags(t.Context(), []*model.Event{event})
@@ -242,9 +255,6 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 		invalidEvent := helperCreateDeviceRegistrationEvent(t, "pubkey2", "invalid_device", "invalid_token")
 		require.NoError(t, db.AcceptEvents(t.Context(), validEvent, invalidEvent))
 
-		helperAddTokenTag(t, db, validEvent.ID, "valid_token")
-		helperAddTokenTag(t, db, invalidEvent.ID, "invalid_token")
-
 		it1 := db.collectDeviceRegistrationEvents(t.Context())
 		initialEvents := helperCollectAllEvents(t, it1)
 		require.Len(t, initialEvents, 2, "Have both events")
@@ -281,17 +291,6 @@ func helperCreateDeviceRegistrationEvent(t *testing.T, pubKey, deviceID, tokenVa
 	return event
 }
 
-func helperAddTokenTag(t *testing.T, client *dbClient, eventID, tokenValue string) {
-	t.Helper()
-
-	_, err := connector.Exec(t.Context(), client.db, `
-		INSERT INTO event_tags (event_id, event_tag_key, event_tag_value1, event_tag_value2)
-		VALUES ($1, $2, $3, $4)
-	`, eventID, "token", tokenValue, "")
-
-	require.NoError(t, err)
-}
-
 func helperCheckTokenStatus(t *testing.T, db *dbClient, eventID, expectedValue string) {
 	t.Helper()
 
@@ -318,7 +317,6 @@ func helperCreateBatchEvents(t *testing.T, db *dbClient, startIdx, count int, ba
 		event.CreatedAt = nostr.Timestamp(baseTimestamp + int64(idx))
 
 		require.NoError(t, db.AcceptEvents(t.Context(), event))
-		helperAddTokenTag(t, db, event.ID, tokenValue)
 
 		events[i] = event
 	}
