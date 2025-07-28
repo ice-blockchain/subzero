@@ -8,7 +8,24 @@ on:
   pull_request:
     branches:
       - master
+
 jobs:
+  go-download:
+    name: Download and cache go modules
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup GO
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Download Go modules
+        run: go mod download
+        shell: bash
+
   verify-licensing:
     name: Verify Licensing
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
@@ -44,6 +61,7 @@ jobs:
   verify-latest-versions-used:
     name: Verify Latest Versions
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -76,6 +94,7 @@ jobs:
   verify-auto-generated:
     name: Verify Auto Generated
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -108,6 +127,7 @@ jobs:
   lint:
     name: Lint
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -143,6 +163,7 @@ jobs:
   build:
     name: Build
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -184,6 +205,7 @@ jobs:
       matrix:
         package: [ "cfg", "database/query", "database/command", "server/http/nip11","server/http/nip96", "server/http/nip98", "server/ws", "dvm", "validation", "push-notifications", "push-notifications/internal" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -230,6 +252,7 @@ jobs:
       matrix:
         package: [ "database/query", "database/command", "server/http/nip11", "server/http/nip96", "server/http/nip98", "server/ws", "dvm" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -297,7 +320,7 @@ jobs:
           SLACK_FOOTER: |
             https://github.com/ice-blockchain/${{ github.event.repository.name }}
   release:
-    needs: [PR]
+    needs: [PR, go-download]
     name: Release
     outputs:
       nextTag: ${{ steps.check_tag.outputs.next_tag }}
