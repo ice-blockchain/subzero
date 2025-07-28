@@ -291,7 +291,7 @@ jobs:
           SLACK_FOOTER: |
             https://github.com/ice-blockchain/${{ github.event.repository.name }}
   release:
-    needs: [PR, go-download]
+    needs: [PR]
     name: Release
     outputs:
       nextTag: ${{ steps.check_tag.outputs.next_tag }}
