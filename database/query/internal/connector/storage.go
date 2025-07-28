@@ -18,13 +18,16 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func WithWriteURLs(urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
 		db.writeLB.Masters = urls
 		for i, connectionString := range urls {
-			conn, err := poolConnect(ctx, connectionString)
+			conn, err := poolConnect(ctx, connectionString, db)
 			if err != nil {
 				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
 				continue
@@ -45,7 +48,7 @@ func WithWriteURLs(urls ...string) Option {
 func WithReadURLs(urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
 		for _, connectionString := range urls {
-			conn, err := poolConnect(ctx, connectionString)
+			conn, err := poolConnect(ctx, connectionString, db)
 			if err != nil {
 				return errors.Wrap(err, "cannot connect to replica")
 			}
@@ -117,7 +120,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 	return db, nil
 }
 
-func poolConnect(ctx context.Context, connectionString string) (*pgxpool.Pool, error) {
+func poolConnect(ctx context.Context, connectionString string, log tracelog.Logger) (*pgxpool.Pool, error) {
 	conf, err := pgxpool.ParseConfig(connectionString)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot parse connection string")
@@ -137,7 +140,7 @@ func poolConnect(ctx context.Context, connectionString string) (*pgxpool.Pool, e
 	conf.MaxConnLifetime = 24 * time.Hour
 	conf.AfterConnect = poolDoAfterConnect
 	conf.MinConns = 1
-
+	conf.ConnConfig.Tracer = &tracelog.TraceLog{Logger: log, LogLevel: tracelog.LogLevelDebug}
 	return pgxpool.NewWithConfig(ctx, conf)
 }
 
@@ -247,7 +250,7 @@ func (db *DB) switchMaster(ctx context.Context, reason error) error {
 	}
 
 	for _, i := range CalculateConnectOrder(db.writeLB.Masters, int(db.writeLB.CurrentIndex)) {
-		conn, err := poolConnect(ctx, db.writeLB.Masters[i])
+		conn, err := poolConnect(ctx, db.writeLB.Masters[i], db)
 		if err != nil {
 			log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.writeLB.Masters[i], err)
 			continue
@@ -296,4 +299,15 @@ func (r *readLB) Next() Querier {
 
 	index := atomic.AddUint64(&r.CurrentIndex, 1) % uint64(len(r.Replicas))
 	return r.Replicas[index]
+}
+
+func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data map[string]any) {
+	prefix := "[PGX] " + time.Now().Format(time.RFC3339Nano) + " "
+	if v := model.GetUserDataFromContext(ctx); v.Authenticated {
+		prefix += " master: [" + v.MasterPublicKey + "]"
+		if v.UserAgent != "" {
+			prefix += " agent: [" + v.UserAgent + "]"
+		}
+	}
+	fmt.Printf(prefix+": %s: %s %v\n", level, msg, data)
 }
