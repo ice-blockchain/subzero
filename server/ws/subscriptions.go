@@ -397,16 +397,17 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 	for i, getter := range wsSubscriptionListeners {
 		now := time.Now()
 		var n int
+		itNow := now
 		for event, err := range getter(getterCtx, filters...) {
 			if err != nil {
 				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
 			}
 			n++
-
+			h.logOperation(respWriter, time.Since(itNow), "req: getter %d: got event for subscription %s", i, sub.ID)
 			if sub.Reduce(event) {
 				continue
 			}
-
+			itNow = time.Now()
 			err := h.writeResponse(ctx, respWriter,
 				&nostr.EventEnvelope{
 					SubscriptionID: &sub.ID,
@@ -415,8 +416,10 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 			if err != nil {
 				return errors.Wrapf(err, "failed to write event[%s]", event.String())
 			}
+			h.logOperation(respWriter, time.Since(itNow), "req: getter %d: sent event for subscription %s", i, sub.ID)
 		}
 		h.logOperation(respWriter, time.Since(now), "req: getter %d: streamed [%d] events for subscription %s", i, n, sub.ID)
+		itNow = time.Now()
 	}
 
 	return nil

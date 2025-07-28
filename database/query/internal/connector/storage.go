@@ -297,3 +297,7 @@ func (r *readLB) Next() Querier {
 	index := atomic.AddUint64(&r.CurrentIndex, 1) % uint64(len(r.Replicas))
 	return r.Replicas[index]
 }
+
+func (db *DB) Current() string {
+	return db.writeLB.Active.Load().Config().ConnConfig.Host
+}
