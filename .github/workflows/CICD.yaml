@@ -25,6 +25,9 @@ jobs:
       - name: Download Go modules
         run: go mod download
         shell: bash
+      - name: Go tidy
+        run: go mod tidy
+        shell: bash
 
   verify-licensing:
     name: Verify Licensing
