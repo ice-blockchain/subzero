@@ -32,6 +32,7 @@ jobs:
   verify-licensing:
     name: Verify Licensing
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
