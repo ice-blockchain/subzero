@@ -299,5 +299,8 @@ func (r *readLB) Next() Querier {
 }
 
 func (db *DB) Current() string {
+	if db.writeLB == nil {
+		return "read-only"
+	}
 	return db.writeLB.Active.Load().Config().ConnConfig.Host
 }
