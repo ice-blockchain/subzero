@@ -22,32 +22,27 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Download Go modules
+      - name: Go mod download
         run: go mod download
         shell: bash
-      - name: Go tidy
+      - name: Go mod tidy
         run: go mod tidy
         shell: bash
 
   verify-licensing:
     name: Verify Licensing
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
-    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: 'stable'
+          cache: false
       - name: Check License
         run: make checkLicense
       - name: Slack Notification For Failure/Cancellation
@@ -62,6 +57,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }}
           SLACK_FOOTER: |
             https://github.com/ice-blockchain/${{ github.event.repository.name }}
+
   verify-latest-versions-used:
     name: Verify Latest Versions
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
