@@ -16,6 +16,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
+	"github.com/ice-blockchain/subzero/server/broadcaster"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip96"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -25,6 +26,7 @@ type (
 	Server interface {
 		wsserver.Server
 		wsserver.EventBroadcaster
+		BroadcastUserEvents(ctx context.Context, events ...*model.Event) error
 	}
 	Config struct {
 		TLSCert            string `yaml:"tls-cert"`
@@ -41,9 +43,10 @@ type (
 	Option func(*router)
 
 	router struct {
-		Config  *Config
-		Handler wsserver.Handler
-		Server  wsserver.Server
+		Config      *Config
+		Broadcaster *broadcaster.Broadcaster
+		Handler     wsserver.Handler
+		Server      wsserver.Server
 	}
 )
 
@@ -120,6 +123,14 @@ func New(ctx context.Context, opts ...Option) Server {
 		log.Panicf("failed to validate config: %v", err)
 	}
 
+	r.Broadcaster = broadcaster.New(broadcaster.Config{
+		RelayURL:   r.Config.RelayURL,
+		PrivateKey: r.Config.PrivateKey,
+	})
+	go func() {
+		<-ctx.Done()
+		r.Broadcaster.Close()
+	}()
 	r.Handler = wsserver.NewHandler(r.Config.RelayURL)
 	r.Server = wsserver.New(
 		&wsserver.Config{
@@ -135,6 +146,10 @@ func New(ctx context.Context, opts ...Option) Server {
 
 func (r *router) MustListenAndServe(ctx context.Context) {
 	r.Server.MustListenAndServe(ctx)
+}
+
+func (r *router) BroadcastUserEvents(ctx context.Context, events ...*model.Event) error {
+	return r.Broadcaster.Broadcast(ctx, events...)
 }
 
 func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {

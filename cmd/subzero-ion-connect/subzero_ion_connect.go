@@ -146,6 +146,12 @@ func init() {
 		}
 
 		antsPool.Submit(func() {
+			if err := webserver.BroadcastUserEvents(context.WithoutCancel(ctx), events...); err != nil {
+				log.Printf("failed to webserver.BroadcastUserEvents(%s): %v", model.Events(events).String(), err)
+			}
+		})
+
+		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
