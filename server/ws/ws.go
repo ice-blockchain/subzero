@@ -203,6 +203,10 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 }
 
 func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelope) {
+	if ok, err := e.Event.CheckSignature(); !ok || err != nil {
+		log.Printf("ERROR: broadcast event %s has invalid signature", e.Event.ID)
+		return
+	}
 	if h.RelayPublicKey != "" && e.Event.PubKey != h.RelayPublicKey {
 		log.Printf("WARN: broadcast event %s is not signed by relay public key %s, ignoring", e.Event.ID, h.RelayPublicKey)
 		return
