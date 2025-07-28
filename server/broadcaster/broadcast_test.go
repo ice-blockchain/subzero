@@ -118,7 +118,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 
 		filteredEvent := &model.Event{
 			Event: nostr.Event{
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 			},
 		}
 

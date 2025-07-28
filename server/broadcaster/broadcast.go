@@ -35,7 +35,7 @@ type (
 
 var (
 	eventKindsNoBroadcast = map[model.Kind]struct{}{
-		model.CustomIONKindEphemeralEmbeddding: {},
+		model.CustomIONKindEphemeralEmbedding: {},
 	}
 )
 

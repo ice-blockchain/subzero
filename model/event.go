@@ -265,7 +265,7 @@ func PointerOf[T any](v T) *T { return &v }
 func ParseEphemeralEmbeddingEvents(events ...*Event) (map[string][]*EphemeralEmbeddingEvent, error) {
 	ephemeralEmbeddingEventsByAddr := make(map[string][]*EphemeralEmbeddingEvent, len(events))
 	for _, ev := range events {
-		if ev.Kind != CustomIONKindEphemeralEmbeddding {
+		if ev.Kind != CustomIONKindEphemeralEmbedding {
 			continue
 		}
 		ref, content, aErr := ParseEphemeralEmbeddingEventRef(ev)
@@ -281,7 +281,7 @@ func ParseEphemeralEmbeddingEventRef(ev *Event) (key string, eventContent *Event
 	var content Event
 	err = content.UnmarshalJSON([]byte(ev.Content))
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "malformed %v event, incorrect content %v", CustomIONKindEphemeralEmbeddding, ev.Content)
+		return "", nil, errors.Wrapf(err, "malformed %v event, incorrect content %v", CustomIONKindEphemeralEmbedding, ev.Content)
 	}
 	eventContent = &content
 	ref := cmp.Or(ev.GetTag("e").Value(), ev.GetTag("a").Value())
@@ -296,6 +296,7 @@ func CollectRelaysFromRelayEvent(ev *Event, filter ...func(Tag) bool) []string {
 main:
 	for _, tag := range ev.Tags {
 		if tag.Key() != "r" {
+			continue main
 		}
 		for _, filterFunc := range filter {
 			if !filterFunc(tag) {

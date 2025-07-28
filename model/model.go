@@ -34,18 +34,18 @@ var (
 )
 
 const (
-	CustomIONKindPollVote            = 1754
-	CustomIONKindFundReceive         = 1755
-	CustomIONKindFundSendNotify      = 1756
-	CustomIONKindUserBlock           = 1757
-	CustomIONKindAttestation         = 10_100
-	CustomIONKindRelayListMetadata   = 20_002
-	CustomIONKindEphemeralEmbeddding = 21_750
-	CustomIONKindEphemeralBatch      = 21_751
-	CustomIONDirectMessage           = 30_014
-	CustomIONKindEditableTextNote    = 30_175
-	CustomIONKindDeviceRegistration  = 31_751
-	KindDVMCountResponse             = 6400
+	CustomIONKindPollVote           = 1754
+	CustomIONKindFundReceive        = 1755
+	CustomIONKindFundSendNotify     = 1756
+	CustomIONKindUserBlock          = 1757
+	CustomIONKindAttestation        = 10_100
+	CustomIONKindRelayListMetadata  = 20_002
+	CustomIONKindEphemeralEmbedding = 21_750
+	CustomIONKindEphemeralBatch     = 21_751
+	CustomIONDirectMessage          = 30_014
+	CustomIONKindEditableTextNote   = 30_175
+	CustomIONKindDeviceRegistration = 31_751
+	KindDVMCountResponse            = 6400
 
 	CustomIONKindRepostOfArticle          = 16_30023
 	CustomIONKindRepostOfEditableTextNote = 16_30175

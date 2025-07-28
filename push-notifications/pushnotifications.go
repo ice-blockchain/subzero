@@ -300,7 +300,7 @@ func (pm *PushNotificationManager) sortEphemeralEvents(events []*model.Event) (m
 	nonEphemeralEvents := make([]*model.Event, 0)
 
 	for _, event := range events {
-		if event.Kind == model.CustomIONKindEphemeralEmbeddding {
+		if event.Kind == model.CustomIONKindEphemeralEmbedding {
 			var refID string
 			if eTag := event.GetTag("e"); eTag != nil {
 				refID = eTag.Value()
@@ -311,7 +311,7 @@ func (pm *PushNotificationManager) sortEphemeralEvents(events []*model.Event) (m
 					pubKey = parts[1]
 				}
 				for _, e := range events {
-					if e.Kind != model.CustomIONKindEphemeralEmbeddding && e.GetMasterPublicKey() == pubKey {
+					if e.Kind != model.CustomIONKindEphemeralEmbedding && e.GetMasterPublicKey() == pubKey {
 						refID = e.ID
 
 						break

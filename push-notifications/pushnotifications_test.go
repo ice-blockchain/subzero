@@ -522,7 +522,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"e", mainEventID},
 				},
@@ -549,7 +549,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"a", fmt.Sprintf("30023:%v", pubKey)},
 				},
@@ -568,7 +568,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		mainEvent := &model.Event{
 			Event: nostr.Event{
 				ID:   "main-event-id",
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"e", "some-other-event-id"},
 				},
@@ -924,7 +924,7 @@ func TestSortEphemeralEvents(t *testing.T) {
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
 				ID:   "ephemeral-event",
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"e", refID},
 				},
@@ -960,7 +960,7 @@ func TestSortEphemeralEvents(t *testing.T) {
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
 				ID:   "ephemeral-event",
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"a", "30023:" + pubKey + ":some-other-data"},
 				},
@@ -981,7 +981,7 @@ func TestSortEphemeralEvents(t *testing.T) {
 		ephemeralEvent1 := &model.Event{
 			Event: nostr.Event{
 				ID:   "ephemeral-event-1",
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"e", refID},
 				},
@@ -990,7 +990,7 @@ func TestSortEphemeralEvents(t *testing.T) {
 		ephemeralEvent2 := &model.Event{
 			Event: nostr.Event{
 				ID:   "ephemeral-event-2",
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					nostr.Tag{"e", refID},
 				},
@@ -1019,7 +1019,7 @@ func TestSortEphemeralEvents(t *testing.T) {
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
 				ID:   "ephemeral-event",
-				Kind: model.CustomIONKindEphemeralEmbeddding,
+				Kind: model.CustomIONKindEphemeralEmbedding,
 			},
 		}
 		regularEvent := &model.Event{

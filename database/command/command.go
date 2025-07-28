@@ -477,7 +477,7 @@ func mapEventsToTXs(events []*model.Event, ackEvents map[string][]*model.Ephemer
 	txs = make([]client.Transaction, 0, len(events))
 	encodedEvents := map[string]nostr.EventEnvelope{}
 	for _, ev := range events {
-		if ev.IsEphemeral() && ev.Kind != model.CustomIONKindEphemeralEmbeddding {
+		if ev.IsEphemeral() && ev.Kind != model.CustomIONKindEphemeralEmbedding {
 			continue
 		}
 		fingerprint, err := mapEventKindToChainFingerprint(ev)

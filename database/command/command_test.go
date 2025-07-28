@@ -166,7 +166,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 			}
 			hasEphemeralAck := false
 			for _, ev := range evs {
-				if ev.Kind == model.CustomIONKindEphemeralEmbeddding {
+				if ev.Kind == model.CustomIONKindEphemeralEmbedding {
 					hasEphemeralAck = true
 					continue
 				}
@@ -225,7 +225,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 		require.NoError(t, repostEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		ack := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
-			Kind:      model.CustomIONKindEphemeralEmbeddding,
+			Kind:      model.CustomIONKindEphemeralEmbedding,
 			Tags: model.Tags{
 				{model.CustomIONTagOnBehalfOf, masterPubkey},
 				{"e", repostEvent.ID},
@@ -261,7 +261,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 		require.NoError(t, reactionEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		ack := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
-			Kind:      model.CustomIONKindEphemeralEmbeddding,
+			Kind:      model.CustomIONKindEphemeralEmbedding,
 			Tags: model.Tags{
 				{model.CustomIONTagOnBehalfOf, masterPubkey},
 				{"e", reactionEvent.ID}},
@@ -663,7 +663,7 @@ func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
 			require.NoError(t, err)
 			badgeDefAck = &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Kind:      model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					{"e", replyEvent.ID},
 				},
@@ -675,7 +675,7 @@ func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
 			require.NoError(t, err)
 			badgeAwardAck = &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Kind:      model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					{"e", replyEvent.ID},
 				},
@@ -687,7 +687,7 @@ func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
 			require.NoError(t, err)
 			profileAck = &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Kind:      model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					{"e", replyEvent.ID},
 				},
@@ -699,7 +699,7 @@ func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
 			require.NoError(t, err)
 			attestationAck = &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Kind:      model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					{"e", replyEvent.ID},
 				},
@@ -711,7 +711,7 @@ func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
 			require.NoError(t, err)
 			textNoteAck = &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Kind:      model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					{"e", replyEvent.ID},
 				},
@@ -746,12 +746,12 @@ func TestMapEventsToTXs_AckEventsFiltering(t *testing.T) {
 
 			for _, ev := range env.Events {
 				eventKinds[ev.Kind]++
-				if ev.Kind == model.CustomIONKindEphemeralEmbeddding {
+				if ev.Kind == model.CustomIONKindEphemeralEmbedding {
 					ephemeralIDs[ev.ID] = true
 				}
 			}
 			require.Equal(t, 1, eventKinds[nostr.KindTextNote], "Should have 1 text note (the reply)")
-			require.Equal(t, 4, eventKinds[model.CustomIONKindEphemeralEmbeddding], "Should have 4 ephemeral events")
+			require.Equal(t, 4, eventKinds[model.CustomIONKindEphemeralEmbedding], "Should have 4 ephemeral events")
 
 			require.True(t, ephemeralIDs[badgeDefAck.ID], "Badge definition ephemeral ack should be included")
 			require.True(t, ephemeralIDs[badgeAwardAck.ID], "Badge award ephemeral ack should be included")

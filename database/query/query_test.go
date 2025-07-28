@@ -663,7 +663,7 @@ func TestQueryEventAttestation(t *testing.T) {
 			require.NoError(t, ephemeralAttestation.SignWithAlg(otherUserMasterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			wrappedEphemeralAttestation := &model.Event{Event: nostr.Event{
 				CreatedAt: 4,
-				Kind:      model.CustomIONKindEphemeralEmbeddding,
+				Kind:      model.CustomIONKindEphemeralEmbedding,
 				Tags: nostr.Tags{
 					[]string{model.CustomIONTagOnBehalfOf, otherUserMasterPubkey},
 					[]string{"e", repost.ID}},
@@ -895,7 +895,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				require.NoError(t, ev.SignWithAlg(user3Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				user3Attestation := &model.Event{Event: nostr.Event{
 					CreatedAt: 4,
-					Kind:      model.CustomIONKindEphemeralEmbeddding,
+					Kind:      model.CustomIONKindEphemeralEmbedding,
 					Tags: nostr.Tags{
 						[]string{model.CustomIONTagOnBehalfOf, user3MasterPublic},
 						[]string{"e", ev.ID}},
@@ -920,7 +920,7 @@ func TestEventDeleteWithAttestation(t *testing.T) {
 				require.NoError(t, ev.SignWithAlg(user3Private, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 				user3Attestation := &model.Event{Event: nostr.Event{
 					CreatedAt: 4,
-					Kind:      model.CustomIONKindEphemeralEmbeddding,
+					Kind:      model.CustomIONKindEphemeralEmbedding,
 					Tags: nostr.Tags{
 						[]string{model.CustomIONTagOnBehalfOf, user3MasterPublic},
 						[]string{"e", ev.ID}},
