@@ -8,7 +8,27 @@ on:
   pull_request:
     branches:
       - master
+
 jobs:
+  go-download:
+    name: Download and cache go modules
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup GO
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Go mod download
+        run: go mod download
+        shell: bash
+      - name: Go mod tidy
+        run: go mod tidy
+        shell: bash
+
   verify-licensing:
     name: Verify Licensing
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
@@ -18,15 +38,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
+          go-version-file: go.mod
+          cache: false
       - name: Check License
         run: make checkLicense
       - name: Slack Notification For Failure/Cancellation
@@ -41,6 +57,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }}
           SLACK_FOOTER: |
             https://github.com/ice-blockchain/${{ github.event.repository.name }}
+
   verify-latest-versions-used:
     name: Verify Latest Versions
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
@@ -50,15 +67,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
+          go-version-file: go.mod
+          cache: false
       - name: Check If We're Up to Date with Everything
         run: make checkModVersion checkIfAllDependenciesAreUpToDate
       - name: Slack Notification For Failure/Cancellation
@@ -73,6 +86,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }}
           SLACK_FOOTER: |
             https://github.com/ice-blockchain/${{ github.event.repository.name }}
+
   verify-auto-generated:
     name: Verify Auto Generated
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
@@ -82,15 +96,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
+          go-version-file: go.mod
+          cache: false
       - name: Check Auto Generated Files
         run: make checkGenerated
       - name: Slack Notification For Failure/Cancellation
@@ -108,21 +118,17 @@ jobs:
   lint:
     name: Lint
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
+          go-version-file: go.mod
 # # # # # TODO Setup linting
 #      - name: golangci-lint
 #        uses: golangci/golangci-lint-action@v3
@@ -143,23 +149,23 @@ jobs:
   build:
     name: Build
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+          go-version-file: go.mod
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Build all
         run: make build-all@ci/cd
       - name: Slack Notification For Failure/Cancellation
@@ -180,23 +186,23 @@ jobs:
       matrix:
         package: [ "cfg", "database/query", "database/command", "server/http/nip11","server/http/nip96", "server/http/nip98", "server/ws", "dvm", "validation", "push-notifications", "push-notifications/internal" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+          go-version-file: go.mod
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Test ${{ matrix.package }}
 #TODO enable coverage
         run: |
@@ -222,23 +228,23 @@ jobs:
       matrix:
         package: [ "database/query", "database/command", "server/http/nip11", "server/http/nip96", "server/http/nip98", "server/ws", "dvm" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
+    needs: go-download
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+          go-version-file: go.mod
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Benchmark ${{ matrix.package }}
         run: |
           cd ${{ matrix.package }}
@@ -297,17 +303,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Find latest Go Version
-        id: findLatestGoVersion
-        run: |
-          LATEST_GO_VERSION=$(make latestGoVersion)
-          echo "::set-output name=latestGoVersion::$LATEST_GO_VERSION"
       - name: Setup GO
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+          go-version-file: go.mod
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Build Artefacts
         run: env GOOS=linux env GOARCH=amd64 make buildAllBinaries
       - name: Compute new Tag version
