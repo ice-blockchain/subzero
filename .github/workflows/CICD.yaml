@@ -158,8 +158,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Build all
         run: make build-all@ci/cd
       - name: Slack Notification For Failure/Cancellation
@@ -195,8 +199,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Test ${{ matrix.package }}
 #TODO enable coverage
         run: |
@@ -237,8 +245,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Benchmark ${{ matrix.package }}
         run: |
           cd ${{ matrix.package }}
@@ -306,8 +318,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.findLatestGoVersion.outputs.latestGoVersion }}
-      - name: Install libvips and ffmpeg for meta extraction
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev ffmpeg
+      - name: Cache libvips ffmpeg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-dev ffmpeg
+          version: latest
+          execute_install_scripts: true
       - name: Build Artefacts
         run: env GOOS=linux env GOARCH=amd64 make buildAllBinaries
       - name: Compute new Tag version
