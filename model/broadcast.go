@@ -43,7 +43,7 @@ func (b *BroadcastEnvelope) UnmarshalJSON(data []byte) error {
 
 	err := easyjson.Unmarshal([]byte(arr[2].Raw), &b.Event)
 
-	return errors.Wrap(err, "failed to decode BROADCAST envelope: event")
+	return errors.Wrap(err, "failed to decode BROADCAST envelope: bad event")
 }
 
 func (b BroadcastEnvelope) MarshalJSON() ([]byte, error) {

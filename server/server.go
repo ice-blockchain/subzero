@@ -131,7 +131,11 @@ func New(ctx context.Context, opts ...Option) Server {
 		<-ctx.Done()
 		r.Broadcaster.Close()
 	}()
-	r.Handler = wsserver.NewHandler(r.Config.RelayURL)
+	public, err := model.GetPublicKey(r.Config.PrivateKey)
+	if err != nil {
+		log.Panicf("failed to get public key from private key: %v", err)
+	}
+	r.Handler = wsserver.NewHandler(r.Config.RelayURL, public)
 	r.Server = wsserver.New(
 		&wsserver.Config{
 			Port:      r.Config.Port,

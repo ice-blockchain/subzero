@@ -5,6 +5,7 @@ package ws
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log"
 	"strings"
@@ -57,19 +58,20 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(relayURL string) Handler {
-	return newHandler(relayURL)
+func NewHandler(relayURL, relayPublicKey string) Handler {
+	return newHandler(relayURL, relayPublicKey)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func newHandler(relayURL string) *handler {
+func newHandler(relayURL, relayPublicKey string) *handler {
 	return &handler{
-		Subscriptions: xsync.NewMap[string, subscription](),
-		ConnAuth:      xsync.NewMap[Writer, connAuthData](),
-		RelayURL:      relayURL,
+		Subscriptions:  xsync.NewMap[string, subscription](),
+		ConnAuth:       xsync.NewMap[Writer, connAuthData](),
+		RelayURL:       relayURL,
+		RelayPublicKey: relayPublicKey,
 	}
 }
 
@@ -121,7 +123,7 @@ func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Durat
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte) {
-	input, err := nostr.ParseMessage(msgBytes)
+	input, err := nostr.ParseMessage(msgBytes, new(model.BroadcastEnvelope))
 	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
@@ -186,6 +188,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	case *nostr.CloseEnvelope:
 		h.unlinkSubscription(respWriter, (*string)(e))
 		h.logOperation(respWriter, time.Since(start), "req: close: %s", (*string)(e))
+	case *model.BroadcastEnvelope:
+		h.handleBroadcast(ctx, e)
+		h.logOperation(respWriter, time.Since(start), "broadcast")
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
@@ -195,6 +200,27 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
 	}
+}
+
+func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelope) {
+	if h.RelayPublicKey != "" && e.Event.PubKey != h.RelayPublicKey {
+		log.Printf("WARN: broadcast event %s is not signed by relay public key %s, ignoring", e.Event.ID, h.RelayPublicKey)
+		return
+	}
+
+	if e.Event.Kind != model.CustomIONKindEphemeralBatch {
+		log.Printf("WARN: broadcast event %s has unsupported kind %d, expected %d, ignoring", e.Event.ID, e.Event.Kind, model.CustomIONKindEphemeralBatch)
+		return
+	}
+
+	var events model.Events
+	if err := json.Unmarshal([]byte(e.Event.Content), &events); err != nil {
+		log.Printf("ERROR: failed to unmarshal broadcast event %s content: %v", e.Event.ID, err)
+		return
+	}
+
+	log.Printf("INFO: received broadcast event %s with %d events from %s", e.Event.ID, len(events), e.Relay)
+	go h.BroadcastNewEvents(ctx, events...)
 }
 
 func (h *handler) writeResponse(ctx context.Context, respWriter adapters.WSWriter, envelope nostr.Envelope) error {
