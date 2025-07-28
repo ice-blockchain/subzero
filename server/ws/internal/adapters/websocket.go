@@ -22,7 +22,7 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeT
 	wt := &WebsocketAdapter{
 		conn:         conn,
 		closeChannel: make(chan struct{}, 1),
-		out:          make(chan wsWrite),
+		out:          make(chan wsWrite, 1000),
 		readTimeout:  readTimeout,
 		writeTimeout: writeTimeout,
 	}
