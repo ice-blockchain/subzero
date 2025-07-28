@@ -4,11 +4,13 @@ package connector
 
 import (
 	"context"
-	"github.com/ice-blockchain/subzero/model"
+	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 func bindNamed(stmt string, params map[string]any) (string, []any, error) {
