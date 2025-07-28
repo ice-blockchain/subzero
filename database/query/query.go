@@ -245,21 +245,8 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) (e
 			}
 		}
 	}
-	now := time.Now()
-	err = db.executeBatch(ctx, &req)
-	duration := time.Since(now)
-	if duration > 150*time.Millisecond {
-		prefix := "[query]: stats: duration: [" + duration.String() + "]"
-		if v := model.GetUserDataFromContext(ctx); v.Authenticated {
-			prefix += " master: [" + v.MasterPublicKey + "]"
-			if v.UserAgent != "" {
-				prefix += " agent: [" + v.UserAgent + "]"
-			}
-		}
-		prefix += ": query saving to host %v"
-		log.Printf(prefix, db.db.Current())
-	}
-	return err
+
+	return db.executeBatch(ctx, &req)
 }
 
 func (db *dbClient) CommitEvents(ctx context.Context, events ...*model.Event) error {

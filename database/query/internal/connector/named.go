@@ -4,6 +4,8 @@ package connector
 
 import (
 	"context"
+	"github.com/ice-blockchain/subzero/model"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
@@ -61,10 +63,24 @@ func ExecNamed[T any](ctx context.Context, db Querier, stmt string, params map[s
 }
 
 func ExecNamedManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf func(err error) bool, stmt string, params map[string]any) ([]*T, error) {
+	now := time.Now()
 	query, argList, err := bindNamed(stmt, params)
 	if err != nil {
 		return nil, err
 	}
 
-	return ExecManyWithCustomRetry[T](ctx, db, retryIf, query, argList...)
+	res, err := ExecManyWithCustomRetry[T](ctx, db, retryIf, query, argList...)
+	duration := time.Since(now)
+	if duration > 150*time.Millisecond {
+		prefix := "[query]: stats: duration: [" + duration.String() + "]"
+		if v := model.GetUserDataFromContext(ctx); v.Authenticated {
+			prefix += " master: [" + v.MasterPublicKey + "]"
+			if v.UserAgent != "" {
+				prefix += " agent: [" + v.UserAgent + "]"
+			}
+		}
+		prefix += ": query saving to host %v"
+		log.Printf(prefix, db.(*DB).writeLB.Active.Load().Config().ConnConfig.Host)
+	}
+	return res, err
 }
