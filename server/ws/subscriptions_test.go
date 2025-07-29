@@ -23,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 type nostrRelay struct {
@@ -785,7 +786,7 @@ func helperCreateUsernameBadge(t *testing.T, username, userPrivKey string, relay
 	userPubKey, err := model.GetPublicKey(userPrivKey)
 	require.NoError(t, err)
 
-	badgeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
+	badgeIssuerPrivKey, _ := model.GenerateKeyPair()
 
 	badgeDefinition := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Now(),
@@ -801,7 +802,7 @@ func helperCreateUsernameBadge(t *testing.T, username, userPrivKey string, relay
 		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindBadgeAward,
 		Tags: nostr.Tags{
-			{"a", fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgeIssuerPubkey, badgeDefinition.GetTag("d").Value())},
+			{"a", badgeDefinition.Address()},
 			{"p", userPubKey},
 		},
 	}}
@@ -810,7 +811,7 @@ func helperCreateUsernameBadge(t *testing.T, username, userPrivKey string, relay
 	profileMetadata := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindProfileMetadata,
-		Content:   fmt.Sprintf(`{"name":"%s","display_name":"User %s","ion_content_nft_collections":{"My NFT Collection":{"address":"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290","created_by":"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"}}}`, username, username),
+		Content:   fmt.Sprintf(`{"name":"%s","display_name":"User %s","ion_content_nft_collections":{"%v":{"address":"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290","created_by":"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"}}}`, username, username, validation.IONNFTCollectionName),
 	}}
 	helperSignWithMinLeadingZeroBits(t, profileMetadata, userPrivKey)
 	require.NoError(t, relay.PublishMany(t.Context(), &badgeDefinition.Event, &badgeAward.Event, &profileMetadata.Event))

@@ -4,6 +4,7 @@ package validation
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestValidateKindRepostEvent(t *testing.T) {
 	profileMetadata := &model.Event{
 		Event: nostr.Event{
 			Kind:    nostr.KindProfileMetadata,
-			Content: `{"name":"testuser","display_name":"Test User","ion_content_nft_collections":{"My NFT Collection":{"address":"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290","created_by":"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"}}}`,
+			Content: fmt.Sprintf(`{"name":"testuser","display_name":"Test User","ion_content_nft_collections":{"%v":{"address":"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290","created_by":"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"}}}`, IONNFTCollectionName),
 			Tags:    model.Tags{{"b", addressableEvent.GetMasterPublicKey()}},
 		},
 	}
@@ -208,14 +209,22 @@ func TestValidateKindRepostEvent(t *testing.T) {
 			validator := newEventValidator(cfg.MustGet[Config](), WithQueryFunc(func(ctx context.Context, filters ...model.Filter) query.EventIterator {
 				return func(yield func(*model.Event, error) bool) {
 					for _, filter := range filters {
+						hasProfileKind := false
 						for _, kind := range filter.Kinds {
 							if kind == nostr.KindProfileMetadata {
-								for _, author := range filter.Authors {
-									if author == addressableEvent.GetMasterPublicKey() {
-										yield(profileMetadata, nil)
-										return
-									}
-								}
+								hasProfileKind = true
+
+								break
+							}
+						}
+						if !hasProfileKind {
+							continue
+						}
+						for _, author := range filter.Authors {
+							if author == addressableEvent.GetMasterPublicKey() {
+								yield(profileMetadata, nil)
+
+								return
 							}
 						}
 					}

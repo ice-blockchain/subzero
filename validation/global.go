@@ -27,6 +27,12 @@ func Validate(ctx context.Context, events ...*model.Event) error {
 	return global.Validator.Validate(ctx, events...)
 }
 
+func ValidateBatch(events model.Events, opts ...Option) error {
+	validator := newEventValidator(cfg.MustGet[Config](), opts...)
+
+	return validator.Validate(context.Background(), events...)
+}
+
 func GetCommunityDefinition(ctx context.Context, hTag string) (*model.Event, error) {
 	return global.Validator.getCommunityDefinition(ctx, hTag)
 }

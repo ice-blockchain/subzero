@@ -1070,7 +1070,7 @@ func TestReplyCannotSetSettings(t *testing.T) {
 				{"e", rootPost.GetID(), "", model.TagMarkerRoot},
 				{"e", rootPost.GetID(), "", model.TagMarkerReply},
 				{"p", rootPost.GetMasterPublicKey()},
-				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, nostr.Now().String()},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, replyWithETags, privkeyUser1)
@@ -1083,8 +1083,8 @@ func TestReplyCannotSetSettings(t *testing.T) {
 			Content:   "Addressable root post with settings",
 			Tags: nostr.Tags{
 				{"d", "test-post"},
-				{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
-				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+				{"published_at", nostr.Now().String()},
+				{"settings", model.WhoCanReplySettings, model.FollowingWhoCanReplySettings, nostr.Now().String()},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, addressableRootPost, privkeyPostOwner)
@@ -1096,11 +1096,11 @@ func TestReplyCannotSetSettings(t *testing.T) {
 			Content:   "Reply with a tag trying to set settings",
 			Tags: nostr.Tags{
 				{"d", "reply-post"},
-				{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				{"published_at", nostr.Now().String()},
 				{"a", addressableRootPost.Address(), "", model.TagMarkerRoot},
 				{"a", addressableRootPost.Address(), "", model.TagMarkerReply},
 				{"p", addressableRootPost.GetMasterPublicKey()},
-				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
+				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, nostr.Now().String()},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, replyWithATags, privkeyUser1)

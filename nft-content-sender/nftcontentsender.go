@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package hashtagssender
+package nftcontentsender
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -24,7 +26,7 @@ type (
 		RequestTimeout time.Duration `yaml:"request-timeout"`
 	}
 	eventsData struct {
-		Events []*model.Event `json:"events"`
+		Events model.Events `json:"events"`
 	}
 	sender struct {
 		config *Config
@@ -32,10 +34,20 @@ type (
 	}
 )
 
+const (
+	NFTCollectionION = "ion"
+)
+
 var (
 	globalSender struct {
 		*sender
 		Once sync.Once
+	}
+	contentEventKinds = map[int]struct{}{
+		nostr.KindProfileMetadata:           {},
+		nostr.KindTextNote:                  {},
+		model.CustomIONKindEditableTextNote: {},
+		nostr.KindArticle:                   {},
 	}
 )
 
@@ -47,7 +59,7 @@ func MustInit(ctx context.Context) {
 		}
 		globalSender.sender = &sender{
 			config: config,
-			client: req.C().SetBaseURL(config.BaseURL),
+			client: req.C().SetBaseURL(config.BaseURL).SetTimeout(config.RequestTimeout),
 		}
 	})
 }
@@ -57,86 +69,103 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 		panic("nft content sender not initialized")
 	}
 
-	return globalSender.sender.processEvents(ctx, events...)
+	return errors.Wrap(globalSender.sender.processEvents(ctx, events...), "failed to process content events")
 }
 
 func (p *sender) processEvents(ctx context.Context, events ...*model.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
-	var contentEvents []*model.Event
+	embeddedEvents, err := model.ParseEphemeralEmbeddingEvents(events...)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse ephemeral embedding events")
+	}
+	contentEvents := make(map[string]*model.Event)
+	profileMetadataEvents := make(map[string]*model.Event)
+	attestationEvents := make(map[string]*model.Event)
 	for _, event := range events {
-		if event.Kind != nostr.KindTextNote && event.Kind != model.CustomIONKindEditableTextNote && event.Kind != nostr.KindArticle {
+		if event.Kind == model.CustomIONKindEphemeralEmbeddding {
 			continue
 		}
-		if event.IsComment() || event.IsCommunityPost() || event.IsStory() {
-			continue
-		}
-		contentEvents = append(contentEvents, event)
-	}
-	if len(contentEvents) == 0 {
-		return nil
-	}
-	var wg sync.WaitGroup
-	for _, contentEvent := range contentEvents {
-		wg.Add(1)
-		go func(event *model.Event) {
-			defer wg.Done()
-			if err := p.processContentEvent(ctx, event); err != nil {
-				log.Printf("failed to process content event %s: %v", event.ID, err)
+		if _, ok := contentEventKinds[event.Kind]; ok {
+			if event.IsComment() || event.IsCommunityPost() || event.IsStory() {
+				continue
 			}
-		}(contentEvent)
+			contentEvents[event.GetMasterPublicKey()] = event
+		}
 	}
-	wg.Wait()
+	for _, embeddedEventsList := range embeddedEvents {
+		for _, embeddedEvent := range embeddedEventsList {
+			if embeddedEvent.ContentEvent != nil {
+				switch embeddedEvent.ContentEvent.Kind {
+				case nostr.KindProfileMetadata:
+					profileMetadataEvents[embeddedEvent.ContentEvent.GetMasterPublicKey()] = embeddedEvent.ContentEvent
+				case model.CustomIONKindAttestation:
+					attestationEvents[embeddedEvent.ContentEvent.GetMasterPublicKey()] = embeddedEvent.ContentEvent
+				}
+			}
+		}
+	}
+	var masterPubkeysToFetch []string
+	for _, contentEvent := range contentEvents {
+		masterPubkey := contentEvent.GetMasterPublicKey()
+		if _, hasProfile := profileMetadataEvents[masterPubkey]; !hasProfile && contentEvent.Kind != nostr.KindProfileMetadata {
+			masterPubkeysToFetch = append(masterPubkeysToFetch, masterPubkey)
+		}
+		if _, hasAttestation := attestationEvents[masterPubkey]; !hasAttestation {
+			masterPubkeysToFetch = append(masterPubkeysToFetch, masterPubkey)
+		}
+	}
+	if len(masterPubkeysToFetch) > 0 {
+		requiredEvents := query.GetStoredEvents(ctx, model.Filter{
+			Kinds:   []int{nostr.KindProfileMetadata, model.CustomIONKindAttestation},
+			Authors: masterPubkeysToFetch,
+		})
+		for evt, err := range requiredEvents {
+			if err != nil {
+				return errors.Wrap(err, "failed to get required events")
+			}
+			switch evt.Kind {
+			case nostr.KindProfileMetadata:
+				profileMetadataEvents[evt.GetMasterPublicKey()] = evt
+			case model.CustomIONKindAttestation:
+				attestationEvents[evt.GetMasterPublicKey()] = evt
+			}
+		}
+	}
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, contentEvent := range contentEvents {
+		event := contentEvent
+		g.Go(func() error {
+			masterPubkey := event.GetMasterPublicKey()
+			profileEvent, hasProfile := profileMetadataEvents[masterPubkey]
+			if !hasProfile && contentEvent.Kind != nostr.KindProfileMetadata {
+				log.Printf("no profile metadata found for user %s, skipping content event %s", masterPubkey, event.ID)
 
-	return nil
+				return nil
+			}
+			attestationEvent, hasAttestation := attestationEvents[masterPubkey]
+			if !hasAttestation {
+				log.Printf("no attestation found for master pubkey %s, skipping content event %s", masterPubkey, event.ID)
+
+				return nil
+			}
+			eventsToSend := model.Events{event, attestationEvent}
+			if contentEvent.Kind != nostr.KindProfileMetadata {
+				eventsToSend = append(eventsToSend, profileEvent)
+			}
+			if err := p.sendEvents(gCtx, eventsToSend); err != nil {
+				return errors.Wrapf(err, "failed to send events for content %s", event.ID)
+			}
+
+			return nil
+		})
+	}
+
+	return errors.Wrap(g.Wait(), "failed to process content events")
 }
 
-func (p *sender) processContentEvent(ctx context.Context, contentEvent *model.Event) error {
-	masterPubkey := contentEvent.GetMasterPublicKey()
-	requiredEvents := query.GetStoredEvents(ctx, model.Filter{
-		Kinds:   []int{nostr.KindProfileMetadata, model.CustomIONKindAttestation},
-		Authors: []string{masterPubkey},
-	})
-	var profileEvent, attestationEvent *model.Event
-	for evt, err := range requiredEvents {
-		if err != nil {
-			return errors.Wrap(err, "failed to get required events")
-		}
-		if evt.GetMasterPublicKey() != masterPubkey {
-			continue
-		}
-		switch evt.Kind {
-		case nostr.KindProfileMetadata:
-			profileEvent = evt
-		case model.CustomIONKindAttestation:
-			attestationEvent = evt
-		default:
-			continue
-		}
-		if profileEvent != nil && attestationEvent != nil {
-			break
-		}
-	}
-	if profileEvent == nil {
-		log.Printf("no profile metadata found for user %s, skipping content event %s", masterPubkey, contentEvent.ID)
-
-		return nil
-	}
-	if attestationEvent == nil {
-		log.Printf("no attestation found for master pubkey %s, skipping content event %s", masterPubkey, contentEvent.ID)
-
-		return nil
-	}
-	eventsToSend := []*model.Event{contentEvent, profileEvent, attestationEvent}
-	if err := p.sendEvents(ctx, eventsToSend); err != nil {
-		return errors.Wrapf(err, "failed to send events for content %s", contentEvent.ID)
-	}
-
-	return nil
-}
-
-func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
+func (p *sender) sendEvents(ctx context.Context, events model.Events) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -144,8 +173,10 @@ func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
 		Events: events,
 	}
 
+	cCtx, cancel := context.WithTimeout(ctx, p.config.RequestTimeout)
+	defer cancel()
 	resp, err := p.client.R().
-		SetContext(ctx).
+		SetContext(cCtx).
 		SetRetryCount(5).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
 			switch {
@@ -165,8 +196,7 @@ func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {
-			return err != nil ||
-				(resp.GetStatusCode() != http.StatusAccepted && resp.GetStatusCode() != http.StatusBadRequest && resp.GetStatusCode() != http.StatusUnprocessableEntity)
+			return err != nil || resp.GetStatusCode() >= http.StatusInternalServerError
 		}).
 		AddQueryParam("caller", "subzero").
 		SetHeader("Accept", "application/json").
@@ -180,7 +210,7 @@ func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
 		return errors.Wrap(err, "failed to send nft content data")
 	}
 	if resp.GetStatusCode() != http.StatusAccepted {
-		return errors.Newf("nft content service responded with status: %d", resp.GetStatusCode())
+		return fmt.Errorf("nft content service responded with status: %d", resp.GetStatusCode())
 	}
 
 	return nil

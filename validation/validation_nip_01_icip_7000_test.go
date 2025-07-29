@@ -5,10 +5,8 @@ package validation
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
@@ -33,59 +31,39 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 		expectedErrorType  error
 	}{
 		{
-			name:  "valid article with NFT collections",
+			name:  "valid article with ion NFT collection",
 			event: helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
 			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
 				"name":                        "testuser",
 				"display_name":                "Test User",
-				"ion_content_nft_collections": helperCreateTestNFTCollections(t),
+				"ion_content_nft_collections": helperCreateTestNFTCollectionsWithIon(t),
 			}),
-			config:      nil,
 			shouldError: false,
 		},
 		{
-			name:  "valid article with allowed NFT collection",
-			event: helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
-			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
-				"name":                        "testuser",
-				"display_name":                "Test User",
-				"ion_content_nft_collections": helperCreateTestNFTCollections(t),
-			}),
-			config: &Config{
-				AllowedNFTCollections: []string{"My NFT Collection", "Other Collection"},
-			},
-			shouldError: false,
-		},
-		{
-			name:  "article with non-allowed NFT collection should fail",
-			event: helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
-			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
-				"name":                        "testuser",
-				"display_name":                "Test User",
-				"ion_content_nft_collections": helperCreateTestNFTCollections(t),
-			}),
-			config: &Config{
-				AllowedNFTCollections: []string{"Allowed Collection", "Other Allowed Collection"},
-			},
-			shouldError: true,
-		},
-		{
-			name:  "valid editable text note with allowed NFT collection",
+			name:  "valid editable text note with ion NFT collection",
 			event: helperCreateEditableTextNoteEventForTest(t, privKey, masterPubkey, "Editable content", "my-note"),
 			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
 				"name":         "testuser",
 				"display_name": "Test User",
 				"ion_content_nft_collections": map[string]interface{}{
-					"Another Collection": map[string]interface{}{
+					IONNFTCollectionName: map[string]interface{}{
 						"address":    "0:6753FD4A022F03A17C17D51B170084B9B3B3F45748761F252A113C6FC9752F85",
 						"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
 					},
 				},
 			}),
-			config: &Config{
-				AllowedNFTCollections: []string{"My NFT Collection", "Another Collection"},
-			},
 			shouldError: false,
+		},
+		{
+			name:  "article without ion NFT collection should fail",
+			event: helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
+			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
+				"name":                        "testuser",
+				"display_name":                "Test User",
+				"ion_content_nft_collections": helperCreateTestNFTCollectionsWithoutIon(t),
+			}),
+			shouldError: true,
 		},
 		{
 			name:  "article without NFT collections should fail",
@@ -94,7 +72,6 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 				"name":         "testuser",
 				"display_name": "Test User",
 			}),
-			config:      nil,
 			shouldError: true,
 		},
 		{
@@ -104,7 +81,6 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 				"name":         "testuser",
 				"display_name": "Test User",
 			}),
-			config:      nil,
 			shouldError: true,
 		},
 		{
@@ -115,38 +91,19 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 				"display_name":                "Test User",
 				"ion_content_nft_collections": map[string]interface{}{},
 			}),
-			config:      nil,
 			shouldError: true,
 		},
 		{
 			name:            "text note should pass without NFT collections check",
 			event:           helperCreateTextNoteEventForTest(t, privKey, masterPubkey, "Just a text note", nil),
 			profileMetadata: nil,
-			config:          nil,
 			shouldError:     false,
 		},
 		{
 			name:            "no profile metadata should fail",
 			event:           helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
 			profileMetadata: nil,
-			config:          nil,
 			shouldError:     true,
-		},
-		{
-			name:  "invalid NFT collections structure should fail",
-			event: helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
-			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
-				"name":         "testuser",
-				"display_name": "Test User",
-				"ion_content_nft_collections": map[string]interface{}{
-					"": map[string]interface{}{
-						"address":    "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
-						"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
-					},
-				},
-			}),
-			config:      nil,
-			shouldError: true,
 		},
 	}
 	for _, tt := range tests {
@@ -196,7 +153,7 @@ func helperCreateEditableTextNoteEventForTest(t *testing.T, privKey, masterPubke
 			Tags: model.Tags{
 				{"b", masterPubkey},
 				{"d", dTag},
-				{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				{"published_at", nostr.Now().String()},
 			},
 		},
 	}
@@ -240,10 +197,24 @@ func helperCreateProfileMetadataWithNFTCollections(t *testing.T, privKey, master
 	return event
 }
 
-func helperCreateTestNFTCollections(t *testing.T) map[string]interface{} {
+func helperCreateTestNFTCollectionsWithIon(t *testing.T) map[string]interface{} {
 	t.Helper()
 	return map[string]interface{}{
-		"My NFT Collection": map[string]interface{}{
+		IONNFTCollectionName: map[string]interface{}{
+			"address":    "0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290",
+			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
+		},
+		"Another Collection": map[string]interface{}{
+			"address":    "0:6753FD4A022F03A17C17D51B170084B9B3B3F45748761F252A113C6FC9752F85",
+			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
+		},
+	}
+}
+
+func helperCreateTestNFTCollectionsWithoutIon(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return map[string]interface{}{
+		"Some Other Collection": map[string]interface{}{
 			"address":    "0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290",
 			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
 		},

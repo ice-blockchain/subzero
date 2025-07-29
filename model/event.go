@@ -305,20 +305,38 @@ func (e *Event) IsComment() bool {
 	if e.Kind != nostr.KindTextNote && e.Kind != CustomIONKindEditableTextNote {
 		return false
 	}
+	isComment := false
 	eTags := e.GetTags("e")
 	for _, tag := range eTags {
 		if len(tag) > 3 && (tag[3] == TagMarkerRoot || tag[3] == TagMarkerReply) {
-			return true
+			isComment = true
 		}
 	}
 
-	return false
+	return isComment
 }
 
 func (e *Event) IsCommunityPost() bool {
-	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("h") != nil
+	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("h") != nil && e.GetTag("h").Value() != e.ID
 }
 
 func (e *Event) IsStory() bool {
 	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("expiration") != nil
+}
+
+func (e *Event) HasVideoIMeta() bool {
+	imetaTags := e.GetTags("imeta")
+	for _, imetaTag := range imetaTags {
+		values, err := ParseIMeta(imetaTag)
+		if err != nil {
+			continue
+		}
+		if mimeType, exists := values["m"]; exists {
+			if strings.HasPrefix(mimeType, "video") {
+				return true
+			}
+		}
+	}
+
+	return false
 }

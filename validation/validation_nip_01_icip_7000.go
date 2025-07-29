@@ -12,6 +12,10 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+const (
+	IONNFTCollectionName = "ion"
+)
+
 func (ev *eventValidator) validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
 	richText := e.GetTag(model.CustomIONTagRichText)
 	if richText != nil && len(e.Content) > 0 {
@@ -83,30 +87,10 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 			"user %s cannot create root %d content without ion_content_nft_collections in profile",
 			e.GetMasterPublicKey(), e.Kind)
 	}
-	for collectionName := range parsedContent.IONContentNFTCollections {
-		if string(collectionName) == "" {
-			return errors.Wrapf(ErrActionForbidden, "ion_content_nft_collections: collection name cannot be empty: %+v", e)
-		}
-	}
-	var hasValidCollection bool
-	if ev.Config != nil && len(ev.Config.AllowedNFTCollections) > 0 {
-		for collectionName := range parsedContent.IONContentNFTCollections {
-			for _, allowedName := range ev.Config.AllowedNFTCollections {
-				if string(collectionName) == allowedName {
-					hasValidCollection = true
-
-					break
-				}
-			}
-			if hasValidCollection {
-				break
-			}
-		}
-		if !hasValidCollection {
-			return errors.Wrapf(ErrActionForbidden,
-				"user %s cannot create root %d content: none of the ion_content_nft_collections match allowed collections %v",
-				e.GetMasterPublicKey(), e.Kind, ev.Config.AllowedNFTCollections)
-		}
+	if _, exists := parsedContent.IONContentNFTCollections[model.IONContentNFTCollectionName(IONNFTCollectionName)]; !exists {
+		return errors.Wrapf(ErrActionForbidden,
+			"user %s cannot create root %d content: user doesn't have ion collection in profile",
+			e.GetMasterPublicKey(), e.Kind)
 	}
 
 	return nil

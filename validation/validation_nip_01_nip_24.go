@@ -14,15 +14,13 @@ import (
 func validateIONContentNFTCollections(collections map[model.IONContentNFTCollectionName]model.IONContentNFTCollectionMetadata, e *model.Event) error {
 	for collectionName, collectionMetadata := range collections {
 		if string(collectionName) == "" {
-			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection name cannot be empty: %+v", e)
+			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection name cannot be empty: %s", e.ID)
 		}
-
 		if collectionMetadata.Address == "" {
-			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection address cannot be empty for collection '%s': %+v", collectionName, e)
+			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection address cannot be empty for collection '%s': %s", collectionName, e.ID)
 		}
-
 		if collectionMetadata.CreatedBy == "" {
-			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: created_by cannot be empty for collection '%s': %+v", collectionName, e)
+			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: created_by cannot be empty for collection '%s': %s", collectionName, e.ID)
 		}
 	}
 
