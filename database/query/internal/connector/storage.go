@@ -148,7 +148,9 @@ func poolConnect(ctx context.Context, connectionString string, log tracelog.Logg
 	conf.MaxConnLifetimeJitter = 10 * time.Minute
 	conf.MaxConnLifetime = 24 * time.Hour
 	conf.AfterConnect = poolDoAfterConnect
-	conf.MinConns = 1
+	if !strings.Contains(strings.ToLower(connectionString), "pool_min_conns") {
+		conf.MinConns = 1
+	}
 	conf.ConnConfig.Tracer = &tracelog.TraceLog{Logger: log, LogLevel: tracelog.LogLevelDebug}
 	return pgxpool.NewWithConfig(ctx, conf)
 }
