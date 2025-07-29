@@ -1,5 +1,7 @@
 -- SPDX-License-Identifier: ice License 1.0
-
+--------
+SELECT pg_advisory_xact_lock(1753772468014996478);
+--------
 CREATE OR REPLACE FUNCTION to_timestamp_seconds(unix_time bigint)
 RETURNS bigint AS $$
 DECLARE

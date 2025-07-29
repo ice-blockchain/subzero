@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/database/query/internal/postgres/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -28,7 +29,7 @@ func helperNewDatabase(t *testing.T) *dbClient {
 
 	connString, _ := mainTestContainer.MustTempDB(t.Context())
 
-	dbClient := openDatabase(t.Context(), []string{connString}, []string{connString}, true).
+	dbClient := openDatabase(t.Context(), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 
