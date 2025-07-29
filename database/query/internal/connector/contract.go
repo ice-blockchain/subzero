@@ -35,6 +35,7 @@ type (
 	Option func(context.Context, *DB) error
 	DB     struct {
 		ddl     string
+		logging bool
 		writeLB *writeLB
 		readLB  *readLB
 		closed  *atomic.Bool

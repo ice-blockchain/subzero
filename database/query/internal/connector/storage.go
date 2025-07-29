@@ -67,6 +67,14 @@ func WithDDL(ddl string) Option {
 	}
 }
 
+func WithLogging(enabled bool) Option {
+	return func(_ context.Context, db *DB) error {
+		db.logging = enabled
+
+		return nil
+	}
+}
+
 func WithFieldNameMapper(mapper NameMapperFunc) Option {
 	return func(context.Context, *DB) error {
 		scanApi, err := pgxscan.NewDBScanAPI(dbscan.WithFieldNameMapper(mapper))
@@ -90,6 +98,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		readLB:  new(readLB),
 		writeLB: new(writeLB),
 		closed:  new(atomic.Bool),
+		logging: true,
 	}
 
 	for i := range opts {
@@ -302,6 +311,10 @@ func (r *readLB) Next() Querier {
 }
 
 func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data map[string]any) {
+	if !db.logging {
+		return
+	}
+
 	prefix := "[PGX] " + time.Now().Format(time.RFC3339Nano) + " "
 	if v := model.GetUserDataFromContext(ctx); v.Authenticated {
 		prefix += " master: [" + v.MasterPublicKey + "]"
@@ -309,5 +322,5 @@ func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data
 			prefix += " agent: [" + v.UserAgent + "]"
 		}
 	}
-	fmt.Printf(prefix+": %s: %s %v\n", level, msg, data)
+	log.Printf(prefix+": %s: %s %v", level, msg, data)
 }

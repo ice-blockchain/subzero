@@ -97,7 +97,7 @@ func readDDL() string {
 	return sb.String()
 }
 
-func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool) *dbClient {
+func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool, ext ...connector.Option) *dbClient {
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
 	}
@@ -112,6 +112,7 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 			return n
 		}),
 	}
+	options = append(options, ext...)
 
 	if runDDL {
 		options = append(options, connector.WithDDL(readDDL()))
