@@ -34,10 +34,6 @@ type (
 	}
 )
 
-const (
-	NFTCollectionION = "ion"
-)
-
 var (
 	globalSender struct {
 		*sender
@@ -139,7 +135,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		g.Go(func() error {
 			masterPubkey := event.GetMasterPublicKey()
 			profileEvent, hasProfile := profileMetadataEvents[masterPubkey]
-			if !hasProfile && contentEvent.Kind != nostr.KindProfileMetadata {
+			if !hasProfile && event.Kind != nostr.KindProfileMetadata {
 				log.Printf("no profile metadata found for user %s, skipping content event %s", masterPubkey, event.ID)
 
 				return nil
@@ -151,7 +147,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 				return nil
 			}
 			eventsToSend := model.Events{event, attestationEvent}
-			if contentEvent.Kind != nostr.KindProfileMetadata {
+			if event.Kind != nostr.KindProfileMetadata {
 				eventsToSend = append(eventsToSend, profileEvent)
 			}
 			if err := p.sendEvents(gCtx, eventsToSend); err != nil {

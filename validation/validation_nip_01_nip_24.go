@@ -13,7 +13,7 @@ import (
 
 func validateIONContentNFTCollections(collections map[model.IONContentNFTCollectionName]model.IONContentNFTCollectionMetadata, e *model.Event) error {
 	for collectionName, collectionMetadata := range collections {
-		if string(collectionName) == "" {
+		if collectionName == "" {
 			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection name cannot be empty: %s", e.ID)
 		}
 		if collectionMetadata.Address == "" {

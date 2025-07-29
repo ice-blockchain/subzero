@@ -87,7 +87,7 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 			"user %s cannot create root %d content without ion_content_nft_collections in profile",
 			e.GetMasterPublicKey(), e.Kind)
 	}
-	if _, exists := parsedContent.IONContentNFTCollections[model.IONContentNFTCollectionName(IONNFTCollectionName)]; !exists {
+	if _, exists := parsedContent.IONContentNFTCollections[IONNFTCollectionName]; !exists {
 		return errors.Wrapf(ErrActionForbidden,
 			"user %s cannot create root %d content: user doesn't have ion collection in profile",
 			e.GetMasterPublicKey(), e.Kind)
