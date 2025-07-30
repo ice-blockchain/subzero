@@ -192,6 +192,10 @@ func (b *Broadcaster) collectTargets(ctx context.Context, events model.Events) (
 		})
 	}
 
+	if len(filters) == 0 {
+		return targets, nil // No filters to query.
+	}
+
 	it := b.conf.QueryFunc(ctx, filters...)
 	for event, err := range it {
 		if err != nil {
