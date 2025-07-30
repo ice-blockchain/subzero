@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -26,35 +27,68 @@ import (
 
 func WithWriteURLs(urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
+		minLatency := time.Duration(math.MaxInt64)
+		minLatencyIdx := uint64(0)
+		var minLatencyConn *pgxpool.Pool
+		latencies := make(chan struct {
+			conn    *pgxpool.Pool
+			latency time.Duration
+			idx     uint64
+		}, len(urls))
+		var wg sync.WaitGroup
+		wg.Add(len(urls))
 		for i, connectionString := range urls {
-			if strings.Contains(connectionString, "preferred=true") {
-				db.writeLB.PreferredUrls = append(db.writeLB.PreferredUrls, uint64(i))
-				urls[i] = strings.ReplaceAll(connectionString, "preferred=true", "")
-			}
-		}
-		for _, prefIdx := range db.writeLB.PreferredUrls {
-			conn, err := poolConnect(ctx, urls[prefIdx], db)
-			if err != nil {
-				log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", urls[prefIdx], err)
-				continue
-			}
-			db.writeLB.Active.Store(conn)
-			db.writeLB.CurrentIndex = uint64(prefIdx)
-			break // Use the first successfully connected master as the active one.
-		}
-		db.writeLB.Masters = urls
-		if db.writeLB.Active.Load() == nil {
-			for i, connectionString := range urls {
+			go func() {
+				defer wg.Done()
 				conn, err := poolConnect(ctx, connectionString, db)
 				if err != nil {
 					log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
-					continue
+					latencies <- struct {
+						conn    *pgxpool.Pool
+						latency time.Duration
+						idx     uint64
+					}{conn: nil, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
+					return
 				}
-				db.writeLB.Active.Store(conn)
-				db.writeLB.CurrentIndex = uint64(i)
-				break // Use the first successfully connected master as the active one.
-			}
+				pingStart := time.Now()
+				err = conn.Ping(ctx)
+				if err != nil {
+					log.Printf("[DATABASE]: WARNING: cannot ping master %s: %v", connectionString, err)
+					latencies <- struct {
+						conn    *pgxpool.Pool
+						latency time.Duration
+						idx     uint64
+					}{conn: conn, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
+					return
+				}
+				latencies <- struct {
+					conn    *pgxpool.Pool
+					latency time.Duration
+					idx     uint64
+				}{conn: conn, latency: time.Since(pingStart), idx: uint64(i)}
+			}()
 		}
+		wg.Wait()
+		close(latencies)
+		for latency := range latencies {
+			log.Printf("[DATABASE]: INFO: latency for %v is %v", latency.idx, latency.latency)
+			if latency.latency < minLatency {
+				minLatency = latency.latency
+				if minLatencyConn != nil {
+					minLatencyConn.Close()
+				}
+				minLatencyConn = latency.conn
+				minLatencyIdx = uint64(latency.idx)
+				continue
+			}
+			latency.conn.Close()
+		}
+		db.writeLB.PreferredUrls = append(db.writeLB.PreferredUrls, minLatencyIdx)
+		log.Printf("[DATABASE]: INFO: preferred master is %v", minLatencyIdx)
+
+		db.writeLB.Active.Store(minLatencyConn)
+		db.writeLB.CurrentIndex = uint64(minLatencyIdx)
+		db.writeLB.Masters = urls
 		if len(db.writeLB.Masters) == 0 {
 			return errors.New("no write URLs provided")
 		} else if db.writeLB.Active.Load() == nil {
