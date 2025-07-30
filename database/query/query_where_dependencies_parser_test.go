@@ -312,6 +312,15 @@ func TestSelectWithDependencies(t *testing.T) {
 		})
 		require.Len(t, events, 2)
 		require.ElementsMatch(t, []string{"id2", "id1"}, []string{events[0].ID, events[1].ID})
+
+		t.Run("Select with ANY kind", func(t *testing.T) {
+			events := helperSelectEvents(t, db, model.Filter{
+				IDs:    []string{"id2"},
+				Search: "include:dependencies:kind65535>kind0",
+			})
+			require.Len(t, events, 2)
+			require.ElementsMatch(t, []string{"id2", "id1"}, []string{events[0].ID, events[1].ID})
+		})
 	})
 	t.Run("kind1>$logged_in_user_pubkey@kind1+e+root", func(t *testing.T) {
 		var ev model.Event

@@ -130,7 +130,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		require.NoError(t, err)
 		badgeDefAck := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
-			Kind:      model.CustomIONKindEphemeralEmbeddding,
+			Kind:      model.CustomIONKindEphemeralEmbedding,
 			Tags: nostr.Tags{
 				{"e", replyEvent.ID},
 			},
@@ -142,7 +142,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		require.NoError(t, err)
 		badgeAwardAck := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
-			Kind:      model.CustomIONKindEphemeralEmbeddding,
+			Kind:      model.CustomIONKindEphemeralEmbedding,
 			Tags: nostr.Tags{
 				{"e", replyEvent.ID},
 			},

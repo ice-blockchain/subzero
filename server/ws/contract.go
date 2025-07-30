@@ -43,9 +43,10 @@ type (
 		Writer Writer
 	}
 	handler struct {
-		Subscriptions *xsync.Map[string, subscription] // Subscriptions ID -> subscription.
-		ConnAuth      *xsync.Map[Writer, connAuthData]
-		RelayURL      string
+		Subscriptions  *xsync.Map[string, subscription] // Subscriptions ID -> subscription.
+		ConnAuth       *xsync.Map[Writer, connAuthData]
+		RelayURL       string
+		RelayPublicKey string
 	}
 )
 

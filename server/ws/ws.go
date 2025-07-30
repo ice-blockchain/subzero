@@ -20,6 +20,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 const (
@@ -57,19 +58,20 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(relayURL string) Handler {
-	return newHandler(relayURL)
+func NewHandler(relayURL, relayPublicKey string) Handler {
+	return newHandler(relayURL, relayPublicKey)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func newHandler(relayURL string) *handler {
+func newHandler(relayURL, relayPublicKey string) *handler {
 	return &handler{
-		Subscriptions: xsync.NewMap[string, subscription](),
-		ConnAuth:      xsync.NewMap[Writer, connAuthData](),
-		RelayURL:      relayURL,
+		Subscriptions:  xsync.NewMap[string, subscription](),
+		ConnAuth:       xsync.NewMap[Writer, connAuthData](),
+		RelayURL:       relayURL,
+		RelayPublicKey: relayPublicKey,
 	}
 }
 
@@ -121,7 +123,7 @@ func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Durat
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte) {
-	input, err := nostr.ParseMessage(msgBytes)
+	input, err := nostr.ParseMessage(msgBytes, new(model.BroadcastEnvelope))
 	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
@@ -186,6 +188,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	case *nostr.CloseEnvelope:
 		h.unlinkSubscription(respWriter, (*string)(e))
 		h.logOperation(respWriter, time.Since(start), "req: close: %s", (*string)(e))
+	case *model.BroadcastEnvelope:
+		h.handleBroadcast(h.populateContext(ctx, respWriter), e)
+		h.logOperation(respWriter, time.Since(start), "broadcast")
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
@@ -195,6 +200,25 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
 	}
+}
+
+func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelope) {
+	if data := model.GetUserDataFromContext(ctx); !data.Authenticated {
+		log.Printf("WARN: ignoring broadcast from unauthenticated relay %q", e.Relay)
+		return
+	} else if data.PublicKey != h.RelayPublicKey {
+		log.Printf("WARN: ignoring broadcast from relay %q due to public key mismatch: %s != %s",
+			e.Relay, data.PublicKey, h.RelayPublicKey)
+		return
+	}
+
+	if err := validation.Validate(ctx, e.Events...); err != nil {
+		log.Printf("ERROR: validation failed for broadcast %q: %v", e.Relay, err)
+		return
+	}
+
+	log.Printf("INFO: received %d broadcast events from %q", len(e.Events), e.Relay)
+	go h.BroadcastNewEvents(ctx, e.Events...)
 }
 
 func (h *handler) writeResponse(ctx context.Context, respWriter adapters.WSWriter, envelope nostr.Envelope) error {
