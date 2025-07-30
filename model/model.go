@@ -41,7 +41,6 @@ const (
 	CustomIONKindAttestation        = 10_100
 	CustomIONKindRelayListMetadata  = 20_002
 	CustomIONKindEphemeralEmbedding = 21_750
-	CustomIONKindEphemeralBatch     = 21_751
 	CustomIONDirectMessage          = 30_014
 	CustomIONKindEditableTextNote   = 30_175
 	CustomIONKindDeviceRegistration = 31_751

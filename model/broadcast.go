@@ -3,7 +3,8 @@
 package model
 
 import (
-	"github.com/cockroachdb/errors"
+	"fmt"
+
 	"github.com/mailru/easyjson"
 	"github.com/mailru/easyjson/jwriter"
 	"github.com/nbd-wtf/go-nostr"
@@ -15,8 +16,8 @@ var (
 )
 
 type BroadcastEnvelope struct {
-	Relay string
-	Event Event
+	Relay  string
+	Events Events
 }
 
 func (BroadcastEnvelope) Label() string {
@@ -28,31 +29,47 @@ func (b BroadcastEnvelope) String() string {
 	return string(j)
 }
 
-func (b *BroadcastEnvelope) UnmarshalJSON(data []byte) error {
+func (v *BroadcastEnvelope) UnmarshalJSON(data []byte) error {
 	r := gjson.ParseBytes(data)
 	arr := r.Array()
 
-	if len(arr) != 3 {
-		return errors.Errorf("failed to decode BROADCAST envelope: expected 3 elements, got %d", len(arr))
+	if len(arr) < 3 { // At least ["BROADCAST", "relay_url", event1, ....].
+		return fmt.Errorf("failed to decode BROADCAST envelope: unknown array len: %v", len(arr))
 	}
 
-	if arr[1].Type != gjson.String {
-		return errors.Errorf("failed to decode BROADCAST envelope: expected relay to be a string, got %s", arr[1].Type.String())
+	if arr[1].Type == gjson.String {
+		v.Relay = arr[1].Str
 	}
-	b.Relay = arr[1].Str
 
-	err := easyjson.Unmarshal([]byte(arr[2].Raw), &b.Event)
+	jsonEvents := arr[2:] // Skip label and relay URL.
+	v.Events = make(Events, 0, len(jsonEvents))
+	for i := range jsonEvents {
+		var ev Event
+		if err := easyjson.Unmarshal([]byte(jsonEvents[i].Raw), &ev); err != nil {
+			return fmt.Errorf("%w -- on event %d", err, i)
+		}
+		v.Events = append(v.Events, &ev)
+	}
 
-	return errors.Wrap(err, "failed to decode BROADCAST envelope: bad event")
+	return nil
 }
 
-func (b BroadcastEnvelope) MarshalJSON() ([]byte, error) {
+func (v BroadcastEnvelope) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{NoEscapeHTML: true}
 	w.RawString(`["BROADCAST",`)
-	w.String(b.Relay)
-	w.RawByte(',')
-	b.Event.MarshalEasyJSON(&w)
-	w.RawByte(']')
+
+	w.RawString(`"` + v.Relay + `"`)
+	if len(v.Events) > 0 {
+		w.RawByte(',')
+	}
+
+	for i := range v.Events {
+		v.Events[i].MarshalEasyJSON(&w)
+		if i < len(v.Events)-1 {
+			w.RawByte(',')
+		}
+	}
+	w.RawString(`]`)
 
 	return w.BuildBytes()
 }

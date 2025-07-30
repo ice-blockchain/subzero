@@ -291,19 +291,12 @@ func ParseEphemeralEmbeddingEventRef(ev *Event) (key string, eventContent *Event
 	return ref, eventContent, nil
 }
 
-func CollectRelaysFromRelayEvent(ev *Event, filter ...func(Tag) bool) []string {
+func CollectRelaysFromRelayEvent(ev *Event) []string {
 	relays := make([]string, 0, len(ev.Tags))
-main:
 	for _, tag := range ev.Tags {
-		if tag.Key() != "r" {
-			continue main
+		if tag.Key() == "r" {
+			relays = append(relays, tag.Value())
 		}
-		for _, filterFunc := range filter {
-			if !filterFunc(tag) {
-				continue main
-			}
-		}
-		relays = append(relays, tag.Value())
 	}
 	return relays
 }
