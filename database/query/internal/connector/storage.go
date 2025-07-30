@@ -327,6 +327,7 @@ func (db *DB) waitPoolFreeToClose(ctx context.Context, oldMaster *pgxpool.Pool) 
 			db.writeLB.cancelPreferredMasterSwitch()
 		}
 	}()
+loop:
 	for ctx.Err() == nil {
 		stat := oldMaster.Stat()
 		if stat.TotalConns() == 0 || stat.TotalConns() == stat.IdleConns() {
@@ -338,12 +339,13 @@ func (db *DB) waitPoolFreeToClose(ctx context.Context, oldMaster *pgxpool.Pool) 
 			continue
 		case <-ctx.Done():
 			oldMaster.Close()
-			break
+			break loop
 		}
 	}
 }
 
 func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferredIdx uint64) {
+loop:
 	for ctx.Err() == nil {
 		conn, err := poolConnect(ctx, db.writeLB.Masters[preferredIdx], db)
 		if err != nil {
@@ -352,12 +354,11 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 			case <-time.After(10 * time.Second):
 				continue
 			case <-ctx.Done():
-				break
+				break loop
 			}
 		}
-		pooledConn, err := conn.Acquire(ctx)
-		if pooledConn != nil {
-			defer pooledConn.Release()
+		err = conn.Ping(ctx)
+		if err == nil {
 			log.Printf("[DATABASE]: INFO: connecting to preferred master: %d -> %d", db.writeLB.CurrentIndex, preferredIdx)
 			if err = db.switchMaster(ctx, errors.Wrapf(errPreferredAvailable, "preferred master %d is available", preferredIdx), conn, &preferredIdx); err != nil {
 				log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[preferredIdx], err)
@@ -369,7 +370,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 		case <-time.After(10 * time.Second):
 			continue
 		case <-ctx.Done():
-			break
+			break loop
 		}
 	}
 }
