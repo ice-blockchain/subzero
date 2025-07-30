@@ -184,7 +184,7 @@ jobs:
     name: Test
     strategy:
       matrix:
-        package: [ "cfg", "database/query", "database/command", "server", "dvm", "validation", "push-notifications" ]
+        package: [ "cfg", "database/query", "database/command", "server/http/nip11","server/http/nip96", "server/http/nip98", "server/ws", "dvm", "validation", "push-notifications", "push-notifications/internal" ]
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'push'  }}
     needs: go-download
     runs-on: ubuntu-22.04
