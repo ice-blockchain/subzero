@@ -5,7 +5,6 @@ package ws
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"io"
 	"log"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 const (
@@ -189,7 +189,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		h.unlinkSubscription(respWriter, (*string)(e))
 		h.logOperation(respWriter, time.Since(start), "req: close: %s", (*string)(e))
 	case *model.BroadcastEnvelope:
-		h.handleBroadcast(ctx, e)
+		h.handleBroadcast(h.populateContext(ctx, respWriter), e)
 		h.logOperation(respWriter, time.Since(start), "broadcast")
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
@@ -203,28 +203,22 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 }
 
 func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelope) {
-	if ok, err := e.Event.CheckSignature(); !ok || err != nil {
-		log.Printf("ERROR: broadcast event %s has invalid signature", e.Event.ID)
+	if data := model.GetUserDataFromContext(ctx); !data.Authenticated {
+		log.Printf("WARN: ignoring broadcast from unauthenticated relay %q", e.Relay)
 		return
-	}
-	if h.RelayPublicKey != "" && e.Event.PubKey != h.RelayPublicKey {
-		log.Printf("WARN: broadcast event %s is not signed by relay public key %s, ignoring", e.Event.ID, h.RelayPublicKey)
-		return
-	}
-
-	if e.Event.Kind != model.CustomIONKindEphemeralBatch {
-		log.Printf("WARN: broadcast event %s has unsupported kind %d, expected %d, ignoring", e.Event.ID, e.Event.Kind, model.CustomIONKindEphemeralBatch)
+	} else if data.PublicKey != h.RelayPublicKey {
+		log.Printf("WARN: ignoring broadcast from relay %q due to public key mismatch: %s != %s",
+			e.Relay, data.PublicKey, h.RelayPublicKey)
 		return
 	}
 
-	var events model.Events
-	if err := json.Unmarshal([]byte(e.Event.Content), &events); err != nil {
-		log.Printf("ERROR: failed to unmarshal broadcast event %s content: %v", e.Event.ID, err)
+	if err := validation.Validate(ctx, e.Events...); err != nil {
+		log.Printf("ERROR: validation failed for broadcast %q: %v", e.Relay, err)
 		return
 	}
 
-	log.Printf("INFO: received broadcast event %s with %d events from %s", e.Event.ID, len(events), e.Relay)
-	go h.BroadcastNewEvents(ctx, events...)
+	log.Printf("INFO: received %d broadcast events from %q", len(e.Events), e.Relay)
+	go h.BroadcastNewEvents(ctx, e.Events...)
 }
 
 func (h *handler) writeResponse(ctx context.Context, respWriter adapters.WSWriter, envelope nostr.Envelope) error {

@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"log"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -693,9 +694,13 @@ func (b *queryBuilder) BuildQueryForDependencyStart(filterID, cteName, field str
 	sb.WriteString(" from ")
 	sb.WriteString(cteName)
 	sb.WriteString(" where ")
-	sb.WriteString(cteName)
-	sb.WriteString(".kind = :")
-	sb.WriteString(b.PushValue(filterID, "kind", filter.Kind))
+	if filter.Kind < math.MaxUint16 {
+		sb.WriteString(cteName)
+		sb.WriteString(".kind = :")
+		sb.WriteString(b.PushValue(filterID, "kind", filter.Kind))
+	} else {
+		sb.WriteString("1=1") // No kind filter, always true.
+	}
 	if filter.ProfileBadges {
 		sb.WriteString(" AND d_tag='profile_badges'")
 	}

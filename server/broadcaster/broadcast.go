@@ -74,7 +74,7 @@ func (b *Broadcaster) newRelay(ctx context.Context, url string) (*nostr.Relay, e
 
 	err = relay.Publish(ctx, b.newInitAuthEvent(url).Event)
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "auth-required:") {
+		if strings.Contains(err.Error(), "auth-required:") {
 			err = errors.Wrap(relay.Auth(ctx, func(event *nostr.Event) error {
 				subZeroEvent := model.Event{Event: *event}
 				subZeroEvent.Tags = append(subZeroEvent.Tags,
@@ -121,6 +121,92 @@ func (b *Broadcaster) ensureRelay(ctx context.Context, url string) *nostr.Relay 
 	return relay
 }
 
+func (b *Broadcaster) collectTargets(ctx context.Context, events model.Events) (map[string][]string, error) {
+	authoritative := true
+	authors := make([]string, 0, len(events))
+	targets := make(map[string][]string, len(authors)) // Master public key -> relay URLs.
+	addresses := make([]string, 0, len(events))
+	wrapReceivers := make([]string, 0, len(events))
+	for _, event := range events {
+		switch event.Kind {
+		case nostr.KindGiftWrap:
+			if v := event.GetTag("p").Value(); v != "" {
+				wrapReceivers = append(wrapReceivers, v)
+			}
+		case model.CustomIONKindEphemeralEmbedding:
+			authoritative = false
+			var content model.Event
+			err := content.UnmarshalJSON([]byte(event.Content))
+			if err != nil {
+				return nil, errors.Wrapf(err, "malformed %v event, incorrect content %v", model.CustomIONKindEphemeralEmbedding, event.Content)
+			}
+			switch content.Kind {
+			case nostr.KindRelayListMetadata:
+				relays := model.CollectRelaysFromRelayEvent(&content)
+				if len(relays) > 0 {
+					targets[event.GetMasterPublicKey()] = model.DeduplicateSlice(relays, strings.ToLower)
+				}
+			}
+		default:
+			authors = append(authors, event.GetMasterPublicKey())
+			for _, tag := range event.Tags {
+				if (tag.Key() == "a" || tag.Key() == "e") && tag.Value() != "" {
+					addresses = append(addresses, tag.Value())
+				}
+			}
+		}
+	}
+
+	var filters model.Filters
+	if len(wrapReceivers) > 0 {
+		filters = append(filters, model.Filter{
+			Authors: wrapReceivers,
+			Kinds:   []model.Kind{nostr.KindRelayListMetadata},
+			Limit:   len(wrapReceivers),
+		})
+	}
+
+	if authoritative {
+		// In authoritative mode, use event authors as targets.
+		if len(authors) > 0 {
+			lookup := make([]string, 0, len(authors))
+			for _, author := range authors {
+				if _, exists := targets[author]; !exists {
+					lookup = append(lookup, author)
+				}
+			}
+			if len(lookup) > 0 {
+				filters = append(filters, model.Filter{
+					Authors: lookup,
+					Kinds:   []model.Kind{nostr.KindRelayListMetadata},
+					Limit:   len(lookup),
+				})
+			}
+		}
+	} else if len(addresses) > 0 {
+		// In non-authoritative mode, use event references as targets, and try to find relays for the authors of the original events.
+		filters = append(filters, model.Filter{
+			Addresses: addresses,
+			Search:    "include:dependencies:kind65535>kind10002",
+		})
+	}
+
+	it := b.conf.QueryFunc(ctx, filters...)
+	for event, err := range it {
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to query relay list metadata")
+		} else if event.Kind != nostr.KindRelayListMetadata {
+			continue // Skip non-relay list metadata events.
+		}
+
+		relays := model.CollectRelaysFromRelayEvent(event)
+		if len(relays) > 0 {
+			targets[event.GetMasterPublicKey()] = model.DeduplicateSlice(relays, strings.ToLower)
+		}
+	}
+	return targets, nil
+}
+
 func (b *Broadcaster) broadcastTo(ctx context.Context, target string, events model.Events) (err error) {
 	relay := b.ensureRelay(ctx, target)
 	if relay == nil {
@@ -142,30 +228,13 @@ func (b *Broadcaster) broadcastTo(ctx context.Context, target string, events mod
 }
 
 func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (err error) {
-	var authors []string
-	for _, event := range events {
-		authors = append(authors, event.GetMasterPublicKey())
-	}
-	if len(authors) == 0 {
+	if len(events) == 0 {
 		return nil // Nothing to broadcast.
 	}
 
-	it := b.conf.QueryFunc(ctx, model.Filter{
-		Authors: authors,
-		Kinds:   []model.Kind{nostr.KindRelayListMetadata},
-		Limit:   len(authors),
-	})
-
-	targets := make(map[string][]string, len(authors)) // Map of author public keys to their relay URLs.
-	for ev, err := range it {
-		if err != nil {
-			return errors.Wrap(err, "failed to query relay list metadata")
-		}
-		relays := model.CollectRelaysFromRelayEvent(ev)
-		if len(relays) == 0 {
-			continue
-		}
-		targets[ev.GetMasterPublicKey()] = model.DeduplicateSlice(relays, strings.ToLower)
+	targets, err := b.collectTargets(ctx, events)
+	if err != nil {
+		return err
 	}
 
 	var wg sync.WaitGroup
