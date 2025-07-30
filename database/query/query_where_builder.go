@@ -6,7 +6,6 @@ import (
 	"cmp"
 	"context"
 	"log"
-	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -694,7 +693,7 @@ func (b *queryBuilder) BuildQueryForDependencyStart(filterID, cteName, field str
 	sb.WriteString(" from ")
 	sb.WriteString(cteName)
 	sb.WriteString(" where ")
-	if filter.Kind < math.MaxUint16 {
+	if filter.Kind != model.KindAny {
 		sb.WriteString(cteName)
 		sb.WriteString(".kind = :")
 		sb.WriteString(b.PushValue(filterID, "kind", filter.Kind))

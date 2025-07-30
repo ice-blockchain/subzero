@@ -4,6 +4,7 @@ package model
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -51,6 +52,8 @@ const (
 
 	// TODO: change to proper value.
 	CustomIONSystemMessage = 999_999
+
+	KindAny = math.MaxUint16
 )
 
 const (

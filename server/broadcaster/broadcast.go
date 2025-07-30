@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"log"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -187,7 +188,7 @@ func (b *Broadcaster) collectTargets(ctx context.Context, events model.Events) (
 		// In non-authoritative mode, use event references as targets, and try to find relays for the authors of the original events.
 		filters = append(filters, model.Filter{
 			Addresses: addresses,
-			Search:    "include:dependencies:kind65535>kind10002",
+			Search:    "include:dependencies:kind" + strconv.Itoa(model.KindAny) + ">kind10002",
 		})
 	}
 
