@@ -1,4 +1,6 @@
 # subzero
+Subzero nodes operate the ION Connect protocol (Nostr-compatible), a high-throughput sidechain capable of processing millions of transactions per second, with linear scalability as additional nodes are deployed.
+
 ## Starting
 ```bash
 subzero --port=9998 --cert=./cmd/subzero/.testdata/localhost.crt --key=./cmd/subzero/.testdata/localhost.key --adnl-external-ip=127.0.0.1 --adnl-port=11512 --storage-root=./../.uploads --adnl-node-key=<hex> [--global-config-url=file://path/to/global.json]
