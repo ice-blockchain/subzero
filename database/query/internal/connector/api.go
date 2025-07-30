@@ -66,7 +66,7 @@ func executeTransaction(ctx context.Context, db *DB, txOptions pgx.TxOptions, fn
 		}
 
 		if isInstanceDead(txErr) {
-			return nil, errors.Join(txErr, db.switchMaster(ctx, txErr))
+			return nil, errors.Join(txErr, db.switchMaster(ctx, txErr, nil, nil))
 		} else if IsUnexpected(txErr) {
 			return nil, txErr
 		}
@@ -251,5 +251,5 @@ func switchMaster(ctx context.Context, db any, reason error) error {
 	if !ok {
 		return nil
 	}
-	return lb.switchMaster(ctx, reason)
+	return lb.switchMaster(ctx, reason, nil, nil)
 }

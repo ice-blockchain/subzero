@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,16 +26,34 @@ import (
 
 func WithWriteURLs(urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
-		db.writeLB.Masters = urls
 		for i, connectionString := range urls {
-			conn, err := poolConnect(ctx, connectionString, db)
+			if strings.Contains(connectionString, "preferred=true") {
+				db.writeLB.PreferredUrls = append(db.writeLB.PreferredUrls, uint64(i))
+				urls[i] = strings.ReplaceAll(connectionString, "preferred=true", "")
+			}
+		}
+		for _, prefIdx := range db.writeLB.PreferredUrls {
+			conn, err := poolConnect(ctx, urls[prefIdx], db)
 			if err != nil {
-				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
+				log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", urls[prefIdx], err)
 				continue
 			}
 			db.writeLB.Active.Store(conn)
-			db.writeLB.CurrentIndex = uint64(i)
+			db.writeLB.CurrentIndex = uint64(prefIdx)
 			break // Use the first successfully connected master as the active one.
+		}
+		db.writeLB.Masters = urls
+		if db.writeLB.Active.Load() == nil {
+			for i, connectionString := range urls {
+				conn, err := poolConnect(ctx, connectionString, db)
+				if err != nil {
+					log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
+					continue
+				}
+				db.writeLB.Active.Store(conn)
+				db.writeLB.CurrentIndex = uint64(i)
+				break // Use the first successfully connected master as the active one.
+			}
 		}
 		if len(db.writeLB.Masters) == 0 {
 			return errors.New("no write URLs provided")
@@ -244,8 +263,9 @@ func CalculateConnectOrder(addresses []string, currentIndex int) []int {
 	return append(all[currentIndex+1:], all[:currentIndex]...)
 }
 
-func (db *DB) switchMaster(ctx context.Context, reason error) error {
+func (db *DB) switchMaster(ctx context.Context, reason error, preferredConn *pgxpool.Pool, preferredIdx *uint64) error {
 	var oldMaster *pgxpool.Pool
+	var oldMasterIdx uint64
 
 	if len(db.writeLB.Masters) == 0 {
 		return errors.Wrap(ErrReadOnly, "no write URLs provided")
@@ -259,25 +279,99 @@ func (db *DB) switchMaster(ctx context.Context, reason error) error {
 		// Already switched to a new master, no need to switch again.
 		return nil
 	}
-
-	for _, i := range CalculateConnectOrder(db.writeLB.Masters, int(db.writeLB.CurrentIndex)) {
-		conn, err := poolConnect(ctx, db.writeLB.Masters[i], db)
-		if err != nil {
-			log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.writeLB.Masters[i], err)
-			continue
+	if preferredConn == nil || preferredIdx == nil {
+		for _, i := range CalculateConnectOrder(db.writeLB.Masters, int(db.writeLB.CurrentIndex)) {
+			conn, err := poolConnect(ctx, db.writeLB.Masters[i], db)
+			if err != nil {
+				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.writeLB.Masters[i], err)
+				continue
+			}
+			log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.writeLB.CurrentIndex, i, reason)
+			oldMasterIdx = db.writeLB.CurrentIndex
+			oldMaster = db.writeLB.Active.Swap(conn)
+			db.writeLB.CurrentIndex = uint64(i)
+			break
 		}
-		log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.writeLB.CurrentIndex, i, reason)
-		oldMaster = db.writeLB.Active.Swap(conn)
-		db.writeLB.CurrentIndex = uint64(i)
-		break
+	} else {
+		log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.writeLB.CurrentIndex, *preferredIdx, reason)
+		oldMasterIdx = db.writeLB.CurrentIndex
+		oldMaster = db.writeLB.Active.Swap(preferredConn)
+		db.writeLB.CurrentIndex = uint64(*preferredIdx)
 	}
 
 	if oldMaster != nil {
-		oldMaster.Close()
+		if slices.Contains(db.writeLB.PreferredUrls, oldMasterIdx) &&
+			!slices.Contains(db.writeLB.PreferredUrls, db.writeLB.CurrentIndex) {
+			if db.writeLB.cancelPreferredMasterSwitch != nil {
+				db.writeLB.cancelPreferredMasterSwitch()
+			}
+			waitCtx, cancel := context.WithCancel(context.Background())
+			db.writeLB.cancelPreferredMasterSwitch = cancel
+			go db.connectToPreferredMasterOnceAvailable(waitCtx, oldMasterIdx)
+		}
+		if !errors.Is(reason, errPreferredAvailable) {
+			oldMaster.Close()
+		} else {
+			go db.waitPoolFreeToClose(ctx, oldMaster)
+		}
+
 		return nil
 	}
 
 	return errors.Errorf("no active master was found among %d write URLs", len(db.writeLB.Masters))
+}
+
+func (db *DB) waitPoolFreeToClose(ctx context.Context, oldMaster *pgxpool.Pool) {
+	defer func() {
+		if db.writeLB.cancelPreferredMasterSwitch != nil {
+			db.writeLB.cancelPreferredMasterSwitch()
+		}
+	}()
+	for ctx.Err() == nil {
+		stat := oldMaster.Stat()
+		if stat.TotalConns() == 0 || stat.TotalConns() == stat.IdleConns() {
+			oldMaster.Close()
+			break
+		}
+		select {
+		case <-time.After(10 * time.Second):
+			continue
+		case <-ctx.Done():
+			oldMaster.Close()
+			break
+		}
+	}
+}
+
+func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferredIdx uint64) {
+	for ctx.Err() == nil {
+		conn, err := poolConnect(ctx, db.writeLB.Masters[preferredIdx], db)
+		if err != nil {
+			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
+			select {
+			case <-time.After(10 * time.Second):
+				continue
+			case <-ctx.Done():
+				break
+			}
+		}
+		pooledConn, err := conn.Acquire(ctx)
+		if pooledConn != nil {
+			defer pooledConn.Release()
+			log.Printf("[DATABASE]: INFO: connecting to preferred master: %d -> %d", db.writeLB.CurrentIndex, preferredIdx)
+			if err = db.switchMaster(ctx, errors.Wrapf(errPreferredAvailable, "preferred master %d is available", preferredIdx), conn, &preferredIdx); err != nil {
+				log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[preferredIdx], err)
+			}
+			break
+		}
+		log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
+		select {
+		case <-time.After(10 * time.Second):
+			continue
+		case <-ctx.Done():
+			break
+		}
+	}
 }
 
 func (db *DB) primary() QueryExecerTx {

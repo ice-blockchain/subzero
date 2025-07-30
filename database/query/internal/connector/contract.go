@@ -29,6 +29,7 @@ var (
 	ErrInvalidData          = errors.New("invalid data")
 	ErrInternal             = errors.New("internal error")
 	ErrReadOnly             = errors.New("read only")
+	errPreferredAvailable   = errors.New("preferred available")
 )
 
 type (
@@ -51,9 +52,11 @@ type (
 		CurrentIndex uint64
 	}
 	writeLB struct {
-		Masters      []string
-		Active       atomic.Pointer[pgxpool.Pool]
-		CurrentIndex uint64
-		SwitchMu     sync.Mutex
+		Masters                     []string
+		PreferredUrls               []uint64
+		Active                      atomic.Pointer[pgxpool.Pool]
+		CurrentIndex                uint64
+		SwitchMu                    sync.Mutex
+		cancelPreferredMasterSwitch context.CancelFunc
 	}
 )
