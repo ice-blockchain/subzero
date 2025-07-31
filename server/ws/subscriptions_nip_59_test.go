@@ -61,7 +61,18 @@ func TestSelfChat(t *testing.T) {
 		{model.TagAttestationName, pub, "", model.CustomIONAttestationKindActive + ":1"},
 	}
 	helperSignWithMinLeadingZeroBits(t, &attestation, masterPriv)
-	require.NoError(t, query.AcceptEvents(context.Background(), &attestation))
+	require.NoError(t, query.AcceptEvents(t.Context(), &attestation))
+
+	relayMetaEvent := &model.Event{Event: nostr.Event{
+		Kind:      nostr.KindRelayListMetadata,
+		CreatedAt: 1,
+		Tags: model.Tags{
+			{"r", pubsubServers[0].Endpoint()},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		},
+	}}
+	helperSignWithMinLeadingZeroBits(t, relayMetaEvent, priv)
+	require.NoError(t, query.AcceptEvents(t.Context(), relayMetaEvent))
 
 	receiver := helperMustNewRelay(t, pubsubServers[0])
 	t.Run("Auth", func(t *testing.T) {
@@ -71,12 +82,12 @@ func TestSelfChat(t *testing.T) {
 		note.CreatedAt = 1
 		note.Content = "test"
 		helperSignWithMinLeadingZeroBits(t, &note, priv)
-		err := receiver.Publish(context.Background(), note.Event)
+		err := receiver.Publish(t.Context(), note.Event)
 		require.Error(t, err)
 		helperDoAuth(t, receiver.Relay, priv, masterPub)
 	})
 
-	sub, err := receiver.Subscribe(context.Background(), []model.Filter{
+	sub, err := receiver.Subscribe(t.Context(), []model.Filter{
 		{
 			Kinds: []int{nostr.KindGiftWrap},
 			Tags: model.TagMap{}.
@@ -126,7 +137,7 @@ loop:
 			helperSignWithMinLeadingZeroBits(t, &evMaster, model.GeneratePrivateKey())
 
 			sender := helperMustNewRelay(t, pubsubServers[0])
-			require.NoError(t, sender.PublishMany(context.Background(), &evUser.Event, &evMaster.Event, &evRandom.Event))
+			require.NoError(t, sender.PublishMany(t.Context(), &evUser.Event, &evMaster.Event, &evRandom.Event))
 			helperMustCloseRelay(t, sender)
 
 		case ev := <-sub.Events:
