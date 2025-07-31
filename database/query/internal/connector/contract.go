@@ -53,10 +53,10 @@ type (
 	}
 	writeLB struct {
 		Masters                     []string
-		PreferredUrls               []uint64
+		PreferredUrl                uint64
 		Active                      atomic.Pointer[pgxpool.Pool]
 		CurrentIndex                uint64
 		SwitchMu                    sync.Mutex
-		cancelPreferredMasterSwitch context.CancelFunc
+		CancelPreferredMasterSwitch context.CancelFunc
 	}
 )
