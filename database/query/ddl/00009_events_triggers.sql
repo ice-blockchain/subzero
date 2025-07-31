@@ -70,7 +70,7 @@ BEGIN
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
-        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll')
+        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'token')
     ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;
