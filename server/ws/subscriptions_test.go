@@ -591,8 +591,18 @@ func TestStreamGiftWrapEvents(t *testing.T) {
 				{model.TagAttestationName, userPub, "", model.CustomIONAttestationKindActive + ":1"},
 			},
 		}}
-		require.NoError(t, attestationEvent.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		helperSignWithMinLeadingZeroBits(t, attestationEvent, masterPriv)
+		relayMetaEvent := &model.Event{Event: nostr.Event{
+			Kind:      nostr.KindRelayListMetadata,
+			CreatedAt: 1,
+			Tags: model.Tags{
+				{"r", pubsubServers[0].Endpoint()},
+				{model.CustomIONTagOnBehalfOf, masterPub},
+			},
+		}}
+		helperSignWithMinLeadingZeroBits(t, relayMetaEvent, userPriv)
 		require.NoError(t, query.AcceptEvents(t.Context(), attestationEvent))
+		require.NoError(t, query.AcceptEvents(t.Context(), relayMetaEvent))
 	})
 	published := make([]*model.Event, 0, giftWrapCount)
 	t.Run("Create gift wrap events", func(t *testing.T) {

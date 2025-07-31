@@ -3,7 +3,6 @@
 package ws
 
 import (
-	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -11,12 +10,12 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 func TestValidateOnBehalfAccess(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+
 	t.Run("No attestation events", func(t *testing.T) {
 		_, masterPubKey := model.GenerateKeyPair()
 		ev := &model.Event{
@@ -25,9 +24,9 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				Tags: model.Tags{{model.CustomIONTagOnBehalfOf, masterPubKey}},
 			},
 		}
-		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 
-		_, err := validateOnBehalfAccess(ctx, ev)
+		_, err := validateUserAttestation(t.Context(), ev, nil)
 		require.ErrorIs(t, err, errAttestationRecordNotFound)
 	})
 
@@ -44,8 +43,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, attestationEv.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, attestationEv))
+		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -55,7 +53,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateOnBehalfAccess(ctx, ev)
+		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.Error(t, err)
 	})
 
@@ -70,8 +68,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, attestationEv.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, attestationEv))
+		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -79,9 +76,9 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				Tags: model.Tags{{model.CustomIONTagOnBehalfOf, masterPubKey}},
 			},
 		}
-		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 
-		_, err := validateOnBehalfAccess(ctx, ev)
+		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.ErrorIs(t, err, errAttestationRecordNotFound)
 	})
 
@@ -98,8 +95,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, attestationEv.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, attestationEv))
+		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -109,7 +105,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateOnBehalfAccess(ctx, ev)
+		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.ErrorIs(t, err, errAttestationRecordRevoked)
 	})
 
@@ -126,8 +122,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, attestationEv.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, attestationEv))
+		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -137,7 +132,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateOnBehalfAccess(ctx, ev)
+		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.ErrorIs(t, err, errAttestationRecordExpired)
 	})
 
@@ -154,8 +149,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, attestationEv.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, attestationEv))
+		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -165,7 +159,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateOnBehalfAccess(ctx, ev)
+		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.ErrorIs(t, err, errAttestationRecordIsNotActive)
 	})
 
@@ -181,8 +175,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, attestationEv.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, attestationEv))
+		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -192,7 +185,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		kinds, err := validateOnBehalfAccess(ctx, ev)
+		kinds, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.NoError(t, err)
 		require.Contains(t, kinds, 10)
 		require.Contains(t, kinds, 22)
