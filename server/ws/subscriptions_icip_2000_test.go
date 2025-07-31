@@ -76,7 +76,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				Tags: model.Tags{{model.CustomIONTagOnBehalfOf, masterPubKey}},
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, attestationEv, masterPrivKey)
+		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 
 		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
 		require.ErrorIs(t, err, errAttestationRecordNotFound)
