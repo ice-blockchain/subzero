@@ -65,14 +65,18 @@ func (db *DB) postponeMinLatencyDetection(ctx context.Context, urls []string) {
 }
 
 func (db *DB) assignPreferredMaster(ctx context.Context, newIdx uint64, newConn *pgxpool.Pool) {
+	db.writeLB.SwitchMu.Lock()
 	if newIdx != db.writeLB.CurrentIndex {
 		db.writeLB.PreferredUrl = newIdx
+		db.writeLB.SwitchMu.Unlock()
 		log.Printf("[DATABASE]: INFO: new preferred master is %v after all nodes become available", newIdx)
 		if err := db.switchMaster(ctx, errPreferredAvailable, newConn, &newIdx); err != nil {
 			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[newIdx], err)
 			newConn.Close()
 		}
+		return
 	}
+	db.writeLB.SwitchMu.Unlock()
 }
 
 func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.Logger) (allAvailable bool, idx int64, conn *pgxpool.Pool) {
@@ -402,10 +406,7 @@ func (db *DB) waitPoolFreeToClose(ctx context.Context, oldMaster *pgxpool.Pool) 
 		if stat.TotalConns() == 0 || stat.TotalConns() == stat.IdleConns() {
 			return
 		}
-		select {
-		case <-time.After(10 * time.Second):
-			continue
-		case <-ctx.Done():
+		if err := SleepContext(ctx, 10*time.Second); err != nil {
 			return
 		}
 	}
@@ -417,12 +418,10 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 		conn, err := poolConnect(ctx, db.writeLB.Masters[preferredIdx], db)
 		if err != nil {
 			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
-			select {
-			case <-time.After(10 * time.Second):
-				continue
-			case <-ctx.Done():
+			if err := SleepContext(ctx, 10*time.Second); err != nil {
 				return
 			}
+			continue
 		}
 
 		err = conn.Ping(ctx)
@@ -436,20 +435,15 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 				}
 				return
 			}
-			select {
-			case <-time.After(10 * time.Second):
-				continue
-			case <-ctx.Done():
+			if err := SleepContext(ctx, 10*time.Second); err != nil {
 				return
 			}
+			continue
 		}
 		conn.Close()
 		successfulPings = 0
 		log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
-		select {
-		case <-time.After(10 * time.Second):
-			continue
-		case <-ctx.Done():
+		if err := SleepContext(ctx, 10*time.Second); err != nil {
 			return
 		}
 	}
@@ -500,4 +494,11 @@ func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data
 		}
 	}
 	log.Printf(prefix+": %s: %s %v", level, msg, data)
+}
+func SleepContext(ctx context.Context, delay time.Duration) error {
+	select {
+	case <-time.After(delay):
+	case <-ctx.Done():
+	}
+	return ctx.Err()
 }
