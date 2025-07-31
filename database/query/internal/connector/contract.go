@@ -51,9 +51,19 @@ type (
 		CurrentIndex uint64
 	}
 	writeLB struct {
-		Masters      []string
-		Active       atomic.Pointer[pgxpool.Pool]
-		CurrentIndex uint64
-		SwitchMu     sync.Mutex
+		Masters                     []string
+		PreferredUrl                uint64
+		Active                      atomic.Pointer[pgxpool.Pool]
+		CurrentIndex                uint64
+		SwitchMu                    sync.Mutex
+		CancelPreferredMasterSwitch context.CancelFunc
 	}
+)
+
+const (
+	pingsForPreferredMasterSwitch = 6
+)
+
+var (
+	errPreferredAvailable = errors.New("preferred available")
 )
