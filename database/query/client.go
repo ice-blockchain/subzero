@@ -23,6 +23,7 @@ import (
 type (
 	dbClient struct {
 		db                 *connector.DB
+		hasReadURLs        bool
 		relayPrivateKey    string
 		relayURL           string
 		rollbackableEvents *xsync.Map[eventHash, *databaseRollbackRequest]
@@ -100,6 +101,7 @@ func readDDL() string {
 func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool, ext ...connector.Option) *dbClient {
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
+		hasReadURLs:        len(readURLs) > 0,
 	}
 	options := []connector.Option{
 		connector.WithWriteURLs(writeURLs...),
