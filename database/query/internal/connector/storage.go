@@ -35,13 +35,13 @@ func WithWriteURLs(urls ...string) Option {
 			log.Printf("[DATABASE]: INFO: preferred master is %v", minLatencyIdx)
 		}
 		db.writeLB.Active.Store(minLatencyConn)
-		db.writeLB.CurrentIndex = uint64(minLatencyIdx)
 		db.writeLB.Masters = urls
 		if len(db.writeLB.Masters) == 0 {
 			return errors.New("no write URLs provided")
-		} else if db.writeLB.Active.Load() == nil {
+		} else if db.writeLB.Active.Load() == nil || minLatencyIdx == -1 {
 			return errors.Errorf("no active master was found among %d write URLs", len(db.writeLB.Masters))
 		}
+		db.writeLB.CurrentIndex = uint64(minLatencyIdx)
 		return nil
 	}
 }
