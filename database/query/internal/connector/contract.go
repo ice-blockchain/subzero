@@ -29,7 +29,6 @@ var (
 	ErrInvalidData          = errors.New("invalid data")
 	ErrInternal             = errors.New("internal error")
 	ErrReadOnly             = errors.New("read only")
-	errPreferredAvailable   = errors.New("preferred available")
 )
 
 type (
@@ -59,4 +58,12 @@ type (
 		SwitchMu                    sync.Mutex
 		CancelPreferredMasterSwitch context.CancelFunc
 	}
+)
+
+const (
+	pingsForPreferredMasterSwitch = 6
+)
+
+var (
+	errPreferredAvailable = errors.New("preferred available")
 )

@@ -30,9 +30,10 @@ func WithWriteURLs(urls ...string) Option {
 		if !allAvailable {
 			go db.postponeMinLatencyDetection(ctx, urls)
 		}
-		db.writeLB.PreferredUrl = minLatencyIdx
-		log.Printf("[DATABASE]: INFO: preferred master is %v", minLatencyIdx)
-
+		if minLatencyIdx >= 0 {
+			db.writeLB.PreferredUrl = uint64(minLatencyIdx)
+			log.Printf("[DATABASE]: INFO: preferred master is %v", minLatencyIdx)
+		}
 		db.writeLB.Active.Store(minLatencyConn)
 		db.writeLB.CurrentIndex = uint64(minLatencyIdx)
 		db.writeLB.Masters = urls
@@ -46,41 +47,44 @@ func WithWriteURLs(urls ...string) Option {
 }
 
 func (db *DB) postponeMinLatencyDetection(ctx context.Context, urls []string) {
-	func() {
-		allChecked := false
-		var minLatencyIdx uint64
-		var minLatencyConn *pgxpool.Pool
-		for ctx.Err() == nil && !allChecked {
-			select {
-			case <-time.After(10 * time.Second):
-				allChecked, minLatencyIdx, minLatencyConn = detectMinLatencyMaster(ctx, urls, db)
-				if allChecked {
-					db.writeLB.PreferredUrl = minLatencyIdx
-					if minLatencyIdx != db.writeLB.CurrentIndex {
-						log.Printf("[DATABASE]: INFO: new preferred master is %v after all nodes become available", minLatencyIdx)
-						if err := db.switchMaster(ctx, errPreferredAvailable, minLatencyConn, &minLatencyIdx); err != nil {
-							log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[minLatencyIdx], err)
-							minLatencyConn.Close()
-						}
-					}
-					return
-				}
-			case <-ctx.Done():
+	allChecked := false
+	var minLatencyIdx int64
+	var minLatencyConn *pgxpool.Pool
+	for ctx.Err() == nil && !allChecked {
+		select {
+		case <-time.After(10 * time.Second):
+			allChecked, minLatencyIdx, minLatencyConn = detectMinLatencyMaster(ctx, urls, db)
+			if allChecked && minLatencyIdx >= 0 {
+				db.assignPreferredMaster(ctx, uint64(minLatencyIdx), minLatencyConn)
 				return
 			}
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
-func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.Logger) (allAvailable bool, idx uint64, conn *pgxpool.Pool) {
+func (db *DB) assignPreferredMaster(ctx context.Context, newIdx uint64, newConn *pgxpool.Pool) {
+	if newIdx != db.writeLB.CurrentIndex {
+		db.writeLB.PreferredUrl = newIdx
+		log.Printf("[DATABASE]: INFO: new preferred master is %v after all nodes become available", newIdx)
+		if err := db.switchMaster(ctx, errPreferredAvailable, newConn, &newIdx); err != nil {
+			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[newIdx], err)
+			newConn.Close()
+		}
+	}
+}
+
+func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.Logger) (allAvailable bool, idx int64, conn *pgxpool.Pool) {
 	minLatency := time.Duration(math.MaxInt64)
-	minLatencyIdx := uint64(0)
+	minLatencyIdx := int64(-1)
 	var minLatencyConn *pgxpool.Pool
-	latencies := make(chan struct {
+	type connectionLatency struct {
 		conn    *pgxpool.Pool
 		latency time.Duration
 		idx     uint64
-	}, len(urls))
+	}
+	latencies := make(chan connectionLatency, len(urls))
 	var wg sync.WaitGroup
 	wg.Add(len(urls))
 	for i, connectionString := range urls {
@@ -89,22 +93,14 @@ func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.
 			conn, err := poolConnect(ctx, connectionString, logger)
 			if err != nil {
 				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
-				latencies <- struct {
-					conn    *pgxpool.Pool
-					latency time.Duration
-					idx     uint64
-				}{conn: nil, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
+				latencies <- connectionLatency{conn: nil, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
 				return
 			}
 			pingStart := time.Now()
 			err = conn.Ping(ctx)
 			if err != nil {
 				log.Printf("[DATABASE]: WARNING: cannot ping master %s: %v", connectionString, err)
-				latencies <- struct {
-					conn    *pgxpool.Pool
-					latency time.Duration
-					idx     uint64
-				}{conn: conn, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
+				latencies <- connectionLatency{conn: conn, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
 				return
 			}
 			latencies <- struct {
@@ -128,10 +124,12 @@ func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.
 				minLatencyConn.Close()
 			}
 			minLatencyConn = latency.conn
-			minLatencyIdx = uint64(latency.idx)
+			minLatencyIdx = int64(latency.idx)
 			continue
 		}
-		latency.conn.Close()
+		if latency.conn != nil {
+			latency.conn.Close()
+		}
 	}
 	return allAvailable, minLatencyIdx, minLatencyConn
 }
@@ -189,7 +187,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		readLB:  new(readLB),
 		writeLB: new(writeLB),
 		closed:  new(atomic.Bool),
-		logging: false,
+		logging: true,
 	}
 
 	for i := range opts {
@@ -397,27 +395,24 @@ func (db *DB) waitPoolFreeToClose(ctx context.Context, oldMaster *pgxpool.Pool) 
 		if db.writeLB.CancelPreferredMasterSwitch != nil {
 			db.writeLB.CancelPreferredMasterSwitch()
 		}
+		oldMaster.Close()
 	}()
-loop:
 	for ctx.Err() == nil {
 		stat := oldMaster.Stat()
 		if stat.TotalConns() == 0 || stat.TotalConns() == stat.IdleConns() {
-			oldMaster.Close()
-			break
+			return
 		}
 		select {
 		case <-time.After(10 * time.Second):
 			continue
 		case <-ctx.Done():
-			oldMaster.Close()
-			break loop
+			return
 		}
 	}
 }
 
 func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferredIdx uint64) {
 	successfulPings := 0
-loop:
 	for ctx.Err() == nil {
 		conn, err := poolConnect(ctx, db.writeLB.Masters[preferredIdx], db)
 		if err != nil {
@@ -426,34 +421,36 @@ loop:
 			case <-time.After(10 * time.Second):
 				continue
 			case <-ctx.Done():
-				break loop
+				return
 			}
 		}
+
 		err = conn.Ping(ctx)
 		if err == nil {
 			successfulPings++
-			if successfulPings >= 6 {
+			if successfulPings >= pingsForPreferredMasterSwitch {
 				log.Printf("[DATABASE]: INFO: connecting to preferred master: %d -> %d", db.writeLB.CurrentIndex, preferredIdx)
 				if err = db.switchMaster(ctx, errors.Wrapf(errPreferredAvailable, "preferred master %d is available", preferredIdx), conn, &preferredIdx); err != nil {
 					log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[preferredIdx], err)
 					conn.Close()
 				}
-				break
+				return
 			}
 			select {
 			case <-time.After(10 * time.Second):
 				continue
 			case <-ctx.Done():
-				break loop
+				return
 			}
 		}
+		conn.Close()
 		successfulPings = 0
 		log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
 		select {
 		case <-time.After(10 * time.Second):
 			continue
 		case <-ctx.Done():
-			break loop
+			return
 		}
 	}
 }
