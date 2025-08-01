@@ -19,7 +19,7 @@ func validateUserAttestation(ctx context.Context, e, attestationEvent *model.Eve
 		return nil, errors.Wrap(errAttestationRecordNotFound, e.PubKey)
 	}
 
-	if err := validation.Validate(ctx, attestationEvent); err != nil {
+	if err := validation.Validate(ctx, model.Events{attestationEvent}); err != nil {
 		return nil, errors.Wrap(err, "failed to validate attestation event")
 	}
 
