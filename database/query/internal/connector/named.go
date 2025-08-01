@@ -4,10 +4,12 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -81,8 +83,39 @@ func ExecNamedManyWithCustomRetry[T any](ctx context.Context, db Querier, retryI
 				prefix += " agent: [" + v.UserAgent + "]"
 			}
 		}
-		prefix += ": query saving to host %v"
-		log.Printf(prefix, db.(*DB).writeLB.Active.Load().Config().ConnConfig.Host)
+		conn := db.(*DB).writeLB.Active.Load()
+		prefix += ": query saving to host %v, pool stats %v"
+		log.Printf(prefix, conn.Config().ConnConfig.Host, formatStat(conn.Stat()))
 	}
 	return res, err
+}
+
+func formatStat(stat *pgxpool.Stat) string {
+	return fmt.Sprintf(`pool{
+	aquireCount: %v,
+	aquireDuration: %v,
+    aquiredConns: %v,
+	constructingConns: %v,
+	CanceledAcquireCount: %v,
+	EmptyAcquireCount: %v,
+	EmptyAcquireWaitTime: %v,
+	Idle: %v,
+	MaxIdleDestroyCount: %v,
+	NewConnsCount: %v,
+	Total: %v,
+	MaxLifetimeDestroyCount: %v
+}`,
+		stat.AcquireCount(),
+		stat.AcquireDuration(),
+		stat.AcquiredConns(),
+		stat.ConstructingConns(),
+		stat.CanceledAcquireCount(),
+		stat.EmptyAcquireCount(),
+		stat.EmptyAcquireWaitTime(),
+		stat.IdleConns(),
+		stat.MaxIdleDestroyCount(),
+		stat.NewConnsCount(),
+		stat.TotalConns(),
+		stat.MaxLifetimeDestroyCount(),
+	)
 }
