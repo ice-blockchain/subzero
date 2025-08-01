@@ -51,6 +51,6 @@ NIPs | latest commit hash implemented | comments
 [96](https://github.com/nostr-protocol/nips/blob/master/96.md) | [4e73e94d417f16fa3451e58ef921cb3b512c6f8e](https://github.com/ice-blockchain/subzero/commit/130bac5adedf6563fe8d8e869f7e46b4cfb414e0)|
 [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | [ae0fd96907d0767f07fb54ca1de9f197c600cb27](https://github.com/ice-blockchain/subzero/commit/130bac5adedf6563fe8d8e869f7e46b4cfb414e0)|
 
-Data vending machive | latest commit hash implemented | comments
+data vending machive | latest commit hash implemented | comments
 --- | --- | --- 
 [Nostr Event Count](https://github.com/nostr-protocol/data-vending-machines/blob/master/kinds/5400.md) | [d7bd5cc](https://github.com/nostr-protocol/data-vending-machines/commit/d7bd5cc4b3a45b75edbee4134c38b3e56b7eef31)
