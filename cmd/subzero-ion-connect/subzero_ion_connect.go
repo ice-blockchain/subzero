@@ -23,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/dvm"
 	hashtagssender "github.com/ice-blockchain/subzero/hashtags-sender"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -40,6 +41,7 @@ var (
 		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
+			monitoring.MustInit()
 			validation.MustInit()
 			query.MustInit(cmd.Context())
 			command.MustInit(cmd.Context())
@@ -127,6 +129,7 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "query.AcceptEvent failed")
 		}
+		monitoring.RecordEventStored(len(events))
 		if ch, err := dvm.AcceptJob(ctx, events[0]); err == nil && ch != nil {
 			antsPool.Submit(func() {
 				result := <-ch

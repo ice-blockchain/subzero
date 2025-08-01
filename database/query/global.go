@@ -14,6 +14,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 )
 
 var (
@@ -22,6 +23,7 @@ var (
 		Once   sync.Once
 	}
 	UsedDatabaseStorage atomic.Uint64
+	DatabaseEventsCount atomic.Uint64
 )
 
 type (
@@ -121,7 +123,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 			WithRelayURL(conf.RelayURL)
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
-		go globalDB.Client.StartCollectingUsedDatabaseStorage(ctx)
+		go globalDB.Client.StartCollectingUsedDatabaseInfo(ctx)
 
 		go func() {
 			<-ctx.Done()
@@ -206,7 +208,7 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	}
 }
 
-func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
+func (db *dbClient) StartCollectingUsedDatabaseInfo(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
 	ticks <- struct{}{}
 	go func() {
@@ -233,7 +235,15 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 			log.Printf("failed to query database size: %v", err)
 		} else {
 			UsedDatabaseStorage.Store(usedDatabaseStorage)
+			monitoring.SetDatabaseSize("subzero", "localhost", int64(usedDatabaseStorage))
 		}
+		if eventsCount, err := db.queryEventsCount(queryCtx); err != nil {
+			log.Printf("failed to query events count: %v", err)
+		} else {
+			DatabaseEventsCount.Store(eventsCount)
+			monitoring.SetDatabaseEventsCount("subzero", "localhost", eventsCount)
+		}
+
 		cancel()
 	}
 }

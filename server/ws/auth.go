@@ -11,6 +11,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
@@ -159,6 +160,10 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	userdata.Authenticated = true
 
 	h.ConnAuth.Store(respWriter, userdata)
+
+	if !state.Authenticated {
+		monitoring.IncreaseAuthenticatedUsers()
+	}
 
 	resp.OK = true
 

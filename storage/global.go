@@ -32,6 +32,7 @@ import (
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
@@ -305,6 +306,9 @@ func mustInit(ctx context.Context) *client {
 	if globalConfig.Debug {
 		go cl.report(ctx)
 	}
+
+	go cl.startStorageMetricsCollection(ctx)
+
 	loadMonitoringCh := make(chan *db.Event, 1000000)
 	go func() {
 		for ev := range loadMonitoringCh {
@@ -451,4 +455,51 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 	}
 
 	return nil
+}
+
+func calculateDirectorySize(dirPath string) (int64, error) {
+	var totalSize int64
+
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	return totalSize, err
+}
+
+func (c *client) startStorageMetricsCollection(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	c.updateStorageMetrics()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.updateStorageMetrics()
+		}
+	}
+}
+
+func (c *client) updateStorageMetrics() {
+	if c.rootStoragePath == "" {
+		return
+	}
+
+	size, err := calculateDirectorySize(c.rootStoragePath)
+	if err != nil {
+		log.Printf("failed to calculate storage size: %v", err)
+
+		return
+	}
+
+	monitoring.SetStorageSize(size)
 }

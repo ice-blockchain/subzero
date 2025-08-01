@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"reflect"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/tracelog"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 )
 
 func WithWriteURLs(urls ...string) Option {
@@ -244,8 +246,21 @@ func poolConnect(ctx context.Context, connectionString string, log tracelog.Logg
 	if !strings.Contains(strings.ToLower(connectionString), "pool_min_conns") {
 		conf.MinConns = 1
 	}
-	conf.ConnConfig.Tracer = &tracelog.TraceLog{Logger: log, LogLevel: tracelog.LogLevelDebug}
-	return pgxpool.NewWithConfig(ctx, conf)
+	host := conf.ConnConfig.Host
+	if host == "" {
+		if u, parseErr := url.Parse(connectionString); parseErr == nil {
+			host = u.Host
+		}
+	}
+	dbTracer := monitoring.NewAdvancedDBTracer(host, "main")
+	conf.ConnConfig.Tracer = dbTracer
+	pool, err := pgxpool.NewWithConfig(ctx, conf)
+	if err != nil {
+		return nil, err
+	}
+	monitoring.RegisterPoolFromConnector(pool, "subzero", host)
+
+	return pool, nil
 }
 
 func poolDoAfterConnect(ctx context.Context, conn *pgx.Conn) error {

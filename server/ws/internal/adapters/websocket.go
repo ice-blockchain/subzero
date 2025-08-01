@@ -16,6 +16,7 @@ import (
 	"github.com/gobwas/ws/wsutil"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/monitoring"
 )
 
 func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
@@ -26,6 +27,8 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeT
 		readTimeout:  readTimeout,
 		writeTimeout: writeTimeout,
 	}
+
+	monitoring.IncreaseActiveConnections("websocket")
 
 	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
 }
@@ -144,6 +147,8 @@ func (w *WebsocketAdapter) Close() error {
 	if !w.closed.CompareAndSwap(false, true) {
 		return nil
 	}
+
+	monitoring.DecreaseActiveConnections("websocket")
 
 	close(w.closeChannel)
 

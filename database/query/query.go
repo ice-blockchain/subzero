@@ -1216,3 +1216,12 @@ func (db *dbClient) queryDatabaseSize(ctx context.Context) (uint64, error) {
 	}
 	return *sizePtr, nil
 }
+
+func (db *dbClient) queryEventsCount(ctx context.Context) (uint64, error) {
+	countPtr, err := connector.Get[uint64](ctx, db.db, `SELECT count(*) FROM events WHERE deleted = false`)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to query events count")
+	}
+
+	return *countPtr, nil
+}
