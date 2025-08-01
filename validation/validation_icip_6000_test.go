@@ -23,15 +23,15 @@ func TestValidateFundSend(t *testing.T) {
 			{"asset_address", "localhost"},
 		}
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 		ev.Tags = append(ev.Tags, model.Tag{"p", "foo"})
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 		ev.Content = "foo"
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, Validate(t.Context(), model.Events{&ev}))
 	})
 
 	t.Run("With l+L", func(t *testing.T) {
@@ -46,14 +46,14 @@ func TestValidateFundSend(t *testing.T) {
 		}
 		ev.Content = `{"to":"1234"}`
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 		ev.Tags = append(ev.Tags, model.Tag{"L", "wallet.address"})
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, Validate(t.Context(), model.Events{&ev}))
 
 		ev.Tags = append(ev.Tags, model.Tag{"p", "bar"})
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, Validate(t.Context(), &ev))
+		require.Error(t, Validate(t.Context(), model.Events{&ev}))
 	})
 }

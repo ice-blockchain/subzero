@@ -53,5 +53,5 @@ func TestPostWithRichTextOnly(t *testing.T) {
 		}
 	}))
 
-	require.NoError(t, validator.Validate(t.Context(), &ev))
+	require.NoError(t, validator.Validate(t.Context(), model.Events{&ev}))
 }

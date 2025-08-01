@@ -106,7 +106,7 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			err := Validate(t.Context(), tt.event)
+			err := Validate(t.Context(), model.Events{tt.event})
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

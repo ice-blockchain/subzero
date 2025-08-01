@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -76,9 +75,30 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ephemeral embedding events")
 	}
-	contentEvents := make(map[string]*model.Event)
-	profileMetadataEvents := make(map[string]*model.Event)
-	attestationEvents := make(map[string]*model.Event)
+	contentEvent := p.findContentEvent(events)
+	if contentEvent == nil {
+		return nil
+	}
+	masterPubkey := contentEvent.GetMasterPublicKey()
+	profileMetadataEvent, attestationEvent := p.extractRequiredEventsFromEmbedded(embeddedEvents, masterPubkey)
+	if p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
+		log.Printf("required events found in the embedded events for contentEvent:%s", contentEvent.ID)
+
+		return nil
+	}
+	profileMetadataEvent, attestationEvent, err = p.getRequiredEventsFromStorage(ctx, masterPubkey, contentEvent)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
+	}
+	if !p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
+		return fmt.Errorf("required events not found in the database for contentEvent:%s", contentEvent.ID)
+	}
+	eventsToSend := p.buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent)
+
+	return errors.Wrapf(p.sendEvents(ctx, eventsToSend), "failed to send events for contentEvent:%s", contentEvent.ID)
+}
+
+func (p *sender) findContentEvent(events []*model.Event) *model.Event {
 	for _, event := range events {
 		if event.Kind == model.CustomIONKindEphemeralEmbeddding {
 			continue
@@ -87,78 +107,81 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 			if event.IsComment() || event.IsCommunityPost() || event.IsStory() {
 				continue
 			}
-			contentEvents[event.GetMasterPublicKey()] = event
+
+			return event
 		}
 	}
+
+	return nil
+}
+
+func (p *sender) extractRequiredEventsFromEmbedded(embeddedEvents map[string][]*model.EphemeralEmbeddingEvent, masterPubkey string) (*model.Event, *model.Event) {
+	var profileMetadataEvent, attestationEvent *model.Event
 	for _, embeddedEventsList := range embeddedEvents {
 		for _, embeddedEvent := range embeddedEventsList {
 			if embeddedEvent.ContentEvent != nil {
 				switch embeddedEvent.ContentEvent.Kind {
 				case nostr.KindProfileMetadata:
-					profileMetadataEvents[embeddedEvent.ContentEvent.GetMasterPublicKey()] = embeddedEvent.ContentEvent
+					if embeddedEvent.ContentEvent.GetMasterPublicKey() == masterPubkey {
+						profileMetadataEvent = embeddedEvent.ContentEvent
+					}
 				case model.CustomIONKindAttestation:
-					attestationEvents[embeddedEvent.ContentEvent.GetMasterPublicKey()] = embeddedEvent.ContentEvent
+					if embeddedEvent.ContentEvent.GetMasterPublicKey() == masterPubkey {
+						attestationEvent = embeddedEvent.ContentEvent
+					}
 				}
 			}
 		}
 	}
-	var masterPubkeysToFetch []string
-	for _, contentEvent := range contentEvents {
-		masterPubkey := contentEvent.GetMasterPublicKey()
-		if _, hasProfile := profileMetadataEvents[masterPubkey]; !hasProfile && contentEvent.Kind != nostr.KindProfileMetadata {
-			masterPubkeysToFetch = append(masterPubkeysToFetch, masterPubkey)
+
+	return profileMetadataEvent, attestationEvent
+}
+
+func (p *sender) getRequiredEventsFromStorage(
+	ctx context.Context, masterPubkey string, contentEvent *model.Event,
+) (profileMetadataEvent, attestationEvent *model.Event, err error) {
+	kinds := []int{model.CustomIONKindAttestation}
+	if contentEvent.Kind != nostr.KindProfileMetadata {
+		kinds = append(kinds, nostr.KindProfileMetadata)
+	}
+	requiredEvents := query.GetStoredEvents(ctx, model.Filter{
+		Kinds:   kinds,
+		Authors: []string{masterPubkey},
+	})
+
+	for evt, err := range requiredEvents {
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to get required events")
 		}
-		if _, hasAttestation := attestationEvents[masterPubkey]; !hasAttestation {
-			masterPubkeysToFetch = append(masterPubkeysToFetch, masterPubkey)
+		switch evt.Kind {
+		case nostr.KindProfileMetadata:
+			profileMetadataEvent = evt
+		case model.CustomIONKindAttestation:
+			attestationEvent = evt
 		}
 	}
-	if len(masterPubkeysToFetch) > 0 {
-		requiredEvents := query.GetStoredEvents(ctx, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata, model.CustomIONKindAttestation},
-			Authors: masterPubkeysToFetch,
-		})
-		for evt, err := range requiredEvents {
-			if err != nil {
-				return errors.Wrap(err, "failed to get required events")
-			}
-			switch evt.Kind {
-			case nostr.KindProfileMetadata:
-				profileMetadataEvents[evt.GetMasterPublicKey()] = evt
-			case model.CustomIONKindAttestation:
-				attestationEvents[evt.GetMasterPublicKey()] = evt
-			}
-		}
+
+	return profileMetadataEvent, attestationEvent, nil
+}
+
+func (p *sender) validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent *model.Event) bool {
+	if attestationEvent == nil {
+		return false
 	}
-	g, gCtx := errgroup.WithContext(ctx)
-	for _, contentEvent := range contentEvents {
-		event := contentEvent
-		g.Go(func() error {
-			masterPubkey := event.GetMasterPublicKey()
-			profileEvent, hasProfile := profileMetadataEvents[masterPubkey]
-			if !hasProfile && event.Kind != nostr.KindProfileMetadata {
-				log.Printf("no profile metadata found for user %s, skipping content event %s", masterPubkey, event.ID)
-
-				return nil
-			}
-			attestationEvent, hasAttestation := attestationEvents[masterPubkey]
-			if !hasAttestation {
-				log.Printf("no attestation found for master pubkey %s, skipping content event %s", masterPubkey, event.ID)
-
-				return nil
-			}
-			eventsToSend := model.Events{event, attestationEvent}
-			if event.Kind != nostr.KindProfileMetadata {
-				eventsToSend = append(eventsToSend, profileEvent)
-			}
-			if err := p.sendEvents(gCtx, eventsToSend); err != nil {
-				return errors.Wrapf(err, "failed to send events for content %s", event.ID)
-			}
-
-			return nil
-		})
+	if contentEvent.Kind != nostr.KindProfileMetadata && profileMetadataEvent == nil {
+		return false
 	}
 
-	return errors.Wrap(g.Wait(), "failed to process content events")
+	return true
+}
+
+func (p *sender) buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent *model.Event) model.Events {
+	eventsToSend := model.Events{contentEvent, attestationEvent}
+	if contentEvent.Kind != nostr.KindProfileMetadata {
+		eventsToSend = append(eventsToSend, profileMetadataEvent)
+	}
+
+	return eventsToSend
 }
 
 func (p *sender) sendEvents(ctx context.Context, events model.Events) error {

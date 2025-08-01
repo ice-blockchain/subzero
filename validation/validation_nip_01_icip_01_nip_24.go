@@ -11,22 +11,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateIONContentNFTCollections(collections map[model.IONContentNFTCollectionName]model.IONContentNFTCollectionMetadata, e *model.Event) error {
-	for collectionName, collectionMetadata := range collections {
-		if collectionName == "" {
-			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection name cannot be empty: %s", e.ID)
-		}
-		if collectionMetadata.Address == "" {
-			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: collection address cannot be empty for collection '%s': %s", collectionName, e.ID)
-		}
-		if collectionMetadata.CreatedBy == "" {
-			return errors.Wrapf(ErrWrongEventParams, "ion_content_nft_collections: created_by cannot be empty for collection '%s': %s", collectionName, e.ID)
-		}
-	}
-
-	return nil
-}
-
 func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
 	if !json.Valid([]byte(e.Content)) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: content field should be stringified json: %+v", e)
@@ -38,9 +22,16 @@ func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, 
 	if parsedContent.Name == "" || parsedContent.DisplayName == "" {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
 	}
-
-	if err := validateIONContentNFTCollections(parsedContent.IONContentNFTCollections, e); err != nil {
-		return errors.Wrapf(err, "failed to validate ion_content_nft_collections")
+	for collectionName, collectionMetadata := range parsedContent.IONContentNFTCollections {
+		if collectionName == "" {
+			return errors.Wrapf(ErrWrongEventParams, "icip-01: ion_content_nft_collections: collection name cannot be empty: %s", e.ID)
+		}
+		if collectionMetadata.Address == "" {
+			return errors.Wrapf(ErrWrongEventParams, "icip-01: ion_content_nft_collections: collection address cannot be empty for collection '%s': %s", collectionName, e.ID)
+		}
+		if collectionMetadata.CreatedBy == "" {
+			return errors.Wrapf(ErrWrongEventParams, "icip-01: ion_content_nft_collections: created_by cannot be empty for collection '%s': %s", collectionName, e.ID)
+		}
 	}
 	if !ev.SkipKindProfileProofEventsVerify {
 		masterKey := e.GetMasterPublicKey()

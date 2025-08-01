@@ -399,11 +399,12 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
-				Content:   post.String(),
+				Kind:      nostr.KindTextNote,
+				Content:   "comment",
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -423,11 +424,12 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
-				Content:   post.String(),
+				Kind:      nostr.KindTextNote,
+				Content:   "comment",
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -438,8 +440,6 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 	t.Run("try to post comment to the community by admin, ok", func(t *testing.T) {
 		post := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				PubKey:    pubkeyUser1,
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
 				Content:   "some text",
@@ -448,14 +448,13 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		helperSignWithMinLeadingZeroBits(t, post, privkeyUser1)
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				PubKey:    pubkeyCommunityAdmin,
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
-				Content:   post.String(),
+				Kind:      nostr.KindTextNote,
+				Content:   "comment",
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -475,11 +474,12 @@ func TestCommunityDefinition_ClosedCommunity_ModeratorPosting_CommentsEnabled(t 
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
-				Content:   post.String(),
+				Kind:      nostr.KindTextNote,
+				Content:   "comment",
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -822,8 +822,6 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				PubKey:    pubkeyCommunityOwner,
 				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
@@ -852,8 +850,6 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 	t.Run("join moderator to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				PubKey:    pubkeyCommunityModerator,
 				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
@@ -958,11 +954,12 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
+				Kind:      nostr.KindTextNote,
 				Content:   post.String(),
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -985,11 +982,12 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
+				Kind:      nostr.KindTextNote,
 				Content:   post.String(),
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -1012,11 +1010,12 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
+				Kind:      nostr.KindTextNote,
 				Content:   post.String(),
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -1039,11 +1038,12 @@ func TestCommunityDefinition_OpenedCommunity_AnyPosting_CommentsDisabled(t *test
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
+				Kind:      nostr.KindTextNote,
 				Content:   post.String(),
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -1097,8 +1097,6 @@ func TestCommunityDefinition_ClosedCommunity_AnybodyPosting(t *testing.T) {
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				PubKey:    pubkeyCommunityOwner,
 				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
@@ -1127,7 +1125,6 @@ func TestCommunityDefinition_ClosedCommunity_AnybodyPosting(t *testing.T) {
 	t.Run("join moderator to the community", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
 				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{
@@ -1587,8 +1584,9 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, privkeyUser1)
 		require.NoError(t, relay.Publish(ctx, ev.Event))
 	})
+	var post *model.Event
 	t.Run("try to post to the community by moderator, ok", func(t *testing.T) {
-		ev := &model.Event{
+		post = &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindTextNote,
@@ -1596,17 +1594,19 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 				Tags:      model.Tags{{"h", communityID}},
 			},
 		}
-		helperSignWithMinLeadingZeroBits(t, ev, privkeyModerator)
-		require.NoError(t, relay.Publish(ctx, ev.Event))
+		helperSignWithMinLeadingZeroBits(t, post, privkeyModerator)
+		require.NoError(t, relay.Publish(ctx, post.Event))
 	})
 	t.Run("try to post comment to the community by any user, forbidden, comments are disabled", func(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
-				Content:   "some text",
+				Kind:      nostr.KindTextNote,
+				Content:   "comment",
 				Tags: model.Tags{
 					{"h", communityID},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 				},
 			},
 		}
@@ -1657,11 +1657,12 @@ func TestCommunityChangeDefinitionApplyingPatches(t *testing.T) {
 		ev := &model.Event{
 			Event: nostr.Event{
 				CreatedAt: nostr.Now(),
-				Kind:      nostr.KindRepost,
-				Content:   post.String(),
+				Kind:      nostr.KindTextNote,
+				Content:   "comment",
 				Tags: model.Tags{
 					{"h", communityID},
-					{"e", post.GetID()},
+					{"e", post.GetID(), "", model.TagMarkerRoot},
+					{"e", post.GetID(), "", model.TagMarkerReply},
 					{"p", post.GetMasterPublicKey()},
 				},
 			},
@@ -1990,8 +1991,6 @@ func TestCommunityBanUser(t *testing.T) {
 	t.Run("join owner to the community", func(t *testing.T) {
 		ev := model.Event{
 			Event: nostr.Event{
-				ID:        uuid.NewString(),
-				PubKey:    pubkeyCommunityOwner,
 				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindCommunityJoin,
 				Tags: model.Tags{

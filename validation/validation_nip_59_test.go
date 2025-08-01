@@ -99,7 +99,7 @@ func TestValidateKindGiftWrapEvent(t *testing.T) {
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
 			require.NoError(t, c.Event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			err := Validate(t.Context(), c.Event)
+			err := Validate(t.Context(), model.Events{c.Event})
 			if c.Err {
 				require.Error(t, err)
 			} else {

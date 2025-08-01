@@ -94,10 +94,14 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name:            "text note should pass without NFT collections check",
-			event:           helperCreateTextNoteEventForTest(t, privKey, masterPubkey, "Just a text note", nil),
-			profileMetadata: nil,
-			shouldError:     false,
+			name:  "text note should pass without NFT collections check",
+			event: helperCreateTextNoteEventForTest(t, privKey, masterPubkey, "Just a text note", nil),
+			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
+				"name":                        "testuser",
+				"display_name":                "Test User",
+				"ion_content_nft_collections": helperCreateTestNFTCollectionsWithIon(t),
+			}),
+			shouldError: false,
 		},
 		{
 			name:            "no profile metadata should fail",
@@ -141,6 +145,7 @@ func helperCreateArticleEventForTest(t *testing.T, privKey, masterPubkey, title,
 		},
 	}
 	require.NoError(t, event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
 	return event
 }
 
@@ -158,6 +163,7 @@ func helperCreateEditableTextNoteEventForTest(t *testing.T, privKey, masterPubke
 		},
 	}
 	require.NoError(t, event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
 	return event
 }
 
@@ -194,6 +200,7 @@ func helperCreateProfileMetadataWithNFTCollections(t *testing.T, privKey, master
 		},
 	}
 	require.NoError(t, event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
 	return event
 }
 
@@ -230,15 +237,13 @@ func createMockQueryFunc(profileMetadata *model.Event, queryError error) func(co
 		return func(yield func(*model.Event, error) bool) {
 			if queryError != nil {
 				yield(nil, queryError)
+
 				return
 			}
-			for _, filter := range filters {
-				for _, kind := range filter.Kinds {
-					if kind == nostr.KindProfileMetadata && profileMetadata != nil {
-						yield(profileMetadata, nil)
-						return
-					}
-				}
+			if profileMetadata != nil && model.FiltersMatch(filters, profileMetadata, profileMetadata.GetMasterPublicKey(), profileMetadata.PubKey) {
+				yield(profileMetadata, nil)
+
+				return
 			}
 		}
 	}

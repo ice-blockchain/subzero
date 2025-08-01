@@ -302,22 +302,39 @@ func CollectRelaysFromRelayEvent(ev *Event) []string {
 }
 
 func (e *Event) IsComment() bool {
-	if e.Kind != nostr.KindTextNote && e.Kind != CustomIONKindEditableTextNote {
-		return false
-	}
-	isComment := false
-	eTags := e.GetTags("e")
-	for _, tag := range eTags {
-		if len(tag) > 3 && (tag[3] == TagMarkerRoot || tag[3] == TagMarkerReply) {
-			isComment = true
+	switch e.Kind {
+	case nostr.KindTextNote, nostr.KindRepost:
+		for _, tag := range e.Tags {
+			if tag.Key() == "e" && len(tag) > 3 && tag[3] == TagMarkerRoot {
+				return true
+			}
+		}
+	case CustomIONKindEditableTextNote, nostr.KindGenericRepost:
+		for _, tag := range e.Tags {
+			if tag.Key() == "a" && len(tag) > 3 && tag[3] == TagMarkerRoot {
+				return true
+			}
 		}
 	}
 
-	return isComment
+	return false
+}
+
+var communityPostKinds = map[int]struct{}{
+	nostr.KindTextNote:            {},
+	CustomIONKindEditableTextNote: {},
+	nostr.KindArticle:             {},
+	nostr.KindRepost:              {},
+	nostr.KindGenericRepost:       {},
 }
 
 func (e *Event) IsCommunityPost() bool {
-	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("h") != nil && e.GetTag("h").Value() != e.ID
+	if _, ok := communityPostKinds[e.Kind]; !ok {
+		return false
+	}
+	hTag := e.GetHTag()
+
+	return hTag != "" && hTag != e.ID
 }
 
 func (e *Event) IsStory() bool {

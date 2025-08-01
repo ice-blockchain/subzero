@@ -53,7 +53,7 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 	if e.IsComment() || e.IsStory() || e.IsCommunityPost() {
 		return nil
 	}
-	if e.Kind != model.CustomIONKindEditableTextNote && e.Kind != nostr.KindArticle {
+	if e.Kind != nostr.KindTextNote && e.Kind != nostr.KindArticle && e.Kind != model.CustomIONKindEditableTextNote {
 		return nil
 	}
 	var profileMetadata *model.Event
@@ -62,17 +62,17 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 		Kinds:   []int{nostr.KindProfileMetadata},
 		Limit:   1,
 	})
-	if queryIterator != nil {
-		for event, err := range queryIterator {
-			if err != nil {
-				return errors.Wrapf(err, "failed to query profile metadata for user %s", e.GetMasterPublicKey())
-			}
-			if event != nil {
-				profileMetadata = event
-			}
+	for event, err := range queryIterator {
+		if err != nil {
+			return errors.Wrapf(err, "failed to query profile metadata for user %s", e.GetMasterPublicKey())
+		}
+		if event != nil {
+			profileMetadata = event
+
 			break
 		}
 	}
+
 	if profileMetadata == nil {
 		return errors.Wrapf(ErrActionForbidden,
 			"profile metadata not found for user %s creating root %d content",

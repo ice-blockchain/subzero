@@ -28,19 +28,19 @@ func TestValidateGiftWrap(t *testing.T) {
 	ev.Kind = nostr.KindGiftWrap
 	ev.CreatedAt = 1
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(t.Context(), &ev))
+	require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 	ev.Tags = append(ev.Tags, model.Tag{"p", "foop"}, model.Tag{"k", "123"})
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(t.Context(), &ev))
+	require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 	ev.Tags = append(ev.Tags, model.Tag{"expiration", "foo"})
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(t.Context(), &ev))
+	require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 	ev.Tags = append(ev.Tags[:len(ev.Tags)-2], model.Tag{"expiration", "123"})
 	require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(t.Context(), &ev))
+	require.Error(t, Validate(t.Context(), model.Events{&ev}))
 }
 
 func TestValidateDtag(t *testing.T) {
@@ -50,14 +50,14 @@ func TestValidateDtag(t *testing.T) {
 	var ev model.Event
 	ev.Kind = nostr.KindArticle
 	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.Error(t, Validate(t.Context(), &ev))
+	require.Error(t, Validate(t.Context(), model.Events{&ev}))
 
 	// Unknown event kind, but addressable.
 	ev.Kind = nostr.KindLiveEvent
-	require.Error(t, Validate(t.Context(), &ev))
+	require.Error(t, Validate(t.Context(), model.Events{&ev}))
 	ev.Tags = append(ev.Tags, model.Tag{"d", "foo"})
 	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, Validate(t.Context(), &ev))
+	require.NoError(t, Validate(t.Context(), model.Events{&ev}))
 }
 
 func TestValidateOneOfSingle(t *testing.T) {
@@ -157,7 +157,7 @@ func TestValidateArticleSoftDelete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			err := Validate(t.Context(), tt.event)
+			err := Validate(t.Context(), model.Events{tt.event})
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

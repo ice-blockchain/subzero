@@ -230,7 +230,7 @@ func TestValidateKindRepostEvent(t *testing.T) {
 					}
 				}
 			}))
-			err := validator.Validate(t.Context(), tt.event)
+			err := validator.Validate(t.Context(), model.Events{tt.event})
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
