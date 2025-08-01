@@ -91,7 +91,9 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
 	if !p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
-		return fmt.Errorf("required events not found in the database for contentEvent:%s", contentEvent.ID)
+		log.Printf("required events not found in the database for contentEvent:%s", contentEvent.ID)
+
+		return nil
 	}
 	eventsToSend := p.buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent)
 
@@ -100,7 +102,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 
 func (p *sender) findContentEvent(events []*model.Event) *model.Event {
 	for _, event := range events {
-		if event.Kind == model.CustomIONKindEphemeralEmbeddding {
+		if event.Kind == model.CustomIONKindEphemeralEmbedding {
 			continue
 		}
 		if _, ok := contentEventKinds[event.Kind]; ok {
