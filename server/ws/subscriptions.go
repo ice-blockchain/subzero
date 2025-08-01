@@ -19,6 +19,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
@@ -131,22 +132,37 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 	})
 	if loaded {
 		log.Printf("WARN: subscription %s already exists, overwriting it", sub.ID)
+	} else {
+		monitoring.IncreaseActiveSubscriptions()
 	}
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	if ID == nil {
 		// Connection is closing, remove all subscriptions.
+		if authData, ok := h.ConnAuth.Load(respWriter); ok && authData.Authenticated {
+			monitoring.DecreaseAuthenticatedUsers()
+		}
+
+		subsCount := 0
 		h.Subscriptions.Range(func(_ string, sub subscription) bool {
 			if sub.Writer == respWriter {
 				h.Subscriptions.Delete(sub.Source.ID)
+				subsCount++
 			}
 			return true
 		})
+		if subsCount > 0 {
+			monitoring.DecreaseActiveSubscriptions(int64(subsCount))
+		}
+
 		return false
 	}
 
 	_, ok := h.Subscriptions.LoadAndDelete(*ID)
+	if ok {
+		monitoring.DecreaseActiveSubscriptions(1)
+	}
 
 	return ok
 }
@@ -402,6 +418,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event) error {
 	if err := validation.Validate(ctx, events...); err != nil {
+		monitoring.RecordEventValidation("rejected", "validation_failed", len(events))
 		return errors.Wrapf(err, "events %v: invalid", events)
 	}
 
@@ -417,6 +434,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 				}, false
 			})
 			if !status.Authenticated {
+				monitoring.RecordEventValidation("rejected", "auth_required", len(events))
 				err := h.writeResponse(ctx, respWriter, &nostr.AuthEnvelope{
 					Challenge: &status.Challenge,
 				})
@@ -425,6 +443,8 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 				}
 				return errAuthRequired
 			} else if !status.IsEventAllowed(events...) {
+				monitoring.RecordEventValidation("rejected", "not_allowed", len(events))
+
 				return errors.New("error: not allowed to publish given events")
 			}
 		}
@@ -432,10 +452,15 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if err := wsEventListener(ctx, events...); err != nil {
 		if errors.Is(err, query.ErrReadOnly) {
+			monitoring.RecordEventValidation("rejected", "read_only", len(events))
+
 			return errRelayReadOnly
 		}
+		monitoring.RecordEventValidation("rejected", "processing_error", len(events))
+
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
+	monitoring.RecordEventValidation("accepted", "valid", len(events))
 
 	return nil
 }

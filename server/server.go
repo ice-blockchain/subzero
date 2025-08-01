@@ -20,6 +20,7 @@ import (
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip96"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type (
@@ -180,5 +181,6 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info()).
 		GET("/health-check", func(c *gin.Context) {
 			c.JSON(http.StatusOK, map[string]any{})
-		})
+		}).
+		GET("/metrics", gin.WrapH(promhttp.Handler()))
 }

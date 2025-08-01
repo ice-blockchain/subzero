@@ -18,6 +18,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/monitoring"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/validation"
@@ -143,6 +144,8 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			log.Printf("ERROR: cannot process events: %s: %v", model.Events(events).String(), err)
 		}
 		h.logOperation(respWriter, time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
+
+		monitoring.RecordWSOperation("event_handle", time.Since(start), err == nil, len(events))
 		sendStart := time.Now()
 		for i := range e.Events {
 			resp := &nostr.OKEnvelope{
@@ -162,16 +165,23 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			}
 		}
 		h.logOperation(respWriter, time.Since(sendStart), "events: send [%d] responses", len(events))
+
+		monitoring.RecordWSOperation("event_send", time.Since(sendStart), true, len(events))
+
 		return
 	case *nostr.AuthEnvelope:
 		ev := &model.Event{Event: e.Event}
 		err = h.writeResponse(ctx, respWriter, h.handleAuth(ctx, respWriter, ev))
 		h.logOperation(respWriter, time.Since(start), "auth")
+
+		monitoring.RecordWSOperation("auth", time.Since(start), err == nil, 1)
 	case *nostr.ReqEnvelope:
 		err = h.handleReq(h.populateContext(ctx, respWriter), respWriter, model.NewSubscription(e.SubscriptionID, e.Filters))
 		h.logOperation(respWriter, time.Since(start), "req: %s: handle [%d] filters: %v: [%v]",
 			e.SubscriptionID, len(e.Filters), string(msgBytes),
 			err)
+
+		monitoring.RecordWSOperation("subscription", time.Since(start), err == nil, len(e.Filters))
 	case *nostr.CountEnvelope:
 		err = h.handleCount(h.populateContext(ctx, respWriter), e)
 		if err != nil {
@@ -188,9 +198,13 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	case *nostr.CloseEnvelope:
 		h.unlinkSubscription(respWriter, (*string)(e))
 		h.logOperation(respWriter, time.Since(start), "req: close: %s", (*string)(e))
+
+		monitoring.RecordWSOperation("close", time.Since(start), true, 1)
 	case *model.BroadcastEnvelope:
 		h.handleBroadcast(h.populateContext(ctx, respWriter), e)
 		h.logOperation(respWriter, time.Since(start), "broadcast")
+
+		monitoring.RecordWSOperation("broadcast", time.Since(start), true, 1)
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())
 	}
@@ -200,6 +214,8 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		notice := nostr.NoticeEnvelope(err.Error())
 		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
 	}
+
+	monitoring.RecordRequest(strings.ToLower(input.Label()), "websocket", time.Since(start), err == nil)
 }
 
 func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelope) {
