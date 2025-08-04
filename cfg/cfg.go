@@ -84,7 +84,6 @@ func Get[T any]() (*T, error) {
 	}); err != nil {
 		return nil, errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t)
 	}
-	log.Printf("info: [%v]config loaded: %+v", key, t)
 
 	if err := Validate(&t); err != nil {
 		return nil, errors.Wrapf(err, "could not validate `%v` yaml key `%v`: %v", yamlConfigurationFilePath, key, err)
