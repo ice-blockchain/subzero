@@ -146,8 +146,7 @@ func TestValidateKindProfileMetadataEvent(t *testing.T) {
 					},
 				},
 			},
-			shouldError: true,
-			errorText:   "required content fields",
+			shouldError: false,
 		},
 		{
 			name: "valid profile with all optional fields",

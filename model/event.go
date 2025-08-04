@@ -309,10 +309,23 @@ func (e *Event) IsComment() bool {
 				return true
 			}
 		}
-	case CustomIONKindEditableTextNote, nostr.KindGenericRepost:
+	case CustomIONKindEditableTextNote:
 		for _, tag := range e.Tags {
 			if tag.Key() == "a" && len(tag) > 3 && tag[3] == TagMarkerRoot {
 				return true
+			}
+		}
+	case nostr.KindGenericRepost:
+		kTag := e.GetTag("k")
+		kTagInt, err := strconv.Atoi(kTag.Value())
+		if err == nil {
+			if kTagInt != CustomIONKindEditableTextNote {
+				return false
+			}
+			for _, tag := range e.Tags {
+				if tag.Key() == "a" && len(tag) > 3 && tag[3] == TagMarkerRoot {
+					return true
+				}
 			}
 		}
 	}
@@ -329,16 +342,40 @@ var communityPostKinds = map[int]struct{}{
 }
 
 func (e *Event) IsCommunityPost() bool {
-	if _, ok := communityPostKinds[e.Kind]; !ok {
+	if hTag := e.GetHTag(); hTag == "" || hTag == e.ID {
 		return false
 	}
-	hTag := e.GetHTag()
+	switch e.Kind {
+	case nostr.KindTextNote, nostr.KindArticle, nostr.KindRepost, CustomIONKindEditableTextNote:
+		return true
+	case nostr.KindGenericRepost:
+		if kTag := e.GetTag("k"); kTag != nil {
+			if kValue, err := strconv.Atoi(kTag.Value()); err == nil {
+				return kValue == CustomIONKindEditableTextNote || kValue == nostr.KindArticle
+			}
+		}
+	}
 
-	return hTag != "" && hTag != e.ID
+	return false
 }
 
 func (e *Event) IsStory() bool {
-	return (e.Kind == nostr.KindTextNote || e.Kind == CustomIONKindEditableTextNote) && e.GetTag("expiration") != nil
+	if e.GetTag("expiration") == nil {
+		return false
+	}
+
+	switch e.Kind {
+	case nostr.KindTextNote, nostr.KindRepost, CustomIONKindEditableTextNote:
+		return true
+	case nostr.KindGenericRepost:
+		if kTag := e.GetTag("k"); kTag != nil {
+			if kValue, err := strconv.Atoi(kTag.Value()); err == nil {
+				return kValue == CustomIONKindEditableTextNote
+			}
+		}
+	}
+
+	return false
 }
 
 func (e *Event) HasVideoIMeta() bool {

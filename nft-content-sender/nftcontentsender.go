@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -71,22 +72,11 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	if len(events) == 0 {
 		return nil
 	}
-	embeddedEvents, err := model.ParseEphemeralEmbeddingEvents(events...)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse ephemeral embedding events")
-	}
 	contentEvent := p.findContentEvent(events)
 	if contentEvent == nil {
 		return nil
 	}
-	masterPubkey := contentEvent.GetMasterPublicKey()
-	profileMetadataEvent, attestationEvent := p.extractRequiredEventsFromEmbedded(embeddedEvents, masterPubkey)
-	if p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
-		log.Printf("required events found in the embedded events for contentEvent:%s", contentEvent.ID)
-
-		return nil
-	}
-	profileMetadataEvent, attestationEvent, err = p.getRequiredEventsFromStorage(ctx, masterPubkey, contentEvent)
+	profileMetadataEvent, attestationEvent, err := p.getRequiredEventsFromStorage(ctx, contentEvent.GetMasterPublicKey(), contentEvent)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
@@ -101,10 +91,12 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 }
 
 func (p *sender) findContentEvent(events []*model.Event) *model.Event {
+	if idx := slices.IndexFunc(events, func(event *model.Event) bool {
+		return event.Kind == model.CustomIONKindEphemeralEmbedding
+	}); idx != -1 {
+		return nil
+	}
 	for _, event := range events {
-		if event.Kind == model.CustomIONKindEphemeralEmbedding {
-			continue
-		}
 		if _, ok := contentEventKinds[event.Kind]; ok {
 			if event.IsComment() || event.IsCommunityPost() || event.IsStory() {
 				continue
@@ -115,28 +107,6 @@ func (p *sender) findContentEvent(events []*model.Event) *model.Event {
 	}
 
 	return nil
-}
-
-func (p *sender) extractRequiredEventsFromEmbedded(embeddedEvents map[string][]*model.EphemeralEmbeddingEvent, masterPubkey string) (*model.Event, *model.Event) {
-	var profileMetadataEvent, attestationEvent *model.Event
-	for _, embeddedEventsList := range embeddedEvents {
-		for _, embeddedEvent := range embeddedEventsList {
-			if embeddedEvent.ContentEvent != nil {
-				switch embeddedEvent.ContentEvent.Kind {
-				case nostr.KindProfileMetadata:
-					if embeddedEvent.ContentEvent.GetMasterPublicKey() == masterPubkey {
-						profileMetadataEvent = embeddedEvent.ContentEvent
-					}
-				case model.CustomIONKindAttestation:
-					if embeddedEvent.ContentEvent.GetMasterPublicKey() == masterPubkey {
-						attestationEvent = embeddedEvent.ContentEvent
-					}
-				}
-			}
-		}
-	}
-
-	return profileMetadataEvent, attestationEvent
 }
 
 func (p *sender) getRequiredEventsFromStorage(
