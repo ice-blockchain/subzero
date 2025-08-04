@@ -200,10 +200,11 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 			masterPubkey = spl[0]
 			file = spl[1]
 		}
+		var fileHash string
 		if strings.Contains(file, ".") {
-			file = strings.TrimSuffix(file, filepath.Ext(file))
+			fileHash = strings.TrimSuffix(file, filepath.Ext(file))
 		}
-		filePath, err := s.storageClient.FilePath(masterPubkey, file)
+		filePath, err := s.storageClient.FilePath(masterPubkey, fileHash, filepath.Ext(file))
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				gCtx.Status(http.StatusNotFound)

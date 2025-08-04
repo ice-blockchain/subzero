@@ -265,11 +265,11 @@ func mustInit(ctx context.Context) *client {
 			Port: int32(globalConfig.ExternalADNLPort),
 		},
 	})
-	if err = gate.StartServer(fmt.Sprintf(":%v", globalConfig.ExternalADNLPort)); err != nil {
+	if err = gate.StartServer(fmt.Sprintf(":%v", globalConfig.ExternalADNLPort), ConcurrentBagsDownloading*threadsPerBagForDownloading); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start adnl gateway"))
 	}
 	dhtGate := adnl.NewGateway(privateKey)
-	if err = dhtGate.StartClient(); err != nil {
+	if err = dhtGate.StartClient(ConcurrentBagsDownloading); err != nil {
 		log.Panic(errors.Wrapf(err, "failed to start dht"))
 	}
 
