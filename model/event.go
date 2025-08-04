@@ -300,3 +300,100 @@ func CollectRelaysFromRelayEvent(ev *Event) []string {
 	}
 	return relays
 }
+
+func (e *Event) IsComment() bool {
+	switch e.Kind {
+	case nostr.KindTextNote, nostr.KindRepost:
+		for _, tag := range e.Tags {
+			if tag.Key() == "e" && len(tag) > 3 && tag[3] == TagMarkerRoot {
+				return true
+			}
+		}
+	case CustomIONKindEditableTextNote:
+		for _, tag := range e.Tags {
+			if tag.Key() == "a" && len(tag) > 3 && tag[3] == TagMarkerRoot {
+				return true
+			}
+		}
+	case nostr.KindGenericRepost:
+		kTag := e.GetTag("k")
+		if kTag == nil {
+			return false
+		}
+		kTagInt, err := strconv.Atoi(kTag.Value())
+		if err == nil {
+			if kTagInt != CustomIONKindEditableTextNote {
+				return false
+			}
+			for _, tag := range e.Tags {
+				if tag.Key() == "a" && len(tag) > 3 && tag[3] == TagMarkerRoot {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+var communityPostKinds = map[int]struct{}{
+	nostr.KindTextNote:            {},
+	CustomIONKindEditableTextNote: {},
+	nostr.KindArticle:             {},
+	nostr.KindRepost:              {},
+	nostr.KindGenericRepost:       {},
+}
+
+func (e *Event) IsCommunityPost() bool {
+	if hTag := e.GetHTag(); hTag == "" || hTag == e.ID {
+		return false
+	}
+	switch e.Kind {
+	case nostr.KindTextNote, nostr.KindArticle, nostr.KindRepost, CustomIONKindEditableTextNote:
+		return true
+	case nostr.KindGenericRepost:
+		if kTag := e.GetTag("k"); kTag != nil {
+			if kValue, err := strconv.Atoi(kTag.Value()); err == nil {
+				return kValue == CustomIONKindEditableTextNote || kValue == nostr.KindArticle
+			}
+		}
+	}
+
+	return false
+}
+
+func (e *Event) IsStory() bool {
+	if e.GetTag("expiration") == nil {
+		return false
+	}
+
+	switch e.Kind {
+	case nostr.KindTextNote, nostr.KindRepost, CustomIONKindEditableTextNote:
+		return true
+	case nostr.KindGenericRepost:
+		if kTag := e.GetTag("k"); kTag != nil {
+			if kValue, err := strconv.Atoi(kTag.Value()); err == nil {
+				return kValue == CustomIONKindEditableTextNote
+			}
+		}
+	}
+
+	return false
+}
+
+func (e *Event) HasVideoIMeta() bool {
+	imetaTags := e.GetTags("imeta")
+	for _, imetaTag := range imetaTags {
+		values, err := ParseIMeta(imetaTag)
+		if err != nil {
+			continue
+		}
+		if mimeType, exists := values["m"]; exists {
+			if strings.HasPrefix(mimeType, "video") {
+				return true
+			}
+		}
+	}
+
+	return false
+}

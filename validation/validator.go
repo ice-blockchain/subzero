@@ -15,16 +15,25 @@ type (
 	Option func(*eventValidator)
 
 	eventValidator struct {
-		Config    *Config
-		QueryFunc func(context.Context, ...model.Filter) query.EventIterator
+		Config                           *Config
+		QueryFunc                        func(context.Context, ...model.Filter) query.EventIterator
+		SkipKindProfileProofEventsVerify bool
 	}
 )
 
-func (v *eventValidator) Validate(ctx context.Context, events ...*model.Event) error {
+func (v *eventValidator) Validate(ctx context.Context, events model.Events, opts ...Option) error {
 	if events == nil {
 		return nil
 	}
-
+	if len(opts) > 0 {
+		for _, opt := range opts {
+			opt(v)
+		}
+	} else {
+		opts = []Option{
+			WithQueryFunc(query.GetStoredEvents),
+		}
+	}
 	for _, e := range events {
 		if !e.CheckID() {
 			return ErrEventInvalidID
@@ -52,6 +61,12 @@ func (v *eventValidator) Validate(ctx context.Context, events ...*model.Event) e
 func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator) Option {
 	return func(v *eventValidator) {
 		v.QueryFunc = f
+	}
+}
+
+func WithSkipProfileMetadataProofEventsVerify() Option {
+	return func(v *eventValidator) {
+		v.SkipKindProfileProofEventsVerify = true
 	}
 }
 

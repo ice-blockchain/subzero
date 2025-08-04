@@ -57,7 +57,7 @@ func TestValidatePollTag(t *testing.T) {
 		}
 		ev.CreatedAt = 1
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, Validate(t.Context(), &ev))
+		require.NoError(t, Validate(t.Context(), model.Events{&ev}))
 	})
 }
 
@@ -76,21 +76,21 @@ func TestValidatePollVote(t *testing.T) {
 			{model.CustomIONTagPoll, "type single", "ttl " + deadline, "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollSingle.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, v.Validate(t.Context(), &pollSingle))
+		require.NoError(t, v.Validate(t.Context(), model.Events{&pollSingle}))
 
 		pollMulti.Kind = nostr.KindTextNote
 		pollMulti.Tags = model.Tags{
 			{model.CustomIONTagPoll, "type multi", "ttl " + deadline, "title Test multi Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollMulti.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, v.Validate(t.Context(), &pollMulti))
+		require.NoError(t, v.Validate(t.Context(), model.Events{&pollMulti}))
 
 		pollExpired.Kind = nostr.KindTextNote
 		pollExpired.Tags = model.Tags{
 			{model.CustomIONTagPoll, "type single", "ttl 1", "title Test single Poll", "options [\"Option 1\", \"Option 2\"]"},
 		}
 		require.NoError(t, pollExpired.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.Error(t, v.Validate(t.Context(), &pollExpired)) // pollExpired is not valid.
+		require.Error(t, v.Validate(t.Context(), model.Events{&pollExpired})) // pollExpired is not valid.
 
 		require.NoError(t, db.AcceptEvents(t.Context(), &pollSingle, &pollMulti, &pollExpired))
 	})
@@ -225,7 +225,7 @@ func TestValidatePollVote(t *testing.T) {
 			tt.event.CreatedAt = nostr.Now()
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			err := v.Validate(t.Context(), tt.event)
+			err := v.Validate(t.Context(), model.Events{tt.event})
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

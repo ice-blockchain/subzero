@@ -4,6 +4,7 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"slices"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 type nostrRelay struct {
@@ -776,4 +778,43 @@ loop:
 	require.ElementsMatch(t, append(sent, &note), received)
 
 	helperMustCloseRelay(t, relay)
+}
+
+func helperCreateUsernameBadge(t *testing.T, username, userPrivKey string, relay *nostrRelay) (*model.Event, *model.Event, *model.Event) {
+	t.Helper()
+
+	userPubKey, err := model.GetPublicKey(userPrivKey)
+	require.NoError(t, err)
+
+	badgeIssuerPrivKey, _ := model.GenerateKeyPair()
+
+	badgeDefinition := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindBadgeDefinition,
+		Content:   `{"name":"Username","description":"Subzero username badge.","image":"https://static.subzero.exchange/assets/icons/username-badge.svg","thumb":"https://static.subzero.exchange/assets/icons/username-badge.svg"}`,
+		Tags: nostr.Tags{
+			{"d", fmt.Sprintf("username_proof_of_ownership~%s", username)},
+		},
+	}}
+	helperSignWithMinLeadingZeroBits(t, badgeDefinition, badgeIssuerPrivKey)
+
+	badgeAward := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindBadgeAward,
+		Tags: nostr.Tags{
+			{"a", badgeDefinition.Address()},
+			{"p", userPubKey},
+		},
+	}}
+	helperSignWithMinLeadingZeroBits(t, badgeAward, badgeIssuerPrivKey)
+
+	profileMetadata := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindProfileMetadata,
+		Content:   fmt.Sprintf(`{"name":"%s","display_name":"User %s","ion_content_nft_collections":{"%v":{"address":"0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290","created_by":"0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4"}}}`, username, username, validation.IONNFTCollectionName),
+	}}
+	helperSignWithMinLeadingZeroBits(t, profileMetadata, userPrivKey)
+	require.NoError(t, relay.PublishMany(t.Context(), &badgeDefinition.Event, &badgeAward.Event, &profileMetadata.Event))
+
+	return badgeDefinition, badgeAward, profileMetadata
 }

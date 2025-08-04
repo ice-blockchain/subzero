@@ -23,8 +23,8 @@ func MustInit(opts ...Option) {
 	})
 }
 
-func Validate(ctx context.Context, events ...*model.Event) error {
-	return global.Validator.Validate(ctx, events...)
+func Validate(ctx context.Context, events model.Events, opts ...Option) error {
+	return global.Validator.Validate(ctx, events, opts...)
 }
 
 func GetCommunityDefinition(ctx context.Context, hTag string) (*model.Event, error) {

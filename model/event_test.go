@@ -203,3 +203,109 @@ func TestSplitBatch(t *testing.T) {
 		require.Equal(t, []int{7}, result[2])
 	})
 }
+
+func TestHasVideoImeta(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		event    *Event
+		expected bool
+	}{
+		{
+			name: "should return true for video/mp4",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "url https://example.com/video.mp4", "m video/mp4"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "should return true for video/webm",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "url https://example.com/video.webm", "m video/webm"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "should return true for generic video type",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "url https://example.com/video", "m video"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "should return false for image/jpeg",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "url https://example.com/image.jpg", "m image/jpeg"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "should return false for no imeta tags",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "should return false for malformed imeta tag",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "invalid-format"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "should return false for imeta without mime type",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "url https://example.com/file", "size 1024"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "should return true for multiple imeta tags with video",
+			event: &Event{
+				Event: nostr.Event{
+					Tags: nostr.Tags{
+						{"imeta", "url https://example.com/image.jpg", "m image/jpeg"},
+						{"imeta", "url https://example.com/video.mp4", "m video/mp4"},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := tc.event.HasVideoIMeta()
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}

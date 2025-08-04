@@ -401,7 +401,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 }
 
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event) error {
-	if err := validation.Validate(ctx, events...); err != nil {
+	if err := validation.Validate(ctx, model.Events(events)); err != nil {
 		return errors.Wrapf(err, "events %v: invalid", events)
 	}
 

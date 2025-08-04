@@ -161,7 +161,7 @@ func validateCustomIONKindCommunityJoinEvent(ctx context.Context, e *model.Event
 		if err := json.Unmarshal([]byte(authorizationTag.Value()), &parsedAuthorizationEvent); err != nil {
 			return errors.Wrap(ErrActionForbidden, "wrong authorization event")
 		}
-		if err := Validate(ctx, &parsedAuthorizationEvent); err != nil {
+		if err := Validate(ctx, model.Events{&parsedAuthorizationEvent}); err != nil {
 			return err
 		}
 		if authorizationRole := model.GetCommunityRoleByPubkey(parsedAuthorizationEvent.GetMasterPublicKey(), communityDefinitionEvent); authorizationRole == model.RegularRole {
