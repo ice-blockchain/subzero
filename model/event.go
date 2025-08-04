@@ -317,6 +317,9 @@ func (e *Event) IsComment() bool {
 		}
 	case nostr.KindGenericRepost:
 		kTag := e.GetTag("k")
+		if kTag == nil {
+			return false
+		}
 		kTagInt, err := strconv.Atoi(kTag.Value())
 		if err == nil {
 			if kTagInt != CustomIONKindEditableTextNote {
