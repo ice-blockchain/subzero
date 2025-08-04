@@ -435,6 +435,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 				}
 				return
 			}
+			conn.Close()
 			if err := SleepContext(ctx, 10*time.Second); err != nil {
 				return
 			}
