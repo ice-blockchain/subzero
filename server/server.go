@@ -29,14 +29,15 @@ type (
 		BroadcastUserEvents(ctx context.Context, events ...*model.Event) error
 	}
 	Config struct {
-		TLSCert            string `yaml:"tls-cert"`
-		TLSKey             string `yaml:"tls-key"`
-		RelayURL           string `yaml:"relay-url"     validate:"required,url"`
-		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
-		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
-		Debug              bool   `yaml:"debug"`
-		PrivateKey         string `yaml:"private-key"`
-		ACME               struct {
+		TLSCert             string `yaml:"tls-cert"`
+		TLSKey              string `yaml:"tls-key"`
+		RelayURL            string `yaml:"relay-url"     validate:"required,url"`
+		Port                uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
+		IONLibertyDisabled  bool   `yaml:"ion-liberty-disabled"`
+		Debug               bool   `yaml:"debug"`
+		PrivateKey          string `yaml:"private-key"`
+		BroadcastPrivateKey string `yaml:"broadcast-private-key" validate:"required"`
+		ACME                struct {
 			APIKey string `yaml:"api-key"`
 		} `yaml:"acme"`
 	}
@@ -117,6 +118,11 @@ func New(ctx context.Context, opts ...Option) Server {
 		opt(&r)
 	}
 
+	if r.Config.BroadcastPrivateKey == "" && r.Config.PrivateKey != "" {
+		log.Printf("[WARN] BroadcastPrivateKey is empty, using PrivateKey for broadcasting")
+		r.Config.BroadcastPrivateKey = r.Config.PrivateKey
+	}
+
 	if r.Config == nil {
 		log.Panic("server: config cannot be nil")
 	} else if err := cfg.Validate(r.Config); err != nil {
@@ -125,13 +131,13 @@ func New(ctx context.Context, opts ...Option) Server {
 
 	r.Broadcaster = broadcaster.New(broadcaster.Config{
 		RelayURL:   r.Config.RelayURL,
-		PrivateKey: r.Config.PrivateKey,
+		PrivateKey: r.Config.BroadcastPrivateKey,
 	})
 	go func() {
 		<-ctx.Done()
 		r.Broadcaster.Close()
 	}()
-	public, err := model.GetPublicKey(r.Config.PrivateKey)
+	public, err := model.GetPublicKey(r.Config.BroadcastPrivateKey)
 	if err != nil {
 		log.Panicf("failed to get public key from private key: %v", err)
 	}
