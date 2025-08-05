@@ -96,9 +96,15 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
 		if existingBagForUser.Header == nil || (existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion) {
 			log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
+			downloading := existingBagForUser.IsDownloadAll()
 			existingBagForUser.Stop()
-			if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
-				return errors.Wrapf(err, "failed to replace bag for user %s", user)
+			c.activeDownloadsMx.Lock()
+			delete(c.activeDownloads, hex.EncodeToString(existingBagForUser.BagID))
+			c.activeDownloadsMx.Unlock()
+			if downloading {
+				if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
+					return errors.Wrapf(err, "failed to replace bag for user %s", user)
+				}
 			}
 			replaceBagPerUser = true
 		}
@@ -134,6 +140,9 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 	if tor == nil {
 		tor = storage.NewTorrent(c.rootStoragePath, c.progressStorage, c.conn)
 		tor.BagID = bag
+		if err = c.saveTorrent(tor, &user, bootstrap, false); err != nil {
+			return errors.Wrapf(err, "failed to store new torrent %v", bagID)
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -142,9 +151,6 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 			bootstrap: bootstrap,
 			user:      &user,
 		}:
-		}
-		if err = c.saveTorrent(tor, &user, bootstrap, false); err != nil {
-			return errors.Wrapf(err, "failed to store new torrent %v", bagID)
 		}
 	} else {
 		if !tor.IsCompleted() {
@@ -295,7 +301,10 @@ outerLoop:
 				log.Printf("[STORAGE] INFO: download loop stopped")
 				return
 			case q := <-c.downloadQueue:
-				tor := q.tor
+				tor := c.progressStorage.GetTorrent(q.tor.BagID)
+				if tor == nil {
+					continue
+				}
 				if downloading, _ := tor.IsActive(); downloading {
 					continue
 				}

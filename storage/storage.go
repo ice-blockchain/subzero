@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -37,7 +38,7 @@ type (
 		BuildUserPath(masterKey, contentType string) (string, string)
 		RootPath() string
 		DownloadUrl(masterKey, fileSha256 string) (string, error)
-		FilePath(masterKey, fileSha256 string) (string, error)
+		FilePath(masterKey, fileSha256, ext string) (string, error)
 		ListFiles(masterKey string, page, count uint32) (totalFiles uint32, files []*FileMetadata, err error)
 		Delete(ctx context.Context, userPubkey, masterKey string, fileSha256 string) error
 		DeleteUser(masterKey string) error
@@ -248,7 +249,7 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 	return bag.Header.FilesCount, res, nil
 }
 
-func (c *client) FilePath(masterKey, fileHash string) (string, error) {
+func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
 	bag, err := c.bagByUser(masterKey)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get bagID for the user %v", masterKey)
@@ -262,10 +263,14 @@ func (c *client) FilePath(masterKey, fileHash string) (string, error) {
 		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
 	}
 	file, err := c.detectFileFromMeta(bag, metadata, fileHash)
+	userPath, _ := c.BuildUserPath(masterKey, "")
 	if err != nil {
+		if errors.Is(err, storage.ErrFileNotExist) {
+			return filepath.Join(userPath, fmt.Sprintf("%v%v", fileHash, ext)), nil
+		}
 		return "", errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userPath, _ := c.BuildUserPath(masterKey, "")
+
 	return filepath.Join(userPath, file), nil
 }
 

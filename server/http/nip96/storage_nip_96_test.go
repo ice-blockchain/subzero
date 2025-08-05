@@ -25,6 +25,7 @@ import (
 
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/imroc/req/v3"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/nbd-wtf/go-nostr"
@@ -780,24 +781,38 @@ func BenchmarkUploadFiles(b *testing.B) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: &tls.Config{}}
+	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	meter := tachymeter.New(&tachymeter.Config{Size: b.N})
 	b.ResetTimer()
 	b.ReportAllocs()
 	fmt.Println(b.N)
 	b.SetParallelism(benchParallelism)
+	keys := []string{}
+	var keysMx sync.Mutex
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			sk := model.GeneratePrivateKey()
-			img, _ := testdata.Open(".testdata/image2.png")
+			var sk string
+			keysMx.Lock()
+			if rand.N(100) >= 70 && len(keys) > 0 {
+				sk = keys[rand.N(len(keys))]
+			}
+			if sk == "" {
+				sk = model.GeneratePrivateKey()
+				keys = append(keys, sk)
+			}
+			keysMx.Unlock()
+			dir, err := testdata.ReadDir(".testdata")
+			require.NoError(b, err)
+			fileName := dir[rand.N[int](len(dir))].Name()
+			img, err := testdata.Open(filepath.Join(".testdata", fileName))
+			require.NoError(b, err)
 			defer img.Close()
 			start := time.Now()
 			resp, err := nip96.Upload(ctx, nip96.UploadRequest{
-				Host:        "https://localhost:9996/files",
+				Host:        "https://localhost:9910/files",
 				File:        img,
-				Filename:    "profile.png",
-				Caption:     "ice profile pic",
-				ContentType: "image/png",
+				Filename:    uuid.NewString(),
+				Caption:     "ice",
 				SK:          sk,
 				SignPayload: true,
 			})
@@ -810,10 +825,10 @@ func BenchmarkUploadFiles(b *testing.B) {
 			}}
 			require.NoError(b, nip94Event.SignWithAlg(sk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-			relay := nostr.NewRelay(ctx, "wss://localhost:9998/", nostr.WithSignatureChecker(func(e *nostr.Event) bool {
+			relay := nostr.NewRelay(ctx, "wss://localhost:9920/", nostr.WithSignatureChecker(func(e *nostr.Event) bool {
 				return true
 			}))
-			require.NoError(b, relay.ConnectWithTLS(ctx, &tls.Config{}))
+			require.NoError(b, relay.ConnectWithTLS(ctx, &tls.Config{InsecureSkipVerify: true}))
 			require.NoError(b, relay.Publish(ctx, nip94Event.Event))
 			require.NoError(b, relay.Close())
 			b.Log(nip94Event)

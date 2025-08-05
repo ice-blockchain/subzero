@@ -5,7 +5,7 @@ go 1.24.5
 replace (
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250728142820-30f40fab82c5
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.13.1
-	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250708083130-c391c71f33e4
+	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250805055619-740054e7a2fd
 )
 
 require (
