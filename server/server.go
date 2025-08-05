@@ -118,14 +118,16 @@ func New(ctx context.Context, opts ...Option) Server {
 		opt(&r)
 	}
 
+	if r.Config == nil {
+		log.Panic("server: config cannot be nil")
+	}
+
 	if r.Config.BroadcastPrivateKey == "" && r.Config.PrivateKey != "" {
 		log.Printf("[WARN] BroadcastPrivateKey is empty, using PrivateKey for broadcasting")
 		r.Config.BroadcastPrivateKey = r.Config.PrivateKey
 	}
 
-	if r.Config == nil {
-		log.Panic("server: config cannot be nil")
-	} else if err := cfg.Validate(r.Config); err != nil {
+	if err := cfg.Validate(r.Config); err != nil {
 		log.Panicf("failed to validate config: %v", err)
 	}
 
