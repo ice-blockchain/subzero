@@ -129,6 +129,13 @@ func init() {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "query.AcceptEvent failed")
 		}
+
+		antsPool.Submit(func() {
+			if err := webserver.BroadcastUserEvents(context.WithoutCancel(ctx), events...); err != nil {
+				log.Printf("failed to webserver.BroadcastUserEvents(%s): %v", model.Events(events).String(), err)
+			}
+		})
+
 		if ch, err := dvm.AcceptJob(ctx, events[0]); err == nil && ch != nil {
 			antsPool.Submit(func() {
 				result := <-ch
@@ -139,6 +146,7 @@ func init() {
 		} else if err != nil {
 			log.Printf("DVM: failed to accept job for event %s: %v", events[0].ID, err)
 		}
+
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "command.AcceptEvent failed")
 		}
@@ -146,12 +154,6 @@ func init() {
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "storage.AcceptEvents failed")
 		}
-
-		antsPool.Submit(func() {
-			if err := webserver.BroadcastUserEvents(context.WithoutCancel(ctx), events...); err != nil {
-				log.Printf("failed to webserver.BroadcastUserEvents(%s): %v", model.Events(events).String(), err)
-			}
-		})
 
 		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
