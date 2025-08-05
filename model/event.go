@@ -237,6 +237,14 @@ func (events Events) String() string {
 	return sb.String()
 }
 
+func (events Events) IDs() []string {
+	ids := make([]string, 0, len(events))
+	for _, e := range events {
+		ids = append(ids, e.ID)
+	}
+	return ids
+}
+
 func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 	seen := make(map[H]struct{}, len(s))
 	j := 0

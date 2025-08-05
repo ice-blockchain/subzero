@@ -128,12 +128,14 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 		require.NoError(t, memdb.AcceptEvents(t.Context(), &relayEvent))
 
 		var newEvent model.Event
+		newEvent.ID = "alice_id1"
 		newEvent.PubKey = "alice"
 		newEvent.Kind = nostr.KindTextNote
 		newEvent.Content = "Hello, world!"
 		newEvent.Tags = model.Tags{}
 
 		var newEvent2 model.Event
+		newEvent2.ID = "alice_id2"
 		newEvent2.PubKey = "alice"
 		newEvent2.Kind = nostr.KindArticle
 		newEvent2.Content = "Hello"

@@ -223,6 +223,7 @@ func (b *Broadcaster) broadcastTo(ctx context.Context, target string, events mod
 		Events: events,
 	}
 	publishErr := relay.PublishEnvelope(ctx, &envelope)
+	log.Printf("[Broadcaster] Publishing %d events (%v) to %s: result: %v", len(events), events.IDs(), target, publishErr)
 	if publishErr != nil {
 		if stored, _ := b.relays.LoadAndDelete(target); stored != nil {
 			stored.Close() // Close the relay if it failed to publish.
@@ -240,7 +241,12 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 	targets, err := b.collectTargets(ctx, events)
 	if err != nil {
 		return err
+	} else if len(targets) == 0 {
+		log.Printf("[Broadcaster] No targets found for %d events: %v", len(events), model.Events(events).String())
+		return nil
 	}
+
+	log.Printf("[Broadcaster] Broadcasting %d events to %d users: %v -> %v", len(events), len(targets), model.Events(events).IDs(), targets)
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(targets))
