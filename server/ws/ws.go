@@ -58,20 +58,20 @@ func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
 }
 
-func NewHandler(relayURL, relayPublicKey string) Handler {
-	return newHandler(relayURL, relayPublicKey)
+func NewHandler(relayURL, broadcastPublicKey string) Handler {
+	return newHandler(relayURL, broadcastPublicKey)
 }
 
 func New(cfg *Config, routes internal.RegisterRoutes) Server {
 	return internal.NewWSServer(routes, cfg)
 }
 
-func newHandler(relayURL, relayPublicKey string) *handler {
+func newHandler(relayURL, broadcastPublicKey string) *handler {
 	return &handler{
-		Subscriptions:  xsync.NewMap[string, subscription](),
-		ConnAuth:       xsync.NewMap[Writer, connAuthData](),
-		RelayURL:       relayURL,
-		RelayPublicKey: relayPublicKey,
+		Subscriptions:      xsync.NewMap[string, subscription](),
+		ConnAuth:           xsync.NewMap[Writer, connAuthData](),
+		RelayURL:           relayURL,
+		BroadcastPublicKey: broadcastPublicKey,
 	}
 }
 
@@ -206,9 +206,9 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 	if data := model.GetUserDataFromContext(ctx); !data.Authenticated {
 		log.Printf("WARN: ignoring broadcast from unauthenticated relay %q", e.Relay)
 		return
-	} else if data.PublicKey != h.RelayPublicKey {
-		log.Printf("WARN: ignoring broadcast from relay %q due to public key mismatch: %s != %s",
-			e.Relay, data.PublicKey, h.RelayPublicKey)
+	} else if data.PublicKey != h.BroadcastPublicKey {
+		log.Printf("WARN: ignoring broadcast from relay %q due to public key mismatch: got %s, want %s",
+			e.Relay, data.PublicKey, h.BroadcastPublicKey)
 		return
 	}
 
@@ -217,7 +217,7 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		return
 	}
 
-	log.Printf("INFO: received %d broadcast events from %q", len(e.Events), e.Relay)
+	log.Printf("INFO: received %d broadcast events (%v) from %q", len(e.Events), model.Events(e.Events).IDs(), e.Relay)
 	go h.BroadcastNewEvents(ctx, e.Events...)
 }
 
