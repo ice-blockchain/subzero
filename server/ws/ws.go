@@ -217,8 +217,13 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		return
 	}
 
-	log.Printf("INFO: received %d broadcast events (%v) from %q", len(e.Events), model.Events(e.Events).IDs(), e.Relay)
-	go h.BroadcastNewEvents(ctx, e.Events...)
+	go func() {
+		start := time.Now()
+		h.BroadcastNewEvents(ctx, e.Events...)
+		end := time.Since(start)
+		log.Printf("INFO: broadcast %d events (%v) from %q [duration %s]", len(e.Events), model.Events(e.Events).IDs(), e.Relay, end)
+	}()
+
 }
 
 func (h *handler) writeResponse(ctx context.Context, respWriter adapters.WSWriter, envelope nostr.Envelope) error {

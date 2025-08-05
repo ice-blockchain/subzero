@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -223,7 +224,6 @@ func (b *Broadcaster) broadcastTo(ctx context.Context, target string, events mod
 		Events: events,
 	}
 	publishErr := relay.PublishEnvelope(ctx, &envelope)
-	log.Printf("[Broadcaster] Publishing %d events (%v) to %s: result: %v", len(events), events.IDs(), target, publishErr)
 	if publishErr != nil {
 		if stored, _ := b.relays.LoadAndDelete(target); stored != nil {
 			stored.Close() // Close the relay if it failed to publish.
@@ -238,6 +238,7 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 		return nil // Nothing to broadcast.
 	}
 
+	start := time.Now()
 	targets, err := b.collectTargets(ctx, events)
 	if err != nil {
 		return err
@@ -245,8 +246,15 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 		log.Printf("[Broadcaster] No targets found for %d events: %v", len(events), model.Events(events).String())
 		return nil
 	}
+	end := time.Since(start)
 
-	log.Printf("[Broadcaster] Broadcasting %d events to %d users: %v -> %v", len(events), len(targets), model.Events(events).IDs(), targets)
+	log.Printf("[Broadcaster] Broadcasting %d events to %d users: %v -> %v [collect duration %s]",
+		len(events),
+		len(targets),
+		model.Events(events).IDs(),
+		targets,
+		end,
+	)
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(targets))
@@ -258,7 +266,11 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				start := time.Now()
 				bxErr := b.broadcastTo(ctx, relay, events)
+				end := time.Since(start)
+				log.Printf("[Broadcaster] Publishing %d events (%v) to %s: result: %v [duration %s]",
+					len(events), model.Events(events).IDs(), relay, bxErr, end)
 				errCh <- errors.Wrapf(bxErr, "failed to broadcast %d event(s) of %s", len(events), pubkey)
 			}()
 		}
