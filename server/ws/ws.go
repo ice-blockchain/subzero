@@ -221,7 +221,7 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		start := time.Now()
 		h.BroadcastNewEvents(ctx, e.Events...)
 		end := time.Since(start)
-		log.Printf("INFO: broadcasted %d events (%v) from %q [duration %s]", len(e.Events), model.Events(e.Events).IDs(), e.Relay, end)
+		log.Printf("INFO: broadcast %d events (%v) from %q [duration %s]", len(e.Events), model.Events(e.Events).IDs(), e.Relay, end)
 	}()
 
 }
