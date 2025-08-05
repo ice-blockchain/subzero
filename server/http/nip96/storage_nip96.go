@@ -200,7 +200,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 			masterPubkey = spl[0]
 			file = spl[1]
 		}
-		var fileHash string
+		fileHash := file
 		if strings.Contains(file, ".") {
 			fileHash = strings.TrimSuffix(file, filepath.Ext(file))
 		}

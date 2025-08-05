@@ -96,11 +96,12 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
 		if existingBagForUser.Header == nil || (existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion) {
 			log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
+			downloading := existingBagForUser.IsDownloadAll()
 			existingBagForUser.Stop()
 			c.activeDownloadsMx.Lock()
 			delete(c.activeDownloads, hex.EncodeToString(existingBagForUser.BagID))
 			c.activeDownloadsMx.Unlock()
-			if existingBagForUser.IsDownloadAll() {
+			if downloading {
 				if err = c.progressStorage.RemoveTorrent(existingBagForUser, false); err != nil {
 					return errors.Wrapf(err, "failed to replace bag for user %s", user)
 				}
