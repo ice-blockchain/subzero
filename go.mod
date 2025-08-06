@@ -12,7 +12,7 @@ require (
 	firebase.google.com/go/v4 v4.18.0
 	github.com/alitto/pond/v2 v2.5.0
 	github.com/bzick/tokenizer v1.4.10
-	github.com/caddyserver/certmagic v0.23.0
+	github.com/caddyserver/certmagic v0.24.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/cockroachdb/errors v1.12.0
@@ -64,7 +64,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0
-	google.golang.org/api v0.244.0
+	google.golang.org/api v0.245.0
 )
 
 require (
