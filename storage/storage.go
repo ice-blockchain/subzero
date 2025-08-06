@@ -277,6 +277,9 @@ func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
 }
 
 func (c *client) Close() (err error) {
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 	c.server.Stop()
 	c.dht.Close()
 	if gClose := c.gateway.Close(); gClose != nil {
@@ -288,11 +291,7 @@ func (c *client) Close() (err error) {
 	if dErr := c.db.Close(); dErr != nil {
 		err = errors.Join(err, errors.Wrapf(dErr, "failed to close db"))
 	}
-	if c.closed.Load() {
-		return nil
-	}
 	close(c.downloadQueue)
-	c.closed.Store(true)
 	return err
 }
 
