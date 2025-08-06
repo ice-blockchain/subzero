@@ -138,18 +138,18 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 	if err != nil {
 		return tusd.HTTPResponse{}, errors.Wrap(err, "failed to open file while processing upload")
 	}
-	defer fileUploadTo.Close()
 	fileSize := uint64(0)
 	hashCalc := sha256.New()
 	written, err := io.Copy(hashCalc, fileUploadTo)
 	fileSize += uint64(written)
 	if fileSize != input.FileSize {
 		fileUploadTo.Close()
-		defer os.Remove(filePath)
+		os.Remove(filePath)
 		return tusd.HTTPResponse{
 			StatusCode: http.StatusPartialContent,
 		}, errors.Wrap(err, "actual file size mismatch, not all chucks reached?")
 	}
+	defer fileUploadTo.Close()
 	hash := hashCalc.Sum(nil)
 	input.Hash = hash
 	hashHex := hex.EncodeToString(input.Hash)

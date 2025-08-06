@@ -218,7 +218,6 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 func MustInit(ctx context.Context) {
 	globalClient.Once.Do(func() {
 		globalConfig = cfg.MustGet[config]()
-		fmt.Println(globalConfig.AbsoluteRootStoragePath)
 		globalClient.Client = mustInit(ctx)
 	})
 	go func() {
