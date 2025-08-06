@@ -12,10 +12,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-const (
-	IONNFTCollectionName = "ion"
-)
-
 func (ev *eventValidator) validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
 	richText := e.GetTag(model.CustomIONTagRichText)
 	if richText != nil && len(e.Content) > 0 {
@@ -89,11 +85,7 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 			"user %s cannot create root %d content without ion_content_nft_collections in profile",
 			e.GetMasterPublicKey(), e.Kind)
 	}
-	if _, exists := parsedContent.IONContentNFTCollections[IONNFTCollectionName]; !exists {
-		return errors.Wrapf(ErrActionForbidden,
-			"user %s cannot create root %d content: user doesn't have ion collection in profile",
-			e.GetMasterPublicKey(), e.Kind)
-	}
+	// TODO: add additional validation for root content NFT collections later if needed.
 
 	return nil
 }
