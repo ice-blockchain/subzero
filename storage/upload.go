@@ -102,10 +102,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 			return "", "", false, errors.Wrapf(err, "failed to get just created file from new bag")
 		}
 		fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
-		if newFile.ContentType == "" {
-			newFile.ContentType = gomime.TypeByExtension(filepath.Ext(fullFilePath))
-		}
-		go c.stats.ProcessFile(fullFilePath, newFile.ContentType, uplFile.Size)
+		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
 	}
 	b, err := json.Marshal(bs)
 	if err != nil {
