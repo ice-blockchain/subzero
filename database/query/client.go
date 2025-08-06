@@ -104,8 +104,6 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 		hasReadURLs:        len(readURLs) > 0,
 	}
 	options := []connector.Option{
-		connector.WithWriteURLs(writeURLs...),
-		connector.WithReadURLs(readURLs...),
 		connector.WithFieldNameMapper(func(in string) string {
 			n := strings.ToLower(in)
 			if mapped, ok := databaseEventFieldMap[n]; ok {
@@ -114,11 +112,16 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 			return n
 		}),
 	}
-	options = append(options, ext...)
-
+	if len(writeURLs) > 0 {
+		options = append(options, connector.WithWriteURLs(writeURLs...))
+	}
+	if len(readURLs) > 0 {
+		options = append(options, connector.WithReadURLs(readURLs...))
+	}
 	if runDDL {
 		options = append(options, connector.WithDDL(readDDL()))
 	}
+	options = append(options, ext...)
 
 	db, err := connector.New(ctx, options...)
 	if err != nil {
