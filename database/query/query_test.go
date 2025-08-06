@@ -1927,3 +1927,31 @@ func TestAcceptEventsWithOldVersion(t *testing.T) {
 	require.NotNil(t, replaceableUpdated.Previous)
 	require.Equal(t, replaceable.Event, replaceableUpdated.Previous.Event)
 }
+
+func TestSelfTest(t *testing.T) {
+	t.Parallel()
+
+	connString, _ := mainTestContainer.MustTempDB(t.Context())
+	connString2, _ := mainTestContainer.MustTempDB(t.Context())
+
+	dbClient := openDatabase(t.Context(), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
+		WithPrivateKey(model.GeneratePrivateKey()).
+		WithRelayURL("wss://localhost")
+	defer dbClient.Close()
+
+	dbClient2 := openDatabase(t.Context(), []string{connString2}, []string{connString2}, true, connector.WithLogging(false)).
+		WithPrivateKey(model.GeneratePrivateKey()).
+		WithRelayURL("wss://localhost")
+	defer dbClient2.Close()
+
+	t.Run("Same connection string", func(t *testing.T) {
+		err := doSelfTest(t.Context(), []string{connString}, []string{connString})
+		require.NoError(t, err, "Self-test should pass without errors")
+	})
+	t.Run("Different connection strings", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		defer cancel()
+		err := doSelfTest(ctx, []string{connString}, []string{connString, connString2})
+		require.Error(t, err, "Self-test should fail with different connection strings")
+	})
+}

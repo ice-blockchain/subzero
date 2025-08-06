@@ -26,12 +26,13 @@ var (
 
 type (
 	Config struct {
-		Username   string   `yaml:"username,omitempty"`
-		Password   string   `yaml:"password,omitempty"`
-		PrivateKey string   `yaml:"private-key"          validate:"required"`
-		RelayURL   string   `yaml:"relay-url"            validate:"required,url"`
-		WriteURLs  []string `yaml:"write-urls"`
-		ReadURLs   []string `yaml:"read-urls"`
+		Username        string   `yaml:"username,omitempty"`
+		Password        string   `yaml:"password,omitempty"`
+		PrivateKey      string   `yaml:"private-key"          validate:"required"`
+		RelayURL        string   `yaml:"relay-url"            validate:"required,url"`
+		WriteURLs       []string `yaml:"write-urls"`
+		ReadURLs        []string `yaml:"read-urls"`
+		DisableSelfTest bool     `yaml:"disable-self-test"`
 	}
 	Option func(*Config)
 )
@@ -119,6 +120,12 @@ func MustInit(ctx context.Context, opts ...Option) {
 		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, true).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
+
+		if !conf.DisableSelfTest {
+			if err := doSelfTest(ctx, conf.WriteURLs, conf.ReadURLs); err != nil {
+				log.Fatalf("database self-test failed: %v", err)
+			}
+		}
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go globalDB.Client.StartCollectingUsedDatabaseStorage(ctx)

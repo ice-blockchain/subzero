@@ -1216,3 +1216,106 @@ func (db *dbClient) queryDatabaseSize(ctx context.Context) (uint64, error) {
 	}
 	return *sizePtr, nil
 }
+
+func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) error {
+	const (
+		selfTestTimeout       = 5 * time.Minute
+		selfTestCheckInterval = 5 * time.Second
+	)
+	var ev model.Event
+
+	privKey, pubKey := model.GenerateKeyPair()
+	ev.Kind = nostr.KindGiftWrap
+	ev.CreatedAt = nostr.Now()
+	ev.Tags = model.Tags{
+		{"expiration", ev.CreatedAt.Add(time.Hour).String()},
+		{"k", "1"},
+		{"p", pubKey},
+	}
+	err := ev.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
+	if err != nil {
+		return errors.Wrap(err, "failed to sign test event")
+	}
+	log.Printf("[DB] self-test: geneated test event ID: %s", ev.ID)
+
+	log.Printf("[DB] self-test: opening %d write clients", len(writeURLs))
+	var clients []*dbClient
+	for _, writeURL := range writeURLs {
+		client := openDatabase(ctx, []string{writeURL}, []string{}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
+		err := client.AcceptEvents(ctx, &ev)
+		if err != nil {
+			log.Panicf("[DB] self-test: failed to write test event to %s: %v", writeURL, err)
+		}
+		clients = append(clients, client)
+	}
+
+	log.Printf("[DB] self-test: opening %d read clients", len(readURLs))
+	for _, readURL := range readURLs {
+		client := openDatabase(ctx, []string{}, []string{readURL}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
+		clients = append(clients, client)
+	}
+
+	defer func() {
+		for _, client := range clients {
+			if err := client.Close(); err != nil {
+				log.Printf("[DB] self-test: failed to close client: %v", err)
+			}
+		}
+	}()
+
+	ch := make(chan struct{}, 1)
+	ch <- struct{}{}
+
+	timer := time.NewTimer(selfTestTimeout)
+	defer timer.Stop()
+
+	ticker := time.NewTicker(selfTestCheckInterval)
+	defer ticker.Stop()
+
+	go func() {
+		for ctx.Err() == nil {
+			select {
+			case <-ticker.C:
+				ch <- struct{}{}
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}
+	}()
+
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-timer.C:
+			return errors.Errorf("self-test timeout reached after %s", selfTestTimeout)
+
+		case <-ch:
+			var events []*model.Event
+			selectCtx := model.SetUserDataInContext(ctx, model.UserDataContext{
+				PublicKey:       pubKey,
+				MasterPublicKey: pubKey,
+				Authenticated:   true,
+			})
+		main:
+			for _, client := range clients {
+				it := client.SelectEvents(selectCtx, model.Filter{IDs: []string{ev.ID}})
+				for ev, err := range it {
+					if err != nil {
+						log.Printf("[DB] self-test: failed to read test event: %v", err)
+						continue main
+					}
+					events = append(events, ev)
+				}
+			}
+			if len(events) == len(clients) {
+				log.Printf("[DB] self-test: successfully read test event from all clients")
+				return nil
+			}
+			log.Printf("[DB] self-test: expected %d events, got %d", len(clients), len(events))
+		}
+	}
+	return ctx.Err()
+}
