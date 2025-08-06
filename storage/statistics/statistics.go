@@ -116,6 +116,9 @@ func (s *statistics) ProcessFile(filePath, contentType string, size uint64) {
 		if err != nil {
 			log.Printf("Error extracting metadata for file stats: %v\n", err)
 		}
+		if md == nil {
+			return
+		}
 		s.registerMetadataStats(md)
 	}()
 }
