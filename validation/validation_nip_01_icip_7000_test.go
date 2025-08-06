@@ -47,7 +47,7 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 				"name":         "testuser",
 				"display_name": "Test User",
 				"ion_content_nft_collections": map[string]interface{}{
-					IONNFTCollectionName: map[string]interface{}{
+					"ion": map[string]interface{}{
 						"address":    "0:6753FD4A022F03A17C17D51B170084B9B3B3F45748761F252A113C6FC9752F85",
 						"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
 					},
@@ -59,9 +59,8 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 			name:  "article without ion NFT collection should fail",
 			event: helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content"),
 			profileMetadata: helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
-				"name":                        "testuser",
-				"display_name":                "Test User",
-				"ion_content_nft_collections": helperCreateTestNFTCollectionsWithoutIon(t),
+				"name":         "testuser",
+				"display_name": "Test User",
 			}),
 			shouldError: true,
 		},
@@ -207,21 +206,7 @@ func helperCreateProfileMetadataWithNFTCollections(t *testing.T, privKey, master
 func helperCreateTestNFTCollectionsWithIon(t *testing.T) map[string]interface{} {
 	t.Helper()
 	return map[string]interface{}{
-		IONNFTCollectionName: map[string]interface{}{
-			"address":    "0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290",
-			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
-		},
-		"Another Collection": map[string]interface{}{
-			"address":    "0:6753FD4A022F03A17C17D51B170084B9B3B3F45748761F252A113C6FC9752F85",
-			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
-		},
-	}
-}
-
-func helperCreateTestNFTCollectionsWithoutIon(t *testing.T) map[string]interface{} {
-	t.Helper()
-	return map[string]interface{}{
-		"Some Other Collection": map[string]interface{}{
+		"ion": map[string]interface{}{
 			"address":    "0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290",
 			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
 		},

@@ -34,7 +34,7 @@ func TestPostWithRichTextOnly(t *testing.T) {
 				Name:        "testuser",
 				DisplayName: "Test User",
 				IONContentNFTCollections: map[model.IONContentNFTCollectionName]model.IONContentNFTCollectionMetadata{
-					IONNFTCollectionName: {
+					"ion": {
 						Address:   "0:3091ABF860DBB033A1EBCDD12AB689C6FF3F9752C151563FEFFF8B508A888290",
 						CreatedBy: "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
 					},
