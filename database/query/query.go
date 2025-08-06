@@ -1236,7 +1236,7 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 	if err != nil {
 		return errors.Wrap(err, "failed to sign test event")
 	}
-	log.Printf("[DB] self-test: geneated test event ID: %s", ev.ID)
+	log.Printf("[DB] self-test: generated test event ID: %s", ev.ID)
 
 	log.Printf("[DB] self-test: opening %d write clients", len(writeURLs))
 	var clients []*dbClient
@@ -1244,7 +1244,7 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 		client := openDatabase(ctx, []string{writeURL}, []string{}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
 		err := client.AcceptEvents(ctx, &ev)
 		if err != nil {
-			log.Panicf("[DB] self-test: failed to write test event to %s: %v", writeURL, err)
+			return errors.Wrapf(err, "failed to write test event to %s", writeURL)
 		}
 		clients = append(clients, client)
 	}
@@ -1265,6 +1265,9 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	timer := time.NewTimer(selfTestTimeout)
 	defer timer.Stop()
