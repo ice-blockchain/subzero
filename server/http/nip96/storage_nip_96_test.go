@@ -43,7 +43,6 @@ import (
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/storage"
-	storagefixture "github.com/ice-blockchain/subzero/storage/fixture"
 )
 
 const (
@@ -67,6 +66,9 @@ func TestMain(m *testing.M) {
 	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	req.DefaultClient().TLSClientConfig = fixture.ClientTLS()
 	code := m.Run()
+	os.RemoveAll("./../../.test-uploads")
+	os.RemoveAll("./../../.test-uploads2")
+	os.RemoveAll("./../../.test-uploads3")
 	serverCancel()
 	release()
 	os.Exit(code)
@@ -90,6 +92,12 @@ func initServer(serverCtx context.Context, port uint16) {
 		"GET /files/:file":    uploader.Download(),
 		"HEAD /files/:file":   uploader.CrossRelayDownload(),
 		"DELETE /files/:file": uploader.Delete(),
+
+		"POST /xfiles/*tus-uploader":    gin.WrapH(http.StripPrefix("/xfiles/", uploader.LargeFiles())),
+		"PATCH /xfiles/*tus-uploader":   gin.WrapH(http.StripPrefix("/xfiles/", uploader.LargeFiles())),
+		"HEAD /xfiles/*tus-uploader":    gin.WrapH(http.StripPrefix("/xfiles/", uploader.LargeFiles())),
+		"GET /xfiles/*tus-uploader":     gin.WrapH(http.StripPrefix("/xfiles/", uploader.LargeFiles())),
+		"OPTIONS /xfiles/*tus-uploader": gin.WrapH(http.StripPrefix("/xfiles/", uploader.LargeFiles())),
 	})
 	time.Sleep(100 * time.Millisecond)
 }
@@ -98,38 +106,14 @@ func initServer(serverCtx context.Context, port uint16) {
 var testdata embed.FS
 
 func TestNIP96(t *testing.T) {
-	t.Parallel()
 	now := time.Now().Unix()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	defer func() {
-		require.NoError(t, storage.Client().Close())
-		require.NoError(t, os.RemoveAll("./../../.test-uploads"))
-		require.NoError(t, os.RemoveAll("./../../.test-uploads2"))
-	}()
 	master, masterPubKey := model.GenerateKeyPair()
 	user1, user1PubKey := model.GenerateKeyPair()
 	user2, user2PubKey := model.GenerateKeyPair()
 	t.Run("create on-behalf attestations", func(t *testing.T) {
-		var ev model.Event
-		ev.Kind = model.CustomIONKindAttestation
-		ev.CreatedAt = 1
-		ev.Tags = model.Tags{
-			{model.TagAttestationName, user1PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-10))},
-			{model.TagAttestationName, user2PubKey, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-5))},
-		}
-		require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, &ev))
-		relaysList := &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindRelayListMetadata,
-			Tags: model.Tags{
-				{model.CustomIONTagOnBehalfOf, masterPubKey},
-				{"r", "wss://localhost:9996"},
-			},
-		}}
-		require.NoError(t, relaysList.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, query.AcceptEvents(ctx, relaysList))
+		helperCreateAttestations(t, ctx, now, master, masterPubKey, user1PubKey, user2PubKey)
 	})
 	events := make([]*model.Event, 0)
 	const filesCount = 7
@@ -201,7 +185,8 @@ func TestNIP96(t *testing.T) {
 	const newStorageRoot = "./../../.test-uploads2"
 	t.Run("nip-94 event is broadcasted, it causes download to other node", func(t *testing.T) {
 		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
-		cfg.MustInit("./../../../server/http/nip96/.testdata/storage-2nd-instance.yaml")
+		cfg.Reset("./../../../server/http/nip96/.testdata/storage-2nd-instance.yaml")
+		storage.Reset()
 		initStorage(ctx)
 		var wg sync.WaitGroup
 		wg.Add(len(events))
@@ -215,10 +200,10 @@ func TestNIP96(t *testing.T) {
 		}
 		wg.Wait()
 
-		downloadedProfileHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
+		downloadedProfileHash, err := storage.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
 		require.NoError(t, err)
 		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
-		downloadedLogoHash, err := storagefixture.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
+		downloadedLogoHash, err := storage.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
 		require.NoError(t, err)
 		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
 	})
@@ -762,6 +747,23 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 				Content: "master's file",
 			},
 		},
+		"video with cute cats": {
+			Status:        "success",
+			Message:       "Upload successful.",
+			ProcessingURL: "",
+			Nip94Event: struct {
+				Tags    nostr.Tags `json:"tags"`
+				Content string     `json:"content"`
+			}{
+				Tags: nostr.Tags{
+					nostr.Tag{"summary", "20492a4d0d84f8beb1767f6616229f85d44c2827b64bdbfb260ee12fa1109e0e.file"},
+					nostr.Tag{"ox", "20492a4d0d84f8beb1767f6616229f85d44c2827b64bdbfb260ee12fa1109e0e"},
+					nostr.Tag{"m", "application/octet-stream"},
+					nostr.Tag{"size", "104857600"},
+				},
+				Content: "master's file",
+			},
+		},
 	}
 	return expectedResponses[caption]
 }
@@ -851,4 +853,27 @@ func helperBenchReportMetrics(
 	t.ReportMetric(float64(metric.Time.StdDev.Milliseconds()), "stddev-ms/op")
 	t.ReportMetric(float64(metric.Time.P50.Milliseconds()), "p50-ms/op")
 	t.ReportMetric(float64(metric.Time.P95.Milliseconds()), "p95-ms/op")
+}
+
+func helperCreateAttestations(t *testing.T, ctx context.Context, now int64, master, masterPubKey string, usrPubkey ...string) {
+	t.Helper()
+	var ev model.Event
+	ev.Kind = model.CustomIONKindAttestation
+	ev.CreatedAt = 1
+	ev.Tags = model.Tags{}
+	for _, usr := range usrPubkey {
+		ev.Tags = append(ev.Tags, model.Tag{model.TagAttestationName, usr, "", model.CustomIONAttestationKindActive + ":" + strconv.Itoa(int(now-10))})
+	}
+	require.NoError(t, ev.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(ctx, &ev))
+	relaysList := &model.Event{Event: nostr.Event{
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindRelayListMetadata,
+		Tags: model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPubKey},
+			{"r", "wss://localhost:9996"},
+		},
+	}}
+	require.NoError(t, relaysList.SignWithAlg(master, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(ctx, relaysList))
 }

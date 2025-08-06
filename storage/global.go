@@ -36,7 +36,10 @@ import (
 )
 
 var (
-	globalClient *client
+	globalClient struct {
+		Client *client
+		Once   sync.Once
+	}
 	globalConfig *config
 )
 
@@ -65,11 +68,11 @@ func init() {
 }
 
 func Client() StorageClient {
-	return globalClient
+	return globalClient.Client
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) (err error) {
-	return acceptEvents(ctx, globalClient.StartDownloadNewBag, events...)
+	return acceptEvents(ctx, globalClient.Client.StartDownloadNewBag, events...)
 }
 
 func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Event) (err error) {
@@ -80,7 +83,7 @@ func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Eve
 
 		case nostr.KindDeletion:
 			if (len(event.Tags) == 0 || (len(event.Tags) == 1 && event.GetTag("b").Value() != "")) && event.GetMasterPublicKey() != "" {
-				err = errors.Join(err, errors.Wrapf(globalClient.DeleteUser(event.GetMasterPublicKey()), "failed to accept profile deletion %v", event))
+				err = errors.Join(err, errors.Wrapf(globalClient.Client.DeleteUser(event.GetMasterPublicKey()), "failed to accept profile deletion %v", event))
 			} else if len(event.Tags) > 1 {
 				if kTag := event.Tags.GetFirst([]string{"k"}); kTag != nil && len(*kTag) > 1 {
 					err = errors.Join(err, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
@@ -104,7 +107,7 @@ func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Eve
 func ReplicateFileOnPeers(ctx context.Context, events ...*model.Event) (err error) {
 	for _, event := range events {
 		if event.Kind == nostr.KindFileMetadata {
-			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event, globalClient.triggerDownloadOnAllPeers(events...)), "failed to accept new bag %v", event))
+			err = errors.Join(err, errors.Wrapf(acceptNewBag(ctx, event, globalClient.Client.triggerDownloadOnAllPeers(events...)), "failed to accept new bag %v", event))
 		}
 	}
 	return err
@@ -189,22 +192,22 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 	if count >= 2 {
 		return nil // Used by other posts
 	}
-	bag, err := globalClient.bagByUser(masterPubkey)
+	bag, err := globalClient.Client.bagByUser(masterPubkey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)
 	}
 	if bag == nil {
 		return errors.Errorf("bagID for user %v not found", masterPubkey)
 	}
-	file, err := globalClient.detectFile(bag, fileHash)
+	file, err := globalClient.Client.detectFile(bag, fileHash)
 	if err != nil {
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userRoot, _ := globalClient.BuildUserPath(masterPubkey, "")
+	userRoot, _ := globalClient.Client.BuildUserPath(masterPubkey, "")
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
-	bagID, _, _, err := globalClient.StartUpload(ctx, time.Now(), pubkey, masterPubkey, file, fileHash, nil)
+	bagID, _, _, err := globalClient.Client.StartUpload(ctx, time.Now(), pubkey, masterPubkey, file, fileHash, nil)
 	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}
@@ -213,8 +216,19 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 }
 
 func MustInit(ctx context.Context) {
-	globalConfig = cfg.MustGet[config]()
-	globalClient = mustInit(ctx)
+	globalClient.Once.Do(func() {
+		globalConfig = cfg.MustGet[config]()
+		globalClient.Client = mustInit(ctx)
+	})
+	go func() {
+		<-ctx.Done()
+		if globalClient.Client == nil {
+			return
+		}
+		globalClient.Client.Close()
+		globalClient.Client = nil
+		globalClient.Once = sync.Once{}
+	}()
 }
 
 func mustInit(ctx context.Context) *client {

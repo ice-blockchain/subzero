@@ -171,6 +171,7 @@ func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event)
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 	nip11Fetcher := nip11.NewFetcher(ctx)
 	uploader := nip96.NewUploadHandler(ctx, r.Config.IONLibertyDisabled, nip11Fetcher)
+	tus := uploader.LargeFiles()
 	androidConfigs, iosConfigs, webConfigs := pushnotifications.GetFCMConfigs()
 	nip11Handler := nip11.NewNIP11Handler(ctx, &nip11.Config{
 		MinLeadingZeroBits: 1111,
@@ -188,5 +189,6 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/.well-known/nostr/nip96.json", uploader.NIP96Info()).
 		GET("/health-check", func(c *gin.Context) {
 			c.JSON(http.StatusOK, map[string]any{})
-		})
+		}).
+		Any("/xfiles/* tus-handler", gin.WrapH(http.StripPrefix("/xfiles/", tus)))
 }

@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 )
@@ -67,4 +68,9 @@ func relativeFiles() []string {
 	}
 
 	return files
+}
+
+func Reset(newCfg string) {
+	yamlConfigurationFilePathInitializer = &sync.Once{}
+	MustInit(newCfg)
 }

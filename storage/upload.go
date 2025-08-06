@@ -102,7 +102,10 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 			return "", "", false, errors.Wrapf(err, "failed to get just created file from new bag")
 		}
 		fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
-		go c.stats.ProcessFile(fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
+		if newFile.ContentType == "" {
+			newFile.ContentType = gomime.TypeByExtension(filepath.Ext(fullFilePath))
+		}
+		go c.stats.ProcessFile(fullFilePath, newFile.ContentType, uplFile.Size)
 	}
 	b, err := json.Marshal(bs)
 	if err != nil {
@@ -258,98 +261,106 @@ func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string, delet
 	return nil
 }
 func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey string, r *http.Request, maxSize uint64) (string, *FileMetaInput, []byte, error) {
-	reader, err := r.MultipartReader()
-	if err != nil {
-		return "", nil, nil, err
-	}
-	hashCalc := sha256.New()
+	storagePath, _ := c.BuildUserPath(masterPubKey, "")
 	input := &FileMetaInput{
 		CreatedAt: uint64(now.UnixNano()),
 	}
-	parseStart := time.Now()
-	var fileName, contentType string
-	var fileSize uint64
-	storagePath, _ := c.BuildUserPath(masterPubKey, "")
-	for {
-		part, err := reader.NextPart()
+	var newName string
+	var hash []byte
+	if r != nil {
+		reader, err := r.MultipartReader()
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return "", nil, nil, errors.Wrap(err, "failed to read multipart")
+			return "", nil, nil, err
 		}
-		switch part.FormName() {
-		case "file":
-			fStart := time.Now()
-			if part.FileName() == "" || !filepath.IsLocal(part.FileName()) {
-				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid filename %q, must be provided", part.FileName())
-			}
-			fileName = part.FileName()
-			if contentType == "" {
-				contentType = gomime.TypeByExtension(filepath.Ext(fileName))
-			}
-			uploadingFilePath := filepath.Join(storagePath, fileName)
-			if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
-				log.Printf("ERROR: failed to open temp file while processing upload %v", err)
-				return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
-			}
-			userDir, err := os.OpenRoot(storagePath)
+		hashCalc := sha256.New()
+		parseStart := time.Now()
+		var fileName, contentType string
+		var fileSize uint64
+		for ctx.Err() == nil {
+			part, err := reader.NextPart()
 			if err != nil {
-				return "", nil, nil, errors.Wrap(err, "failed to open user folder while processing upload")
+				if err == io.EOF {
+					break
+				}
+				return "", nil, nil, errors.Wrap(err, "failed to read multipart")
 			}
-			fileUploadTo, err := userDir.Create(fileName)
-			if err != nil {
-				return "", nil, nil, errors.Wrap(err, "failed to open temp file while processing upload")
-			}
-			defer func() {
-				fileUploadTo.Sync()
-				fileUploadTo.Close()
-			}()
-			written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
-			fileSize += uint64(written)
-			if fileSize > maxSize {
-				part.Close()
-				defer os.Remove(uploadingFilePath)
-				return "", &FileMetaInput{FileSize: fileSize}, nil, ErrFileTooBig
-			}
-			log.Printf("[STORAGE DURATION %v %v] FILE PROCESSING %v, whole %v, bytes %v", masterPubKey, fileName, time.Since(fStart), time.Since(now), written)
-
-		case "media_type":
-			var mediaType string
-			mediaType, err = readString(part, "media_type")
-			if mediaType != "" && mediaType != mediaTypeAvatar && mediaType != mediaTypeBanner {
-				return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid media type %q, must be provided", mediaType)
-			}
-		case "content_type":
-			contentType, err = readString(part, "content_type")
-			if contentType == "" {
-				if fileName != "" {
+			switch part.FormName() {
+			case "file":
+				fStart := time.Now()
+				if part.FileName() == "" || !filepath.IsLocal(part.FileName()) {
+					return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid filename %q, must be provided", part.FileName())
+				}
+				fileName = part.FileName()
+				if contentType == "" {
 					contentType = gomime.TypeByExtension(filepath.Ext(fileName))
 				}
+				uploadingFilePath := filepath.Join(storagePath, fileName)
+				if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o744); err != nil {
+					log.Printf("ERROR: failed to open temp file while processing upload %v", err)
+					return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
+				}
+				userDir, err := os.OpenRoot(storagePath)
+				if err != nil {
+					return "", nil, nil, errors.Wrap(err, "failed to open user folder while processing upload")
+				}
+				fileUploadTo, err := userDir.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
+				if err != nil {
+					return "", nil, nil, errors.Wrap(err, "failed to open temp file while processing upload")
+				}
+				defer func() {
+					fileUploadTo.Sync()
+					fileUploadTo.Close()
+				}()
+				written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
+				fileSize += uint64(written)
+				if fileSize > maxSize {
+					part.Close()
+					defer os.Remove(uploadingFilePath)
+					return "", &FileMetaInput{FileSize: fileSize}, nil, ErrFileTooBig
+				}
+				log.Printf("[STORAGE DURATION %v %v] FILE PROCESSING %v, whole %v, bytes %v", masterPubKey, fileName, time.Since(fStart), time.Since(now), written)
+
+			case "media_type":
+				var mediaType string
+				mediaType, err = readString(part, "media_type")
+				if mediaType != "" && mediaType != MediaTypeAvatar && mediaType != MediaTypeBanner {
+					return "", nil, nil, errors.Wrapf(ErrValidationFailed, "invalid media type %q, must be provided", mediaType)
+				}
+			case "content_type":
+				contentType, err = readString(part, "content_type")
+				if contentType == "" {
+					if fileName != "" {
+						contentType = gomime.TypeByExtension(filepath.Ext(fileName))
+					}
+				}
+			case "caption":
+				input.Caption, err = readString(part, "caption")
+			case "alt":
+				input.Alt, err = readString(part, "alt")
 			}
-		case "caption":
-			input.Caption, err = readString(part, "caption")
-		case "alt":
-			input.Alt, err = readString(part, "alt")
+			if err != nil {
+				return "", nil, nil, errors.Wrap(err, "failed read multipart")
+			}
+			part.Close()
 		}
-		if err != nil {
-			return "", nil, nil, errors.Wrap(err, "failed read multipart")
+		log.Printf("[STORAGE DURATION %v %v] PARSE STREAMING %v, whole %v", masterPubKey, fileName, time.Since(parseStart), time.Since(now))
+		hStart := time.Now()
+		hash = hashCalc.Sum(nil)
+		input.Hash = hash
+		input.ContentType = contentType
+		input.FileSize = fileSize
+		log.Printf("[STORAGE DURATION %v %v] HASH %v, whole %v", masterPubKey, fileName, time.Since(hStart), time.Since(now))
+		hexHash := hex.EncodeToString(hash)
+		newName = hexHash + filepath.Ext(fileName)
+		if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); err != nil {
+			log.Printf("[ERROR] Failed to rename file %v to hash %v: %v", fileName, newName, err)
+			return "", nil, nil, errors.Wrapf(err, "failed to rename file %v %v", fileName, newName)
 		}
-		part.Close()
 	}
-	log.Printf("[STORAGE DURATION %v %v] PARSE STREAMING %v, whole %v", masterPubKey, fileName, time.Since(parseStart), time.Since(now))
-	hStart := time.Now()
-	hash := hashCalc.Sum(nil)
-	input.Hash = hash
-	input.ContentType = contentType
-	input.FileSize = fileSize
-	log.Printf("[STORAGE DURATION %v %v] HASH %v, whole %v", masterPubKey, fileName, time.Since(hStart), time.Since(now))
-	rTime := time.Now()
-	hexHash := hex.EncodeToString(hash)
-	newName := hexHash + filepath.Ext(fileName)
-	if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); err != nil {
-		log.Printf("[ERROR] Failed to rename file %v to hash %v: %v", fileName, newName, err)
-		return "", nil, nil, errors.Wrapf(err, "failed to rename file %v %v", fileName, newName)
+	if newName == "" {
+		if val := ctx.Value("fileName"); val != nil {
+			newName = val.(string)
+		}
 	}
 	c.newFilesMx.Lock()
 	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {
@@ -357,7 +368,6 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 	}
 	c.newFiles[masterPubKey][newName] = input
 	c.newFilesMx.Unlock()
-	log.Printf("[STORAGE DURATION %v %v] REN %v, whole %v", masterPubKey, fileName, time.Since(rTime), time.Since(now))
 	input.Filename = newName
 	return filepath.Join(storagePath, newName), input, hash, nil
 }

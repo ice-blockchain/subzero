@@ -3,6 +3,8 @@ module github.com/ice-blockchain/subzero
 go 1.24.5
 
 replace (
+	// Waiting to be merged, used in tests https://github.com/bdragon300/tusgo/pull/3
+	github.com/bdragon300/tusgo => github.com/ice-cronus/tus-go-client v0.0.0-20250806075336-87bcf10e4f13
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250728142820-30f40fab82c5
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.13.1
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250805055619-740054e7a2fd
@@ -11,6 +13,7 @@ replace (
 require (
 	firebase.google.com/go/v4 v4.18.0
 	github.com/alitto/pond/v2 v2.5.0
+	github.com/bdragon300/tusgo v0.1.2
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.24.0
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -58,6 +61,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 	github.com/tidwall/gjson v1.18.0
+	github.com/tus/tusd/v2 v2.8.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.14.0
 	github.com/xssnick/tonutils-storage v1.1.5
@@ -198,6 +202,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a // indirect
+	github.com/onsi/ginkgo/v2 v2.23.3 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -234,6 +239,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
+	github.com/tus/lockfile v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package fixture
+//go:build test
+
+package storage
 
 import (
 	"context"
@@ -8,6 +10,7 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -89,4 +92,8 @@ loop:
 		}
 	}
 	return nil
+}
+
+func Reset() {
+	globalClient.Once = sync.Once{}
 }

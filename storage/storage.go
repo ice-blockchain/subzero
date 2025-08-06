@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -82,6 +83,7 @@ type (
 		activeDownloadsMx *sync.RWMutex
 		rootStoragePath   string
 		debug             bool
+		closed            atomic.Bool
 	}
 	queueItem struct {
 		tor       *storage.Torrent
@@ -98,8 +100,8 @@ var (
 	ErrValidationFailed = errors.New("validation failed")
 )
 
-const mediaTypeAvatar = "avatar"
-const mediaTypeBanner = "banner"
+const MediaTypeAvatar = "avatar"
+const MediaTypeBanner = "banner"
 
 func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 	var desc headerData
@@ -275,6 +277,9 @@ func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
 }
 
 func (c *client) Close() (err error) {
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 	c.server.Stop()
 	c.dht.Close()
 	if gClose := c.gateway.Close(); gClose != nil {

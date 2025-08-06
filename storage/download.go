@@ -301,6 +301,9 @@ outerLoop:
 				log.Printf("[STORAGE] INFO: download loop stopped")
 				return
 			case q := <-c.downloadQueue:
+				if q.tor == nil {
+					continue
+				}
 				tor := c.progressStorage.GetTorrent(q.tor.BagID)
 				if tor == nil {
 					continue
@@ -365,7 +368,7 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 		log.Printf("INFO: triggering download on %#v relays for user %v file %v", relays, userMasterKey, fileHash)
 		for _, relay := range relays {
 			eg.Go(func() error {
-				if err := globalClient.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
+				if err := globalClient.Client.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
 					log.Printf("WARN: failed to trigger download on relay %v for user %v: %v", relay, userMasterKey, err)
 					return err
 				}

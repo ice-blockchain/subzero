@@ -52,7 +52,7 @@ func TestGetAuthHeader(t *testing.T) {
 			}
 			c.Request.Header.Set("Authorization", tt.authHeader)
 
-			result := GetAuthHeader(c)
+			result := DetectAuthHeader(c.GetHeader("Authorization"))
 			require.Equal(t, tt.expectedResult, result)
 		})
 	}
