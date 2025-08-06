@@ -49,7 +49,7 @@ func NewAuth() AuthClient {
 	return &authNostr{}
 }
 
-func GetAuthHeader(val string) string {
+func DetectAuthHeader(val string) string {
 	knownTypes := []string{"Bearer", "Nostr", "IONConnect"}
 
 	for _, t := range knownTypes {

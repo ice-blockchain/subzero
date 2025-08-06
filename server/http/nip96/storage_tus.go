@@ -17,9 +17,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pingcap/errors"
 	"github.com/tus/tusd/v2/pkg/filelocker"
 	"github.com/tus/tusd/v2/pkg/filestore"
 	tusd "github.com/tus/tusd/v2/pkg/handler"
@@ -36,7 +36,7 @@ type tusHooks interface {
 
 func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.FileInfoChanges, error) {
 	now := time.Now()
-	token := nip98.GetAuthHeader(hook.HTTPRequest.Header.Get("Authorization"))
+	token := nip98.DetectAuthHeader(hook.HTTPRequest.Header.Get("Authorization"))
 	uri, err := url.Parse(hook.HTTPRequest.URI)
 	if err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, errors.Wrapf(err, "failed to parse url: %v", hook.HTTPRequest.URI)
@@ -103,7 +103,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 		return tusd.HTTPResponse{}, nil
 	}
 	now := time.Now()
-	token := nip98.GetAuthHeader(hook.HTTPRequest.Header.Get("Authorization"))
+	token := nip98.DetectAuthHeader(hook.HTTPRequest.Header.Get("Authorization"))
 	uri, err := url.Parse(hook.HTTPRequest.URI)
 	if err != nil {
 		return tusd.HTTPResponse{}, errors.Wrapf(err, "failed to parse url: %v", hook.HTTPRequest.URI)

@@ -315,7 +315,6 @@ func mustInit(ctx context.Context) *client {
 		activeDownloads:   make(map[string]bool),
 		activeDownloadsMx: &sync.RWMutex{},
 		debug:             globalConfig.Debug,
-		closedMx:          &sync.Mutex{},
 	}
 	if globalConfig.Debug {
 		go cl.report(ctx)

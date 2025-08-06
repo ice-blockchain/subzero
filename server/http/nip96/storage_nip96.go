@@ -90,7 +90,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		authHeader := nip98.DetectAuthHeader(gCtx.GetHeader("Authorization"))
 		token, authErr := s.auth.VerifyToken(&url.URL{
 			Scheme:   "https",
 			Host:     gCtx.Request.Host,
@@ -170,7 +170,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		authHeader := nip98.DetectAuthHeader(gCtx.GetHeader("Authorization"))
 		token, authErr := s.auth.VerifyToken(&url.URL{
 			Scheme:   "https",
 			Host:     gCtx.Request.Host,
@@ -249,7 +249,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		authHeader := nip98.DetectAuthHeader(gCtx.GetHeader("Authorization"))
 		token, authErr := s.auth.VerifyToken(&url.URL{
 			Scheme:   "https",
 			Host:     gCtx.Request.Host,
@@ -289,7 +289,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 func (s *storageHandler) ListFiles() gin.HandlerFunc {
 	return func(gCtx *gin.Context) {
 		now := time.Now()
-		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		authHeader := nip98.DetectAuthHeader(gCtx.GetHeader("Authorization"))
 		token, authErr := s.auth.VerifyToken(&url.URL{
 			Scheme:   "https",
 			Host:     gCtx.Request.Host,
@@ -349,7 +349,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 		now := time.Now()
 		ctx, cancel := context.WithTimeout(gCtx, mediaEndpointTimeout)
 		defer cancel()
-		authHeader := nip98.GetAuthHeader(gCtx.GetHeader("Authorization"))
+		authHeader := nip98.DetectAuthHeader(gCtx.GetHeader("Authorization"))
 		token, authErr := s.auth.VerifyToken(&url.URL{
 			Scheme:   "https",
 			Host:     gCtx.Request.Host,

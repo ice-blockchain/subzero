@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -82,8 +83,7 @@ type (
 		activeDownloadsMx *sync.RWMutex
 		rootStoragePath   string
 		debug             bool
-		closed            bool
-		closedMx          *sync.Mutex
+		closed            atomic.Bool
 	}
 	queueItem struct {
 		tor       *storage.Torrent
@@ -288,14 +288,11 @@ func (c *client) Close() (err error) {
 	if dErr := c.db.Close(); dErr != nil {
 		err = errors.Join(err, errors.Wrapf(dErr, "failed to close db"))
 	}
-	c.closedMx.Lock()
-	if c.closed {
-		c.closedMx.Unlock()
+	if c.closed.Load() {
 		return nil
 	}
 	close(c.downloadQueue)
-	c.closed = true
-	c.closedMx.Unlock()
+	c.closed.Store(true)
 	return err
 }
 

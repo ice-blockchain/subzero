@@ -276,7 +276,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 		parseStart := time.Now()
 		var fileName, contentType string
 		var fileSize uint64
-		for {
+		for ctx.Err() == nil {
 			part, err := reader.NextPart()
 			if err != nil {
 				if err == io.EOF {
@@ -295,7 +295,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 					contentType = gomime.TypeByExtension(filepath.Ext(fileName))
 				}
 				uploadingFilePath := filepath.Join(storagePath, fileName)
-				if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o755); err != nil {
+				if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o744); err != nil {
 					log.Printf("ERROR: failed to open temp file while processing upload %v", err)
 					return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
 				}
@@ -303,7 +303,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 				if err != nil {
 					return "", nil, nil, errors.Wrap(err, "failed to open user folder while processing upload")
 				}
-				fileUploadTo, err := userDir.Create(fileName)
+				fileUploadTo, err := userDir.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
 				if err != nil {
 					return "", nil, nil, errors.Wrap(err, "failed to open temp file while processing upload")
 				}

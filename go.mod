@@ -48,7 +48,6 @@ require (
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.51.12
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pingcap/errors v0.11.4
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.54.0
 	github.com/quic-go/webtransport-go v0.9.0
