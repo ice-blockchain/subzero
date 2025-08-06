@@ -1948,6 +1948,10 @@ func TestSelfTest(t *testing.T) {
 		err := doSelfTest(t.Context(), []string{connString}, []string{connString})
 		require.NoError(t, err, "Self-test should pass without errors")
 	})
+	t.Run("Two masters", func(t *testing.T) {
+		err := doSelfTest(t.Context(), []string{connString, connString}, []string{connString})
+		require.NoError(t, err)
+	})
 	t.Run("Different connection strings", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer cancel()

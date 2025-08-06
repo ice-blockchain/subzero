@@ -1222,27 +1222,32 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 		selfTestTimeout       = 5 * time.Minute
 		selfTestCheckInterval = 5 * time.Second
 	)
-	var ev model.Event
 
 	privKey, pubKey := model.GenerateKeyPair()
-	ev.Kind = nostr.KindGiftWrap
-	ev.CreatedAt = nostr.Now()
-	ev.Tags = model.Tags{
-		{"expiration", ev.CreatedAt.Add(time.Hour).String()},
-		{"k", "1"},
-		{"p", pubKey},
+	writeEvents := make(model.Events, 0, len(writeURLs))
+	for i := range writeURLs {
+		var ev model.Event
+		ev.Kind = nostr.KindGiftWrap
+		ev.CreatedAt = nostr.Now()
+		ev.Tags = model.Tags{
+			{"expiration", ev.CreatedAt.Add(time.Hour).String()},
+			{"k", "1"},
+			{"p", pubKey},
+			{"r", strconv.Itoa(i)},
+		}
+		err := ev.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
+		if err != nil {
+			return errors.Wrap(err, "failed to sign test event")
+		}
+		log.Printf("[DB] self-test: generated test event ID: %s", ev.ID)
+		writeEvents = append(writeEvents, &ev)
 	}
-	err := ev.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
-	if err != nil {
-		return errors.Wrap(err, "failed to sign test event")
-	}
-	log.Printf("[DB] self-test: generated test event ID: %s", ev.ID)
 
 	log.Printf("[DB] self-test: opening %d write clients", len(writeURLs))
 	var clients []*dbClient
-	for _, writeURL := range writeURLs {
+	for i, writeURL := range writeURLs {
 		client := openDatabase(ctx, []string{writeURL}, []string{}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
-		err := client.AcceptEvents(ctx, &ev)
+		err := client.AcceptEvents(ctx, writeEvents[i])
 		if err != nil {
 			return errors.Wrapf(err, "failed to write test event to %s", writeURL)
 		}
@@ -1296,7 +1301,7 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 			return errors.Errorf("self-test timeout reached after %s", selfTestTimeout)
 
 		case <-ch:
-			var events []*model.Event
+			var readEvents []*model.Event
 			selectCtx := model.SetUserDataInContext(ctx, model.UserDataContext{
 				PublicKey:       pubKey,
 				MasterPublicKey: pubKey,
@@ -1304,20 +1309,20 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 			})
 		main:
 			for _, client := range clients {
-				it := client.SelectEvents(selectCtx, model.Filter{IDs: []string{ev.ID}})
+				it := client.SelectEvents(selectCtx, model.Filter{IDs: writeEvents.IDs()})
 				for ev, err := range it {
 					if err != nil {
 						log.Printf("[DB] self-test: failed to read test event: %v", err)
 						continue main
 					}
-					events = append(events, ev)
+					readEvents = append(readEvents, ev)
 				}
 			}
-			if len(events) == len(clients) {
+			if len(readEvents) == len(clients)*len(writeEvents) {
 				log.Printf("[DB] self-test: successfully read test event from all clients")
 				return nil
 			}
-			log.Printf("[DB] self-test: expected %d events, got %d", len(clients), len(events))
+			log.Printf("[DB] self-test: expected %d events, got %d", len(clients)*len(writeEvents), len(readEvents))
 		}
 	}
 	return ctx.Err()
