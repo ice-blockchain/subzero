@@ -72,10 +72,11 @@ type (
 	eventEnricher interface {
 		EnrichEvents(events []*databaseEvent) []*databaseEvent
 	}
-	kind0EventEnricher struct {
+	byAuthorEventEnricher struct {
 		Filter      *databaseFilterSearch
 		Origin      string
-		Kind0Origin string
+		KindOrigin  string
+		Kind        int
 		UnknownKeys map[string]struct{}
 		Signer      func(event *databaseEvent)
 	}
@@ -880,7 +881,7 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 	return event
 }
 
-func (e *kind0EventEnricher) EnrichEvents(events []*databaseEvent) (result []*databaseEvent) {
+func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []*databaseEvent) {
 	// Run two passes as the order of events is not guaranteed.
 	for i := range events {
 		if events[i].Origin == e.Origin {
@@ -888,7 +889,7 @@ func (e *kind0EventEnricher) EnrichEvents(events []*databaseEvent) (result []*da
 		}
 	}
 	for i := range events {
-		if events[i].Origin == e.Kind0Origin {
+		if events[i].Origin == e.KindOrigin {
 			delete(e.UnknownKeys, events[i].GetMasterPublicKey())
 		}
 	}
@@ -898,7 +899,7 @@ func (e *kind0EventEnricher) EnrichEvents(events []*databaseEvent) (result []*da
 		var ev, hint databaseEvent
 
 		hint.Event = new(model.Event)
-		hint.Kind = nostr.KindProfileMetadata
+		hint.Kind = e.Kind
 		hint.CreatedAt = now
 		hint.Tags = model.Tags{
 			{"p", key},
@@ -923,10 +924,11 @@ func (db *dbClient) postProcessEvents(r *queryBuildResult, events []*databaseEve
 		for leafOrigin, dep := range tree.Leafs {
 			// kindXXX>kind0.
 			if len(dep.Reduce.Kinds) == 1 && dep.Reduce.Kinds[0] == nostr.KindProfileMetadata && dep.Reduce.Tag == "" && dep.Reduce.Author == "" {
-				enrichers = append(enrichers, &kind0EventEnricher{
+				enrichers = append(enrichers, &byAuthorEventEnricher{
 					Filter:      tree.Root,
 					Origin:      origin,
-					Kind0Origin: leafOrigin,
+					KindOrigin:  leafOrigin,
+					Kind:        dep.Reduce.Kinds[0],
 					UnknownKeys: make(map[string]struct{}),
 					Signer: func(event *databaseEvent) {
 						err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
