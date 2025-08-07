@@ -52,11 +52,20 @@ type (
 		Params map[string]any
 		strings.Builder
 	}
+	queryBuildResult struct {
+		Statement string
+		Params    map[string]any
+		Filters   map[string]*databaseFilterTree // Origin/cte name -> filter.
+	}
 	queryBuilderValue struct {
 		Name   string
 		CastTo string // If empty, no cast is applied.
 		Func   string // If non-empty, the value is passed to the function.
 		Value  any
+	}
+	databaseFilterTree struct {
+		Root  *databaseFilterSearch
+		Leafs map[string]*filterDependency // Origin/dependency name -> dependency.
 	}
 	databaseFilterSearch struct {
 		model.Filter
@@ -735,7 +744,8 @@ select
 	jsonb_build_array(
 		jsonb_build_array('output', 'JSON'),
 		jsonb_build_array('param', 'group', 'content')
-	) as tags
+	) as tags,
+	'' as origin
 from (
 	select
 		mainev.id AS poll_id,
@@ -814,7 +824,8 @@ select
 			))
 		else
 			jsonb_build_array()
-		end as tags
+		end as tags,
+		'' as origin
 from
 	event_counters f
 inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
@@ -828,7 +839,7 @@ where
 `)
 	} else {
 		b.WriteString(` union all select `)
-		for i, f := range b.fieldsNames("e") {
+		for i, f := range b.fieldsNames("e", filterID) {
 			if i > 0 {
 				b.WriteString(", ")
 			}
@@ -930,7 +941,7 @@ AND (
 AND e.hidden=false`
 			b.WriteString(usersWithBadges)
 			b.WriteString(` union select `)
-			for i, f := range b.fieldsNames("en") {
+			for i, f := range b.fieldsNames("en", filterID) {
 				if i > 0 {
 					b.WriteString(", ")
 				}
@@ -985,7 +996,8 @@ select
 	'' as content,
 	'' as d_tag,
 	'' as h_tag,
-	'[]' as tags
+	'[]' as tags,
+	'' as origin
 from
 	events e
 inner join `)
@@ -1116,22 +1128,27 @@ func (b *queryBuilder) BuildSingleWhere(ctx context.Context, filters ...model.Fi
 	return b.String(), b.Params, nil
 }
 
-func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (sql string, params map[string]any, err error) {
+func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (*queryBuildResult, error) {
 	var ctes []*databaseCTE
 
 	databaseFilters, err := b.ParseFilters(ctx, filters...)
 	if err != nil {
-		return "", nil, errors.Wrap(err, "failed to parse filters")
+		return nil, errors.Wrap(err, "failed to parse filters")
 	}
 
 	definedOrder := false
+	filtersTree := make(map[string]*databaseFilterTree)
 	for _, filter := range databaseFilters {
 		cte, err := b.BuildCTE(filter)
 		if err != nil {
-			return "", nil, errors.Wrap(err, "failed to build filter")
+			return nil, errors.Wrap(err, "failed to build filter")
 		}
 		ctes = append(ctes, cte)
 		definedOrder = definedOrder || cte.OrderBy != ""
+		filtersTree[cte.Name] = &databaseFilterTree{
+			Root:  filter,
+			Leafs: make(map[string]*filterDependency),
+		}
 	}
 
 	b.Reset()
@@ -1151,7 +1168,7 @@ func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (sql 
 			b.WriteString(" UNION ALL \n")
 		}
 		b.WriteString(` (SELECT `)
-		for x, f := range b.fieldsNames(ctes[i].Name) {
+		for x, f := range b.fieldsNames(ctes[i].Name, "") {
 			if x > 0 {
 				b.WriteString(", ")
 			}
@@ -1165,8 +1182,10 @@ func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (sql 
 		}
 		b.WriteString(` ) `)
 		for j := range ctes[i].Filter.Dependencies {
+			depName := ctes[i].Name + "_dep" + strconv.Itoa(j)
+			filtersTree[ctes[i].Name].Leafs[depName] = ctes[i].Filter.Dependencies[j]
 			b.BuildDependency(
-				ctes[i].Name+"_dep"+strconv.Itoa(j),
+				depName,
 				ctes[i].Name,
 				ctes[i].Filter,
 				ctes[i].Filter.Dependencies[j],
@@ -1179,10 +1198,14 @@ func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (sql 
 		b.WriteString(whereBuilderDefaultOrderBy)
 	}
 
-	return b.String(), b.Params, nil
+	return &queryBuildResult{
+		Statement: b.String(),
+		Params:    b.Params,
+		Filters:   filtersTree,
+	}, nil
 }
 
-func (b *queryBuilder) fieldsNames(table string) []string {
+func (b *queryBuilder) fieldsNames(table, origin string) []string {
 	fields := []string{
 		"kind",
 		"created_at",
@@ -1197,12 +1220,21 @@ func (b *queryBuilder) fieldsNames(table string) []string {
 		"h_tag",
 		"tags",
 	}
+
+	if origin == "" {
+		fields = append(fields, "origin")
+	}
+
 	if table == "" {
 		return fields
 	}
 
 	for i := range fields {
 		fields[i] = table + "." + fields[i]
+	}
+
+	if origin != "" {
+		fields = append(fields, `'`+origin+`' as origin`)
 	}
 
 	return fields
@@ -1225,7 +1257,8 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 		orderBy = "random()"
 	}
 
-	fields := b.fieldsNames("e")
+	name := filter.ID + "events_cte"
+	fields := b.fieldsNames("e", name)
 	var joinString string
 	switch filter.Rank {
 	case rankTOP:
@@ -1270,7 +1303,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 	sb.WriteString(`)`)
 
 	return &databaseCTE{
-		Name:    filter.ID + "events_cte",
+		Name:    name,
 		Body:    sb.String(),
 		OrderBy: orderBy,
 		Filter:  filter,

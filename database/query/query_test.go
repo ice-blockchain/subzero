@@ -1959,3 +1959,53 @@ func TestSelfTest(t *testing.T) {
 		require.Error(t, err, "Self-test should fail with different connection strings")
 	})
 }
+
+func TestEventEnricherKind0(t *testing.T) {
+	t.Parallel()
+
+	db, testEvent := helperEnsureDatabaseWithData(t, 10)
+	defer db.Close()
+
+	t.Run("Query", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Search: "include:dependencies:kind" + strconv.Itoa(model.KindAny) + ">kind0",
+		})
+		require.Len(t, events, 20) // 10 original events, 10 auto-generated kind0 events.
+		for _, ev := range events[10:] {
+			require.Equal(t, model.CustomIONKindEphemeralEmbedding, ev.Kind)
+		}
+	})
+	t.Run("Multiple queries", func(t *testing.T) {
+		user1 := model.GeneratePrivateKey()
+		user2 := model.GeneratePrivateKey()
+
+		var ev1, ev2, ev3 model.Event
+		ev1.Kind = nostr.KindTextNote
+		ev1.CreatedAt = nostr.Now()
+		ev1.Content = "event 1"
+		require.NoError(t, ev1.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		ev2.Kind = nostr.KindProfileMetadata
+		ev2.CreatedAt = nostr.Now()
+		ev2.Content = "event 2 kind 0"
+		require.NoError(t, ev2.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		ev3.Kind = nostr.KindTextNote
+		ev3.CreatedAt = nostr.Now()
+		ev3.Content = "event 3"
+		require.NoError(t, ev3.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &ev1, &ev2, &ev3))
+
+		events := helperSelectEvents(t, db,
+			model.Filter{
+				Authors: []string{testEvent.Random(t).PubKey},
+			},
+			model.Filter{
+				Kinds:  []int{nostr.KindTextNote},
+				Search: "include:dependencies:kind1>kind0",
+			})
+		require.GreaterOrEqual(t, len(events), 5) // N original events, 1 auto-generated kind0 event for user2/ev3.
+		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[len(events)-1].Kind)
+	})
+}

@@ -56,6 +56,7 @@ type (
 		AddressValue    string
 		Lookup          string
 		SaveMergeAction string
+		Origin          string
 		Deleted         bool
 		HasImages       bool
 		HasVideos       bool
@@ -67,6 +68,16 @@ type (
 	databaseRollbackRequest struct {
 		databaseBatchRequest
 		ReplaceableEvents map[string]bool
+	}
+	eventEnricher interface {
+		EnrichEvents(events []*databaseEvent) []*databaseEvent
+	}
+	kind0EventEnricher struct {
+		Filter      *databaseFilterSearch
+		Origin      string
+		Kind0Origin string
+		UnknownKeys map[string]struct{}
+		Signer      func(event *databaseEvent)
 	}
 )
 
@@ -869,15 +880,90 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 	return event
 }
 
+func (e *kind0EventEnricher) EnrichEvents(events []*databaseEvent) (result []*databaseEvent) {
+	// Run two passes as the order of events is not guaranteed.
+	for i := range events {
+		if events[i].Origin == e.Origin {
+			e.UnknownKeys[events[i].GetMasterPublicKey()] = struct{}{}
+		}
+	}
+	for i := range events {
+		if events[i].Origin == e.Kind0Origin {
+			delete(e.UnknownKeys, events[i].GetMasterPublicKey())
+		}
+	}
+
+	now := nostr.Now()
+	for key := range e.UnknownKeys {
+		var ev, hint databaseEvent
+
+		hint.Event = new(model.Event)
+		hint.Kind = nostr.KindProfileMetadata
+		hint.CreatedAt = now
+		hint.Tags = model.Tags{
+			{"p", key},
+		}
+		e.Signer(&hint)
+
+		ev.Event = new(model.Event)
+		ev.Kind = model.CustomIONKindEphemeralEmbedding
+		ev.CreatedAt = now
+		ev.Content = hint.String()
+		e.Signer(&ev)
+
+		result = append(result, &ev)
+	}
+
+	return result
+}
+
+func (db *dbClient) postProcessEvents(r *queryBuildResult, events []*databaseEvent) []*databaseEvent {
+	var enrichers []eventEnricher
+	for origin, tree := range r.Filters {
+		for leafOrigin, dep := range tree.Leafs {
+			// kindXXX>kind0.
+			if len(dep.Reduce.Kinds) == 1 && dep.Reduce.Kinds[0] == nostr.KindProfileMetadata && dep.Reduce.Tag == "" && dep.Reduce.Author == "" {
+				enrichers = append(enrichers, &kind0EventEnricher{
+					Filter:      tree.Root,
+					Origin:      origin,
+					Kind0Origin: leafOrigin,
+					UnknownKeys: make(map[string]struct{}),
+					Signer: func(event *databaseEvent) {
+						err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
+						if err != nil {
+							log.Panicf("[DB] failed to sign event: %v", err)
+						}
+					},
+				})
+			}
+		}
+	}
+
+	if len(enrichers) == 0 {
+		return events
+	}
+
+	var enrichedEvents []*databaseEvent
+	for _, enricher := range enrichers {
+		enrichedEvents = append(enrichedEvents, enricher.EnrichEvents(events)...)
+	}
+
+	if len(enrichedEvents) == 0 {
+		return events
+	}
+
+	return append(events, enrichedEvents...)
+}
+
 func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) EventIterator {
 	return func(yield func(*model.Event, error) bool) {
-		sqlQuery, params, err := db.generateSelectEventsSQL(ctx, filters...)
+		result, err := db.generateSelectEventsSQL(ctx, filters...)
 		if err != nil {
 			yield(nil, errors.Wrap(err, "failed to generate select events SQL"))
 			return
 		}
 
-		data, err := connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
+		data, err := connector.SelectNamed[databaseEvent](ctx, db.db, result.Statement, result.Params)
 		if err != nil {
 			err = handleError(err)
 			if errors.Is(err, connector.ErrNotFound) {
@@ -887,6 +973,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 			return
 		}
 
+		data = db.postProcessEvents(result, data)
 		for i := range data {
 			if !yield(db.eventTransform(data[i]).Event, nil) {
 				return
@@ -985,7 +1072,7 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 	return *result, nil
 }
 
-func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
+func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (*queryBuildResult, error) {
 	filters := db.extendWhereFilters(ctx, filter...)
 
 	return newQueryBuilder().Build(ctx, filters...)
