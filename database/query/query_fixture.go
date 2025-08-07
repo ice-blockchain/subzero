@@ -28,7 +28,11 @@ func TriggerExpiredEventsCleanup(ctx context.Context) error {
 }
 
 func GenerateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql string, params map[string]any, err error) {
-	return newQueryBuilder().Build(ctx, filter...)
+	r, err := newQueryBuilder().Build(ctx, filter...)
+	if err != nil {
+		return "", nil, err
+	}
+	return r.Statement, r.Params, nil
 }
 
 func DeleteAllEvents(ctx context.Context) error {

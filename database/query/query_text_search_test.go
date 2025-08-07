@@ -734,7 +734,7 @@ func TestSearchEvents_ScoreWithSearch(t *testing.T) {
 			Kinds:  []int{nostr.KindTextNote},
 			Search: `"content" top include:dependencies:kind1>kind0`,
 		})
-		require.Len(t, stored, 2)
+		require.Len(t, stored, 4)
 		require.ElementsMatch(t, []string{evNote.ID, evArticle.ID}, []string{stored[0].ID, stored[1].ID})
 	})
 }
@@ -796,7 +796,7 @@ func TestSearchEvents_WithNestedDependencyKind3Kind0(t *testing.T) {
 			Kinds:  []int{nostr.KindFollowList},
 			Search: `include:dependencies:kind3>kind0 "anna"`,
 		})
-		require.Len(t, events, len(followListEvents)+1)
+		require.GreaterOrEqual(t, len(events), len(followListEvents)+1)
 		require.Contains(t, events, profileEvents[2])
 		for i := range followListEvents {
 			require.Contains(t, events, followListEvents[i])

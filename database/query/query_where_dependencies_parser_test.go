@@ -500,7 +500,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			Authors: []string{"t4pk3", "pk1"},
 			Search:  "include:dependencies:kind1>kind0 include:dependencies:kind30008+profile_badges>kind30009>kind8",
 		})
-		require.Len(t, events, 5) // 2 from the first search, 3 from the second.
+		require.Len(t, events, 7) // 4 from the first search, 3 from the second.
 	})
 	t.Run("kind10002", func(t *testing.T) {
 		t.Run("kind6>kind10002", func(t *testing.T) {

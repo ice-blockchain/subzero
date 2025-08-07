@@ -295,14 +295,14 @@ func TestQueryFuzzIndexes(t *testing.T) {
 			pool.Submit(func() {
 				defer bar.Add(1)
 				filter := helperNewFilterFromElements(t, set)
-				sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
+				buildResult, err := db.generateSelectEventsSQL(t.Context(), filter)
 				if err != nil {
 					errCh <- errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i+1, set, err)
 					return
 				}
 
-				sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
-				result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
+				sql := "EXPLAIN (FORMAT JSON, ANALYZE) " + buildResult.Statement
+				result, err := connector.GetNamed[string](t.Context(), db.db, sql, buildResult.Params)
 				if err != nil {
 					errCh <- errors.Errorf("failed to execute query for set #%d: %w", i+1, err)
 					return
@@ -324,7 +324,7 @@ func TestQueryFuzzIndexes(t *testing.T) {
 				if helperQueryHas(t, q, "Seq Scan") {
 					var emptyFilter model.Filter
 					if !nostr.FilterEqual(filter, emptyFilter) {
-						errCh <- errors.Errorf("set #%d: found SCAN without INDEX; sql: %s; params: %#v", i+1, sql, params)
+						errCh <- errors.Errorf("set #%d: found SCAN without INDEX; sql: %s; params: %#v", i+1, sql, buildResult.Params)
 					}
 				}
 			})
