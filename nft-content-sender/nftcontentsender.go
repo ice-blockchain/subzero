@@ -80,6 +80,9 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	if err != nil {
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
+	if (profileMetadataEvent == nil && attestationEvent == nil) || contentEvent.Kind == nostr.KindProfileMetadata && profileMetadataEvent != nil {
+		return nil
+	}
 	if !p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
 		log.Printf("required events not found in the database for contentEvent:%s", contentEvent.ID)
 
@@ -112,13 +115,12 @@ func (p *sender) findContentEvent(events []*model.Event) *model.Event {
 func (p *sender) getRequiredEventsFromStorage(
 	ctx context.Context, masterPubkey string, contentEvent *model.Event,
 ) (profileMetadataEvent, attestationEvent *model.Event, err error) {
-	kinds := []int{model.CustomIONKindAttestation}
-	if contentEvent.Kind != nostr.KindProfileMetadata {
-		kinds = append(kinds, nostr.KindProfileMetadata)
-	}
+	kinds := []int{model.CustomIONKindAttestation, nostr.KindProfileMetadata}
 	requiredEvents := query.GetStoredEvents(ctx, model.Filter{
 		Kinds:   kinds,
 		Authors: []string{masterPubkey},
+	}, model.Filter{
+		Addresses: []string{contentEvent.Address()},
 	})
 
 	for evt, err := range requiredEvents {
@@ -130,6 +132,8 @@ func (p *sender) getRequiredEventsFromStorage(
 			profileMetadataEvent = evt
 		case model.CustomIONKindAttestation:
 			attestationEvent = evt
+		default:
+			return nil, nil, nil
 		}
 	}
 
