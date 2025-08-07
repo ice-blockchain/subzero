@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.24.5
+go 1.24.6
 
 replace (
 	// Waiting to be merged, used in tests https://github.com/bdragon300/tusgo/pull/3
@@ -22,7 +22,7 @@ require (
 	github.com/cubewise-code/go-mime v0.0.0-20200519001935-8c5762b177d8
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/go-connections v0.6.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/pprof v1.5.3
