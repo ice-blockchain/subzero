@@ -17,6 +17,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server/broadcaster"
+	"github.com/ice-blockchain/subzero/server/cert"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip96"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -78,16 +79,16 @@ func mustLoadTLSConfig(ctx context.Context, conf *Config) (tls *tls.Config) {
 
 		if conf.ACME.APIKey == "" {
 			log.Printf("API key is required for ACME, falling back to self-signed TLS certificate for %q", target)
-			return MustGenerateTLSConfigSelfSigned(target)
+			return cert.MustGenerateTLSConfigSelfSigned(target)
 		}
 
 		var err error
 		if isIP {
 			log.Printf("using HTTP challenge for IP address %q", target)
-			tls, err = LoadTLSConfigFromACMEWithHTTP(ctx, target, conf.ACME.APIKey)
+			tls, err = cert.LoadTLSConfigFromACMEWithHTTP(ctx, target, conf.ACME.APIKey)
 		} else {
 			log.Printf("using DNS challenge for domain %q", target)
-			tls, err = LoadTLSConfigFromACMEWithDNS(ctx, target, conf.ACME.APIKey)
+			tls, err = cert.LoadTLSConfigFromACMEWithDNS(ctx, target, conf.ACME.APIKey)
 		}
 		if err != nil {
 			log.Panicf("failed to load TLS config from ACME: %v", err)
@@ -95,7 +96,7 @@ func mustLoadTLSConfig(ctx context.Context, conf *Config) (tls *tls.Config) {
 
 	case conf.TLSCert == "selfsigned" || conf.TLSKey == "selfsigned":
 		log.Printf("using self-signed TLS certificate for %q", target)
-		tls = MustGenerateTLSConfigSelfSigned(target)
+		tls = cert.MustGenerateTLSConfigSelfSigned(target)
 
 	default:
 		log.Println("using provided TLS certificate and key")
