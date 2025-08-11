@@ -33,6 +33,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		relayURL:       testRelayURL,
 	}
 
 	recipientMasterPubKey := "recipient_master_pubkey"
@@ -146,6 +147,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 
 			localPM := &PushNotificationManager{
 				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+				relayURL:       testRelayURL,
 			}
 
 			filters := nostr.Filters{
@@ -235,6 +237,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 
 			pm := &PushNotificationManager{
 				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+				relayURL:       testRelayURL,
 			}
 
 			filters := nostr.Filters{
@@ -309,6 +312,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		relayURL:       testRelayURL,
 	}
 
 	recipientMasterPubKey := "recipient_master_pubkey"
@@ -379,6 +383,7 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		relayURL:       testRelayURL,
 	}
 
 	jsonContent := `[{"kinds":[1059],"#k":["1756"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175,30023],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[16],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"],"#k":["30175","30023"]},{"kinds":[6],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175],"#Q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[1],"#q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[7],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["7"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[3],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["30014","14"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["1755"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]}]`

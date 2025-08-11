@@ -36,10 +36,11 @@ type (
 )
 
 var (
-	wsEventListener         EventListener
-	wsSubscriptionListeners []EventGetter
-	reqMustAuth             ReqMustAuthenticate
-	eventMustAuth           EventAuthenticate
+	wsEventListener          EventListener
+	wsSubscriptionListeners  []EventGetter
+	wsBroadcastEventListener EventListener
+	reqMustAuth              ReqMustAuthenticate
+	eventMustAuth            EventAuthenticate
 )
 
 func RegisterWSEventListener(listen EventListener) {
@@ -56,6 +57,10 @@ func RegisterReqMustAuthenticate(cb ReqMustAuthenticate) {
 
 func RegisterEventMustAuthenticate(cb EventAuthenticate) {
 	eventMustAuth = cb
+}
+
+func RegisterWSBroadcastEventListener(cb EventListener) {
+	wsBroadcastEventListener = cb
 }
 
 func NewHandler(relayURL, broadcastPublicKey string) Handler {
@@ -217,13 +222,9 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		return
 	}
 
-	go func() {
-		start := time.Now()
-		h.BroadcastNewEvents(ctx, e.Events...)
-		end := time.Since(start)
-		log.Printf("INFO: broadcast %d events (%v) from %q [duration %s]", len(e.Events), model.Events(e.Events).IDs(), e.Relay, end)
-	}()
-
+	if wsBroadcastEventListener != nil {
+		wsBroadcastEventListener(ctx, e.Events...)
+	}
 }
 
 func (h *handler) writeResponse(ctx context.Context, respWriter adapters.WSWriter, envelope nostr.Envelope) error {

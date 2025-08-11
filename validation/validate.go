@@ -183,11 +183,7 @@ var (
 			ContentNotEmpty().
 			Required("d", "t", "relay", "token").
 			Validate(func(v *eventValidator, e *model.Event) error {
-				var relayURL string
-				if v.Config != nil {
-					relayURL = v.Config.RelayURL
-				}
-				return validateKindDeviceRegistration(e, relayURL)
+				return validateKindDeviceRegistration(e)
 			}).
 			Build(),
 	}

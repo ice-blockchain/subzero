@@ -22,7 +22,7 @@ BEGIN
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
-        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token')
+        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token', 'relay')
     ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;
@@ -43,10 +43,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER trigger_events_before_update_remove_old_data
-BEFORE UPDATE ON events
+BEFORE UPDATE ON events 
 FOR EACH ROW
 WHEN (NEW.tags != OLD.tags OR NEW.id != OLD.id)
-EXECUTE FUNCTION trigger_events_before_update_remove_old_data();
+EXECUTE FUNCTION trigger_events_before_update_remove_old_data();    
 --------
 CREATE OR REPLACE FUNCTION trigger_events_after_update_generate_tags()
 RETURNS TRIGGER AS $$
@@ -70,7 +70,7 @@ BEGIN
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
-        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'token')
+        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'token', 'relay')
     ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;

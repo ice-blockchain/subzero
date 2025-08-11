@@ -38,6 +38,7 @@ type (
 		userDevicesMap         map[PublicKey]map[DeviceID]DeviceInfo
 		deviceMutex            sync.RWMutex
 		pushNotificationClient *pn.Client
+		relayURL               string
 	}
 
 	notificationTranslationFuncs struct {
@@ -52,10 +53,7 @@ type (
 		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
 		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
 		PrivateKey         string   `yaml:"private-key"`
-	}
-	notificationCollections struct {
-		single []*pn.Notification[*DeviceRegistrationEvent]
-		topic  []*pn.Notification[pn.SubscriptionTopic]
+		RelayURL           string   `yaml:"relay-url"`
 	}
 )
 
@@ -224,6 +222,7 @@ func MustInit() {
 	globalPushNotificationManager = &PushNotificationManager{
 		userDevicesMap:         userDevicesMap,
 		pushNotificationClient: &pnClient,
+		relayURL:               config.RelayURL,
 	}
 
 	if err := globalPushNotificationManager.syncDevices(context.Background()); err != nil {

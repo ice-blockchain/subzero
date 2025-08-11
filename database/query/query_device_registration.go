@@ -28,6 +28,9 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 			et.id as tag_id
 		FROM event_tags et
 		JOIN events e ON et.event_id = e.id AND e.kind = :kind
+		JOIN event_tags et_relay ON et_relay.event_id = e.id 
+			AND et_relay.event_tag_key = 'relay' 
+			AND et_relay.event_tag_value1 = :relay_url
 		WHERE et.event_tag_key = 'token' AND et.event_tag_value2 != 'invalid' AND et.id > :last_tag_id
 		ORDER BY et.id ASC
 		LIMIT :batch_size
@@ -39,6 +42,7 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 		for ctx.Err() == nil {
 			params := map[string]any{
 				"kind":        model.CustomIONKindDeviceRegistration,
+				"relay_url":   db.relayURL,
 				"last_tag_id": lastTagID,
 				"batch_size":  batchSize,
 			}

@@ -284,6 +284,7 @@ func helperCreateDeviceRegistrationEvent(t *testing.T, pubKey, deviceID, tokenVa
 		tags = append(tags, nostr.Tag{"token", tokenValue})
 	}
 	tags = append(tags, nostr.Tag{"t", "android"})
+	tags = append(tags, nostr.Tag{"relay", "wss://localhost"})
 	event.Tags = tags
 
 	event.ID = uuid.New().String()

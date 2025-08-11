@@ -25,11 +25,6 @@ type (
 		Event    *model.Event
 		DeviceID DeviceID
 	}
-
-	deviceToRemove struct {
-		deviceID     DeviceID
-		masterPubKey PublicKey
-	}
 )
 
 func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
@@ -55,6 +50,9 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 }
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
+	if event.GetTag("relay").Value() != pm.relayURL {
+		return nil
+	}
 	deviceID := DeviceID(event.Tags.GetD())
 
 	var filters nostr.Filters

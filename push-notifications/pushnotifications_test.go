@@ -1078,6 +1078,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		relayURL:       testRelayURL,
 	}
 	recipientPubKey := "recipient_master_pubkey"
 	deviceID := "device1"
