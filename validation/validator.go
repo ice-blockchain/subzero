@@ -18,6 +18,7 @@ type (
 		Config                           *Config
 		QueryFunc                        func(context.Context, ...model.Filter) query.EventIterator
 		SkipKindProfileProofEventsVerify bool
+		BroadcastMode                    bool
 	}
 )
 
@@ -61,6 +62,12 @@ func (v *eventValidator) Validate(ctx context.Context, events model.Events, opts
 func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator) Option {
 	return func(v *eventValidator) {
 		v.QueryFunc = f
+	}
+}
+
+func WithBroadcastMode() Option {
+	return func(v *eventValidator) {
+		v.BroadcastMode = true
 	}
 }
 

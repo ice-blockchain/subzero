@@ -102,6 +102,7 @@ push-notifications:
   fcm-web-configs: []
   private-key: *pk
   fcm-credentials-file: ./bogus.json
+  relay-url: *self
 validation:
   max-wrapped-event-expiration: 720h
   nip13MinLeadingZeroBits: 0
