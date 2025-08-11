@@ -55,7 +55,10 @@ func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTP
 			Body:       `{"status":"error", "message":"Unauthorized"}`,
 		}
 		hook.Upload.StopUpload(errResp)
-		return errResp, tusd.FileInfoChanges{}, nil
+		return errResp, tusd.FileInfoChanges{}, tusd.Error{
+			ErrorCode:    errResp.Body,
+			HTTPResponse: errResp,
+		}
 	}
 	attestationValid := tok.ValidateAttestation(hook.Context, nostr.KindFileMetadata, now)
 	if attestationValid != nil {
@@ -65,7 +68,10 @@ func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTP
 			Body:       `{"status":"error", "message":"on-behalf attestation failed"}`,
 		}
 		hook.Upload.StopUpload(errResp)
-		return errResp, tusd.FileInfoChanges{}, nil
+		return errResp, tusd.FileInfoChanges{}, tusd.Error{
+			ErrorCode:    errResp.Body,
+			HTTPResponse: errResp,
+		}
 	}
 	mediaType := hook.Upload.MetaData["mediaType"]
 	if mediaType != "" && mediaType != storage.MediaTypeAvatar && mediaType != storage.MediaTypeBanner {
@@ -74,7 +80,10 @@ func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTP
 			Body:       `{"status":"error", "message":"failed validate upload request"}`,
 		}
 		hook.Upload.StopUpload(errResp)
-		return errResp, tusd.FileInfoChanges{}, nil
+		return errResp, tusd.FileInfoChanges{}, tusd.Error{
+			ErrorCode:    errResp.Body,
+			HTTPResponse: errResp,
+		}
 	}
 	hook.Upload.MetaData["master"] = tok.MasterPubKey()
 	hook.Upload.MetaData["user"] = tok.PubKey()
@@ -86,7 +95,10 @@ func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTP
 				Body:       fmt.Sprintf(`{"status":"error", "message":"failed validate upload request: invalid filename %q"}`, hook.Upload.MetaData["fileName"]),
 			}
 			hook.Upload.StopUpload(errResp)
-			return errResp, tusd.FileInfoChanges{}, nil
+			return errResp, tusd.FileInfoChanges{}, tusd.Error{
+				ErrorCode:    errResp.Body,
+				HTTPResponse: errResp,
+			}
 		}
 		if hook.Upload.MetaData["contentType"] == "" {
 			hook.Upload.MetaData["contentType"] = gomime.TypeByExtension(filepath.Ext(hook.Upload.MetaData["fileName"]))
@@ -122,7 +134,10 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 			Body:       `{"status":"error", "message":"Unauthorized"}`,
 		}
 		hook.Upload.StopUpload(errResp)
-		return errResp, nil
+		return errResp, tusd.Error{
+			ErrorCode:    errResp.Body,
+			HTTPResponse: errResp,
+		}
 	}
 	input := storage.FileMetaInput{
 		Caption:     hook.Upload.MetaData["caption"],
@@ -160,7 +175,10 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 			Body:       `{"status":"error", "message":"Unauthorized"}`,
 		}
 		hook.Upload.StopUpload(errResp)
-		return errResp, nil
+		return errResp, tusd.Error{
+			ErrorCode:    errResp.Body,
+			HTTPResponse: errResp,
+		}
 	}
 	input.Filename = hashHex + filepath.Ext(input.Filename)
 	s.storageClient.SaveFile(context.WithValue(hook.Context, "fileName", input.Filename), now, tok.MasterPubKey(), nil, 0)

@@ -52,22 +52,34 @@ func TestLargeFileUploader(t *testing.T) {
 		require.Error(t, err)
 		require.NotNil(t, res)
 		require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+		require.Empty(t, res.Header.Get("Location"))
 	})
 	finalFileHash := "20492a4d0d84f8beb1767f6616229f85d44c2827b64bdbfb260ee12fa1109e0e" // 100M of zero bytes
 	streams := make(chan *tusgo.UploadStream, 100)
-	t.Run("it runs fine with proper auth, chunks uploads", func(t *testing.T) {
-		client.GetRequest = func(method, reqUrl string, body io.Reader, tusClient *tusgo.Client, httpClient *http.Client) (*http.Request, error) {
-			req, err := http.NewRequest(method, reqUrl, body)
-			if err != nil {
-				return nil, err
-			}
-			parsedUrl, err := url.Parse(reqUrl)
-			require.NoError(t, err)
-			auth, err := nip98.GenerateAuthHeader(user1, method, finalFileHash, parsedUrl, masterPubKey)
-			require.NoError(t, err)
-			req.Header.Set("Authorization", auth)
-			return req, nil
+	client.GetRequest = func(method, reqUrl string, body io.Reader, tusClient *tusgo.Client, httpClient *http.Client) (*http.Request, error) {
+		req, err := http.NewRequest(method, reqUrl, body)
+		if err != nil {
+			return nil, err
 		}
+		parsedUrl, err := url.Parse(reqUrl)
+		require.NoError(t, err)
+		auth, err := nip98.GenerateAuthHeader(user1, method, finalFileHash, parsedUrl, masterPubKey)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", auth)
+		return req, nil
+	}
+	t.Run("it fails with incorrect payload", func(t *testing.T) {
+		var upl tusgo.Upload
+		res, err := client.CreateUpload(&upl, 1024, true, map[string]string{
+			"fileName":  "failed-video.mp4",
+			"mediaType": "incorrect payload",
+		})
+		require.Error(t, err)
+		require.NotNil(t, res)
+		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Empty(t, res.Header.Get("Location"))
+	})
+	t.Run("it runs fine with proper auth, chunks uploads", func(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(100)
 		for i := 0; i < 100; i++ {
