@@ -182,13 +182,6 @@ var (
 		model.CustomIONKindDeviceRegistration: newKindValidatorBuilder().
 			ContentNotEmpty().
 			Required("d", "t", "relay", "token").
-			Validate(func(v *eventValidator, e *model.Event) error {
-				var relayURL string
-				if v.Config != nil {
-					relayURL = v.Config.RelayURL
-				}
-				return validateKindDeviceRegistration(e, relayURL)
-			}).
 			Build(),
 	}
 
@@ -359,6 +352,8 @@ func (ev *eventValidator) validate(ctx context.Context, e *model.Event, incoming
 		return validateCustomIONKindCommunityOwnershipTransferringEvent(ctx, e)
 	case model.CustomIONKindCommunityBanUser:
 		return validateCustomIONKindCommunityBanUserEvent(ctx, e)
+	case model.CustomIONKindDeviceRegistration:
+		return validateKindDeviceRegistration(e, ev.Config.RelayURL, ev.BroadcastMode)
 	default:
 		if e.IsJobResponse() {
 			return validateKindJobResult(e)

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"syscall"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -184,6 +185,21 @@ func init() {
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
+	wsserver.RegisterWSBroadcastEventListener(func(ctx context.Context, events ...*model.Event) error {
+		antsPool.Submit(func() {
+			start := time.Now()
+			webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+			end := time.Since(start)
+			log.Printf("INFO: broadcast %d events (%v) [duration %s]", len(events), model.Events(events).IDs(), end)
+		})
+		antsPool.Submit(func() {
+			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
+				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
+			}
+		})
+
+		return nil
+	})
 }
 
 func newContext() context.Context {

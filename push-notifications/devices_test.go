@@ -14,6 +14,8 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+const testRelayURL = "wss://relay.example.com"
+
 func helperCreateTestDeviceRegistrationEvent(t *testing.T, pubKey string, deviceID string, tags nostr.Tags, filters nostr.Filters) *model.Event {
 	t.Helper()
 
@@ -36,6 +38,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			relayURL:       testRelayURL,
 		}
 
 		filters := nostr.Filters{
@@ -77,6 +80,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			relayURL:       testRelayURL,
 		}
 
 		masterPubKey := "master_pubkey"
@@ -111,6 +115,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			relayURL:       testRelayURL,
 		}
 
 		filters := nostr.Filters{
@@ -142,6 +147,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			relayURL:       testRelayURL,
 		}
 
 		filters := nostr.Filters{
@@ -180,7 +186,9 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 func TestShouldProcessDeletionEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{}
+	pm := &PushNotificationManager{
+		relayURL: testRelayURL,
+	}
 
 	t.Run("not_a_deletion_event", func(t *testing.T) {
 		t.Parallel()
@@ -267,6 +275,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			relayURL:       testRelayURL,
 		}
 
 		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{})
@@ -277,6 +286,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 		t.Parallel()
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			relayURL:       testRelayURL,
 		}
 		filters := nostr.Filters{
 			{
@@ -307,6 +317,7 @@ func TestProcessDeviceRegistrationBatch(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		relayURL:       testRelayURL,
 	}
 
 	devices := []struct {
