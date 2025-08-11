@@ -43,10 +43,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER trigger_events_before_update_remove_old_data
-BEFORE UPDATE ON events 
+BEFORE UPDATE ON events
 FOR EACH ROW
 WHEN (NEW.tags != OLD.tags OR NEW.id != OLD.id)
-EXECUTE FUNCTION trigger_events_before_update_remove_old_data();    
+EXECUTE FUNCTION trigger_events_before_update_remove_old_data();
 --------
 CREATE OR REPLACE FUNCTION trigger_events_after_update_generate_tags()
 RETURNS TRIGGER AS $$
