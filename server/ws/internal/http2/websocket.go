@@ -28,7 +28,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 			Extension: h2Upgrader.Extension,
 		}.Upgrade(req, writer)
 	} else if req.Method == http.MethodConnect && req.Proto == websocketProtocol {
-		conn, _, _, err = h2Upgrader.Upgrade(req, writer)
+		conn, _, hs, err = h2Upgrader.Upgrade(req, writer)
 	}
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))

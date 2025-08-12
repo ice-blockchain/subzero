@@ -42,7 +42,7 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, conf *WebtransportA
 		const compressThresholdBytes = 256
 		wt.framer = func(opCode int, data []byte) (ws.Frame, error) {
 			frame := ws.NewFrame(ws.OpCode(opCode), true, data)
-			if opCode == int(ws.OpText) || opCode == int(ws.OpBinary) && len(data) > compressThresholdBytes {
+			if (opCode == int(ws.OpText) || opCode == int(ws.OpBinary)) && len(data) > compressThresholdBytes {
 				return wsflate.CompressFrame(frame)
 			}
 			return frame, nil
