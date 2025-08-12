@@ -11,11 +11,21 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/httphead"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
 	"github.com/quic-go/quic-go/http3"
 )
 
+func New() *Upgrader {
+	e := wsflate.Extension{
+		Parameters: wsflate.DefaultParameters,
+	}
+	return &Upgrader{
+		Negotiate: e.Negotiate,
+	}
+}
+
 //nolint:funlen,gocritic,revive // Nope, we're keeping it compatible with 3rd party
-func (u *ConnectUpgrader) Upgrade(req *http.Request, writer http.ResponseWriter) (conn net.Conn, rw *bufio.ReadWriter, hs ws.Handshake, err error) {
+func (u *Upgrader) Upgrade(req *http.Request, writer http.ResponseWriter) (conn net.Conn, rw *bufio.ReadWriter, hs ws.Handshake, err error) {
 	if req.Proto != "websocket" {
 		writer.WriteHeader(http.StatusBadRequest)
 
@@ -121,7 +131,7 @@ func negotiateExtensions(
 }
 
 //nolint:gocognit,gocyclo,revive,cyclop // .
-func (u *ConnectUpgrader) syncWSProtocols(req *http.Request) (hs ws.Handshake, err error) {
+func (u *Upgrader) syncWSProtocols(req *http.Request) (hs ws.Handshake, err error) {
 	if check := u.Protocol; check != nil {
 		ps := req.Header[headerSecProtocolCanonical]
 		for i := 0; hs.Protocol == "" && err == nil && i < len(ps); i++ {

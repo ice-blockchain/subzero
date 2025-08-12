@@ -3,7 +3,10 @@
 package adapters
 
 import (
+	"bytes"
+	"compress/flate"
 	"context"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -13,21 +16,44 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
 	"github.com/gobwas/ws/wsutil"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 )
 
-func NewWebSocketAdapter(ctx context.Context, conn net.Conn, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
+func NewWebSocketAdapter(ctx context.Context, conn net.Conn, conf *WebtransportAdapterConfig) (WSWithWriter, context.Context) {
 	wt := &WebsocketAdapter{
 		conn:         conn,
 		closeChannel: make(chan struct{}, 1),
 		out:          make(chan wsWrite, 1000),
-		readTimeout:  readTimeout,
-		writeTimeout: writeTimeout,
+		readTimeout:  conf.ReadTimeout,
+		writeTimeout: conf.WriteTimeout,
 	}
 
-	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
+	var hasCompression bool
+	for _, ext := range conf.Handshake.Extensions {
+		if bytes.Equal(ext.Name, wsflate.ExtensionNameBytes) {
+			hasCompression = true
+		}
+	}
+
+	if hasCompression {
+		const compressThresholdBytes = 256
+		wt.framer = func(opCode int, data []byte) (ws.Frame, error) {
+			frame := ws.NewFrame(ws.OpCode(opCode), true, data)
+			if opCode == int(ws.OpText) || opCode == int(ws.OpBinary) && len(data) > compressThresholdBytes {
+				return wsflate.CompressFrame(frame)
+			}
+			return frame, nil
+		}
+	} else {
+		wt.framer = func(opCode int, data []byte) (ws.Frame, error) {
+			return ws.NewFrame(ws.OpCode(opCode), true, data), nil
+		}
+	}
+
+	return wt, NewCustomCancelContext(ctx, wt.closeChannel, conf.CloseChannel)
 }
 
 func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte) (err error) {
@@ -39,10 +65,15 @@ func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte)
 	case <-w.closeChannel:
 		return nil
 	default:
+		frame, err := w.framer(messageType, data)
+		if err != nil {
+			return errors.Wrap(err, "failed to create websocket frame")
+		}
+
 		if w.writeTimeout > 0 {
 			err = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
 		}
-		wErr := wsutil.WriteServerMessage(w.conn, ws.OpCode(messageType), data)
+		wErr := ws.WriteFrame(w.conn, frame)
 		w.wrErrMx.Lock()
 		w.wrErr = wErr
 		w.wrErrMx.Unlock()
@@ -112,11 +143,56 @@ func (w *WebsocketAdapter) Write(ctx context.Context) {
 	}
 }
 
+func (w *WebsocketAdapter) readFrame() ([]byte, ws.OpCode, error) {
+	const want = ws.OpText | ws.OpBinary
+	var msg wsflate.MessageState
+	controlHandler := wsutil.ControlFrameHandler(w.conn, ws.StateServerSide)
+	rd := wsutil.Reader{
+		Source:         w.conn,
+		State:          ws.StateServerSide | ws.StateExtended,
+		OnIntermediate: controlHandler,
+		Extensions: []wsutil.RecvExtension{
+			&msg,
+		},
+	}
+	for !w.closed.Load() {
+		hdr, err := rd.NextFrame()
+		if err != nil {
+			return nil, 0, err
+		}
+		if hdr.OpCode.IsControl() {
+			if err := controlHandler(hdr, &rd); err != nil {
+				return nil, 0, err
+			}
+			continue // Continue to the next frame if control frame is received.
+		}
+		if hdr.OpCode&want == 0 {
+			if err := rd.Discard(); err != nil {
+				return nil, 0, err
+			}
+			continue // Continue to the next frame if the received frame is not of the expected type.
+		}
+
+		var payloadReader io.Reader = &rd
+		if msg.IsCompressed() {
+			payloadReader = wsflate.NewReader(&rd, func(r io.Reader) wsflate.Decompressor {
+				return flate.NewReader(r)
+			})
+		}
+
+		bts, err := io.ReadAll(payloadReader)
+
+		return bts, hdr.OpCode, err
+	}
+
+	return nil, 0, errors.New("websocket connection closed")
+}
+
 func (w *WebsocketAdapter) ReadMessage() (messageType int, p []byte, err error) {
 	if w.readTimeout > 0 {
 		_ = w.conn.SetReadDeadline(time.Now().Add(w.readTimeout)) //nolint:errcheck // It is not crucial if we ignore it here.
 	}
-	msgBytes, typ, err := wsutil.ReadClientData(w.conn)
+	msgBytes, typ, err := w.readFrame()
 	if err != nil {
 		return int(typ), msgBytes, err
 	}

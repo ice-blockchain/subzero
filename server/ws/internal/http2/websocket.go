@@ -16,20 +16,29 @@ import (
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
 )
 
-//nolint:gochecknoglobals,grouper // We need single instance to avoid spending extra mem
-var h2Upgrader = &cws.ConnectUpgrader{}
-
 func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2ws adapters.WSWithWriter, ctx context.Context, err error) {
 	var conn net.Conn
+	var hs ws.Handshake
+
+	h2Upgrader := cws.New()
 	if req.Header.Get("Upgrade") == websocketProtocol {
-		conn, _, _, err = ws.DefaultHTTPUpgrader.Upgrade(req, writer)
+		conn, _, hs, err = ws.HTTPUpgrader{
+			Negotiate: h2Upgrader.Negotiate,
+			Protocol:  h2Upgrader.Protocol,
+			Extension: h2Upgrader.Extension,
+		}.Upgrade(req, writer)
 	} else if req.Method == http.MethodConnect && req.Proto == websocketProtocol {
 		conn, _, _, err = h2Upgrader.Upgrade(req, writer)
 	}
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
-	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout, s.shutdownCh)
+	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, &adapters.WebtransportAdapterConfig{
+		Handshake:    hs,
+		ReadTimeout:  s.cfg.ReadTimeout,
+		WriteTimeout: s.cfg.WriteTimeout,
+		CloseChannel: s.shutdownCh,
+	})
 	go s.ping(ctx, wsocket)
 
 	return wsocket, ctx, nil
