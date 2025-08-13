@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gobwas/ws"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/webtransport-go"
 )
@@ -38,6 +39,12 @@ type (
 	WSWriterRoutine interface {
 		Write(ctx context.Context)
 	}
+	WebtransportAdapterConfig struct {
+		WriteTimeout time.Duration
+		ReadTimeout  time.Duration
+		Handshake    ws.Handshake
+		CloseChannel <-chan struct{}
+	}
 	WebtransportAdapter struct {
 		stream       Stream
 		session      *webtransport.Session
@@ -60,6 +67,7 @@ type (
 		closed       atomic.Bool
 		writeTimeout time.Duration
 		readTimeout  time.Duration
+		framer       func(int, []byte) (ws.Frame, error)
 	}
 )
 

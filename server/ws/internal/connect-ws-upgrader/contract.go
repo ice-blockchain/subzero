@@ -12,7 +12,7 @@ import (
 
 // Implements PFC 8441.
 type (
-	ConnectUpgrader struct {
+	Upgrader struct {
 		Protocol  func(string) bool
 		Extension func(httphead.Option) bool
 		Negotiate func(httphead.Option) (httphead.Option, error)

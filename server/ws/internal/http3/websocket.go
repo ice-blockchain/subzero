@@ -7,28 +7,24 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/cockroachdb/errors"
-
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
 )
 
-//nolint:gochecknoglobals // We need single instance.
-var (
-	//nolint:gochecknoglobals // We need single instance.
-	websocketupgrader = cws.ConnectUpgrader{}
-)
-
 func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h3ws adapters.WSWithWriter, ctx context.Context, err error) {
-	conn, _, _, err := websocketupgrader.Upgrade(req, writer)
+	conn, _, hs, err := cws.New().Upgrade(req, writer)
 	if err != nil {
-		err = errors.Wrap(err, "upgrading http3/websocket failed")
-		log.Printf("ERROR:%v", err)
+		log.Printf("[http3] ERROR: upgrading http3/websocket failed: %v", err)
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return
 	}
-	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, s.cfg.ReadTimeout, s.cfg.WriteTimeout, s.shutdownCh)
+	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, &adapters.WebtransportAdapterConfig{
+		Handshake:    hs,
+		ReadTimeout:  s.cfg.ReadTimeout,
+		WriteTimeout: s.cfg.WriteTimeout,
+		CloseChannel: s.shutdownCh,
+	})
 
 	return wsocket, ctx, nil
 }
