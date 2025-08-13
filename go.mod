@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.24.6
+go 1.25.0
 
 replace (
 	// Waiting to be merged, used in tests https://github.com/bdragon300/tusgo/pull/3
