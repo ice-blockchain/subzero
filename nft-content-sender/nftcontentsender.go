@@ -79,7 +79,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return nil
 	}
 	if contentEvent.Previous != nil {
-		log.Printf("content event already exists in the database, skipping: %s", contentEvent.ID)
+		log.Printf("content event was already processed previously, skipping: %s", contentEvent.ID)
 
 		return nil
 	}
@@ -88,11 +88,6 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
 	if attestationEvent == nil || (contentEvent.Kind != nostr.KindProfileMetadata && profileMetadataEvent == nil) {
-		log.Printf("required events not found in the database for contentEvent:%s", contentEvent.ID)
-
-		return nil
-	}
-	if !p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
 		log.Printf("required events not found in the database for contentEvent:%s", contentEvent.ID)
 
 		return nil
@@ -147,17 +142,6 @@ func (p *sender) getRequiredEventsFromStorage(
 	}
 
 	return profileMetadataEvent, attestationEvent, nil
-}
-
-func (p *sender) validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent *model.Event) bool {
-	if attestationEvent == nil {
-		return false
-	}
-	if contentEvent.Kind != nostr.KindProfileMetadata && profileMetadataEvent == nil {
-		return false
-	}
-
-	return true
 }
 
 func (p *sender) buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent *model.Event) model.Events {
