@@ -93,11 +93,12 @@ type (
 )
 
 var (
-	ErrNotFound         = storage.ErrFileNotExist
-	ErrForbidden        = errors.New("forbidden")
-	ErrNoRelays         = errors.New("no relays")
-	ErrFileTooBig       = errors.New("too big")
-	ErrValidationFailed = errors.New("validation failed")
+	ErrNotFound                  = storage.ErrFileNotExist
+	ErrForbidden                 = errors.New("forbidden")
+	ErrNoRelays                  = errors.New("no relays")
+	ErrFileTooBig                = errors.New("too big")
+	ErrValidationFailed          = errors.New("validation failed")
+	errLatestBagNotDownloadedYet = errors.New("no header fetched yet")
 )
 
 const MediaTypeAvatar = "avatar"
@@ -113,7 +114,7 @@ func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 			return nil, errors.Wrapf(err, "No header fetched yet for %v and failed to get stored", hex.EncodeToString(bag.BagID))
 		}
 		if hData == nil {
-			return nil, errors.Errorf("No header fetched yet for %v", hex.EncodeToString(bag.BagID))
+			return nil, errors.Wrapf(errLatestBagNotDownloadedYet, "No header fetched yet for %v", hex.EncodeToString(bag.BagID))
 		}
 	} else {
 		hData = bag.Header.Data
@@ -259,13 +260,16 @@ func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
 	if bag == nil {
 		return "", ErrNotFound
 	}
+	userPath, _ := c.BuildUserPath(masterKey, "")
 	var metadata *headerData
 	metadata, err = c.fileMeta(bag)
 	if err != nil {
+		if errors.Is(err, errLatestBagNotDownloadedYet) {
+			return filepath.Join(userPath, fmt.Sprintf("%v%v", fileHash, ext)), nil
+		}
 		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
 	}
 	file, err := c.detectFileFromMeta(bag, metadata, fileHash)
-	userPath, _ := c.BuildUserPath(masterKey, "")
 	if err != nil {
 		if errors.Is(err, storage.ErrFileNotExist) {
 			return filepath.Join(userPath, fmt.Sprintf("%v%v", fileHash, ext)), nil
