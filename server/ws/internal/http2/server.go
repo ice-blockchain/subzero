@@ -56,9 +56,10 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		wsocket, ctx, err = s.handleWebTransport(writer, req)
 	}
 	if err != nil {
-		log.Printf("ERROR:%v", errors.Wrapf(err, "upgrading failed (http2 / %v)", req.Proto))
-		writer.WriteHeader(http.StatusBadRequest)
-
+		if !errors.Is(err, errNoCompression) {
+			log.Printf("ERROR:%v", errors.Wrapf(err, "upgrading failed (http2 / %v)", req.Proto))
+			writer.WriteHeader(http.StatusBadRequest)
+		}
 		return
 	}
 	if wsocket != nil {

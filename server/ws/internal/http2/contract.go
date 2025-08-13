@@ -4,8 +4,9 @@ package http2
 
 import (
 	"context"
+	"errors"
 	"net/http"
-	stdlibtime "time"
+	"time"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -35,5 +36,9 @@ type (
 const (
 	websocketProtocol    = "websocket"
 	webtransportProtocol = "webtransport"
-	acceptStreamTimeout  = 30 * stdlibtime.Second
+	acceptStreamTimeout  = 30 * time.Second
+)
+
+var (
+	errNoCompression = errors.New("websocket connection requires compression support")
 )

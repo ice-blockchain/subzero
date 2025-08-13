@@ -3,6 +3,7 @@
 package http2
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"net"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
@@ -33,6 +35,20 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to upgrade to websocket over http1/2: %v, upgrade: %v", req.Proto, req.Header.Get("Upgrade"))
 	}
+
+	{
+		hasCompression := false
+		for _, ext := range hs.Extensions {
+			hasCompression = hasCompression || bytes.EqualFold(ext.Name, wsflate.ExtensionNameBytes)
+		}
+		if !hasCompression {
+			conn.Write(ws.CompiledCloseProtocolError)
+			log.Printf("ERROR: websocket connection %v does not support compression, closing", conn.RemoteAddr())
+			conn.Close()
+			return nil, nil, errNoCompression
+		}
+	}
+
 	wsocket, ctx := adapters.NewWebSocketAdapter(req.Context(), conn, &adapters.WebtransportAdapterConfig{
 		Handshake:    hs,
 		ReadTimeout:  s.cfg.ReadTimeout,
