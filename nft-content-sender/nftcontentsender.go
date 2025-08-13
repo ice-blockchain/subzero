@@ -74,6 +74,12 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	}
 	contentEvent := p.findContentEvent(events)
 	if contentEvent == nil {
+		var ids []string
+		for _, event := range events {
+			ids = append(ids, event.ID)
+		}
+		log.Printf("content event not found for events: %v", ids)
+
 		return nil
 	}
 	profileMetadataEvent, attestationEvent, err := p.getRequiredEventsFromStorage(ctx, contentEvent.GetMasterPublicKey(), contentEvent)
@@ -81,6 +87,8 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
 	if (profileMetadataEvent == nil && attestationEvent == nil) || contentEvent.Kind == nostr.KindProfileMetadata && profileMetadataEvent != nil {
+		log.Printf("required events were found in the database for contentEvent:%s", contentEvent.ID)
+
 		return nil
 	}
 	if !p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
@@ -89,6 +97,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return nil
 	}
 	eventsToSend := p.buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent)
+	log.Printf("sending events for contentEvent:%s, eventsToSend:%v", contentEvent.ID)
 
 	return errors.Wrapf(p.sendEvents(ctx, eventsToSend), "failed to send events for contentEvent:%s", contentEvent.ID)
 }
@@ -133,9 +142,12 @@ func (p *sender) getRequiredEventsFromStorage(
 		case model.CustomIONKindAttestation:
 			attestationEvent = evt
 		default:
+			log.Printf("no required event found for contentEvent:%s, kind:%d", contentEvent.ID, evt.Kind)
+
 			return nil, nil, nil
 		}
 	}
+	log.Printf("found required events for contentEvent:%s, profileMetadataEvent:%s, attestationEvent:%s", contentEvent.ID, profileMetadataEvent.ID, attestationEvent.ID)
 
 	return profileMetadataEvent, attestationEvent, nil
 }
