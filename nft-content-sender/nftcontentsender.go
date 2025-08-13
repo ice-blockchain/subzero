@@ -78,22 +78,21 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 
 		return nil
 	}
+	if contentEvent.Previous != nil {
+		log.Printf("content event was already processed previously, skipping: %s", contentEvent.ID)
+
+		return nil
+	}
 	profileMetadataEvent, attestationEvent, err := p.getRequiredEventsFromStorage(ctx, contentEvent.GetMasterPublicKey(), contentEvent)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
-	if (profileMetadataEvent == nil && attestationEvent == nil) || contentEvent.Kind == nostr.KindProfileMetadata && profileMetadataEvent != nil {
-		log.Printf("required events were found in the database for contentEvent:%s", contentEvent.ID)
-
-		return nil
-	}
-	if !p.validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent) {
+	if attestationEvent == nil || (contentEvent.Kind != nostr.KindProfileMetadata && profileMetadataEvent == nil) {
 		log.Printf("required events not found in the database for contentEvent:%s", contentEvent.ID)
 
 		return nil
 	}
 	eventsToSend := p.buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent)
-	log.Printf("sending events for contentEvent:%s, eventsToSend:%v", contentEvent.ID)
 
 	return errors.Wrapf(p.sendEvents(ctx, eventsToSend), "failed to send events for contentEvent:%s", contentEvent.ID)
 }
@@ -120,14 +119,14 @@ func (p *sender) findContentEvent(events []*model.Event) *model.Event {
 func (p *sender) getRequiredEventsFromStorage(
 	ctx context.Context, masterPubkey string, contentEvent *model.Event,
 ) (profileMetadataEvent, attestationEvent *model.Event, err error) {
-	kinds := []int{model.CustomIONKindAttestation, nostr.KindProfileMetadata}
+	var kinds = []int{model.CustomIONKindAttestation}
+	if contentEvent.Kind != nostr.KindProfileMetadata {
+		kinds = append(kinds, nostr.KindProfileMetadata)
+	}
 	requiredEvents := query.GetStoredEvents(ctx, model.Filter{
 		Kinds:   kinds,
 		Authors: []string{masterPubkey},
-	}, model.Filter{
-		Addresses: []string{contentEvent.Address()},
 	})
-
 	for evt, err := range requiredEvents {
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to get required events")
@@ -138,25 +137,11 @@ func (p *sender) getRequiredEventsFromStorage(
 		case model.CustomIONKindAttestation:
 			attestationEvent = evt
 		default:
-			log.Printf("no required event found for contentEvent:%s, kind:%d", contentEvent.ID, evt.Kind)
-
-			return nil, nil, nil
+			continue
 		}
 	}
-	log.Printf("found required events for contentEvent:%s, profileMetadataEvent:%s, attestationEvent:%s", contentEvent.ID, profileMetadataEvent.ID, attestationEvent.ID)
 
 	return profileMetadataEvent, attestationEvent, nil
-}
-
-func (p *sender) validateRequiredEvents(contentEvent, profileMetadataEvent, attestationEvent *model.Event) bool {
-	if attestationEvent == nil {
-		return false
-	}
-	if contentEvent.Kind != nostr.KindProfileMetadata && profileMetadataEvent == nil {
-		return false
-	}
-
-	return true
 }
 
 func (p *sender) buildEventsToSend(contentEvent, profileMetadataEvent, attestationEvent *model.Event) model.Events {
