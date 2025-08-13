@@ -7,6 +7,7 @@ import (
 	"net/http"
 	stdlibtime "time"
 
+	"github.com/cockroachdb/errors"
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -36,4 +37,8 @@ const (
 	websocketProtocol    = "websocket"
 	webtransportProtocol = "webtransport"
 	acceptStreamTimeout  = 30 * stdlibtime.Second
+)
+
+var (
+	errNoCompression = errors.New("websocket connection requires compression support")
 )
