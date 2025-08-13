@@ -74,11 +74,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	}
 	contentEvent := p.findContentEvent(events)
 	if contentEvent == nil {
-		var ids []string
-		for _, event := range events {
-			ids = append(ids, event.ID)
-		}
-		log.Printf("content event not found for events: %v", ids)
+		log.Printf("content event not found for events: %v", model.Events(events).IDs())
 
 		return nil
 	}
