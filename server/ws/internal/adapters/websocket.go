@@ -29,31 +29,40 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, conf *WebtransportA
 		out:          make(chan wsWrite, 1000),
 		readTimeout:  conf.ReadTimeout,
 		writeTimeout: conf.WriteTimeout,
+		framer: func(opCode int, data []byte) (ws.Frame, error) {
+			return ws.NewFrame(ws.OpCode(opCode), true, data), nil
+		},
 	}
 
+	wt.initExtensions(conf.Handshake)
+
+	return wt, NewCustomCancelContext(ctx, wt.closeChannel, conf.CloseChannel)
+}
+
+func (w *WebsocketAdapter) initCompression() {
+	const compressThresholdBytes = 256
+
+	w.framer = func(opCode int, data []byte) (ws.Frame, error) {
+		frame := ws.NewFrame(ws.OpCode(opCode), true, data)
+		if opCode == int(ws.OpText) || opCode == int(ws.OpBinary) && len(data) > compressThresholdBytes {
+			return wsflate.CompressFrame(frame)
+		}
+		return frame, nil
+	}
+}
+
+func (w *WebsocketAdapter) initExtensions(handshake ws.Handshake) {
 	var hasCompression bool
-	for _, ext := range conf.Handshake.Extensions {
+
+	for _, ext := range handshake.Extensions {
 		if bytes.Equal(ext.Name, wsflate.ExtensionNameBytes) {
 			hasCompression = true
 		}
 	}
 
 	if hasCompression {
-		const compressThresholdBytes = 256
-		wt.framer = func(opCode int, data []byte) (ws.Frame, error) {
-			frame := ws.NewFrame(ws.OpCode(opCode), true, data)
-			if (opCode == int(ws.OpText) || opCode == int(ws.OpBinary)) && len(data) > compressThresholdBytes {
-				return wsflate.CompressFrame(frame)
-			}
-			return frame, nil
-		}
-	} else {
-		wt.framer = func(opCode int, data []byte) (ws.Frame, error) {
-			return ws.NewFrame(ws.OpCode(opCode), true, data), nil
-		}
+		w.initCompression()
 	}
-
-	return wt, NewCustomCancelContext(ctx, wt.closeChannel, conf.CloseChannel)
 }
 
 func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte) (err error) {
