@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
-	"github.com/xssnick/tonutils-go/adnl"
 	"github.com/xssnick/tonutils-go/adnl/dht"
+	"github.com/xssnick/tonutils-go/adnl/keys"
 	"github.com/xssnick/tonutils-go/adnl/overlay"
 	"github.com/xssnick/tonutils-go/tl"
 	"github.com/xssnick/tonutils-storage/storage"
@@ -210,7 +210,7 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 	addr := c.gateway.GetAddressList()
 
 	dNode := dht.Node{
-		ID:        adnl.PublicKeyED25519{Key: key.Public().(ed25519.PublicKey)},
+		ID:        keys.PublicKeyED25519{Key: key.Public().(ed25519.PublicKey)},
 		AddrList:  &addr,
 		Version:   int32(time.Now().Unix()),
 		Signature: nil,
