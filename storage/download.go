@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/xssnick/tonutils-go/adnl/keys"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/xssnick/tonutils-go/adnl/keys"
 	"github.com/xssnick/tonutils-storage/storage"
 	"golang.org/x/sync/errgroup"
 
