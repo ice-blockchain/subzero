@@ -35,12 +35,12 @@ func validateAttestationEvent(v *eventValidator, e *model.Event) error {
 		if tag.Key() != model.TagAttestationName {
 			continue
 		} else if len(tag) < 4 {
-			return errors.Wrapf(ErrAttestationInvalidFormat, "attestation tag %q at index %d is too short", tag.Value(), i+1)
+			return errors.Wrapf(ErrAttestationInvalidFormat, "attestation tag %v at index %d is too short", tag[1:], i+1)
 		}
 
 		pubkey := tag[model.TagAttestationValueIndexPubkey]
 		if pubkey == "" {
-			return errors.Wrapf(ErrAttestationInvalidPubkey, "empty pubkey in attestation tag %q", tag.Value())
+			return errors.Wrapf(ErrAttestationInvalidPubkey, "empty pubkey in attestation tag %v", tag[1:])
 		} else if e.PubKey == pubkey {
 			return errors.Wrapf(ErrAttestationInvalidPubkey, "pubkey in attestation tag at index %d matches event pubkey %q", i+1, e.PubKey)
 		}
