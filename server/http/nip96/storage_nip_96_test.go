@@ -169,44 +169,6 @@ func TestNIP96(t *testing.T) {
 	rand.Shuffle(len(events), func(i, j int) {
 		events[i], events[j] = events[j], events[i]
 	})
-	t.Run("nip-94 accepted on same relay where is was uploaded to = no-op", func(t *testing.T) {
-		var wg sync.WaitGroup
-		wg.Add(len(events))
-		for _, e := range events {
-			go func() {
-				defer wg.Done()
-				require.NoError(t, query.AcceptEvents(ctx, e))
-				require.NoError(t, storage.AcceptEvents(ctx, e))
-				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
-			}()
-		}
-		wg.Wait()
-	})
-	const newStorageRoot = "./../../.test-uploads2"
-	t.Run("nip-94 event is broadcasted, it causes download to other node", func(t *testing.T) {
-		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
-		cfg.Reset("./../../../server/http/nip96/.testdata/storage-2nd-instance.yaml")
-		storage.Reset()
-		initStorage(ctx)
-		var wg sync.WaitGroup
-		wg.Add(len(events))
-		for _, e := range events {
-			go func() {
-				defer wg.Done()
-				require.NoError(t, query.AcceptEvents(ctx, e))
-				require.NoError(t, storage.AcceptEvents(ctx, e))
-				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
-			}()
-		}
-		wg.Wait()
-
-		downloadedProfileHash, err := storage.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
-		require.NoError(t, err)
-		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
-		downloadedLogoHash, err := storage.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
-		require.NoError(t, err)
-		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
-	})
 	t.Run("delete file on same relay", func(t *testing.T) {
 		var nip94ToBeDeleted *model.Event
 		for _, e := range events {
@@ -268,6 +230,45 @@ func TestNIP96(t *testing.T) {
 		}()
 		wg.Wait()
 		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, fileName))
+	})
+	t.Run("nip-94 accepted on same relay where is was uploaded to = no-op", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(len(events))
+		for _, e := range events {
+			go func() {
+				defer wg.Done()
+				require.NoError(t, query.AcceptEvents(ctx, e))
+				require.NoError(t, storage.AcceptEvents(ctx, e))
+				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
+			}()
+		}
+		wg.Wait()
+	})
+	const newStorageRoot = "./../../.test-uploads2"
+	t.Run("nip-94 event is broadcasted, it causes download to other node", func(t *testing.T) {
+		// Simulate another storage node where we broadcast event/bag, and it needs to download it.
+		cfg.Reset("./../../../server/http/nip96/.testdata/storage-2nd-instance.yaml")
+		storage.Reset()
+		initStorage(ctx)
+		var wg sync.WaitGroup
+		wg.Add(len(events))
+		for _, e := range events {
+			go func() {
+				defer wg.Done()
+				require.NoError(t, query.AcceptEvents(ctx, e))
+				require.NoError(t, storage.AcceptEvents(ctx, e))
+				require.NoError(t, storage.ReplicateFileOnPeers(ctx, e))
+			}()
+		}
+		wg.Wait()
+
+		downloadedProfileHash, err := storage.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png"), "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", int64(182744))
+		require.NoError(t, err)
+		require.Equal(t, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", downloadedProfileHash)
+		downloadedLogoHash, err := storage.WaitForFile(ctx, newStorageRoot, filepath.Join(newStorageRoot, masterPubKey, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218.jpg"), "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", int64(415939))
+		require.NoError(t, err)
+		require.Equal(t, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", downloadedLogoHash)
+		require.NoFileExists(t, filepath.Join(storageRoot, masterPubKey, "aca3a138e07162a8565070575b3593ee2fef404d447162f5786d5cc645d82b7a.txt"))
 	})
 	t.Run("delete file by same hash used in multiple posts does not break link", func(t *testing.T) {
 		deleteFileAndVerify := func(verify func(fileName string)) {

@@ -3,17 +3,15 @@ module github.com/ice-blockchain/subzero
 go 1.25.0
 
 replace (
-	// Waiting to be merged, used in tests https://github.com/bdragon300/tusgo/pull/3
-	github.com/bdragon300/tusgo => github.com/ice-cronus/tus-go-client v0.0.0-20250806075336-87bcf10e4f13
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250728142820-30f40fab82c5
 	github.com/xssnick/tonutils-go => github.com/xssnick/tonutils-go v1.13.1
-	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250805055619-740054e7a2fd
+	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250814115459-8d57142d986f
 )
 
 require (
 	firebase.google.com/go/v4 v4.18.0
 	github.com/alitto/pond/v2 v2.5.0
-	github.com/bdragon300/tusgo v0.1.2
+	github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936
 	github.com/bzick/tokenizer v1.4.10
 	github.com/caddyserver/certmagic v0.24.0
 	github.com/cenkalti/backoff/v4 v4.3.0

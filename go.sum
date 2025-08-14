@@ -80,6 +80,8 @@ github.com/aws/aws-sdk-go v1.55.8 h1:JRmEUbU52aJQZ2AjX4q4Wu7t4uZjOu71uyNmaWlUkJQ
 github.com/aws/aws-sdk-go v1.55.8/go.mod h1:ZkViS9AqA6otK+JBBNH2++sx1sgxrPKcSzPPvQkUtXk=
 github.com/aymerick/douceur v0.2.0 h1:Mv+mAeH1Q+n9Fr+oyamOlAkUNPWPlA8PPGR0QAaYuPk=
 github.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=
+github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936 h1:yyqXLulG2tSmM5vP+MF50n271ZrY1IeR1auSUcQynL4=
+github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936/go.mod h1:C+JEnr9Mg5aMyd9hCQx6y8DGzbf2gXd3tF6c3Ft7IIw=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
@@ -366,10 +368,8 @@ github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250728142820-30f40fab82c5 h1:
 github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250728142820-30f40fab82c5/go.mod h1:qDKi/EEIWeHYNzwopYzbOzQT2QS7nTi3QwTeHpL8ovo=
 github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830 h1:FymrVSpOD6rKyZ97MJr5Xu2ZP29EqTKpdMqTf2DrMgU=
 github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830/go.mod h1:pVzkmaIwkLaJ5cKPHPtuKyxaXiTsa/V7kbbgLmsr4Hw=
-github.com/ice-blockchain/tonutils-storage v0.0.0-20250805055619-740054e7a2fd h1:mCStulzQubUZRydj3lqzjMz3J7NXzUPQ9znVUnrqy0c=
-github.com/ice-blockchain/tonutils-storage v0.0.0-20250805055619-740054e7a2fd/go.mod h1:aEg5acw8rooLDbRLwrUyZhZYv0o5tw/25ZF5+HP8c1Y=
-github.com/ice-cronus/tus-go-client v0.0.0-20250806075336-87bcf10e4f13 h1:+r5h5a3YQyHRuoMUW6RdhiBNspVuGAg/Hbzqob7svr8=
-github.com/ice-cronus/tus-go-client v0.0.0-20250806075336-87bcf10e4f13/go.mod h1:C+JEnr9Mg5aMyd9hCQx6y8DGzbf2gXd3tF6c3Ft7IIw=
+github.com/ice-blockchain/tonutils-storage v0.0.0-20250814115459-8d57142d986f h1:hc1N144rOiLkXOFIaGT4A17Ma+GE10x9hgiT5Vgc0z0=
+github.com/ice-blockchain/tonutils-storage v0.0.0-20250814115459-8d57142d986f/go.mod h1:aEg5acw8rooLDbRLwrUyZhZYv0o5tw/25ZF5+HP8c1Y=
 github.com/icholy/digest v1.1.0 h1:HfGg9Irj7i+IX1o1QAmPfIBNu/Q5A5Tu3n/MED9k9H4=
 github.com/icholy/digest v1.1.0/go.mod h1:QNrsSGQ5v7v9cReDI0+eyjsXGUoRSUZQHeQ5C4XLa0Y=
 github.com/imroc/req/v3 v3.54.0 h1:kwWJSpT7OvjJ/Q8ykp+69Ye5H486RKDcgEoepw1Ren4=

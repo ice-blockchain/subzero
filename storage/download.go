@@ -308,7 +308,7 @@ outerLoop:
 				if tor == nil {
 					continue
 				}
-				if downloading, _ := tor.IsActive(); downloading {
+				if downloading, _ := tor.IsActive(); downloading || tor.IsCompleted() {
 					continue
 				}
 				usr := ""
