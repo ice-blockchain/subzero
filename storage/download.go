@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -259,17 +258,6 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 			}
 		}
 		if deletion || (tr.Header == nil && newVersion != nil && *newVersion >= int64(maxVal)) || (tr.Header != nil && tr.Header.FilesCount >= maxVal) {
-			fmt.Println("SAVE", hex.EncodeToString(tr.BagID), func() int64 {
-				if newVersion == nil {
-					return -1
-				}
-				return *newVersion
-			}(), maxVal, func() string {
-				if existing == nil {
-					return "NIL"
-				}
-				return hex.EncodeToString(existing.BagID)
-			}())
 			if err := c.saveBagPerUser(tr.BagID, newVersion, userPubKey); err != nil {
 				return errors.Wrapf(err, "failed to save bag per user")
 			}
