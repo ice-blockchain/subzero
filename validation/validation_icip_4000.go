@@ -17,7 +17,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func (ev *eventValidator) validateWhoCanReplySettings(ctx context.Context, e *model.Event, events ...*model.Event) error {
+func (ev *eventValidator) validateWhoCanReplySettings(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	rootPost, err := ev.findRootPost(ctx, e)
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func (ev *eventValidator) validateWhoCanReplySettings(ctx context.Context, e *mo
 	passed := false
 
 	for _, value := range values {
-		if passed, err = ev.checkWhoCanReplySettings(ctx, value, rootPost, e, settingsTag, events...); err != nil {
+		if passed, err = ev.checkWhoCanReplySettings(ctx, rules, batch, e, value, rootPost, settingsTag); err != nil {
 			return err
 		}
 		if passed {
@@ -48,7 +48,15 @@ func (ev *eventValidator) validateWhoCanReplySettings(ctx context.Context, e *mo
 	return nil
 }
 
-func (ev *eventValidator) checkWhoCanReplySettings(ctx context.Context, value string, rootPost, e *model.Event, settingsTag model.Tag, events ...*model.Event) (bool, error) {
+func (ev *eventValidator) checkWhoCanReplySettings(
+	ctx context.Context,
+	rules *ruleSet,
+	batch model.Events,
+	e *model.Event,
+	value string,
+	rootPost *model.Event,
+	settingsTag model.Tag,
+) (bool, error) {
 	switch {
 	case value == model.FollowingWhoCanReplySettings:
 		return ev.checkFollowingWhoCanReplySettings(ctx, rootPost, e)
@@ -57,7 +65,7 @@ func (ev *eventValidator) checkWhoCanReplySettings(ctx context.Context, value st
 		return checkMentionWhoCanReplySettings(rootPost, e)
 
 	case strings.HasPrefix(value, model.BadgeWhoCanReplySettingsPrefix):
-		if err := ev.handleTextNoteVerifiedOnlyReply(ctx, e, settingsTag, events...); err != nil {
+		if err := ev.handleTextNoteVerifiedOnlyReply(ctx, rules, batch, e, settingsTag); err != nil {
 			return false, err
 		}
 
@@ -513,8 +521,8 @@ func hasReplyTag(e *model.Event) bool {
 	return false
 }
 
-func (ev *eventValidator) handleTextNoteVerifiedOnlyReply(ctx context.Context, e *model.Event, settingsTag model.Tag, events ...*model.Event) error {
-	ephemeralAckEvents, err := model.ParseEphemeralEmbeddingEvents(events...)
+func (ev *eventValidator) handleTextNoteVerifiedOnlyReply(ctx context.Context, _ *ruleSet, batch model.Events, e *model.Event, settingsTag model.Tag) error {
+	ephemeralAckEvents, err := model.ParseEphemeralEmbeddingEvents(batch...)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ephemeral ack events")
 	}

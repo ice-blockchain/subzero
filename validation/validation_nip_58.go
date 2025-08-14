@@ -26,7 +26,7 @@ func validateKindBadgeDefinitionEvent(e *model.Event) error {
 	return nil
 }
 
-func (ev *eventValidator) validateKindBadgeAwardEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindBadgeAwardEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	if len(e.Tags.GetAll([]string{"a"})) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: a tag is required")
 	}
@@ -60,14 +60,14 @@ func (ev *eventValidator) validateKindBadgeAwardEvent(ctx context.Context, e *mo
 	if len(e.Tags.GetAll([]string{"p"})) == 0 {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: p tag is required")
 	}
-	if err := ev.validateKindBadgeAwardOwnership(ctx, e, incomingEvents); err != nil {
+	if err := ev.validateKindBadgeAwardOwnership(ctx, rules, batch, e); err != nil {
 		return errors.Wrap(err, "can't validate badge award ownership")
 	}
 
 	return nil
 }
 
-func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, e *model.Event, imcomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	if dTag := e.Tags.GetD(); dTag != model.ProfileBadgesIdentifier {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: no required d tag/wrong value: expected %q, got %q", model.ProfileBadgesIdentifier, dTag)
 	}
@@ -94,7 +94,7 @@ func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, e 
 		if i < len(eTags) && len(eTags[i]) >= 2 {
 			badgeAwardID := eTags[i][1]
 			if badgeAwardID != "" {
-				if err := ev.validateProfileBadgeAward(ctx, badgeRef, badgeAwardID, userPubkey, imcomingEvents); err != nil {
+				if err := ev.validateProfileBadgeAward(ctx, rules, batch, badgeRef, badgeAwardID, userPubkey); err != nil {
 					return errors.Wrapf(err, "invalid badge award reference %s", badgeAwardID)
 				}
 			}
@@ -104,7 +104,7 @@ func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, e 
 	return nil
 }
 
-func (ev *eventValidator) validateKindBadgeAwardOwnership(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindBadgeAwardOwnership(ctx context.Context, _ *ruleSet, batch model.Events, e *model.Event) error {
 	aTag := e.GetTag("a")
 	if aTag == nil || aTag.Value() == "" {
 		return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award missing a tag %v", e.ID)
@@ -117,12 +117,21 @@ func (ev *eventValidator) validateKindBadgeAwardOwnership(ctx context.Context, e
 	if e.GetMasterPublicKey() != expectedBadgeAuthor {
 		return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award not signed by badge definition author %v", e.ID)
 	}
-	badgeDefinitionIndex := slices.IndexFunc(incomingEvents, func(event *model.Event) bool {
-		if event.Kind != nostr.KindBadgeDefinition {
-			return false
-		}
+	badgeDefinitionIndex := slices.IndexFunc(batch, func(event *model.Event) bool {
 		expectedDTag := parts[2]
-		return event.GetMasterPublicKey() == expectedBadgeAuthor && event.Tags.GetD() == expectedDTag
+		switch event.Kind {
+		case nostr.KindBadgeDefinition:
+			return event.GetMasterPublicKey() == expectedBadgeAuthor && event.Tags.GetD() == expectedDTag
+
+		case model.CustomIONKindEphemeralEmbedding:
+			var nestedEvent model.Event
+			err := nestedEvent.UnmarshalJSON([]byte(event.Content))
+			return err == nil &&
+				nestedEvent.Kind == nostr.KindBadgeDefinition &&
+				nestedEvent.GetMasterPublicKey() == expectedBadgeAuthor &&
+				nestedEvent.Tags.GetD() == expectedDTag
+		}
+		return false
 	})
 
 	if badgeDefinitionIndex == -1 {
@@ -132,7 +141,7 @@ func (ev *eventValidator) validateKindBadgeAwardOwnership(ctx context.Context, e
 		it := ev.QueryFunc(ctx, model.Filter{
 			Authors: []string{badgePubkey},
 			Kinds:   []int{nostr.KindBadgeDefinition},
-			Tags:    nostr.TagMap{}.SetLiterals("d", badgeDTag),
+			Tags:    model.TagMap{}.SetLiterals("d", badgeDTag),
 			Limit:   1,
 		})
 		badgeDefinitionFound := false
@@ -185,17 +194,17 @@ func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
 	return false, ""
 }
 
-func checkProofOfOwnershipBadges(username string, masterKey string, incomingEvents []*model.Event) error {
-	badgeDefinitionIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+func checkProofOfOwnershipBadges(_ context.Context, _ *ruleSet, batch model.Events, username string, masterKey string) error {
+	badgeDefinitionIndex := slices.IndexFunc(batch, func(e *model.Event) bool {
 		return e.Kind == nostr.KindBadgeDefinition
 	})
-	badgeAwardIndex := slices.IndexFunc(incomingEvents, func(e *model.Event) bool {
+	badgeAwardIndex := slices.IndexFunc(batch, func(e *model.Event) bool {
 		return e.Kind == nostr.KindBadgeAward
 	})
 	if badgeDefinitionIndex == -1 || badgeAwardIndex == -1 {
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] missing badge definition or award events for username %s", username)
 	}
-	badgeDefinition := incomingEvents[badgeDefinitionIndex]
+	badgeDefinition := batch[badgeDefinitionIndex]
 	_, badgeUsername := extractUsernameFromProofBadge(badgeDefinition)
 	if badgeUsername == "" {
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] badge definition does not have username proof of ownership")
@@ -203,7 +212,7 @@ func checkProofOfOwnershipBadges(username string, masterKey string, incomingEven
 	if badgeUsername != username {
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] username in badge definition (%s) doesn't match username (%s)", badgeUsername, username)
 	}
-	badgeAward := incomingEvents[badgeAwardIndex]
+	badgeAward := batch[badgeAwardIndex]
 	_, badgeUsername = extractUsernameFromProofBadge(badgeAward)
 	if badgeUsername == "" {
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] badge award does not have username proof of ownership")
@@ -234,8 +243,8 @@ func (ev *eventValidator) getEvent(ctx context.Context, address string) (event *
 	return nil, nil
 }
 
-func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, badgeRef, badgeAwardID, userPubkey string, incomingEvents []*model.Event) error {
-	for _, event := range incomingEvents {
+func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *ruleSet, batch model.Events, badgeRef, badgeAwardID, userPubkey string) error {
+	for _, event := range batch {
 		if event.Kind == nostr.KindBadgeAward && event.GetID() == badgeAwardID {
 			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s does not reference badge %s", badgeAwardID, badgeRef)

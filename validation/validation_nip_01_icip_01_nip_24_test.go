@@ -205,10 +205,11 @@ func TestValidateKindProfileMetadataEvent(t *testing.T) {
 				},
 			}
 			require.NoError(t, event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			validator := &eventValidator{
-				SkipKindProfileProofEventsVerify: true,
-			}
-			err = validator.validateKindProfileMetadataEvent(t.Context(), event, nil)
+			validator := newEventValidator(nil)
+			rules := new(ruleSet).Configure(
+				RuleWithSkipProfileMetadataProofEventsVerify(),
+			)
+			err = validator.validateKindProfileMetadataEvent(t.Context(), rules, model.Events{}, event)
 			if tt.shouldError {
 				require.Error(t, err, "Expected error for test case: %s", tt.name)
 			} else {

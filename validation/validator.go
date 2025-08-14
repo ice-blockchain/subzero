@@ -13,46 +13,33 @@ import (
 
 type (
 	Option func(*eventValidator)
+	Rule   func(*ruleSet)
 
 	eventValidator struct {
-		Config                           *Config
-		QueryFunc                        func(context.Context, ...model.Filter) query.EventIterator
+		Config    *Config
+		QueryFunc func(context.Context, ...model.Filter) query.EventIterator
+	}
+	ruleSet struct {
 		SkipKindProfileProofEventsVerify bool
 		BroadcastMode                    bool
 	}
 )
 
-func (v *eventValidator) Validate(ctx context.Context, events model.Events, opts ...Option) error {
-	if events == nil {
-		return nil
+func (r *ruleSet) Configure(rules ...Rule) *ruleSet {
+	for _, rule := range rules {
+		rule(r)
 	}
-	if len(opts) > 0 {
-		for _, opt := range opts {
-			opt(v)
-		}
-	} else {
-		opts = []Option{
-			WithQueryFunc(query.GetStoredEvents),
-		}
-	}
-	for _, e := range events {
-		if !e.CheckID() {
-			return ErrEventInvalidID
-		}
-		if ok, err := e.CheckSignature(); err != nil {
-			return errors.Wrap(err, "signature check failed")
-		} else if !ok {
-			return ErrEventInvalidSign
-		}
+	return r
+}
 
-		if err := v.validate(ctx, e, events...); err != nil {
+func (v *eventValidator) Validate(ctx context.Context, batch model.Events, rules ...Rule) error {
+	var ruleSet ruleSet
+
+	ruleSet.Configure(rules...)
+
+	for _, e := range batch {
+		if err := v.validate(ctx, &ruleSet, batch, e); err != nil {
 			return errors.Wrap(err, "validation failed")
-		}
-
-		if v.Config != nil && v.Config.NIP13MinLeadingZeroBits > 0 {
-			if err := e.CheckNIP13Difficulty(v.Config.NIP13MinLeadingZeroBits); err != nil {
-				return errors.Wrap(err, "wrong event difficulty")
-			}
 		}
 	}
 
@@ -65,14 +52,14 @@ func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator)
 	}
 }
 
-func WithBroadcastMode() Option {
-	return func(v *eventValidator) {
+func RuleWithBroadcastMode() Rule {
+	return func(v *ruleSet) {
 		v.BroadcastMode = true
 	}
 }
 
-func WithSkipProfileMetadataProofEventsVerify() Option {
-	return func(v *eventValidator) {
+func RuleWithSkipProfileMetadataProofEventsVerify() Rule {
+	return func(v *ruleSet) {
 		v.SkipKindProfileProofEventsVerify = true
 	}
 }

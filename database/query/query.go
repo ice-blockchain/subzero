@@ -197,6 +197,23 @@ func (req *databaseBatchRequest) Save(e *model.Event) error {
 	return nil
 }
 
+func (req *databaseBatchRequest) SaveWithExpiration(e *model.Event, ttl time.Duration) error {
+	dbEvent, err := toDatabaseEvent(e)
+	if err != nil {
+		return err
+	}
+
+	if ttl > 0 {
+		dbEvent.Expiration = sql.NullInt64{
+			Valid: true,
+			Int64: int64(time.Now().Add(ttl).UnixNano()),
+		}
+	}
+
+	req.InsertOrReplace = append(req.InsertOrReplace, *dbEvent)
+	return nil
+}
+
 func (req *databaseBatchRequest) Remove(e *model.Event) error {
 	f, err := parseEventAsFilterForDelete(e)
 	if err != nil {
@@ -1250,7 +1267,7 @@ func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, eve
 		if !allowed {
 			return errors.Wrapf(model.ErrOnBehalfAccessDenied, "event id %s / kind %d", event.ID, event.Kind)
 		}
-		return req.Save(ephemeralAttestationEvent)
+		return req.SaveWithExpiration(ephemeralAttestationEvent, time.Minute)
 	}
 	return nil
 }

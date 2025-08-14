@@ -12,11 +12,12 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func (ev *eventValidator) validateTextNote(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validateTextNote(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	richText := e.GetTag(model.CustomIONTagRichText)
 	if richText != nil && len(e.Content) > 0 {
 		return errors.Wrap(ErrWrongEventParams, "rich text tag is set, but content is not empty")
 	}
+
 	if len(e.Content) == 0 && richText == nil {
 		pubAt := e.GetTag("published_at").Value()
 		if val, err := nostr.ParseTimestamp(pubAt); err != nil || val.Equal(e.CreatedAt) {
@@ -34,7 +35,7 @@ func (ev *eventValidator) validateTextNote(ctx context.Context, e *model.Event, 
 		if err := ev.validatePostCommunityEvent(ctx, e); err != nil {
 			return errors.Wrap(err, "validate post community event")
 		}
-		if err := ev.validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
+		if err := ev.validateWhoCanReplySettings(ctx, rules, batch, e); err != nil {
 			return errors.Wrap(err, "validate who can reply settings")
 		}
 		if false {

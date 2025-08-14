@@ -245,7 +245,31 @@ func extractTagValueFromPairs(tag model.Tag, key string) (value string, err erro
 	return "", errors.Wrapf(ErrWrongEventParams, "tag %q does not have key %q", tag.Key(), key)
 }
 
-func (ev *eventValidator) validate(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validateKindEphemeralEmbeddingEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
+	var wrappedEvent model.Event
+
+	err := wrappedEvent.UnmarshalJSON([]byte(e.Content))
+	if err != nil {
+		return errors.Wrap(err, "failed to unmarshal wrapped event")
+	}
+
+	return ev.validate(ctx, rules, batch, &wrappedEvent)
+}
+
+func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
+	if !e.CheckID() {
+		return ErrEventInvalidID
+	}
+	if ok, err := e.CheckSignature(); err != nil {
+		return errors.Wrap(err, "signature check failed")
+	} else if !ok {
+		return ErrEventInvalidSign
+	}
+	if ev.Config != nil && ev.Config.NIP13MinLeadingZeroBits > 0 {
+		if err := e.CheckNIP13Difficulty(ev.Config.NIP13MinLeadingZeroBits); err != nil {
+			return errors.Wrap(err, "wrong event difficulty")
+		}
+	}
 	if e.Kind < 0 || e.Kind > 65535 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	}
@@ -268,17 +292,17 @@ func (ev *eventValidator) validate(ctx context.Context, e *model.Event, incoming
 	}
 	switch e.Kind {
 	case nostr.KindProfileMetadata:
-		return ev.validateKindProfileMetadataEvent(ctx, e, incomingEvents)
+		return ev.validateKindProfileMetadataEvent(ctx, rules, batch, e)
 	case nostr.KindTextNote:
-		return ev.validateKindTextNoteEvent(ctx, e, incomingEvents...)
+		return ev.validateKindTextNoteEvent(ctx, rules, batch, e)
 	case nostr.KindDeletion:
 		return ev.validateKindDeletionEvent(ctx, e)
 	case nostr.KindRepost, nostr.KindGenericRepost:
-		return ev.validateKindRepostEvent(ctx, e, incomingEvents...)
+		return ev.validateKindRepostEvent(ctx, rules, batch, e)
 	case nostr.KindFollowList:
 		return validateFollowListEvent(e)
 	case nostr.KindBadgeAward:
-		return ev.validateKindBadgeAwardEvent(ctx, e, incomingEvents)
+		return ev.validateKindBadgeAwardEvent(ctx, rules, batch, e)
 	case nostr.KindDirectMessage, nostr.KindSeal:
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
 	case nostr.KindReactionToWebsite:
@@ -345,11 +369,11 @@ func (ev *eventValidator) validate(ctx context.Context, e *model.Event, incoming
 	case nostr.KindRelayListMetadata:
 		return validateKindRelayListMetadataEvent(e)
 	case nostr.KindProfileBadges:
-		return ev.validateKindProfileBadgesEvent(ctx, e, incomingEvents)
+		return ev.validateKindProfileBadgesEvent(ctx, rules, batch, e)
 	case nostr.KindBadgeDefinition:
 		return validateKindBadgeDefinitionEvent(e)
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
-		return ev.validateTextNote(ctx, e, incomingEvents...)
+		return ev.validateTextNote(ctx, rules, batch, e)
 	case model.CustomIONKindCommunityDefinition, model.CustomIONKindCommunityChangeDefinition:
 		return validateCustomIONKindCommunityDefinitionEvent(ctx, e)
 	case model.CustomIONKindCommunityJoin:
@@ -359,7 +383,9 @@ func (ev *eventValidator) validate(ctx context.Context, e *model.Event, incoming
 	case model.CustomIONKindCommunityBanUser:
 		return validateCustomIONKindCommunityBanUserEvent(ctx, e)
 	case model.CustomIONKindDeviceRegistration:
-		return validateKindDeviceRegistration(e, ev.Config.RelayURL, ev.BroadcastMode)
+		return ev.validateKindDeviceRegistration(ctx, rules, batch, e)
+	case model.CustomIONKindEphemeralEmbedding:
+		return ev.validateKindEphemeralEmbeddingEvent(ctx, rules, batch, e)
 	default:
 		if e.IsJobResponse() {
 			return validateKindJobResult(e)
