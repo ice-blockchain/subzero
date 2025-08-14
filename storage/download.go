@@ -88,13 +88,13 @@ func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKe
 }
 
 func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, bootstap *string, newVersion int64) error {
-	existingBagForUser, _, err := c.bagByUser(user)
+	existingBagForUser, ver, err := c.bagByUser(user)
 	if err != nil {
 		return errors.Wrapf(err, "failed to find existing bag for user %s", user)
 	}
 	replaceBagPerUser := existingBagForUser == nil
 	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
-		if existingBagForUser.Header == nil || (existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion) {
+		if (existingBagForUser.Header == nil && ver < newVersion) || (existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion) {
 			log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
 			downloading := existingBagForUser.IsDownloadAll()
 			existingBagForUser.Stop()

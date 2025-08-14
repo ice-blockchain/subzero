@@ -149,9 +149,9 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 		return nil
 	}
 	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
-	fileHashes := []string{}
+	fileHashes := map[string]string{}
 	if xTag := originalEvent.GetTag("ox"); originalEvent.Kind == nostr.KindFileMetadata && xTag.Value() != "" {
-		fileHashes = append(fileHashes, xTag.Value())
+		fileHashes[xTag.Value()] = originalEvent.GetTag("url").Value()
 	} else {
 		imetas := originalEvent.Tags.GetAll([]string{"imeta"})
 		for _, imeta := range imetas {
@@ -163,17 +163,18 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 			if hash == "" {
 				return errors.Errorf("malformed imeta: empty x, ox tags")
 			}
-			fileHashes = append(fileHashes, hash)
+			fileHashes[hash] = imetaValues["url"]
 		}
 	}
 	var err error
-	for _, fh := range fileHashes {
-		err = errors.Join(err, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey))
+	for fh := range fileHashes {
+		ext := filepath.Ext(fileHashes[fh])
+		err = errors.Join(err, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey, ext))
 	}
 	return err
 }
 
-func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey string) error {
+func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey, ext string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -202,14 +203,14 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 	if bag == nil {
 		return errors.Errorf("bagID for user %v not found", masterPubkey)
 	}
+	userRoot, _ := globalClient.Client.BuildUserPath(masterPubkey, "")
 	file, err := globalClient.Client.detectFile(bag, fileHash)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) || errors.Is(err, errLatestBagNotDownloadedYet) {
-			return nil
+			return os.Remove(filepath.Join(userRoot, fileHash+ext))
 		}
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
-	userRoot, _ := globalClient.Client.BuildUserPath(masterPubkey, "")
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
@@ -383,13 +384,17 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 		}
 		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String())
 		fileHash := ""
+		ext := ""
 		if xTag := ev.GetTag("ox"); ev.Kind == nostr.KindFileMetadata && xTag.Value() != "" {
 			fileHash = xTag.Value()
+		}
+		if url := ev.GetTag("url"); ev.Kind == nostr.KindFileMetadata && url.Value() != "" {
+			ext = filepath.Ext(url.Value())
 		}
 		if fileHash == "" {
 			return errors.Errorf("malformed file event: no file hash, %v", ev.String())
 		}
-		err = processEventDeletion(ctx, fileHash, ev.GetMasterPublicKey(), ev.PubKey)
+		err = processEventDeletion(ctx, fileHash, ev.GetMasterPublicKey(), ev.PubKey, ext)
 		if errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrNotFound) {
 			err = nil
 		}
