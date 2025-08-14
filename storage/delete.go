@@ -35,7 +35,7 @@ func (c *client) Delete(ctx context.Context, userPubKey, masterKey, fileHash str
 	if count >= 2 {
 		return nil // Used by other posts
 	}
-	bag, err := c.bagByUser(masterKey)
+	bag, _, err := c.bagByUser(masterKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
 	}
@@ -70,7 +70,7 @@ func (c *client) Delete(ctx context.Context, userPubKey, masterKey, fileHash str
 }
 
 func (c *client) DeleteUser(masterKey string) error {
-	bag, err := c.bagByUser(masterKey)
+	bag, _, err := c.bagByUser(masterKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get serving bag for user %v")
 	}

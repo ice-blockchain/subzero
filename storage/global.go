@@ -174,6 +174,9 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 }
 
 func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	it := query.GetStoredEvents(ctx,
 		model.Filter{
 			Kinds:     []int{nostr.KindFileMetadata},
@@ -192,7 +195,7 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 	if count >= 2 {
 		return nil // Used by other posts
 	}
-	bag, err := globalClient.Client.bagByUser(masterPubkey)
+	bag, _, err := globalClient.Client.bagByUser(masterPubkey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)
 	}
@@ -201,6 +204,9 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey st
 	}
 	file, err := globalClient.Client.detectFile(bag, fileHash)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, errLatestBagNotDownloadedYet) {
+			return nil
+		}
 		return errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
 	userRoot, _ := globalClient.Client.BuildUserPath(masterPubkey, "")

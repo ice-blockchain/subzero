@@ -32,7 +32,7 @@ import (
 
 func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
 	eStart := time.Now()
-	existingBagForUser, err := c.bagByUser(masterPubKey)
+	existingBagForUser, _, err := c.bagByUser(masterPubKey)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to find existing bag for user %s", masterPubKey)
 	}
@@ -242,7 +242,7 @@ func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bo
 }
 
 func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string, deletion bool) error {
-	if err := c.saveTorrent(tr, &userPubKey, nil, deletion); err != nil {
+	if err := c.saveTorrent(tr, &userPubKey, nil, deletion, nil); err != nil {
 		return errors.Wrap(err, "failed to save upload torrent into storage")
 	}
 	c.newFilesMx.Lock()

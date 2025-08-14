@@ -89,6 +89,7 @@ type (
 		tor       *storage.Torrent
 		bootstrap *string
 		user      *string
+		version   int64
 	}
 )
 
@@ -159,17 +160,31 @@ func (c *client) detectFileFromMeta(bag *storage.Torrent, metadata *headerData, 
 	return f.Name, nil
 }
 
-func (c *client) bagByUser(userPubKey string) (*storage.Torrent, error) {
+func (c *client) bagByUser(userPubKey string) (*storage.Torrent, int64, error) {
+	var version int64
 	k := make([]byte, 3+64)
 	copy(k, "ub:")
 	copy(k[3:], userPubKey)
-	bagID, err := c.db.Get(k, nil)
+	var bagID []byte
+	bagIDAndVersion, err := c.db.Get(k, nil)
+	if len(bagIDAndVersion) > 0 {
+		bagID = bagIDAndVersion[:32]
+		versionStr := string(bagIDAndVersion[32:])
+		if versionStr != "" {
+			version, err = strconv.ParseInt(versionStr, 10, 64)
+			if err != nil {
+				return nil, 0, errors.Wrapf(err, "failed to read userID:bag mapping, version is %v, invalid", versionStr)
+			}
+		}
+	}
 	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
-		return nil, errors.Wrap(err, "failed to read userID:bag mapping")
+		return nil, 0, errors.Wrap(err, "failed to read userID:bag mapping")
 	}
 	tr := c.progressStorage.GetTorrent(bagID)
-
-	return tr, nil
+	if version == 0 && tr != nil && tr.Header != nil {
+		version = int64(tr.Header.FilesCount)
+	}
+	return tr, version, nil
 }
 func (c *client) bootstrapForBag(bagID []byte) (string, error) {
 	k := make([]byte, 3+32)
@@ -198,7 +213,7 @@ func (c *client) BuildUserPath(userPubKey string, contentType string) (userStora
 }
 
 func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32, res []*FileMetadata, err error) {
-	bag, err := c.bagByUser(userPubKey)
+	bag, _, err := c.bagByUser(userPubKey)
 	if err != nil {
 		return 0, nil, errors.Wrapf(err, "failed to get bagID for the user %v", userPubKey)
 	}
@@ -253,7 +268,7 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 }
 
 func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
-	bag, err := c.bagByUser(masterKey)
+	bag, _, err := c.bagByUser(masterKey)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get bagID for the user %v", masterKey)
 	}
