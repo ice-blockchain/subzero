@@ -14,8 +14,11 @@ var (
 			model.CustomIONAttestationKindRevoked:  {},
 			model.CustomIONAttestationKindInactive: {},
 		},
-		model.CustomIONAttestationKindInactive: {}, // Inactive -> [].
-		model.CustomIONAttestationKindRevoked:  {}, // Revoked -> [].
+		model.CustomIONAttestationKindInactive: { // Inactive -> [Active, Revoked].
+			model.CustomIONAttestationKindActive:  {},
+			model.CustomIONAttestationKindRevoked: {},
+		},
+		model.CustomIONAttestationKindRevoked: {}, // Revoked -> [].
 	}
 
 	ErrAttestationUnknownAction        = errors.New("unknown attestation action")

@@ -104,7 +104,7 @@ func TestValidateAttestationEvent(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("invalid state transition from inactive", func(t *testing.T) {
+	t.Run("state transition from inactive to active", func(t *testing.T) {
 		var ev model.Event
 		ev.PubKey = "event_pubkey"
 		ev.Tags = model.Tags{
@@ -113,9 +113,7 @@ func TestValidateAttestationEvent(t *testing.T) {
 		}
 
 		err := validateAttestationEvent(validator, &ev)
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrAttestationInvalidTransition)
-		require.Contains(t, err.Error(), "from \"inactive\" to \"active\"")
+		require.NoError(t, err)
 	})
 
 	t.Run("invalid state transition from revoked", func(t *testing.T) {
@@ -274,8 +272,8 @@ func TestValidateAttestationEvent(t *testing.T) {
 		var ev model.Event
 		ev.PubKey = "event_pubkey"
 		ev.Tags = model.Tags{
-			{"p", "user1", "", "inactive:1692000000"},
-			{"p", "user1", "", "revoked:1692000100"}, // Invalid: inactive is terminal.
+			{"p", "user1", "", "revoked:1692000000"},
+			{"p", "user1", "", "active:1692000100"}, // Invalid: revoked is terminal.
 		}
 
 		err := validateAttestationEvent(validator, &ev)
