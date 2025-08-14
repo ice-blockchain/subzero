@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -27,7 +28,7 @@ import (
 )
 
 func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, error) {
-	bag, err := c.bagByUser(masterPubkey)
+	bag, _, err := c.bagByUser(masterPubkey)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)
 	}
@@ -88,7 +89,7 @@ func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKe
 }
 
 func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, bootstap *string, newVersion int64) error {
-	existingBagForUser, err := c.bagByUser(user)
+	existingBagForUser, _, err := c.bagByUser(user)
 	if err != nil {
 		return errors.Wrapf(err, "failed to find existing bag for user %s", user)
 	}
@@ -111,17 +112,17 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 	}
 	if replaceBagPerUser && user != "" {
 		bagId, _ := hex.DecodeString(bagID)
-		if err = c.saveBagPerUser(bagId, &user); err != nil {
+		if err = c.saveBagPerUser(bagId, &newVersion, &user); err != nil {
 			return errors.Wrapf(err, "failed to save bag per user")
 		}
 	}
-	if err = c.download(ctx, bagID, user, bootstap, replaceBagPerUser); err != nil {
+	if err = c.download(ctx, bagID, user, bootstap, newVersion); err != nil {
 		return errors.Wrapf(err, "failed to download new bag ID %v for user %v", bagID, user)
 	}
 	return nil
 }
 
-func (c *client) download(ctx context.Context, bagID, user string, bootstrap *string, replaceByUsr bool) (err error) {
+func (c *client) download(ctx context.Context, bagID, user string, bootstrap *string, newVersion int64) (err error) {
 	bag, err := hex.DecodeString(bagID)
 	if err != nil {
 		return errors.Wrapf(err, "invalid bagID %v", bagID)
@@ -140,7 +141,7 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 	if tor == nil {
 		tor = storage.NewTorrent(c.rootStoragePath, c.progressStorage, c.conn)
 		tor.BagID = bag
-		if err = c.saveTorrent(tor, &user, bootstrap, false); err != nil {
+		if err = c.saveTorrent(tor, &user, bootstrap, false, &newVersion); err != nil {
 			return errors.Wrapf(err, "failed to store new torrent %v", bagID)
 		}
 		select {
@@ -150,6 +151,7 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 			tor:       tor,
 			bootstrap: bootstrap,
 			user:      &user,
+			version:   newVersion,
 		}:
 		}
 	} else {
@@ -179,8 +181,8 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 			c.activeDownloadsMx.Lock()
 			delete(c.activeDownloads, hex.EncodeToString(tor.BagID))
 			c.activeDownloadsMx.Unlock()
-
-			if pErr := c.saveTorrent(tor, user, nil, false); pErr != nil {
+			ver := int64(tor.Header.FilesCount)
+			if pErr := c.saveTorrent(tor, user, nil, false, &ver); pErr != nil {
 				log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
 			}
 
@@ -199,7 +201,8 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 						*user = m.Master
 					}
 				}
-				if pErr := c.saveTorrent(tor, user, nil, false); pErr != nil {
+				ver := int64(tor.Header.FilesCount)
+				if pErr := c.saveTorrent(tor, user, nil, false, &ver); pErr != nil {
 					log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
 				}
 			}
@@ -235,7 +238,7 @@ func (c *client) connectToBootstrap(ctx context.Context, torrent *storage.Torren
 	return nil
 }
 
-func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string, deletion bool) error {
+func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string, deletion bool, newVersion *int64) error {
 	if err := c.progressStorage.SetTorrent(tr); err != nil {
 		return errors.Wrap(err, "failed to save torrent into storage")
 	}
@@ -244,15 +247,30 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 		f := len(c.newFiles[*userPubKey])
 		c.newFilesMx.RUnlock()
 		maxVal := uint32(f)
-		existing, err := c.bagByUser(*userPubKey)
+		existing, ver, err := c.bagByUser(*userPubKey)
 		if err != nil {
 			return err
 		}
-		if existing != nil && existing.Header != nil {
-			maxVal = max(uint32(f), existing.Header.FilesCount)
+		if existing != nil {
+			if existing.Header != nil {
+				maxVal = max(uint32(f), existing.Header.FilesCount)
+			} else {
+				maxVal = max(uint32(f), uint32(ver))
+			}
 		}
-		if deletion || tr.Header == nil || (tr.Header != nil && tr.Header.FilesCount >= maxVal) {
-			if err := c.saveBagPerUser(tr.BagID, userPubKey); err != nil {
+		if deletion || (tr.Header == nil && newVersion != nil && *newVersion >= int64(maxVal)) || (tr.Header != nil && tr.Header.FilesCount >= maxVal) {
+			fmt.Println("SAVE", hex.EncodeToString(tr.BagID), func() int64 {
+				if newVersion == nil {
+					return -1
+				}
+				return *newVersion
+			}(), maxVal, func() string {
+				if existing == nil {
+					return "NIL"
+				}
+				return hex.EncodeToString(existing.BagID)
+			}())
+			if err := c.saveBagPerUser(tr.BagID, newVersion, userPubKey); err != nil {
 				return errors.Wrapf(err, "failed to save bag per user")
 			}
 		}
@@ -277,12 +295,16 @@ func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string
 	return nil
 }
 
-func (c *client) saveBagPerUser(bagID []byte, userPubKey *string) error {
+func (c *client) saveBagPerUser(bagID []byte, ver *int64, userPubKey *string) error {
 	if userPubKey != nil && *userPubKey != "" {
 		k := make([]byte, 3+64)
 		copy(k, "ub:")
 		copy(k[3:], *userPubKey)
-		if err := c.db.Put(k, bagID, nil); err != nil {
+		versionStr := ""
+		if ver != nil {
+			versionStr = strconv.FormatInt(*ver, 10)
+		}
+		if err := c.db.Put(k, append(bagID, []byte(versionStr)...), nil); err != nil {
 			return errors.Wrapf(err, "failed to save userID:bag mapping for bag %X", bagID)
 		}
 	}
@@ -326,7 +348,7 @@ outerLoop:
 					}
 					cancel()
 				}
-				if err := c.saveTorrent(tor, q.user, q.bootstrap, false); err != nil {
+				if err := c.saveTorrent(tor, q.user, q.bootstrap, false, &q.version); err != nil {
 					log.Printf("ERROR: failed save updated upload / download torrrent state %v: %v", hex.EncodeToString(q.tor.BagID), err)
 				}
 				c.activeDownloadsMx.Lock()
