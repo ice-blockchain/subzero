@@ -183,6 +183,12 @@ var (
 			ContentNotEmpty().
 			Required("d", "t", "relay", "token").
 			Build(),
+
+		model.CustomIONKindAttestation: newKindValidatorBuilderEmpty().
+			Required(model.TagAttestationName).
+			Optional("nonce").
+			Validate(validateAttestationEvent).
+			Build(),
 	}
 
 	// Allow multiple `p` tags for given kinds that point to the same user.

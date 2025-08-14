@@ -18,7 +18,6 @@ type (
 		addresses map[string]int
 		pending   Events
 		reduce    func(*Event) (skip bool)
-		oneShot   bool
 		mu        sync.Mutex
 	}
 )
