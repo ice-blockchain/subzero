@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func caclFileHash(t *testing.T, path string) (string, error) {
+func calcFileHash(t *testing.T, path string) (string, error) {
 	t.Helper()
 
 	f, err := os.Open(path)
@@ -59,7 +59,7 @@ func WaitForFile(t *testing.T, ctx context.Context, watchPath, expectedPath, exp
 	for ctx.Err() == nil {
 		select {
 		case <-ticker.C:
-			hash, err = caclFileHash(t, expectedPath)
+			hash, err = calcFileHash(t, expectedPath)
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to calculate hash of file %s", expectedPath)
 			}
