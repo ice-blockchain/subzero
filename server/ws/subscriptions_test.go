@@ -271,7 +271,7 @@ func TestPublishingEvents(t *testing.T) {
 		},
 	}}
 	t.Run("create on-behalf attestations", func(t *testing.T) {
-		helperSignWithMinLeadingZeroBits(t, attestationEvent, privkey)
+		helperSignWithMinLeadingZeroBits(t, attestationEvent, master)
 		require.NoError(t, relay.Publish(ctx, attestationEvent.Event))
 	})
 	onBehalfEvent := *validEvent

@@ -11,7 +11,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, e *model.Event, incomingEvents []*model.Event) error {
+func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	var parsedContent model.ProfileMetadataContent
 	if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "nip-01,nip-24: wrong json fields for: %+v", e)
@@ -30,7 +30,7 @@ func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, 
 			return errors.Wrapf(ErrWrongEventParams, "icip-01: ion_content_nft_collections: created_by cannot be empty for collection '%s': %s", collectionName, e.ID)
 		}
 	}
-	if !ev.SkipKindProfileProofEventsVerify {
+	if !rules.SkipKindProfileProofEventsVerify {
 		masterKey := e.GetMasterPublicKey()
 		nameChanged, username, err := ev.validateProfileMetadataNameChange(ctx, e, masterKey)
 		if err != nil {
@@ -39,7 +39,7 @@ func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, 
 		if !nameChanged {
 			return nil
 		}
-		if err := checkProofOfOwnershipBadges(username, masterKey, incomingEvents); err != nil {
+		if err := checkProofOfOwnershipBadges(ctx, rules, batch, username, masterKey); err != nil {
 			return errors.Wrapf(err, "failed to check proof of ownership for badges for username %s", username)
 		}
 	}

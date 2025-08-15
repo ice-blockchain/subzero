@@ -4,7 +4,6 @@ package validation
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 
 	"github.com/cockroachdb/errors"
@@ -13,15 +12,12 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, e *model.Event, incomingEvents ...*model.Event) error {
+func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	var repostedEvent model.Event
 
-	if !json.Valid([]byte(e.Content)) {
-		return errors.Wrapf(ErrWrongEventParams, "nip-18: content field should be stringified json: %q", e.Content)
-	}
 	if err := repostedEvent.UnmarshalJSON([]byte(e.Content)); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong json fields: %v", err)
-	} else if err := ev.validate(ctx, &repostedEvent); err != nil && !errors.IsAny(err, ErrPollTTLExpired) {
+	} else if err := ev.validate(ctx, rules, batch, &repostedEvent); err != nil && !errors.IsAny(err, ErrPollTTLExpired) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: invalid reposted event: %v", err)
 	}
 
@@ -53,7 +49,7 @@ func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, e *model.
 	if err := ev.validatePostCommunityEvent(ctx, e); err != nil {
 		return err
 	}
-	if err := ev.validateWhoCanReplySettings(ctx, e, incomingEvents...); err != nil {
+	if err := ev.validateWhoCanReplySettings(ctx, rules, batch, e); err != nil {
 		return err
 	}
 

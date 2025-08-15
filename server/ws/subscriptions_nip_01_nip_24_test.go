@@ -126,27 +126,23 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 		}}
 		helperSignWithMinLeadingZeroBits(t, replyEvent, userPrivKey)
 
-		badgeDefAckContent, err := badgeDefinition.MarshalJSON()
-		require.NoError(t, err)
 		badgeDefAck := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEphemeralEmbedding,
 			Tags: nostr.Tags{
 				{"e", replyEvent.ID},
 			},
-			Content: string(badgeDefAckContent),
+			Content: badgeDefinition.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, badgeDefAck, userPrivKey)
 
-		badgeAwardAckContent, err := badgeAward.MarshalJSON()
-		require.NoError(t, err)
 		badgeAwardAck := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      model.CustomIONKindEphemeralEmbedding,
 			Tags: nostr.Tags{
 				{"e", replyEvent.ID},
 			},
-			Content: string(badgeAwardAckContent),
+			Content: badgeAward.String(),
 		}}
 		helperSignWithMinLeadingZeroBits(t, badgeAwardAck, userPrivKey)
 

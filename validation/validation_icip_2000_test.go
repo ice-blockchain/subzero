@@ -38,3 +38,278 @@ func TestValidateTagsBAndP(t *testing.T) {
 		{"p", "bar"},
 	}}}, KindSupportedTags))
 }
+
+func TestValidateAttestationEvent(t *testing.T) {
+	t.Parallel()
+
+	validator := &eventValidator{}
+
+	t.Run("valid single attestation", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid multiple attestations for different pubkeys", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+			{"p", "user2", "", "inactive:1692000100"},
+			{"p", "user3", "", "revoked:1692000200"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid state transition active to revoked", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+			{"p", "user1", "", "revoked:1692000100"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid state transition active to inactive", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+			{"p", "user1", "", "inactive:1692000100"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid equal timestamps", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+			{"p", "user1", "", "revoked:1692000000"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("state transition from inactive to active", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "inactive:1692000000"},
+			{"p", "user1", "", "active:1692000100"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid state transition from revoked", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "revoked:1692000000"},
+			{"p", "user1", "", "active:1692000100"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrAttestationInvalidTransition)
+		require.Contains(t, err.Error(), "from \"revoked\" to \"active\"")
+	})
+
+	t.Run("invalid temporal order", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000100"},
+			{"p", "user1", "", "revoked:1692000000"}, // Earlier timestamp.
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrAttestationInvalidTemporalOrder)
+		require.Contains(t, err.Error(), "previous timestamp")
+		require.Contains(t, err.Error(), "is after current timestamp")
+	})
+
+	t.Run("unknown attestation action", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "unknown_action:1692000000"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrAttestationUnknownAction)
+		require.Contains(t, err.Error(), "unknown_action")
+	})
+
+	t.Run("empty pubkey in tag", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "", "", "active:1692000000"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrAttestationInvalidPubkey)
+		require.Contains(t, err.Error(), "empty pubkey")
+	})
+
+	t.Run("pubkey matches event pubkey", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "same_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "same_pubkey", "", "active:1692000000"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrAttestationInvalidPubkey)
+		require.Contains(t, err.Error(), "matches event pubkey")
+	})
+
+	t.Run("invalid tag format - too few elements", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "active:1692000000"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.ErrorIs(t, err, ErrAttestationInvalidFormat)
+	})
+
+	t.Run("non-attestation tags are ignored", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"e", "event_id", "", "some_value"},
+			{"t", "hashtag", "", ""},
+			{"p", "user1", "", "active:1692000000"}, // Only this should be processed.
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("malformed attestation string", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "invalid_format"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		// Error should come from model.ParseAttestationString.
+	})
+
+	t.Run("complex valid scenario with multiple users and transitions", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+			{"p", "user2", "", "active:1692000050"},
+			{"p", "user1", "", "revoked:1692000100"},
+			{"p", "user3", "", "inactive:1692000150"},
+			{"p", "user2", "", "inactive:1692000200"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("empty event tags", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("attestation with kinds (should be ignored)", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000:1,2,3"},
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("multiple transitions for same user with valid temporal order", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "active:1692000000"},
+			{"p", "user1", "", "inactive:1692000100"},
+			// Note: inactive is terminal, so no further transitions allowed.
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("attempt transition from terminal state", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "revoked:1692000000"},
+			{"p", "user1", "", "active:1692000100"}, // Invalid: revoked is terminal.
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrAttestationInvalidTransition)
+	})
+
+	t.Run("valid starting with any state", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"p", "user1", "", "revoked:1692000000"}, // Starting with terminal state is allowed.
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("mixed tags", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = model.Tags{
+			{"e", "event_id", "", "some_value"},     // Wrong key, should be ignored.
+			{"p", "user2", "", "active:1692000000"}, // Valid, should be processed.
+		}
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("nil tags", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = nil
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+}
