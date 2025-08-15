@@ -91,11 +91,6 @@ type (
 		user      *string
 		version   int64
 	}
-	TusContextFileNameKey string
-)
-
-const (
-	TusContextFileNameValue TusContextFileNameKey = "tusFileName"
 )
 
 var (

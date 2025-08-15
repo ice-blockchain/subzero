@@ -344,14 +344,6 @@ func (e *Event) IsComment() bool {
 	return false
 }
 
-var communityPostKinds = map[int]struct{}{
-	nostr.KindTextNote:            {},
-	CustomIONKindEditableTextNote: {},
-	nostr.KindArticle:             {},
-	nostr.KindRepost:              {},
-	nostr.KindGenericRepost:       {},
-}
-
 func (e *Event) IsCommunityPost() bool {
 	if hTag := e.GetHTag(); hTag == "" || hTag == e.ID {
 		return false

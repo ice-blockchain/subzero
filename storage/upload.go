@@ -359,9 +359,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 		}
 	}
 	if newName == "" {
-		if val := ctx.Value("fileName"); val != nil {
-			newName = val.(string)
-		}
+		newName = FileNameFromContext(ctx)
 	}
 	c.newFilesMx.Lock()
 	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {

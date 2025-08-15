@@ -181,7 +181,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 		}
 	}
 	input.Filename = hashHex + filepath.Ext(input.Filename)
-	s.storageClient.SaveFile(context.WithValue(hook.Context, "fileName", input.Filename), now, tok.MasterPubKey(), nil, 0)
+	s.storageClient.SaveFile(storage.WithFileNameInContext(hook.Context, input.Filename), now, tok.MasterPubKey(), nil, 0)
 	bagID, url, existed, err := s.storageClient.StartUpload(hook.Context, now, tok.PubKey(), tok.MasterPubKey(), input.Filename, hashHex, &input)
 	if err != nil {
 		err = errors.Wrap(err, "failed to upload file to ion storage")
