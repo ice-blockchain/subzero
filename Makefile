@@ -8,7 +8,6 @@ CGO_ENABLED ?= 1
 GOOS         ?=
 GOARCH       ?=
 SERVICE_NAME ?=
-TAGS         := go_json,linux,sqlite_stat4,sqlite_icu,sqlite_fts5,sqlite_math_functions
 
 export CGO_ENABLED GOOS GOARCH SERVICE_NAME
 
@@ -62,7 +61,7 @@ checkGenerated: generate
 	true;
 
 build-all@ci/cd:
-	go build -tags $(TAGS) -a -v -race ./...
+	go build -a -v -race ./...
 
 build: build-all@ci/cd
 
@@ -92,11 +91,11 @@ coverage: $(COVERAGE_FILE)
 
 test@ci/cd:
 	# TODO make -race work
-	go test -timeout 20m -tags test,$(TAGS) -v -cover -coverprofile=$(COVERAGE_FILE) -covermode atomic
+	go test -timeout 20m -tags test -v -cover -coverprofile=$(COVERAGE_FILE) -covermode atomic
 
 benchmark@ci/cd:
 	# TODO make -race work
-	go test -timeout 20m -tags test,$(TAGS) -run=^$ -v -bench=. -benchmem -benchtime 10s
+	go test -timeout 20m -tags test -run=^$ -v -bench=. -benchmem -benchtime 10s
 
 benchmark:
 	set -xe; \
@@ -166,7 +165,7 @@ buildAllBinaries:
 binary-specific-service:
 	set -xe; \
 	echo "$@: $(SERVICE_NAME) / $(GOOS) / $(GOARCH)" ; \
-	go build -tags $(TAGS) -a -v -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
+	go build -a -v -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
 	cp ./cmd/$${SERVICE_NAME}/bin ./$${SERVICE_NAME}.$${GOOS}.$${GOARCH}.bin; \
 
 all: checkLicense checkModVersion checkIfAllDependenciesAreUpToDate checkGenerated build test coverage benchmark clean
