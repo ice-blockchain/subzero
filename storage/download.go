@@ -52,17 +52,14 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 
 func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx context.Context, fh, master, infohash string) error) error {
 	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), event.String())
-	infohash := ""
-	if iTag := event.Tags.GetFirst([]string{"i"}); iTag != nil && len(*iTag) > 1 {
-		infohash = iTag.Value()
-	} else {
-		return errors.Newf("malformed i tag %v", iTag)
+	infohash := event.GetTag("i").Value()
+	if infohash == "" {
+		return errors.Newf("malformed or missing i tag in event %v", event.ID)
 	}
-	fileHash := ""
-	if oxTag := event.GetTag("ox"); oxTag != nil && len(oxTag) > 1 {
-		fileHash = oxTag.Value()
-	} else {
-		return errors.Newf("malformed ox tag %v", oxTag)
+
+	fileHash := event.GetTag("ox").Value()
+	if fileHash == "" {
+		return errors.Newf("malformed or missing ox tag in event %v", event.ID)
 	}
 
 	return acceptor(ctx, fileHash, event.GetMasterPublicKey(), infohash)
@@ -173,7 +170,16 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 		case storage.EventDone:
 			c.progressStorage.SetActiveFiles(tor.BagID, []uint32{})
 			tor.Stop()
-			log.Printf("[STORAGE] INFO: bag %v for user %v downloaded (%v files, %v bytes), disabling download", hex.EncodeToString(tor.BagID), usr, tor.Header.FilesCount, tor.Info.FileSize)
+
+			files, _ := tor.ListFiles()
+
+			log.Printf("[STORAGE] INFO: bag %v for user %v downloaded (%v files, %v bytes, %v content), disabling download",
+				hex.EncodeToString(tor.BagID),
+				usr,
+				tor.Header.FilesCount,
+				tor.Info.FileSize,
+				files,
+			)
 			if pErr := tor.Start(true, false, false); pErr != nil {
 				log.Printf("ERROR: failed to stop torrent download after downloading data for bag %v user %v: %v", hex.EncodeToString(tor.BagID), usr, pErr)
 			}
@@ -327,10 +333,10 @@ outerLoop:
 				}
 				log.Printf("[STORAGE] INFO: starting download %v for user %v Q %v", hex.EncodeToString(tor.BagID), usr, len(c.downloadQueue))
 				if err := tor.StartWithCallback(false, true, false, c.torrentStateCallback(tor, q.user)); err != nil {
-					log.Printf("ERROR: %v", errors.Wrapf(err, "failed to start new torrent %v", q.tor.BagID))
+					log.Printf("ERROR: failed to start new torrent %v: %v", q.tor.BagID, err)
 				}
 				if q.bootstrap != nil && *q.bootstrap != "" {
-					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 					if err := c.connectToBootstrap(ctx, tor, *q.bootstrap); err != nil {
 						log.Printf("WARN: failed to connect to bootstrap node for bag %v, waiting for DHT: %v", hex.EncodeToString(q.tor.BagID), err)
 					}
@@ -350,7 +356,6 @@ outerLoop:
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-
 }
 
 func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
@@ -410,7 +415,7 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 	values := u.Query()
 	values.Set("i", infohash)
 	u.RawQuery = values.Encode()
-	auth, err := nip98.GenerateAuthHeader(globalConfig.PrivateKey, "HEAD", "", u)
+	auth, err := nip98.GenerateAuthHeader(c.config.PrivateKey, "HEAD", "", u)
 	if err != nil {
 		return errors.Wrapf(err, "failed to generate auth header from relay's key")
 	}
@@ -438,7 +443,7 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 			return err != nil || resp.GetStatusCode() != http.StatusAccepted
 		}).
 		SetHeader("Authorization", auth).
-		SetHeader("Referer", globalConfig.RelayURL).
+		SetHeader("Referer", c.config.RelayURL).
 		SetQueryString(u.RawQuery).
 		Head(fullStrUrl)
 

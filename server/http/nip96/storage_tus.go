@@ -224,12 +224,12 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 			Content string     `json:"content"`
 		}{
 			Tags: nostr.Tags{
-				nostr.Tag{"url", url},
-				nostr.Tag{"ox", hashHex},
-				nostr.Tag{"m", input.ContentType},
-				nostr.Tag{"i", bagID},
-				nostr.Tag{"alt", input.Alt},
-				nostr.Tag{"size", strconv.FormatUint(uint64(input.FileSize), 10)},
+				{"url", url},
+				{"ox", hashHex},
+				{"m", input.ContentType},
+				{"i", bagID},
+				{"alt", input.Alt},
+				{"size", strconv.FormatUint(uint64(input.FileSize), 10)},
 			},
 			Content: input.Caption,
 		},
@@ -249,7 +249,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 		Body:       string(b),
 	}, nil
 }
-func mustNewTusHandler(ctx context.Context, hooks tusHooks) (*tusd.Handler, interface {
+func mustNewTusHandler(_ context.Context, hooks tusHooks) (*tusd.Handler, interface {
 	tusd.DataStore
 	tusd.TerminaterDataStore
 }) {

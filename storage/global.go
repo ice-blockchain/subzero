@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/url"
 	"os"
@@ -40,11 +41,10 @@ var (
 		Client *client
 		Once   sync.Once
 	}
-	globalConfig *config
 )
 
 type (
-	config struct {
+	Config struct {
 		PrivateKey              string `yaml:"private-key"`
 		IONStorageConfigURL     string `yaml:"ion-storage-config-url"`
 		AbsoluteRootStoragePath string `yaml:"absolute-root-storage-path"`
@@ -54,6 +54,7 @@ type (
 		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
 		RelayURL                string `yaml:"relay-url"`
 	}
+	Option     func(*client)
 	acceptorFn func(ctx context.Context, fh, master, infohash string) error
 )
 
@@ -90,8 +91,9 @@ func acceptEvents(ctx context.Context, acceptor acceptorFn, events ...*model.Eve
 				}
 			}
 		case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+			var val model.Timestamp
 			if len(event.Content) < 1 && event.GetTag(model.CustomIONTagRichText) == nil {
-				val, err := nostr.ParseTimestamp(event.GetTag("published_at").Value())
+				val, err = nostr.ParseTimestamp(event.GetTag("published_at").Value())
 				softDelete := err == nil && event.CreatedAt.After(val)
 				if softDelete {
 					err = errors.Join(err, errors.Wrapf(acceptDeletion(ctx, event), "failed to accept deletion %v", event))
@@ -167,8 +169,9 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 		}
 	}
 	var err error
+	var u *url.URL
 	for fh := range fileHashes {
-		u, err := url.Parse(fileHashes[fh])
+		u, err = url.Parse(fileHashes[fh])
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse malformed url %v", fileHashes[fh])
 		}
@@ -226,10 +229,18 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey, e
 	return nil
 }
 
-func MustInit(ctx context.Context) {
+func WithConfig(cfg *Config) Option {
+	return func(c *client) {
+		if cfg == nil {
+			log.Panicf("nil config passed to WithConfig")
+		}
+		c.config = cfg
+	}
+}
+
+func MustInit(ctx context.Context, opts ...Option) {
 	globalClient.Once.Do(func() {
-		globalConfig = cfg.MustGet[config]()
-		globalClient.Client = mustInit(ctx)
+		globalClient.Client = mustInit(ctx, opts...)
 	})
 	go func() {
 		<-ctx.Done()
@@ -242,9 +253,29 @@ func MustInit(ctx context.Context) {
 	}()
 }
 
-func mustInit(ctx context.Context) *client {
+func mustInit(ctx context.Context, opts ...Option) *client {
+	var cl = &client{
+		newFiles:          make(map[string]map[string]*FileMetaInput),
+		newFilesMx:        &sync.RWMutex{},
+		downloadQueue:     make(chan queueItem, 1000000),
+		activeDownloads:   make(map[string]bool),
+		activeDownloadsMx: &sync.RWMutex{},
+	}
+
+	for _, opt := range opts {
+		opt(cl)
+	}
+
+	if cl.config == nil {
+		cl.config = cfg.MustGet[Config]()
+	} else {
+		if err := cfg.Validate(cl.config); err != nil {
+			log.Panicf("failed to validate config: %v", err)
+		}
+	}
+
 	storage.Logger = func(a ...any) {
-		if globalConfig.Debug {
+		if cl.config.Debug {
 			log.Println(a...)
 		}
 		if len(a) > 0 {
@@ -257,79 +288,74 @@ func mustInit(ctx context.Context) *client {
 	}
 	storage.DownloadPrefetch = threadsPerBagForDownloading
 	adnl.Logger = func(v ...any) {}
-	var lsCfg *liteclient.GlobalConfig
-	u, err := url.Parse(globalConfig.IONStorageConfigURL)
+
+	u, err := url.Parse(cl.config.IONStorageConfigURL)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "invalid ton config url: %v", globalConfig.IONStorageConfigURL))
+		log.Panicf("invalid ton config url: %v: %v", cl.config.IONStorageConfigURL, err)
 	}
+
+	var lsCfg *liteclient.GlobalConfig
 	if u.Scheme == "file" {
 		lsCfg, err = liteclient.GetConfigFromFile(u.Path)
 		if err != nil {
-			log.Panic(errors.Wrapf(err, "failed to load ton network config from file: %v", u.Path))
+			log.Panicf("failed to load ton network config from file: %v: %v", u.Path, err)
 		}
 	} else {
 		downloadConfigCtx, cancelDownloadConfig := context.WithTimeout(ctx, 30*time.Second)
 		defer cancelDownloadConfig()
-		lsCfg, err = liteclient.GetConfigFromUrl(downloadConfigCtx, globalConfig.IONStorageConfigURL)
+		lsCfg, err = liteclient.GetConfigFromUrl(downloadConfigCtx, cl.config.IONStorageConfigURL)
 		if err != nil {
-			log.Panic(errors.Wrapf(err, "failed to load ton network config from url: %v", u.String()))
+			log.Panicf("failed to load ton network config from url: %v: %v", u.String(), err)
 		}
 	}
-	privateKey, err := hex.DecodeString(globalConfig.PrivateKey)
+	privateKey, err := hex.DecodeString(cl.config.PrivateKey)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to decode private key as hex: %v", globalConfig.PrivateKey))
+		log.Panicf("failed to decode private key as hex: %v: %v", cl.config.PrivateKey, err)
 	}
-	gate := adnl.NewGateway(privateKey)
-	ip := net.ParseIP(globalConfig.ExternalADNLAddress)
-	if ip == nil {
-		log.Panic(errors.Errorf("invalid external-adnl-address: %v", globalConfig.ExternalADNLAddress))
+	cl.gateway = adnl.NewGateway(privateKey)
+	ip := net.IPv4(127, 0, byte(rand.IntN(200))+1, byte(rand.IntN(200))+1) // Default to localhost.
+	if cl.config.ExternalADNLAddress != "" {
+		ip = net.ParseIP(cl.config.ExternalADNLAddress)
+		if ip == nil {
+			log.Panicf("invalid external-adnl-address: %v: %v", cl.config.ExternalADNLAddress, err)
+		}
 	}
-	gate.SetAddressList([]*adnlAddress.UDP{
+	cl.gateway.SetAddressList([]*adnlAddress.UDP{
 		{
 			IP:   ip,
-			Port: int32(globalConfig.ExternalADNLPort),
+			Port: int32(cl.config.ExternalADNLPort),
 		},
 	})
-	if err = gate.StartServer(fmt.Sprintf(":%v", globalConfig.ExternalADNLPort), ConcurrentBagsDownloading*threadsPerBagForDownloading); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to start adnl gateway"))
-	}
-	dhtGate := adnl.NewGateway(privateKey)
-	if err = dhtGate.StartClient(ConcurrentBagsDownloading); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to start dht"))
+	if err = cl.gateway.StartServer(fmt.Sprintf(":%v", cl.config.ExternalADNLPort), ConcurrentBagsDownloading*threadsPerBagForDownloading); err != nil {
+		log.Panicf("failed to start adnl gateway: %v", err)
 	}
 
-	dhtClient, err := dht.NewClientFromConfig(dhtGate, lsCfg)
+	dhtGate := adnl.NewGateway(privateKey)
+	if err = dhtGate.StartClient(ConcurrentBagsDownloading); err != nil {
+		log.Panicf("failed to start dht: %v", err)
+	}
+
+	cl.dht, err = dht.NewClientFromConfig(dhtGate, lsCfg)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to create dht client"))
+		log.Panicf("failed to create dht client: %v", err)
 	}
-	srv := storage.NewServer(dhtClient, gate, privateKey, true, runtime.NumCPU())
-	conn := storage.NewConnector(srv)
-	fStorage, err := ldbstorage.OpenFile(filepath.Join(globalConfig.AbsoluteRootStoragePath, "db"), false)
+	cl.server = storage.NewServer(cl.dht, cl.gateway, privateKey, true, runtime.NumCPU())
+	cl.conn = storage.NewConnector(cl.server)
+	fStorage, err := ldbstorage.OpenFile(filepath.Join(cl.config.AbsoluteRootStoragePath, "db"), false)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to open leveldb storage %v", filepath.Join(globalConfig.AbsoluteRootStoragePath, "db")))
+		log.Panicf("failed to open leveldb storage %v: %v", filepath.Join(cl.config.AbsoluteRootStoragePath, "db"), err)
 	}
-	progressDb, err := leveldb.Open(fStorage, nil)
+	cl.db, err = leveldb.Open(fStorage, nil)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to open leveldb"))
+		log.Panicf("failed to open leveldb storage: %v", err)
 	}
-	cl := &client{
-		conn:              conn,
-		db:                progressDb,
-		server:            srv,
-		gateway:           gate,
-		dht:               dhtClient,
-		rootStoragePath:   globalConfig.AbsoluteRootStoragePath,
-		newFiles:          make(map[string]map[string]*FileMetaInput),
-		newFilesMx:        &sync.RWMutex{},
-		stats:             statistics.NewStatistics(globalConfig.AbsoluteRootStoragePath, globalConfig.Debug),
-		downloadQueue:     make(chan queueItem, 1000000),
-		activeDownloads:   make(map[string]bool),
-		activeDownloadsMx: &sync.RWMutex{},
-		debug:             globalConfig.Debug,
-	}
-	if globalConfig.Debug {
+
+	cl.rootStoragePath = cl.config.AbsoluteRootStoragePath
+	cl.stats = statistics.NewStatistics(cl.rootStoragePath, cl.config.Debug)
+	if cl.config.Debug {
 		go cl.report(ctx)
 	}
+
 	loadMonitoringCh := make(chan *db.Event, 1000000)
 	go func() {
 		for ev := range loadMonitoringCh {
@@ -364,13 +390,13 @@ func mustInit(ctx context.Context) *client {
 			}
 		}
 	}()
-	progressStorage, err := db.NewStorage(progressDb, conn, db.Config{
+	progressStorage, err := db.NewStorage(cl.db, cl.conn, db.Config{
 		Notifier:   loadMonitoringCh,
 		SkipVerify: true,
 		NoRemove:   true,
 	})
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to open storage"))
+		log.Panicf("failed to create progress storage: %v", err)
 	}
 	cl.progressStorage = progressStorage
 	cl.server.SetStorage(progressStorage)
@@ -392,8 +418,12 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 		if xTag := ev.GetTag("ox"); ev.Kind == nostr.KindFileMetadata && xTag.Value() != "" {
 			fileHash = xTag.Value()
 		}
-		if url := ev.GetTag("url"); ev.Kind == nostr.KindFileMetadata && url.Value() != "" {
-			ext = filepath.Ext(url.Value())
+		if tag := ev.GetTag("url"); ev.Kind == nostr.KindFileMetadata && tag.Value() != "" {
+			u, err := url.Parse(tag.Value())
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse malformed url %v", tag.Value())
+			}
+			ext = filepath.Ext(u.Path)
 		}
 		if fileHash == "" {
 			return errors.Errorf("malformed file event: no file hash, %v", ev.String())
@@ -411,7 +441,7 @@ func (c *client) RootPath() string {
 	return c.rootStoragePath
 }
 
-func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
+func (c *client) verifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
 	fileIt := query.GetStoredEvents(ctx,
 		model.Filter{
 			Kinds:   []int{nostr.KindFileMetadata},
@@ -474,10 +504,14 @@ func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, no
 		return errors.Wrapf(model.ErrOnBehalfAccessDenied, "kind %d", nostr.KindFileMetadata)
 	}
 	relaysList := model.CollectRelaysFromRelayEvent(relays)
-	relaysValid := slices.Contains(relaysList, senderUrl) && slices.Contains(relaysList, globalConfig.RelayURL)
+	relaysValid := slices.Contains(relaysList, senderUrl) && slices.Contains(relaysList, c.config.RelayURL)
 	if !relaysValid {
-		return errors.Errorf("failed to verify file ownership, invalid relays %v %v for user %v", senderUrl, globalConfig.RelayURL, masterPubkey)
+		return errors.Errorf("failed to verify file ownership, invalid relays %v %v for user %v", senderUrl, c.config.RelayURL, masterPubkey)
 	}
 
 	return nil
+}
+
+func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
+	return globalClient.Client.verifyFileOwnershipAndAttestationForFileReplication(ctx, now, fileHash, masterPubkey, senderUrl)
 }

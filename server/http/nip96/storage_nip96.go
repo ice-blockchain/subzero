@@ -163,7 +163,6 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 				Content: input.Caption,
 			},
 		})
-		return
 	}
 }
 
