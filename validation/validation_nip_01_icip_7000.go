@@ -38,10 +38,8 @@ func (ev *eventValidator) validateTextNote(ctx context.Context, rules *ruleSet, 
 		if err := ev.validateWhoCanReplySettings(ctx, rules, batch, e); err != nil {
 			return errors.Wrap(err, "validate who can reply settings")
 		}
-		if false {
-			if err := ev.validateRootContentNFTCollections(ctx, e); err != nil {
-				return errors.Wrap(err, "validate root content NFT collections")
-			}
+		if err := ev.validateRootContentNFTCollections(ctx, e); err != nil {
+			return errors.Wrap(err, "validate root content NFT collections")
 		}
 	}
 
