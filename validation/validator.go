@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -14,6 +15,10 @@ import (
 type (
 	Option func(*eventValidator)
 	Rule   func(*ruleSet)
+
+	Validator interface {
+		Validate(ctx context.Context, batch model.Events, rules ...Rule) error
+	}
 
 	eventValidator struct {
 		Config    *Config
@@ -62,6 +67,10 @@ func RuleWithSkipProfileMetadataProofEventsVerify() Rule {
 	return func(v *ruleSet) {
 		v.SkipKindProfileProofEventsVerify = true
 	}
+}
+
+func New(opts ...Option) Validator {
+	return newEventValidator(cfg.MustGet[Config](), opts...)
 }
 
 func newEventValidator(cfg *Config, opts ...Option) *eventValidator {

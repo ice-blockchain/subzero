@@ -168,7 +168,11 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	}
 	var err error
 	for fh := range fileHashes {
-		ext := filepath.Ext(fileHashes[fh])
+		u, err := url.Parse(fileHashes[fh])
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse malformed url %v", fileHashes[fh])
+		}
+		ext := filepath.Ext(u.Path)
 		err = errors.Join(err, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey, ext))
 	}
 	return err
