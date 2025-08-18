@@ -4,6 +4,7 @@ package nftcontentsender
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -79,9 +80,20 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return nil
 	}
 	if contentEvent.Previous != nil {
-		log.Printf("content event was already processed previously, skipping: %s", contentEvent.ID)
+		switch contentEvent.Kind {
+		case nostr.KindProfileMetadata:
+			var parsedContent model.ProfileMetadataContent
+			if err := json.Unmarshal([]byte(contentEvent.Content), &parsedContent); err != nil {
+				return errors.Wrapf(err, "invalid profile metadata content for user %s", contentEvent.GetMasterPublicKey())
+			}
+			if len(parsedContent.IONContentNFTCollections) > 0 {
+				return nil
+			}
+		default:
+			log.Printf("content event was already processed previously, skipping: %s", contentEvent.ID)
 
-		return nil
+			return nil
+		}
 	}
 	profileMetadataEvent, attestationEvent, err := p.getRequiredEventsFromStorage(ctx, contentEvent.GetMasterPublicKey(), contentEvent)
 	if err != nil {
