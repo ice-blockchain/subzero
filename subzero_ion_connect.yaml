@@ -111,3 +111,11 @@ validation:
   max-content-sizes:
     30023: 65535
     30175: 65535
+open-telemetry:
+  log-level: trace
+  version: v9.9.9.local
+  relay-url: *self
+  exporter-urls:
+    - ingester1.opentelemetry.example.com
+    - ingester2.opentelemetry.example.com
+    - ingester3.opentelemetry.example.com
