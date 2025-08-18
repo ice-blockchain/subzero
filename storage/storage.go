@@ -82,8 +82,8 @@ type (
 		activeDownloads   map[string]bool
 		activeDownloadsMx *sync.RWMutex
 		rootStoragePath   string
-		debug             bool
 		closed            atomic.Bool
+		config            *Config
 	}
 	queueItem struct {
 		tor       *storage.Torrent
@@ -316,14 +316,18 @@ func (c *client) Close() (err error) {
 
 func (c *client) report(ctx context.Context) {
 	period := 1 * time.Hour
-	if c.debug {
+	if c.config.Debug {
 		period = 1 * time.Minute
 	}
+
+	reporter := time.NewTicker(period)
+	defer reporter.Stop()
+
 	for ctx.Err() == nil {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(period):
+		case <-reporter.C:
 			activelyDownloading := 0
 			activeUploading := 0
 			notResolvedHeader := 0

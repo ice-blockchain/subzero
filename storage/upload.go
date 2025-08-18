@@ -96,7 +96,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 	}
 	bagID = hex.EncodeToString(bag.BagID)
 	log.Printf("[STORAGE] INFO: new upload %v for user %v hash %v resulted in bag %v, total %v", relativePathToFileForUrl, masterPubKey, hash, bagID, bag.Header.FilesCount)
-	if newFile != nil && c.debug {
+	if newFile != nil && c.config.Debug {
 		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
 		if err != nil {
 			return "", "", false, errors.Wrapf(err, "failed to get just created file from new bag")
@@ -229,10 +229,10 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 }
 
 func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bootstrap string) (string, error) {
-	if globalConfig.IONLibertyDisabled {
-		relayUrl, err := url.Parse(globalConfig.RelayURL)
+	if c.config.IONLibertyDisabled {
+		relayUrl, err := url.Parse(c.config.RelayURL)
 		if err != nil {
-			return "", errors.Wrapf(err, "invalid relay-url configured %v", globalConfig.RelayURL)
+			return "", errors.Wrapf(err, "invalid relay-url configured %v", c.config.RelayURL)
 		}
 		return fmt.Sprintf("https://%v:%v/files/%v:%v%v", relayUrl.Hostname(), relayUrl.Port(), masterPubkey, fileHash, filepath.Ext(relativePath)), nil
 	}
@@ -309,6 +309,10 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 					fileUploadTo.Close()
 				}()
 				written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
+				if err != nil {
+					log.Printf("[ERROR] Failed to copy file %v: %v", fileName, err)
+					return "", nil, nil, errors.Wrapf(err, "failed to copy file %v", fileName)
+				}
 				fileSize += uint64(written)
 				if fileSize > maxSize {
 					part.Close()
@@ -355,9 +359,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 		}
 	}
 	if newName == "" {
-		if val := ctx.Value("fileName"); val != nil {
-			newName = val.(string)
-		}
+		newName = FileNameFromContext(ctx)
 	}
 	c.newFilesMx.Lock()
 	if userNewFiles, hasNewFiles := c.newFiles[masterPubKey]; !hasNewFiles || userNewFiles == nil {
@@ -371,7 +373,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 
 func readString(part *multipart.Part, name string) (string, error) {
 	bufSize := 1024
-	b := make([]byte, bufSize, bufSize)
+	b := make([]byte, bufSize)
 	read, err := part.Read(b)
 	if err != nil {
 		if err == io.EOF {

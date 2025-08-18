@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -22,6 +23,10 @@ import (
 	"github.com/jackc/pgx/v5/tracelog"
 
 	"github.com/ice-blockchain/subzero/model"
+)
+
+const (
+	envLoggigEnabled = "SUBZERO_PGX_LOGGING_DEFAULT_VALUE"
 )
 
 func WithWriteURLs(urls ...string) Option {
@@ -187,11 +192,21 @@ func WithFieldNameMapper(mapper NameMapperFunc) Option {
 }
 
 func New(ctx context.Context, opts ...Option) (*DB, error) {
+	val, ok := os.LookupEnv(envLoggigEnabled)
 	db := &DB{
 		readLB:  new(readLB),
 		writeLB: new(writeLB),
 		closed:  new(atomic.Bool),
 		logging: true,
+	}
+
+	if ok {
+		switch val {
+		case "true", "1", "yes", "on":
+			db.logging = true
+		case "false", "0", "no", "off":
+			db.logging = false
+		}
 	}
 
 	for i := range opts {

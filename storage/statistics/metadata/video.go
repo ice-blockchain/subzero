@@ -116,7 +116,7 @@ func newVideoExtractor() Extractor {
 			err = nil
 		}
 		if err != nil {
-			log.Panic(errors.Wrapf(err, "failed to call ffprobe, is ffmpeg installed?"))
+			log.Panicf("failed to call ffprobe, is ffmpeg installed? %v", err)
 		}
 	}
 	return &videoMetaExtractor{}

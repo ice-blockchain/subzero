@@ -8,7 +8,7 @@ CGO_ENABLED ?= 1
 GOOS         ?=
 GOARCH       ?=
 SERVICE_NAME ?=
-TAGS         := go_json,linux,sqlite_stat4,sqlite_icu,sqlite_fts5,sqlite_math_functions
+TAGS         := go_json,linux
 
 export CGO_ENABLED GOOS GOARCH SERVICE_NAME
 
