@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package opentelemetry
 
 import (
@@ -6,13 +8,14 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/tidwall/wal"
 	otelsdklog "go.opentelemetry.io/otel/sdk/log"
 	otelsdkresource "go.opentelemetry.io/otel/sdk/resource"
 	otelsemconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/ice-blockchain/subzero/cfg"
 )
 
 var (
