@@ -36,7 +36,6 @@ func helperCreateFollowListEvent(t *testing.T, id string, pubKey string, followe
 
 func TestGetNewlyFollowedPubkeys(t *testing.T) {
 	t.Parallel()
-	pm := &PushNotificationManager{}
 
 	emptyTagsEvent := helperCreateFollowListEvent(
 		t,
@@ -45,7 +44,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 		[]string{},
 	)
 
-	recipients := pm.getNewlyFollowedPubkeys(emptyTagsEvent, nil)
+	recipients := model.GetNewlyFollowedPubkeys(emptyTagsEvent, nil)
 	require.Empty(t, recipients, "Recipients should be empty when no p-tags")
 
 	singleTagEvent := helperCreateFollowListEvent(
@@ -55,7 +54,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 		[]string{"follower_pubkey"},
 	)
 
-	recipients = pm.getNewlyFollowedPubkeys(singleTagEvent, nil)
+	recipients = model.GetNewlyFollowedPubkeys(singleTagEvent, nil)
 	require.Len(t, recipients, 1, "Should return one recipient when there's only one p-tag and no old event")
 	require.Equal(t, "follower_pubkey", recipients[0], "Recipient should be the only p-tag")
 
@@ -73,7 +72,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 		[]string{"pubkey1", "pubkey2"},
 	)
 
-	recipients = pm.getNewlyFollowedPubkeys(newReducedEvent, oldEvent)
+	recipients = model.GetNewlyFollowedPubkeys(newReducedEvent, oldEvent)
 	require.Empty(t, recipients, "Recipients should be empty when follow list reduced")
 
 	newExtendedEvent := helperCreateFollowListEvent(
@@ -83,7 +82,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 		[]string{"pubkey1", "pubkey2", "pubkey3", "new_pubkey"},
 	)
 
-	recipients = pm.getNewlyFollowedPubkeys(newExtendedEvent, oldEvent)
+	recipients = model.GetNewlyFollowedPubkeys(newExtendedEvent, oldEvent)
 	require.Len(t, recipients, 1, "Should return one new recipient")
 	require.Equal(t, "new_pubkey", recipients[0], "Recipient should be the new pubkey")
 
@@ -94,7 +93,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 		[]string{"pubkey1", "new_pubkey1", "pubkey2", "new_pubkey2", "pubkey3"},
 	)
 
-	recipients = pm.getNewlyFollowedPubkeys(multipleNewEvent, oldEvent)
+	recipients = model.GetNewlyFollowedPubkeys(multipleNewEvent, oldEvent)
 	require.Len(t, recipients, 2, "Should return all new recipients")
 	require.Contains(t, recipients, "new_pubkey1", "Should contain first new pubkey")
 	require.Contains(t, recipients, "new_pubkey2", "Should contain second new pubkey")
