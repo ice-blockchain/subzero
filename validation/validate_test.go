@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/ice-blockchain/subzero/database/query/fixture"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -188,4 +189,23 @@ func TestMultipleTagsP(t *testing.T) {
 			{"p", "foo"},
 			{"p", "foo"},
 		}}}, KindSupportedTags))
+}
+
+func TestRejectEphemeralWithAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	var db fixture.MemDB
+	v := newEventValidator(global.Validator.Config, WithQueryFunc(db.SelectEvents))
+
+	var ev model.Event
+	ev.Kind = model.CustomIONKindEphemeralEmbedding
+	ev.CreatedAt = 1
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+		Authoritative: true,
+	})
+
+	err := v.Validate(ctx, model.Events{&ev})
+	require.ErrorIs(t, err, ErrActionForbidden)
 }

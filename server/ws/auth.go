@@ -151,7 +151,12 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 
 			return &resp
 		}
+
+		// TODO: use `authoritative` flag from validateUserAccess().
+		_, hErr := validateUserAccessAuthoritative(ctx, h.RelayURL, e)
+		userdata.Authoritative = hErr == nil
 	}
+
 	userdata.Challenge = state.Challenge
 	userdata.MasterPublicKey = e.GetMasterPublicKey()
 	userdata.PublicKey = e.PubKey
