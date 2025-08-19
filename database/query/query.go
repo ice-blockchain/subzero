@@ -71,14 +71,18 @@ type (
 	}
 	eventEnricher interface {
 		EnrichEvents(events []*databaseEvent) []*databaseEvent
+		CanUse(dep *filterDependency) bool
+		Track(origin, depOrigin string)
+		Empty() bool
 	}
 	byAuthorEventEnricher struct {
-		Filter      *databaseFilterSearch
-		Origin      string
-		KindOrigin  string
-		Kind        int
-		UnknownKeys map[string]struct{}
-		Signer      func(event *databaseEvent)
+		Kind       int                 // Target kind to enrich, like `nostr.KindProfileMetadata`.
+		Origin     map[string]struct{} // Origin of the event, i.e. source. Like `filter0_events_cte`.
+		KindOrigin map[string]struct{} // The loaded dependency origin, like `filter0_events_cte_dep9`.
+		Signer     func(event *databaseEvent)
+	}
+	byAuthorKind0EventEnricher struct {
+		byAuthorEventEnricher
 	}
 )
 
@@ -898,21 +902,54 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 	return event
 }
 
+func (e *byAuthorEventEnricher) CanUse(dep *filterDependency) bool {
+	return len(dep.Reduce.Kinds) == 1 && dep.Reduce.Kinds[0] == e.Kind && dep.Reduce.Tag == "" && dep.Reduce.Author == ""
+}
+
+func newByAuthorKind0EventEnricher(signer func(event *databaseEvent)) *byAuthorKind0EventEnricher {
+	return &byAuthorKind0EventEnricher{
+		byAuthorEventEnricher: byAuthorEventEnricher{
+			Signer: signer,
+			Kind:   nostr.KindProfileMetadata,
+		},
+	}
+}
+
+func (e *byAuthorEventEnricher) Track(origin, depOrigin string) {
+	if e.Origin == nil {
+		e.Origin = make(map[string]struct{})
+	}
+	if e.KindOrigin == nil {
+		e.KindOrigin = make(map[string]struct{})
+	}
+
+	e.Origin[origin] = struct{}{}
+	e.KindOrigin[depOrigin] = struct{}{}
+}
+
+func (e *byAuthorEventEnricher) Empty() bool {
+	return len(e.Origin) == 0 && len(e.KindOrigin) == 0
+}
+
 func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []*databaseEvent) {
+	unknownKeys := make(map[string]struct{})
+
 	// Run two passes as the order of events is not guaranteed.
 	for i := range events {
-		if events[i].Origin == e.Origin {
-			e.UnknownKeys[events[i].GetMasterPublicKey()] = struct{}{}
+		_, ok := e.Origin[events[i].Origin]
+		if ok {
+			unknownKeys[events[i].GetMasterPublicKey()] = struct{}{}
 		}
 	}
 	for i := range events {
-		if events[i].Origin == e.KindOrigin {
-			delete(e.UnknownKeys, events[i].GetMasterPublicKey())
+		_, ok := e.KindOrigin[events[i].Origin]
+		if ok {
+			delete(unknownKeys, events[i].GetMasterPublicKey())
 		}
 	}
 
 	now := nostr.Now()
-	for key := range e.UnknownKeys {
+	for key := range unknownKeys {
 		var ev, hint databaseEvent
 
 		hint.Event = new(model.Event)
@@ -935,35 +972,35 @@ func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []
 	return result
 }
 
+func (db *dbClient) mustSignDatabaseEvent(event *databaseEvent) {
+	err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
+	if err != nil {
+		log.Panicf("[DB] failed to sign event: %v", err)
+	}
+}
+
 func (db *dbClient) postProcessEvents(r *queryBuildResult, events []*databaseEvent) []*databaseEvent {
-	var enrichers []eventEnricher
+	enrichers := []eventEnricher{
+		newByAuthorKind0EventEnricher(db.mustSignDatabaseEvent),
+	}
+
 	for origin, tree := range r.Filters {
 		for leafOrigin, dep := range tree.Leafs {
-			// kindXXX>kind0.
-			if len(dep.Reduce.Kinds) == 1 && dep.Reduce.Kinds[0] == nostr.KindProfileMetadata && dep.Reduce.Tag == "" && dep.Reduce.Author == "" {
-				enrichers = append(enrichers, &byAuthorEventEnricher{
-					Filter:      tree.Root,
-					Origin:      origin,
-					KindOrigin:  leafOrigin,
-					Kind:        dep.Reduce.Kinds[0],
-					UnknownKeys: make(map[string]struct{}),
-					Signer: func(event *databaseEvent) {
-						err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
-						if err != nil {
-							log.Panicf("[DB] failed to sign event: %v", err)
-						}
-					},
-				})
+			for _, enricher := range enrichers {
+				if !enricher.CanUse(dep) {
+					continue
+				}
+
+				enricher.Track(origin, leafOrigin)
 			}
 		}
 	}
 
-	if len(enrichers) == 0 {
-		return events
-	}
-
 	var enrichedEvents []*databaseEvent
 	for _, enricher := range enrichers {
+		if enricher.Empty() {
+			continue
+		}
 		enrichedEvents = append(enrichedEvents, enricher.EnrichEvents(events)...)
 	}
 
