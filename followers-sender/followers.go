@@ -66,15 +66,13 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	if len(events) == 0 {
 		return nil
 	}
-	if idx := slices.IndexFunc(events, func(event *model.Event) bool {
+	if slices.ContainsFunc(events, func(event *model.Event) bool {
 		return event.Kind == model.CustomIONKindEphemeralEmbedding
-	}); idx != -1 {
+	}) {
 		return nil
 	}
 	followersEvent := p.findFollowerListEvent(events)
 	if followersEvent == nil {
-		log.Printf("followers event not found for events: %v", model.Events(events).IDs())
-
 		return nil
 	}
 	if len(model.GetNewlyFollowedPubkeys(followersEvent, followersEvent.Previous)) == 0 {
@@ -132,10 +130,8 @@ func (p *sender) sendEvents(ctx context.Context, events model.Events) error {
 		Events: events,
 	}
 
-	cCtx, cancel := context.WithTimeout(ctx, p.config.RequestTimeout)
-	defer cancel()
 	resp, err := p.client.R().
-		SetContext(cCtx).
+		SetContext(ctx).
 		SetRetryCount(5).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
 			switch {
