@@ -248,6 +248,10 @@ func extractTagValueFromPairs(tag model.Tag, key string) (value string, err erro
 func (ev *eventValidator) validateKindEphemeralEmbeddingEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	var wrappedEvent model.Event
 
+	if model.GetUserDataFromContext(ctx).Authoritative {
+		return errors.Wrap(ErrActionForbidden, "authoritative relays do not allow ephemeral embedding events")
+	}
+
 	err := wrappedEvent.UnmarshalJSON([]byte(e.Content))
 	if err != nil {
 		return errors.Wrap(err, "failed to unmarshal wrapped event")

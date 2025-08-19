@@ -12,6 +12,7 @@ type (
 		MasterPublicKey string
 		UserAgent       string
 		Authenticated   bool
+		Authoritative   bool
 		Kinds           map[int]struct{}
 	}
 	userKey string
