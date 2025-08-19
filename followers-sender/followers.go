@@ -66,6 +66,11 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	if len(events) == 0 {
 		return nil
 	}
+	if idx := slices.IndexFunc(events, func(event *model.Event) bool {
+		return event.Kind == model.CustomIONKindEphemeralEmbedding
+	}); idx != -1 {
+		return nil
+	}
 	followersEvent := p.findFollowerListEvent(events)
 	if followersEvent == nil {
 		log.Printf("followers event not found for events: %v", model.Events(events).IDs())
