@@ -176,7 +176,11 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 			return errors.Wrapf(err, "failed to parse malformed url %v", fileHashes[fh])
 		}
 		ext := filepath.Ext(u.Path)
-		err = errors.Join(err, processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey, ext))
+		deleteErr := processEventDeletion(ctx, fh, originalEvent.GetMasterPublicKey(), originalEvent.PubKey, ext)
+		if errors.IsAny(deleteErr, os.ErrNotExist, ErrNotFound) {
+			deleteErr = nil // File already deleted.
+		}
+		err = errors.Join(err, deleteErr)
 	}
 	return err
 }
