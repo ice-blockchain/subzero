@@ -2009,3 +2009,39 @@ func TestEventEnricherKind0(t *testing.T) {
 		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[len(events)-1].Kind)
 	})
 }
+
+func TestEventEnricherKind0Multi(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	t.Run("Populate", func(t *testing.T) {
+		user1 := model.GeneratePrivateKey()
+		user2 := model.GeneratePrivateKey()
+
+		var note1, article1, post1 model.Event
+		note1.Kind = nostr.KindTextNote
+		note1.CreatedAt = nostr.Now()
+		note1.Content = "text note 1"
+		require.NoError(t, note1.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		article1.Kind = nostr.KindArticle
+		article1.CreatedAt = nostr.Now()
+		article1.Content = "article 1"
+		require.NoError(t, article1.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		post1.Kind = model.CustomIONKindEditableTextNote
+		post1.CreatedAt = nostr.Now()
+		post1.Content = "editable post 1"
+		require.NoError(t, post1.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &note1, &article1, &post1))
+	})
+	t.Run("Query", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Search: "include:dependencies:kind1>kind0 include:dependencies:kind30175>kind0 include:dependencies:kind30023>kind0",
+		})
+		require.Len(t, events, 5, "Should return 3 original events and 2 auto-generated kind0 events")
+	})
+}
