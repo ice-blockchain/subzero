@@ -397,3 +397,38 @@ func (e *Event) HasVideoIMeta() bool {
 
 	return false
 }
+
+func GetNewlyFollowedPubkeys(event, oldEvent *Event) []string {
+	currentPTags := event.GetTags("p")
+	if len(currentPTags) == 0 {
+		return nil
+	}
+
+	currentPubKeys := make(map[string]struct{})
+	for _, tag := range currentPTags {
+		currentPubKeys[tag.Value()] = struct{}{}
+	}
+
+	if oldEvent == nil {
+		result := make([]string, 0, len(currentPubKeys))
+		for pubKey := range currentPubKeys {
+			result = append(result, pubKey)
+		}
+
+		return result
+	}
+	oldPTags := oldEvent.GetTags("p")
+	oldPubKeys := make(map[string]struct{})
+	for _, tag := range oldPTags {
+		oldPubKeys[tag.Value()] = struct{}{}
+	}
+
+	var newPubKeys []string
+	for pubKey := range currentPubKeys {
+		if _, exists := oldPubKeys[pubKey]; !exists {
+			newPubKeys = append(newPubKeys, pubKey)
+		}
+	}
+
+	return newPubKeys
+}
