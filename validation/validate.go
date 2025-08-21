@@ -48,16 +48,17 @@ type (
 )
 
 var (
-	ErrWrongEventParams = errors.New("wrong event params")
-	ErrPollTTLExpired   = errors.New("expiration timestamp is in the past")
-	ErrUnsupportedTag   = errors.New("unsupported tag")
-	ErrUnsupportedJob   = errors.New("unsupported job")
-	ErrUnsupportedKind  = errors.New("unsupported kind")
-	ErrActionForbidden  = errors.New("forbidden")
-	ErrNotFound         = errors.New("not found")
-	ErrContentEmpty     = errors.New("content is empty")
-	ErrEventInvalidID   = errors.New("event id is invalid")
-	ErrEventInvalidSign = errors.New("event signature is invalid")
+	ErrWrongEventParams   = errors.New("wrong event params")
+	ErrPollTTLExpired     = errors.New("expiration timestamp is in the past")
+	ErrUnsupportedTag     = errors.New("unsupported tag")
+	ErrUnsupportedJob     = errors.New("unsupported job")
+	ErrUnsupportedKind    = errors.New("unsupported kind")
+	ErrActionForbidden    = errors.New("forbidden")
+	ErrEphemeralForbidden = errors.New("ephemeral events are forbidden")
+	ErrNotFound           = errors.New("not found")
+	ErrContentEmpty       = errors.New("content is empty")
+	ErrEventInvalidID     = errors.New("event id is invalid")
+	ErrEventInvalidSign   = errors.New("event signature is invalid")
 
 	CommongTags = []string{
 		"t",
@@ -249,7 +250,7 @@ func (ev *eventValidator) validateKindEphemeralEmbeddingEvent(ctx context.Contex
 	var wrappedEvent model.Event
 
 	if model.GetUserDataFromContext(ctx).Authoritative {
-		return errors.Wrap(ErrActionForbidden, "authoritative relays do not allow ephemeral embedding events")
+		return errors.Wrap(ErrEphemeralForbidden, "authoritative relays do not allow ephemeral embedding events")
 	}
 
 	err := wrappedEvent.UnmarshalJSON([]byte(e.Content))

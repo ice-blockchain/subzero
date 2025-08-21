@@ -32,6 +32,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER trigger_events_after_insert_generate_tags
 AFTER INSERT ON events
 FOR EACH ROW
+WHEN (length(NEW.tags::text) > 2)
 EXECUTE FUNCTION trigger_events_after_insert_generate_tags();
 --------
 CREATE OR REPLACE FUNCTION trigger_events_before_update_remove_old_data()

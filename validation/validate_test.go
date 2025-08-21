@@ -207,5 +207,5 @@ func TestRejectEphemeralWithAuthoritative(t *testing.T) {
 	})
 
 	err := v.Validate(ctx, model.Events{&ev})
-	require.ErrorIs(t, err, ErrActionForbidden)
+	require.ErrorIs(t, err, ErrEphemeralForbidden)
 }
