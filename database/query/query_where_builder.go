@@ -773,12 +773,65 @@ group by t.poll_id, t.pubkey, t.master_pubkey, t.kind, t.h_tag, t.d_tag, t.addre
 `)
 }
 
+func (b *queryBuilder) CountStoriesOf(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	b.WriteString(`
+union all
+select
+	6400 as kind,
+	cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint) as created_at,
+	to_timestamp_nano(cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as lookup_created_at,
+	'' as id,
+	'' as address,
+	t.pubkey,
+	t.master_pubkey,
+	'' as sig,
+	cast(coalesce(t.c, 0) as text) as content,
+	cast(jsonb_build_array(jsonb_build_object(
+		'kinds', jsonb_build_array(cast(:`)
+	b.WriteValue(filterID, "reduce_kind", current.Reduce.Kinds[1])
+	b.WriteString(` as int)),
+		'p', jsonb_build_array(t.master_pubkey))
+	) as text) as d_tag,
+	'' as h_tag,
+	jsonb_build_array(
+		jsonb_build_array('output', 'JSON')
+	) as tags,
+	:`)
+	b.WriteValue(filterID, "story_origin", filterID)
+	b.WriteString(` as origin
+from (
+	select
+		(select count(id) from events cev where
+			cev.kind = :`)
+	b.WriteValue(filterID, "reduce_kind", current.Reduce.Kinds[1])
+	b.WriteString(`
+			and cev.expiration is not null
+			and cev.expiration > :`)
+	b.WriteValue(filterID, "story_now", time.Now().UnixNano())
+	b.WriteString(`
+			and ((cev.pubkey = ev_source.pubkey and cev.hidden=false) or (cev.master_pubkey = ev_source.master_pubkey and cev.hidden=false))
+			and cev.hidden=false
+		) as c,
+		ev_source.pubkey,
+		ev_source.master_pubkey
+	from `)
+	b.WriteString(cteName)
+	b.WriteString(` ev_source where kind = :`)
+	b.WriteValue(filterID, "start_kind", current.Start.Kind)
+	b.WriteString(` ) t`)
+}
+
 func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
 	if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.KindDVMCountResponse {
-		if len(current.Reduce.Kinds) > 1 && current.Reduce.Kinds[1] == model.CustomIONKindPollVote && current.Reduce.Group {
-			b.CountVotesOf(filterID, cteName, current)
-
-			return
+		if len(current.Reduce.Kinds) > 1 {
+			if current.Reduce.Kinds[1] == model.CustomIONKindPollVote && current.Reduce.Group {
+				b.CountVotesOf(filterID, cteName, current)
+				return
+			}
+			if len(current.Reduce.Kinds) == 2 && current.Reduce.Expiration {
+				b.CountStoriesOf(filterID, cteName, filter, current)
+				return
+			}
 		}
 		b.WriteString(`
 union all
