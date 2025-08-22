@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
@@ -233,6 +234,18 @@ func TestParseDepRequest(t *testing.T) {
 					Kinds:   []int{6400, 1754},
 					Group:   true,
 					Context: "content",
+				},
+			},
+		},
+		{
+			Input: "kind123>kind6400+kind30175+expiration",
+			Expected: filterDependency{
+				Start: filterDependencyStart{
+					Kind: 123,
+				},
+				Reduce: filterDependencyReduce{
+					Kinds:      []int{6400, 30175},
+					Expiration: true,
 				},
 			},
 		},
@@ -1719,4 +1732,76 @@ func TestGenericKindWithProfileBadgeLookup(t *testing.T) {
 		require.Len(t, events, 1)
 		require.Equal(t, model.CustomIONKindEditableTextNote, events[0].Kind)
 	})
+}
+
+func TestSelectDependencyStoryCount(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	user1Priv, user1Pub := model.GenerateKeyPair()
+	user2Priv, user2Pub := model.GenerateKeyPair()
+
+	var userMeta1, userMeta2 model.Event
+	userMeta1.Kind = nostr.KindProfileMetadata
+	userMeta1.CreatedAt = nostr.Now().Add(-time.Minute)
+	userMeta1.Content = `{"name":"User1"}`
+	require.NoError(t, userMeta1.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	userMeta2.Kind = nostr.KindProfileMetadata
+	userMeta2.CreatedAt = nostr.Now().Add(-time.Minute)
+	userMeta2.Content = `{"name":"User2"}`
+	require.NoError(t, userMeta2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &userMeta1, &userMeta2))
+
+	var user1Story model.Event
+	user1Story.Kind = model.CustomIONKindEditableTextNote
+	user1Story.CreatedAt = nostr.Now()
+	user1Story.Content = "User1 story"
+	user1Story.Tags = model.Tags{
+		{"d", "story_of_user1"},
+		{"expiration", user1Story.CreatedAt.Add(time.Hour).String()},
+	}
+	require.NoError(t, user1Story.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &user1Story))
+
+	var user1Post model.Event
+	user1Post.Kind = nostr.KindTextNote
+	user1Post.CreatedAt = nostr.Now()
+	user1Post.Content = "User1 post"
+	require.NoError(t, user1Post.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &user1Post))
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{nostr.KindProfileMetadata},
+		Search: "include:dependencies:kind0>kind6400+kind30175+expiration",
+	})
+	require.Len(t, events, 4, "2 dvm events, 2 profile metadata")
+	for i := range events[:2] {
+		var req model.Event
+
+		require.Equal(t, model.KindDVMCountResponse, events[i].Kind)
+		require.NoError(t, req.UnmarshalJSON([]byte(events[i].GetTag("request").Value())))
+
+		userKey := events[i].GetTag("p").Value()
+		require.NotEmpty(t, userKey)
+		switch userKey {
+		case user1Pub:
+			require.Equal(t, "1", events[i].Content)
+		case user2Pub:
+			require.Equal(t, "0", events[i].Content)
+		default:
+			t.Fatalf("unexpected user pubkey: %s", userKey)
+		}
+
+		var reqFilters model.Filters
+		require.NoError(t, json.Unmarshal([]byte(req.Content), &reqFilters))
+
+		require.Len(t, reqFilters, 1)
+		require.Len(t, reqFilters[0].Kinds, 1)
+		require.Len(t, reqFilters[0].Authors, 1)
+		require.Equal(t, "expiration:true", reqFilters[0].Search)
+		require.Equal(t, userKey, reqFilters[0].Authors[0])
+		require.Equal(t, model.CustomIONKindEditableTextNote, reqFilters[0].Kinds[0])
+	}
 }

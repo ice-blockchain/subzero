@@ -19,11 +19,12 @@ type (
 	}
 
 	filterDependencyReduce struct {
-		Kinds   []int
-		Author  string
-		Group   bool
-		Tag     string
-		Context string
+		Kinds      []int
+		Author     string
+		Tag        string
+		Context    string
+		Group      bool
+		Expiration bool
 	}
 
 	filterDependency struct {
@@ -52,6 +53,7 @@ const (
 	tokenLiteralGroupTagDetailP
 	tokenLiteralDetailTagE
 	tokenLiteralDetailTagP
+	tokenLiteralDetailExpiration
 
 	tokenLiteralPipe
 )
@@ -71,9 +73,10 @@ var (
 		tokenLiteralProfileBadges: {"profile_badges"},
 		tokenLiteralReply:         {"reply", "root"},
 
-		tokenLiteralDetailTagE: {"+e"},
-		tokenLiteralDetailTagP: {"+p+"},
-		tokenLiteralTagQ:       {"q"},
+		tokenLiteralDetailExpiration: {"+expiration"},
+		tokenLiteralDetailTagE:       {"+e"},
+		tokenLiteralDetailTagP:       {"+p+"},
+		tokenLiteralTagQ:             {"q"},
 
 		tokenLiteralGroupTagDetailP: {"group+p"},
 	}
@@ -252,6 +255,18 @@ var (
 				tokenizer.TokenUndef,
 			},
 		},
+		// kindXXX>kind6400+kind30175+expiration.
+		{
+			Tokens: []token{
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenSearchExpr,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenCondDetail,
+				tokenLiteralKind, tokenizer.TokenKeyword,
+				tokenLiteralDetailExpiration,
+				tokenizer.TokenUndef,
+			},
+		},
 		// kind3>kind0+p+|key1,key2,keyN|.
 		{
 			Tokens: []token{
@@ -316,6 +331,9 @@ func (s *filterSequence) Parse(stream *tokenizer.Stream) (*filterDependency, err
 
 		case tokenLiteralGroup:
 			filter.Reduce.Group = true
+
+		case tokenLiteralDetailExpiration:
+			filter.Reduce.Expiration = true
 
 		case tokenSearchExpr:
 			start = false
