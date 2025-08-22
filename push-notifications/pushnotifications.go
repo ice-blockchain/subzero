@@ -340,6 +340,16 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	var notifications []*pn.Notification[*DeviceRegistrationEvent]
 	var err error
 
+	if len(relevantEvents) == 0 && !shouldSkipEphemeralEvent(event) {
+		isAuthoritative, profileMetadataEvent, attestationEvent, err := pm.getAuthoritativeEvents(ctx, event)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get authoritative events")
+		}
+		if isAuthoritative {
+			relevantEvents = append(relevantEvents, pm.createEphemeralEmbeddingEvent(profileMetadataEvent), pm.createEphemeralEmbeddingEvent(attestationEvent))
+		}
+	}
+
 	if event.Kind == nostr.KindGenericRepost {
 		shouldProcess, err := shouldProcessGenericRepostEvent(event)
 		if err != nil {
@@ -656,4 +666,55 @@ func compressAndEncodeBase64(data string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *model.Event) *model.Event {
+	ephemeralEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindEphemeralEmbedding,
+			CreatedAt: nostr.Now(),
+			Content:   contentEvent.String(),
+		},
+	}
+
+	return ephemeralEvent
+}
+
+func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, event *model.Event) (bool, *model.Event, *model.Event, error) {
+	masterPubKey := event.GetMasterPublicKey()
+	it := query.GetStoredEvents(ctx,
+		model.Filter{
+			Authors: []string{masterPubKey},
+			Kinds:   []int{nostr.KindRelayListMetadata},
+			Tags:    model.TagMap{}.Set("r", &pm.relayURL),
+			Limit:   1,
+		},
+		model.Filter{
+			Authors: []string{masterPubKey},
+			Kinds:   []int{nostr.KindProfileMetadata},
+			Limit:   1,
+		},
+		model.Filter{
+			Authors: []string{masterPubKey},
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Tags:    model.TagMap{}.Set("p", &event.PubKey),
+			Limit:   1,
+		},
+	)
+	var relayListMetadataEvent, profileMetadataEvent, attestationEvent *model.Event
+	for ev, err := range it {
+		if err != nil {
+			return false, nil, nil, errors.Wrap(err, "failed to check relay list metadata")
+		}
+		switch ev.Kind {
+		case nostr.KindRelayListMetadata:
+			relayListMetadataEvent = ev
+		case nostr.KindProfileMetadata:
+			profileMetadataEvent = ev
+		case model.CustomIONKindAttestation:
+			attestationEvent = ev
+		}
+	}
+
+	return relayListMetadataEvent != nil, profileMetadataEvent, attestationEvent, nil
 }

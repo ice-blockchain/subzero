@@ -404,3 +404,117 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	require.Equal(t, `[`+profileEvent.Content+`]`, decompressed, "Decompressed content should match profile event content")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 }
+
+func TestMentionWithAuthoritativeEvents(t *testing.T) {
+	t.Parallel()
+	senderMasterPriv, senderMasterPub := model.GenerateKeyPair()
+	senderDevicePriv, senderDevicePub := model.GenerateKeyPair()
+	recipientMasterPriv, recipientMasterPub := model.GenerateKeyPair()
+	pm := &PushNotificationManager{
+		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		relayURL:       "wss://test-mention-relay.example.com",
+	}
+	senderMetadataEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindProfileMetadata,
+			CreatedAt: nostr.Now(),
+			Content:   `{"name":"Mention Sender","display_name":"Mention sender profile"}`,
+		},
+	}
+	require.NoError(t, senderMetadataEvent.SignWithAlg(senderMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), senderMetadataEvent))
+	senderAttestationEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", senderDevicePub, "", "active:" + nostr.Now().String() + ":1,7"},
+			},
+			Content: "",
+		},
+	}
+	require.NoError(t, senderAttestationEvent.SignWithAlg(senderMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), senderAttestationEvent))
+	senderRelayListEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindRelayListMetadata,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"r", "wss://test-mention-relay.example.com", "read"},
+				{"r", "wss://test-mention-relay.example.com", "write"},
+			},
+			Content: "",
+		},
+	}
+	require.NoError(t, senderRelayListEvent.SignWithAlg(senderMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), senderRelayListEvent))
+	deviceEvent := &model.Event{
+		Event: nostr.Event{
+			PubKey:    recipientMasterPub,
+			Kind:      model.CustomIONKindDeviceRegistration,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"t", "ios"},
+				{"d", "test-device-mention"},
+				{"relay", "wss://test-mention-relay.example.com"},
+				{"token", "encrypted_token_mention"},
+			},
+			Content: `[{"kinds":[1]}]`,
+		},
+	}
+	require.NoError(t, deviceEvent.SignWithAlg(recipientMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	mentionEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindTextNote,
+			CreatedAt: nostr.Now(),
+			Content:   "Hello @recipient! This is a mention with authoritative events.",
+			Tags: model.Tags{
+				{model.CustomIONTagOnBehalfOf, senderMasterPub},
+				{"p", recipientMasterPub},
+			},
+		},
+	}
+	require.NoError(t, mentionEvent.SignWithAlg(senderDevicePriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	isAuthoritative, profileEvent, attestationEvent, err := pm.getAuthoritativeEvents(t.Context(), mentionEvent)
+	require.NoError(t, err)
+	require.True(t, isAuthoritative, "Sender should be authoritative on this relay")
+	require.NotNil(t, profileEvent, "Should find sender's profile event")
+	require.NotNil(t, attestationEvent, "Should find sender's attestation event")
+
+	notifications, err := pm.processEvent(t.Context(), mentionEvent)
+	require.NoError(t, err)
+	require.NotNil(t, notifications)
+
+	notification := notifications[0]
+	require.Contains(t, notification.Data, "relevant_events", "Should contain relevant events")
+	relevantEventsData, ok := notification.Data["relevant_events"].(string)
+	require.True(t, ok, "relevant_events should be a string")
+	require.NotEmpty(t, relevantEventsData, "relevant_events should not be empty")
+
+	decompressed := helperDecompressZlibAndDecodeBase64(t, relevantEventsData)
+	var relevantEventsArray []map[string]interface{}
+	err = json.Unmarshal([]byte(decompressed), &relevantEventsArray)
+	require.NoError(t, err, "Should be able to parse decompressed data as JSON array")
+	require.True(t, len(relevantEventsArray) >= 2, "Should contain at least 2 relevant events")
+
+	foundProfile := false
+	foundAttestation := false
+	for _, event := range relevantEventsArray {
+		kind, ok := event["kind"].(float64)
+		require.True(t, ok, "Event should have kind field")
+
+		if kind == float64(nostr.KindProfileMetadata) {
+			foundProfile = true
+			require.Equal(t, senderMasterPub, event["pubkey"], "Profile event should be from sender")
+			content, ok := event["content"].(string)
+			require.True(t, ok, "Profile event should have content")
+			require.Contains(t, content, "Mention Sender", "Profile content should match")
+		} else if kind == float64(model.CustomIONKindAttestation) {
+			foundAttestation = true
+			require.Equal(t, senderMasterPub, event["pubkey"], "Attestation event should be from sender")
+		}
+	}
+	require.True(t, foundProfile, "Should find profile metadata in relevant events")
+	require.True(t, foundAttestation, "Should find attestation in relevant events")
+}
