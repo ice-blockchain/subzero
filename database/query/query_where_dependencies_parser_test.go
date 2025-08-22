@@ -1799,6 +1799,9 @@ func TestSelectDependencyStoryCount(t *testing.T) {
 
 		require.Len(t, reqFilters, 1)
 		require.Len(t, reqFilters[0].Kinds, 1)
+		require.Len(t, reqFilters[0].Authors, 1)
+		require.Equal(t, "expiration:true", reqFilters[0].Search)
+		require.Equal(t, userKey, reqFilters[0].Authors[0])
 		require.Equal(t, model.CustomIONKindEditableTextNote, reqFilters[0].Kinds[0])
 	}
 }

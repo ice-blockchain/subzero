@@ -787,10 +787,11 @@ select
 	'' as sig,
 	cast(coalesce(t.c, 0) as text) as content,
 	cast(jsonb_build_array(jsonb_build_object(
+		'search', 'expiration::true',
 		'kinds', jsonb_build_array(cast(:`)
 	b.WriteValue(filterID, "reduce_kind", current.Reduce.Kinds[1])
 	b.WriteString(` as int)),
-		'p', jsonb_build_array(t.master_pubkey))
+		'authors', jsonb_build_array(t.master_pubkey))
 	) as text) as d_tag,
 	'' as h_tag,
 	jsonb_build_array(
