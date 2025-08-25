@@ -33,10 +33,11 @@ CREATE INDEX IF NOT EXISTS idx_events_ttags ON events USING GIN(t_tags);
 -- Expiration.
 CREATE INDEX IF NOT EXISTS idx_events_expiration_id ON events(expiration, id) WHERE expiration IS NOT NULL;
 
--- PGroonga index for text search.
-CREATE EXTENSION IF NOT EXISTS pgroonga;
+DROP INDEX IF EXISTS idx_events_lookup_pgroonga;
+DROP EXTENSION IF EXISTS pgroonga;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-CREATE INDEX IF NOT EXISTS idx_events_lookup_pgroonga ON events USING pgroonga (lookup) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit');
+CREATE INDEX IF NOT EXISTS idx_events_lookup_trgm ON events USING gin (lookup gin_trgm_ops);
 
 -- Feed request:
 --   kinds":[1, 30175, 6, 30023]

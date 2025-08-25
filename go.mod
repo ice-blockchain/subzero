@@ -35,7 +35,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250714150930-6fb404dc7d83
 	github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830
-	github.com/imroc/req/v3 v3.54.1
+	github.com/imroc/req/v3 v3.54.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
@@ -55,12 +55,12 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.7
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 	github.com/tidwall/gjson v1.18.0
-	github.com/tidwall/wal v1.1.8
+	github.com/tidwall/wal v1.2.0
 	github.com/tus/tusd/v2 v2.8.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.14.1

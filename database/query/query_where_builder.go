@@ -582,8 +582,8 @@ func (b *queryBuilder) ApplyTextSearch(filter *databaseFilterSearch) {
 	text := replaceSpecialChars(filter.SearchText)
 
 	b.MaybeAND()
-	b.WriteString("(e.lookup &@ :")
-	b.WriteValue(filter.ID, "fts", text)
+	b.WriteString("(e.lookup ILIKE :")
+	b.WriteValue(filter.ID, "fts", "%"+text+"%")
 	b.WriteString(")")
 }
 
