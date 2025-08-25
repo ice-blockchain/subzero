@@ -35,7 +35,6 @@ CREATE INDEX IF NOT EXISTS idx_events_expiration_id ON events(expiration, id) WH
 
 -- TODO: remove pgroonga DROPs after the migration on all envs.
 DROP INDEX IF EXISTS idx_events_lookup_pgroonga;
-DROP EXTENSION IF EXISTS pgroonga;
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS idx_events_lookup_trgm ON events USING gin (lookup gin_trgm_ops);
