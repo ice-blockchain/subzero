@@ -188,7 +188,6 @@ var (
 		model.CustomIONKindAttestation: newKindValidatorBuilderEmpty().
 			Required(model.TagAttestationName).
 			Optional("nonce").
-			Validate(validateAttestationEvent).
 			Build(),
 	}
 
@@ -296,6 +295,8 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 		}
 	}
 	switch e.Kind {
+	case model.CustomIONKindAttestation:
+		return ev.validateAttestationEvent(ctx, rules, batch, e)
 	case nostr.KindProfileMetadata:
 		return ev.validateKindProfileMetadataEvent(ctx, rules, batch, e)
 	case nostr.KindTextNote:

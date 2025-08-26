@@ -25,8 +25,9 @@ type (
 		QueryFunc func(context.Context, ...model.Filter) query.EventIterator
 	}
 	ruleSet struct {
-		SkipKindProfileProofEventsVerify bool
-		BroadcastMode                    bool
+		SkipKindProfileProofEventsVerify      bool
+		SkipKindAttestationProofDevicesVerify bool
+		BroadcastMode                         bool
 	}
 )
 
@@ -41,6 +42,10 @@ func (v *eventValidator) Validate(ctx context.Context, batch model.Events, rules
 	var ruleSet ruleSet
 
 	ruleSet.Configure(rules...)
+
+	if true { // TODO: remove once FE implemented
+		ruleSet.SkipKindAttestationProofDevicesVerify = true
+	}
 
 	for _, e := range batch {
 		if err := v.validate(ctx, &ruleSet, batch, e); err != nil {
@@ -66,6 +71,11 @@ func RuleWithBroadcastMode() Rule {
 func RuleWithSkipProfileMetadataProofEventsVerify() Rule {
 	return func(v *ruleSet) {
 		v.SkipKindProfileProofEventsVerify = true
+	}
+}
+func RuleWithSkipDeviceIdentificationProofEventsVerify() Rule {
+	return func(v *ruleSet) {
+		v.SkipKindAttestationProofDevicesVerify = true
 	}
 }
 

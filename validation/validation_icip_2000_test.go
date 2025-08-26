@@ -3,11 +3,14 @@
 package validation
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -312,4 +315,122 @@ func TestValidateAttestationEvent(t *testing.T) {
 		err := validateAttestationEvent(validator, &ev)
 		require.NoError(t, err)
 	})
+
+	t.Run("nil tags", func(t *testing.T) {
+		var ev model.Event
+		ev.PubKey = "event_pubkey"
+		ev.Tags = nil
+
+		err := validateAttestationEvent(validator, &ev)
+		require.NoError(t, err)
+	})
+
+	t.Run("run badges/devices validation", func(t *testing.T) {
+		t.Run("disabled", func(t *testing.T) {
+			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+				return func(yield func(*model.Event, error) bool) {
+					return
+				}
+			}))
+			var ev model.Event
+			ev.PubKey = "master_key"
+			ev.Tags = model.Tags{
+				{"p", "device1", "", "active:1692000000"},
+			}
+			var rules ruleSet
+			rules.SkipKindAttestationProofDevicesVerify = true
+			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &rules, []*model.Event{&ev}, &ev))
+		})
+		t.Run("no old attestation - new device - require badges", func(t *testing.T) {
+			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+				return func(yield func(*model.Event, error) bool) {
+					return
+				}
+			}))
+			var ev model.Event
+			ev.PubKey = "master_key"
+			ev.Tags = model.Tags{
+				{"p", "device1", "", "active:1692000000"},
+			}
+
+			require.Error(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev), ErrDeviceIdentificationProofFailed)
+			bagdeDef, badgeAward := helperDeviceBadges(t, "device1")
+			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev, bagdeDef, badgeAward}, &ev))
+		})
+		t.Run("old attestattion contains all devices - no proofs required", func(t *testing.T) {
+			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+				return func(yield func(*model.Event, error) bool) {
+					var ev model.Event
+					ev.PubKey = "master_key"
+					ev.Tags = model.Tags{
+						{"p", "device1", "", "active:1692000000"},
+						{"p", "device2", "", "active:1692000001"},
+					}
+					if !yield(&ev, nil) {
+						return
+					}
+				}
+			}))
+			var ev model.Event
+			ev.PubKey = "master_key"
+			ev.Tags = model.Tags{
+				{"p", "device1", "", "active:1692000000"},
+				{"p", "device2", "", "active:1692000003"},
+			}
+
+			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev))
+			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev))
+		})
+
+		t.Run("old attestation contains some devices - require proofs for missing", func(t *testing.T) {
+			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+				return func(yield func(*model.Event, error) bool) {
+					var ev model.Event
+					ev.PubKey = "master_key"
+					ev.Tags = model.Tags{
+						{"p", "device1", "", "active:1692000000"},
+						{"p", "device2", "", "active:1692000001"},
+					}
+					if !yield(&ev, nil) {
+						return
+					}
+				}
+			}))
+			var ev model.Event
+			ev.PubKey = "master_key"
+			ev.Tags = model.Tags{
+				{"p", "device1", "", "active:1692000000"},
+				{"p", "device2", "", "active:1692000001"},
+				{"p", "device3", "", "active:1692000002"},
+			}
+			require.Error(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev), ErrDeviceIdentificationProofFailed)
+			bagdeDef, badgeAward := helperDeviceBadges(t, "device3")
+			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev, bagdeDef, badgeAward}, &ev))
+		})
+	})
+}
+
+func helperDeviceBadges(t *testing.T, devicePubkey string) (*model.Event, *model.Event) {
+	t.Helper()
+	_, publicKey := model.GenerateKeyPair()
+	badgeDefinitionEvent := model.Event{
+		Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags: model.Tags{
+				{"d", deviceIdentificationProof + "~" + devicePubkey},
+			},
+		},
+	}
+	badgeAwardEvent := model.Event{
+		Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeAward,
+			Tags: model.Tags{
+				{"a", fmt.Sprintf("%d:%s:%s~%s", nostr.KindBadgeDefinition, publicKey, deviceIdentificationProof, devicePubkey)},
+				{"p", devicePubkey},
+			},
+		},
+	}
+	return &badgeDefinitionEvent, &badgeAwardEvent
 }
