@@ -100,7 +100,7 @@ func newEventValidator(ctx context.Context, cfg *Config, opts ...Option) *eventV
 		opt(&validator)
 	}
 	if validator.IONIdentityPublicKeys == nil {
-		pubKeys := identitypubkeys.MustNewIONIdentityPublicKeys(ctx, cfg.IONIdentityURL)
+		pubKeys := identitypubkeys.MustNewIONIdentityPublicKeys(ctx, cfg.BaseURL)
 		WithIONIdentityPublicKeys(pubKeys.PublicKeys)(&validator)
 	}
 	return &validator
