@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
+	"github.com/ice-blockchain/subzero/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -34,8 +35,9 @@ const (
 )
 
 var (
-	pubsubServers      []*fixture.MockService
-	pubsubServersExtra []*fixture.MockService // For `TestConsensusEvents`.
+	pubsubServers                         []*fixture.MockService
+	pubsubServersExtra                    []*fixture.MockService // For `TestConsensusEvents`.
+	badgeIssuerPrivKey, badgeIssuerPubKey = model.GenerateKeyPair()
 )
 
 type globalCfg struct {
@@ -62,7 +64,7 @@ func TestMain(m *testing.M) {
 		return nil
 	})
 
-	validation.MustInit(ctx, validation.WithServiceKeys(func() []string { return nil }))
+	validation.MustInit(ctx, validation.WithServiceKeys(func() []string { return []string{badgeIssuerPubKey} }))
 	dvm.MustInit(ctx)
 
 	for _, wsPort := range []uint16{9988, 9977, 9966, 9955} {

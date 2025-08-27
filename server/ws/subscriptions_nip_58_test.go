@@ -34,12 +34,12 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeDefinition,
 			Tags:      tags,
 		}}
-		helperSignWithMinLeadingZeroBits(t, validBadgeDefinitionEvent, privkey)
+		helperSignWithMinLeadingZeroBits(t, validBadgeDefinitionEvent, badgeIssuerPrivKey)
 	})
 
 	t.Run("kind 8 (Badge award) (NIP-56): valid badge award event", func(t *testing.T) {
 		var tags nostr.Tags
-		badgeRef := fmt.Sprintf("30009:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("30009:%s:bravery", badgeIssuerPubKey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"p", pubkey, "wss://relay"})
 		validBadgeAwardEvent = &model.Event{Event: nostr.Event{
@@ -47,13 +47,13 @@ func TestPublishingNIP58Badges(t *testing.T) {
 			Kind:      nostr.KindBadgeAward,
 			Tags:      tags,
 		}}
-		helperSignWithMinLeadingZeroBits(t, validBadgeAwardEvent, privkey)
+		helperSignWithMinLeadingZeroBits(t, validBadgeAwardEvent, badgeIssuerPrivKey)
 	})
 
 	t.Run("kind 3008 (Profile badges) (NIP-56): valid profile badges event", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
-		badgeRef := fmt.Sprintf("30009:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("30009:%s:bravery", badgeIssuerPubKey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"e", validBadgeAwardEvent.ID, "wss://nostr.academy"})
 		validProfileBadgesEvent = &model.Event{Event: nostr.Event{
