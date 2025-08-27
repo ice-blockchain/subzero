@@ -28,7 +28,7 @@ func TestPostWithRichTextOnly(t *testing.T) {
 	}
 	require.NoError(t, ev.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	validator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filters ...model.Filter) query.EventIterator {
+	validator := newEventValidator(t.Context(), &Config{}, WithServiceKeys(emptyServiceKeys), WithQueryFunc(func(ctx context.Context, filters ...model.Filter) query.EventIterator {
 		return func(yield func(*model.Event, error) bool) {
 			profileContent := model.ProfileMetadataContent{
 				Name:        "testuser",

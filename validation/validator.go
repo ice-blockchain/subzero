@@ -10,6 +10,7 @@ import (
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	servicekeys "github.com/ice-blockchain/subzero/validation/internal/service-keys"
 )
 
 type (
@@ -21,8 +22,9 @@ type (
 	}
 
 	eventValidator struct {
-		Config    *Config
-		QueryFunc func(context.Context, ...model.Filter) query.EventIterator
+		Config      *Config
+		QueryFunc   func(context.Context, ...model.Filter) query.EventIterator
+		ServiceKeys func() []string
 	}
 	ruleSet struct {
 		SkipKindProfileProofEventsVerify      bool
@@ -61,6 +63,11 @@ func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator)
 		v.QueryFunc = f
 	}
 }
+func WithServiceKeys(f func() []string) Option {
+	return func(v *eventValidator) {
+		v.ServiceKeys = f
+	}
+}
 
 func RuleWithBroadcastMode() Rule {
 	return func(v *ruleSet) {
@@ -79,11 +86,11 @@ func RuleWithSkipDeviceIdentificationProofEventsVerify() Rule {
 	}
 }
 
-func New(opts ...Option) Validator {
-	return newEventValidator(cfg.MustGet[Config](), opts...)
+func New(ctx context.Context, opts ...Option) Validator {
+	return newEventValidator(ctx, cfg.MustGet[Config](), opts...)
 }
 
-func newEventValidator(cfg *Config, opts ...Option) *eventValidator {
+func newEventValidator(ctx context.Context, cfg *Config, opts ...Option) *eventValidator {
 	validator := eventValidator{
 		Config:    cfg,
 		QueryFunc: query.GetStoredEvents,
@@ -92,6 +99,9 @@ func newEventValidator(cfg *Config, opts ...Option) *eventValidator {
 	for _, opt := range opts {
 		opt(&validator)
 	}
-
+	if validator.ServiceKeys == nil {
+		serviceKeys := servicekeys.MustNewIONIdentityServiceKeys(ctx, cfg.ServiceKeysURL)
+		WithServiceKeys(serviceKeys.ServiceKeys)(&validator)
+	}
 	return &validator
 }

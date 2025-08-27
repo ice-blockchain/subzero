@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 	query.MustInit(ctx, query.WithConfig(&query.Config{
 		WriteURLs: []string{addr},
 	}))
-	validation.MustInit()
+	validation.MustInit(ctx)
 
 	code := m.Run()
 	cancel()

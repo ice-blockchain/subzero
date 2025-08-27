@@ -324,14 +324,14 @@ func TestValidateAttestationEvent(t *testing.T) {
 		err := validateAttestationEvent(validator, &ev)
 		require.NoError(t, err)
 	})
-
+	masterKey, _ := model.GenerateKeyPair()
 	t.Run("run badges/devices validation", func(t *testing.T) {
 		t.Run("disabled", func(t *testing.T) {
-			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+			customValidator := newEventValidator(t.Context(), &Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
 				return func(yield func(*model.Event, error) bool) {
 					return
 				}
-			}))
+			}), WithServiceKeys(emptyServiceKeys))
 			var ev model.Event
 			ev.PubKey = "master_key"
 			ev.Tags = model.Tags{
@@ -339,80 +339,96 @@ func TestValidateAttestationEvent(t *testing.T) {
 			}
 			var rules ruleSet
 			rules.SkipKindAttestationProofDevicesVerify = true
-			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &rules, []*model.Event{&ev}, &ev))
+			require.NoError(t, customValidator.validateKindAttestationEvent(t.Context(), &rules, []*model.Event{&ev}, &ev))
 		})
 		t.Run("no old attestation - new device - require badges", func(t *testing.T) {
-			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
-				return func(yield func(*model.Event, error) bool) {
-					return
-				}
-			}))
+			bagdeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
+			customValidator := newEventValidator(t.Context(), &Config{},
+				WithServiceKeys(func() []string {
+					return []string{badgeIssuerPubkey}
+				}),
+				WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+					return func(yield func(*model.Event, error) bool) {
+						return
+					}
+				}))
 			var ev model.Event
-			ev.PubKey = "master_key"
+			ev.Kind = model.CustomIONKindAttestation
 			ev.Tags = model.Tags{
 				{"p", "device1", "", "active:1692000000"},
 			}
-
-			require.Error(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev), ErrDeviceIdentificationProofFailed)
-			bagdeDef, badgeAward := helperDeviceBadges(t, "device1")
-			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev, bagdeDef, badgeAward}, &ev))
+			require.NoError(t, ev.SignWithAlg(masterKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Error(t, customValidator.validate(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev), ErrDeviceIdentificationProofFailed)
+			bagdeDef, badgeAward := helperDeviceBadges(t, bagdeIssuerPrivKey, "device1")
+			require.NoError(t, customValidator.validate(t.Context(), &ruleSet{}, []*model.Event{&ev, bagdeDef, badgeAward}, &ev))
 		})
 		t.Run("old attestattion contains all devices - no proofs required", func(t *testing.T) {
-			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
-				return func(yield func(*model.Event, error) bool) {
-					var ev model.Event
-					ev.PubKey = "master_key"
-					ev.Tags = model.Tags{
-						{"p", "device1", "", "active:1692000000"},
-						{"p", "device2", "", "active:1692000001"},
+			customValidator := newEventValidator(t.Context(), &Config{},
+				WithServiceKeys(emptyServiceKeys),
+				WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+					return func(yield func(*model.Event, error) bool) {
+						var ev model.Event
+						ev.PubKey = "master_key"
+						ev.Tags = model.Tags{
+							{"p", "device1", "", "active:1692000000"},
+							{"p", "device2", "", "active:1692000001"},
+						}
+						if !yield(&ev, nil) {
+							return
+						}
 					}
-					if !yield(&ev, nil) {
-						return
-					}
-				}
-			}))
+				}))
 			var ev model.Event
-			ev.PubKey = "master_key"
 			ev.Tags = model.Tags{
 				{"p", "device1", "", "active:1692000000"},
 				{"p", "device2", "", "active:1692000003"},
 			}
 
-			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev))
-			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev))
+			require.NoError(t, customValidator.validateKindAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev))
+			require.NoError(t, customValidator.validateKindAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev))
 		})
 
 		t.Run("old attestation contains some devices - require proofs for missing", func(t *testing.T) {
-			customValidator := newEventValidator(&Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
-				return func(yield func(*model.Event, error) bool) {
-					var ev model.Event
-					ev.PubKey = "master_key"
-					ev.Tags = model.Tags{
-						{"p", "device1", "", "active:1692000000"},
-						{"p", "device2", "", "active:1692000001"},
+			bagdeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
+			customValidator := newEventValidator(t.Context(), &Config{},
+				WithServiceKeys(func() []string {
+					return []string{badgeIssuerPubkey}
+				}),
+				WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
+					return func(yield func(*model.Event, error) bool) {
+						var ev model.Event
+						ev.PubKey = "master_key"
+						ev.Tags = model.Tags{
+							{"p", "device1", "", "active:1692000000"},
+							{"p", "device2", "", "active:1692000001"},
+						}
+						if !yield(&ev, nil) {
+							return
+						}
 					}
-					if !yield(&ev, nil) {
-						return
-					}
-				}
-			}))
+				}))
 			var ev model.Event
-			ev.PubKey = "master_key"
+			ev.Kind = model.CustomIONKindAttestation
 			ev.Tags = model.Tags{
 				{"p", "device1", "", "active:1692000000"},
 				{"p", "device2", "", "active:1692000001"},
 				{"p", "device3", "", "active:1692000002"},
 			}
-			require.Error(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev), ErrDeviceIdentificationProofFailed)
-			bagdeDef, badgeAward := helperDeviceBadges(t, "device3")
-			require.NoError(t, customValidator.validateAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev, bagdeDef, badgeAward}, &ev))
+			require.NoError(t, ev.SignWithAlg(masterKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.Error(t, customValidator.validateKindAttestationEvent(t.Context(), &ruleSet{}, []*model.Event{&ev}, &ev), ErrDeviceIdentificationProofFailed)
+			otherIssuerPrivKey, _ := model.GenerateKeyPair()
+			invalidBagdeDef, invalidBadgeAward := helperDeviceBadges(t, otherIssuerPrivKey, "device3")
+			require.Error(t, customValidator.validate(t.Context(), &ruleSet{}, []*model.Event{&ev, invalidBagdeDef, invalidBadgeAward}, &ev), ErrSignatureByServiceKeyRequired)
+			bagdeDef, badgeAward := helperDeviceBadges(t, bagdeIssuerPrivKey, "device3")
+			require.NoError(t, customValidator.validate(t.Context(), &ruleSet{}, []*model.Event{&ev, bagdeDef, badgeAward}, &ev))
 		})
 	})
 }
 
-func helperDeviceBadges(t *testing.T, devicePubkey string) (*model.Event, *model.Event) {
+func helperDeviceBadges(t *testing.T, issuerPrivateKey, devicePubkey string) (*model.Event, *model.Event) {
 	t.Helper()
-	_, publicKey := model.GenerateKeyPair()
+	issuerPublicKey, err := model.GetPublicKey(issuerPrivateKey)
+	require.NoError(t, err)
 	badgeDefinitionEvent := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Now(),
@@ -427,10 +443,12 @@ func helperDeviceBadges(t *testing.T, devicePubkey string) (*model.Event, *model
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags: model.Tags{
-				{"a", fmt.Sprintf("%d:%s:%s~%s", nostr.KindBadgeDefinition, publicKey, deviceIdentificationProof, devicePubkey)},
+				{"a", fmt.Sprintf("%d:%s:%s~%s", nostr.KindBadgeDefinition, issuerPublicKey, deviceIdentificationProof, devicePubkey)},
 				{"p", devicePubkey},
 			},
 		},
 	}
+	require.NoError(t, badgeDefinitionEvent.SignWithAlg(issuerPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, badgeAwardEvent.SignWithAlg(issuerPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &badgeDefinitionEvent, &badgeAwardEvent
 }
