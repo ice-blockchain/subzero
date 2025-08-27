@@ -10,7 +10,7 @@ import (
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	servicekeys "github.com/ice-blockchain/subzero/validation/internal/service-keys"
+	identitypubkeys "github.com/ice-blockchain/subzero/validation/internal/ion-identity-pubkeys"
 )
 
 type (
@@ -22,9 +22,9 @@ type (
 	}
 
 	eventValidator struct {
-		Config      *Config
-		QueryFunc   func(context.Context, ...model.Filter) query.EventIterator
-		ServiceKeys func() []string
+		Config                *Config
+		QueryFunc             func(context.Context, ...model.Filter) query.EventIterator
+		IONIdentityPublicKeys func() []string
 	}
 	ruleSet struct {
 		SkipKindProfileProofEventsVerify      bool
@@ -63,9 +63,9 @@ func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator)
 		v.QueryFunc = f
 	}
 }
-func WithServiceKeys(f func() []string) Option {
+func WithIONIdentityPublicKeys(f func() []string) Option {
 	return func(v *eventValidator) {
-		v.ServiceKeys = f
+		v.IONIdentityPublicKeys = f
 	}
 }
 
@@ -99,9 +99,9 @@ func newEventValidator(ctx context.Context, cfg *Config, opts ...Option) *eventV
 	for _, opt := range opts {
 		opt(&validator)
 	}
-	if validator.ServiceKeys == nil {
-		serviceKeys := servicekeys.MustNewIONIdentityServiceKeys(ctx, cfg.ServiceKeysURL)
-		WithServiceKeys(serviceKeys.ServiceKeys)(&validator)
+	if validator.IONIdentityPublicKeys == nil {
+		pubKeys := identitypubkeys.MustNewIONIdentityPublicKeys(ctx, cfg.IONIdentityURL)
+		WithIONIdentityPublicKeys(pubKeys.PublicKeys)(&validator)
 	}
 	return &validator
 }

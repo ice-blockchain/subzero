@@ -104,6 +104,7 @@ push-notifications:
   fcm-credentials-file: ./bogus.json
   relay-url: *self
 validation:
+  ion-identity-url: https://identity.io/
   max-wrapped-event-expiration: 720h
   nip13MinLeadingZeroBits: 0
   relay-url: *self

@@ -26,8 +26,8 @@ const (
 	tagStateOneOf
 	tagStateOneOfSingle
 
-	kindValidatorFlagContentRequired             uint = 1 << 0
-	kindValidatorFlagServiceKeySignatureRequired uint = 1 << 1
+	kindValidatorFlagContentRequired                 uint = 1 << 0
+	kindValidatorFlagIONIdentityKeySignatureRequired uint = 1 << 1
 )
 
 type (
@@ -49,18 +49,18 @@ type (
 )
 
 var (
-	ErrWrongEventParams              = errors.New("wrong event params")
-	ErrPollTTLExpired                = errors.New("expiration timestamp is in the past")
-	ErrUnsupportedTag                = errors.New("unsupported tag")
-	ErrUnsupportedJob                = errors.New("unsupported job")
-	ErrUnsupportedKind               = errors.New("unsupported kind")
-	ErrActionForbidden               = errors.New("forbidden")
-	ErrEphemeralForbidden            = errors.New("ephemeral events are forbidden")
-	ErrNotFound                      = errors.New("not found")
-	ErrContentEmpty                  = errors.New("content is empty")
-	ErrEventInvalidID                = errors.New("event id is invalid")
-	ErrEventInvalidSign              = errors.New("event signature is invalid")
-	ErrSignatureByServiceKeyRequired = errors.New("event requires signature by service key")
+	ErrWrongEventParams               = errors.New("wrong event params")
+	ErrPollTTLExpired                 = errors.New("expiration timestamp is in the past")
+	ErrUnsupportedTag                 = errors.New("unsupported tag")
+	ErrUnsupportedJob                 = errors.New("unsupported job")
+	ErrUnsupportedKind                = errors.New("unsupported kind")
+	ErrActionForbidden                = errors.New("forbidden")
+	ErrEphemeralForbidden             = errors.New("ephemeral events are forbidden")
+	ErrNotFound                       = errors.New("not found")
+	ErrContentEmpty                   = errors.New("content is empty")
+	ErrEventInvalidID                 = errors.New("event id is invalid")
+	ErrEventInvalidSign               = errors.New("event signature is invalid")
+	ErrSignatureByIONIdentityRequired = errors.New("event requires signature by ion identity")
 
 	CommongTags = []string{
 		"t",
@@ -82,7 +82,7 @@ var (
 		nostr.KindDeletion:          newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
 		nostr.KindRepost:            newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
 		nostr.KindReaction:          newKindValidatorBuilder().Required("p", "k").OneOf("e", "a").Build(),
-		nostr.KindBadgeAward:        newKindValidatorBuilder().Optional("a", "p").RequireServiceKeySignature().Build(),
+		nostr.KindBadgeAward:        newKindValidatorBuilder().Optional("a", "p").RequireIONIdentitySignature().Build(),
 		nostr.KindGenericRepost:     newKindValidatorBuilder().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindReactionToWebsite: tagsTable("r"),
 		nostr.KindMuteList:          tagsTable("p", "t", "word", "e"),
@@ -115,7 +115,7 @@ var (
 		nostr.KindLabel:                 tagsTable("e", "p", "a", "r", "t"),
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
-		nostr.KindBadgeDefinition:       newKindValidatorBuilder().Optional("d", "name", "image", "description", "thumb").RequireServiceKeySignature().Build(),
+		nostr.KindBadgeDefinition:       newKindValidatorBuilder().Optional("d", "name", "image", "description", "thumb").RequireIONIdentitySignature().Build(),
 		nostr.KindArticle:               tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 		nostr.KindDraftArticle:          tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
@@ -556,8 +556,8 @@ func (t *kindValidatorBuilder) ContentNotEmpty() *kindValidatorBuilder {
 	return t
 }
 
-func (t *kindValidatorBuilder) RequireServiceKeySignature() *kindValidatorBuilder {
-	t.Validator.Flags |= kindValidatorFlagServiceKeySignatureRequired
+func (t *kindValidatorBuilder) RequireIONIdentitySignature() *kindValidatorBuilder {
+	t.Validator.Flags |= kindValidatorFlagIONIdentityKeySignatureRequired
 	return t
 }
 
@@ -618,8 +618,8 @@ func (v *kindValidator) Execute(ev *eventValidator, e *model.Event) (err error) 
 	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
 		err = errors.Join(err, ErrContentEmpty)
 	}
-	if v.Flags&kindValidatorFlagServiceKeySignatureRequired != 0 && !slices.Contains(ev.ServiceKeys(), e.GetMasterPublicKey()) {
-		err = errors.Join(err, ErrSignatureByServiceKeyRequired)
+	if v.Flags&kindValidatorFlagIONIdentityKeySignatureRequired != 0 && !slices.Contains(ev.IONIdentityPublicKeys(), e.PubKey) {
+		err = errors.Join(err, ErrSignatureByIONIdentityRequired)
 	}
 	if v.Validate != nil {
 		err = errors.Join(err, v.Validate(ev, e))

@@ -91,9 +91,9 @@ func (ev *eventValidator) validateDevices(ctx context.Context, rules *ruleSet, b
 	if rules.SkipKindAttestationProofDevicesVerify {
 		return nil
 	}
-	oldAttestation, oldErr := ev.getEvent(ctx, fmt.Sprintf("%v:%v", model.CustomIONKindAttestation, newAttestationEvent.GetMasterPublicKey()))
+	oldAttestation, oldErr := ev.getEvent(ctx, fmt.Sprintf("%v:%v:", model.CustomIONKindAttestation, newAttestationEvent.GetMasterPublicKey()))
 	if oldErr != nil {
-		oldAttestation = nil
+		return errors.Wrapf(err, "[device-identification-proof] failed to get old attestation event")
 	}
 	for i, tag := range newAttestationEvent.Tags {
 		if tag.Key() != model.TagAttestationName {
@@ -113,7 +113,7 @@ func (ev *eventValidator) validateDevices(ctx context.Context, rules *ruleSet, b
 			}
 		}
 		if newDevice {
-			if deviceErr := ev.checkDeviceIdentificationProofs(ctx, batch, pubkey); deviceErr != nil {
+			if deviceErr := ev.checkDeviceIdentificationProofs(ctx, batch, newAttestationEvent.GetMasterPublicKey(), pubkey); deviceErr != nil {
 				err = errors.Join(err, errors.Wrapf(deviceErr, "failed to validate device identification proofs for pubkey %q at index %d", pubkey, i))
 			}
 		}
@@ -121,7 +121,7 @@ func (ev *eventValidator) validateDevices(ctx context.Context, rules *ruleSet, b
 	return err
 }
 
-func (ev *eventValidator) checkDeviceIdentificationProofs(_ context.Context, batch model.Events, devicePubkey string) error {
+func (ev *eventValidator) checkDeviceIdentificationProofs(_ context.Context, batch model.Events, userMasterKey, devicePubkey string) error {
 	badgeDefinitionIndex := slices.IndexFunc(batch, func(e *model.Event) bool {
 		return e.Kind == nostr.KindBadgeDefinition
 	})
@@ -132,26 +132,26 @@ func (ev *eventValidator) checkDeviceIdentificationProofs(_ context.Context, bat
 		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] missing badge definition or award events for device identification %s", devicePubkey)
 	}
 	badgeDefinition := batch[badgeDefinitionIndex]
-	issuer, badgeDevicePubkey := extractPubkeyFromDeviceIdentificationProof(badgeDefinition)
-	if badgeDevicePubkey == "" {
+	issuer, badgeDefinitionTargetPubkey := extractPubkeyFromDeviceIdentificationProof(badgeDefinition)
+	if badgeDefinitionTargetPubkey == "" {
 		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] badge definition does not have device pubkey")
 	}
-	if badgeDevicePubkey != devicePubkey {
-		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] device pubkey in badge definition (%s) doesn't match actual pubkey (%s)", badgeDevicePubkey, devicePubkey)
+	if badgeDefinitionTargetPubkey != devicePubkey {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] device pubkey in badge definition (%s) doesn't match actual pubkey (%s)", badgeDefinitionTargetPubkey, devicePubkey)
 	}
-	if issuer != badgeDefinition.GetMasterPublicKey() {
+	if issuer != badgeDefinition.PubKey {
 		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer pubkey in badge definition (%s) doesn't match event sign key", issuer, badgeDefinition.GetMasterPublicKey())
 	}
-	if !slices.Contains(ev.ServiceKeys(), issuer) {
-		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer of badge definition (%s) is not a service key", issuer)
+	if !slices.Contains(ev.IONIdentityPublicKeys(), issuer) {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer of badge definition (%s) is not a ion identity key", issuer)
 	}
 	badgeAward := batch[badgeAwardIndex]
-	issuer, badgeDevicePubkey = extractPubkeyFromDeviceIdentificationProof(badgeAward)
-	if badgeDevicePubkey == "" {
+	awardIssuer, badgeAwardTargetPubkey := extractPubkeyFromDeviceIdentificationProof(badgeAward)
+	if badgeAwardTargetPubkey == "" {
 		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] badge award does not have device pubkey")
 	}
-	if badgeDevicePubkey != devicePubkey {
-		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] device publey in badge award (%s) doesn't match actual pubkey (%s)", badgeDevicePubkey, devicePubkey)
+	if badgeAwardTargetPubkey != devicePubkey {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] device publey in badge award (%s) doesn't match actual pubkey (%s)", badgeDefinitionTargetPubkey, devicePubkey)
 	}
 	pTag := badgeAward.GetTag("p")
 	if pTag == nil || pTag.Value() == "" {
@@ -160,11 +160,24 @@ func (ev *eventValidator) checkDeviceIdentificationProofs(_ context.Context, bat
 	if pTag.Value() != devicePubkey {
 		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] p tag in badge award do not point to device pubkey")
 	}
-	if issuer != badgeAward.GetMasterPublicKey() {
+	if pTag.Value() == userMasterKey {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] p tag in badge award points to user master key, not the device")
+	}
+	if awardIssuer != badgeAward.PubKey {
 		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer pubkey in badge award (%s) doesn't match event sign key", issuer, badgeAward.GetMasterPublicKey())
 	}
-	if !slices.Contains(ev.ServiceKeys(), issuer) {
-		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer of badge award (%s) is not a service key", issuer)
+	if awardIssuer != issuer {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer pubkey in badge award (%s) doesn't match issuer pubkey in badge definition (%s)", issuer, awardIssuer)
+	}
+	aTag := badgeAward.GetTag("a")
+	if aTag == nil || aTag.Value() == "" {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] no a tag in badge award for device identification")
+	}
+	if aTag.Value() != badgeDefinition.Address() {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] a tag (%s) in badge award does not point to badge definition address", aTag.Value())
+	}
+	if !slices.Contains(ev.IONIdentityPublicKeys(), awardIssuer) {
+		return errors.Wrapf(ErrDeviceIdentificationProofFailed, "[device-identification-proof] issuer of badge award (%s) is not a ion identity key", issuer)
 	}
 	return nil
 }
@@ -176,8 +189,8 @@ func extractPubkeyFromDeviceIdentificationProof(ev *model.Event) (issuer string,
 			// For badge award: 30009:issuerPubKey:device_identification_proof~devicePubKey
 			if len(parts) >= 3 && strings.HasPrefix(parts[2], deviceIdentificationProof+"~") {
 				devicePubkey = strings.TrimPrefix(parts[2], deviceIdentificationProof+"~")
-				if devicePubkey != "" && parts[1] == ev.GetMasterPublicKey() {
-					return parts[1], devicePubkey
+				if devicePubkey != "" && parts[1] == ev.PubKey {
+					return ev.PubKey, devicePubkey
 				}
 			}
 		}
@@ -187,7 +200,7 @@ func extractPubkeyFromDeviceIdentificationProof(ev *model.Event) (issuer string,
 			if strings.HasPrefix(dTag.Value(), deviceIdentificationProof+"~") {
 				devicePubkey = strings.TrimPrefix(dTag.Value(), deviceIdentificationProof+"~")
 				if devicePubkey != "" {
-					return ev.GetMasterPublicKey(), devicePubkey
+					return ev.PubKey, devicePubkey
 				}
 			}
 		}

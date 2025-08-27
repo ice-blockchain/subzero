@@ -64,7 +64,7 @@ func TestMain(m *testing.M) {
 		return nil
 	})
 
-	validation.MustInit(ctx, validation.WithServiceKeys(func() []string { return []string{badgeIssuerPubKey} }))
+	validation.MustInit(ctx, validation.WithIONIdentityPublicKeys(func() []string { return []string{badgeIssuerPubKey} }))
 	dvm.MustInit(ctx)
 
 	for _, wsPort := range []uint16{9988, 9977, 9966, 9955} {

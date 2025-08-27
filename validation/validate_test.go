@@ -19,7 +19,7 @@ import (
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	MustInit(ctx, WithServiceKeys(emptyServiceKeys))
+	MustInit(ctx, WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 	goleak.VerifyTestMain(m)
 }
 
@@ -198,7 +198,7 @@ func TestRejectEphemeralWithAuthoritative(t *testing.T) {
 	t.Parallel()
 
 	var db fixture.MemDB
-	v := newEventValidator(t.Context(), global.Validator.Config, WithQueryFunc(db.SelectEvents), WithServiceKeys(emptyServiceKeys))
+	v := newEventValidator(t.Context(), global.Validator.Config, WithQueryFunc(db.SelectEvents), WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 
 	var ev model.Event
 	ev.Kind = model.CustomIONKindEphemeralEmbedding
@@ -213,6 +213,6 @@ func TestRejectEphemeralWithAuthoritative(t *testing.T) {
 	require.ErrorIs(t, err, ErrEphemeralForbidden)
 }
 
-func emptyServiceKeys() []string {
+func emptyIONIdentityKeys() []string {
 	return nil
 }

@@ -22,7 +22,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 			RelayURL: relayURL,
 		},
 		WithQueryFunc(new(fixture.MemDB).SelectEvents),
-		WithServiceKeys(emptyServiceKeys),
+		WithIONIdentityPublicKeys(emptyIONIdentityKeys),
 	)
 
 	t.Run("valid event with minimal filter", func(t *testing.T) {
