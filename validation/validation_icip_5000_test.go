@@ -65,7 +65,7 @@ func TestValidatePollVote(t *testing.T) {
 	t.Parallel()
 
 	var db fixture.MemDB
-	v := newEventValidator(global.Validator.Config, WithQueryFunc(db.SelectEvents))
+	v := newEventValidator(t.Context(), global.Validator.Config, WithQueryFunc(db.SelectEvents), WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 
 	var pollSingle, pollMulti, pollExpired model.Event
 	t.Run("CreatePolls", func(t *testing.T) {

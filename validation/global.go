@@ -17,9 +17,9 @@ var (
 	}
 )
 
-func MustInit(opts ...Option) {
+func MustInit(ctx context.Context, opts ...Option) {
 	global.Do(func() {
-		global.Validator = newEventValidator(cfg.MustGet[Config](), opts...)
+		global.Validator = newEventValidator(ctx, cfg.MustGet[Config](), opts...)
 	})
 }
 

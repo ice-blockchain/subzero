@@ -292,7 +292,7 @@ func TestWhoCanReplySettings_ModifiableEvent(t *testing.T) {
 }
 
 func TestWhoCanReplySettings_SelfReply(t *testing.T) {
-	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, _ := model.GenerateKeyPair()
 	ctx := t.Context()
 	RegisterWSSubscriptionListener(query.GetStoredEvents)
@@ -312,7 +312,7 @@ func TestWhoCanReplySettings_SelfReply(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Content:   "This post has badge restrictions",
 			Tags: nostr.Tags{
-				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
+				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, badgePost, privkeyPostOwner)
@@ -433,7 +433,7 @@ func TestWhoCanReplySettings_SelfReply(t *testing.T) {
 }
 
 func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
-	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 
 	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
@@ -458,7 +458,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 				Content:   fmt.Sprintf("hello world: %v", pkey),
 				Tags: nostr.Tags{
-					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
+					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 				},
 			}}
 			helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
@@ -475,7 +475,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 					{"description", "Verified user badge"},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, badgeDefinition, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, badgeDefinition, badgeIssuerPrivKey)
 			require.NoError(t, relay.Publish(ctx, badgeDefinition.Event))
 		})
 
@@ -484,11 +484,11 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeAward,
 				Tags: nostr.Tags{
-					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 					{"p", pubkeyUser1, ""},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, badgeAward, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, badgeAward, badgeIssuerPrivKey)
 			require.NoError(t, relay.Publish(ctx, badgeAward.Event))
 
 			t.Run("profile badges event", func(t *testing.T) {
@@ -496,7 +496,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 					CreatedAt: nostr.Now(),
 					Kind:      nostr.KindProfileBadges,
 					Tags: nostr.Tags{
-						{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+						{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 						{"e", badgeAward.GetID(), ""},
 						{"d", "profile_badges"},
 					},
@@ -542,7 +542,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 				Content:   "Second post with badge restrictions",
 				Tags: nostr.Tags{
-					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
+					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 				},
 			}}
 			helperSignWithMinLeadingZeroBits(t, post2, privkeyPostOwner)
@@ -570,7 +570,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 					{"name", "Verified Badge"},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, badgeDefinition, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, badgeDefinition, badgeIssuerPrivKey)
 
 			badgeDefAckContent, err := badgeDefinition.MarshalJSON()
 			require.NoError(t, err)
@@ -588,11 +588,11 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeAward,
 				Tags: nostr.Tags{
-					{"a", fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+					{"a", fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 					{"p", pubkeyUser2},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, badgeAward, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, badgeAward, badgeIssuerPrivKey)
 
 			badgeAwardAckContent, err := badgeAward.MarshalJSON()
 			require.NoError(t, err)
@@ -645,7 +645,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Content:   "Post by owner with badge restrictions",
 			Tags: nostr.Tags{
-				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, "verified"), strconv.FormatInt(time.Now().Unix(), 10)},
+				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, "verified"), strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, restrictedPost, privkeyPostOwner)
@@ -669,7 +669,7 @@ func TestWhoCanReplySettings_BadgeSettings(t *testing.T) {
 }
 
 func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
-	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 	privkeyUser2, pubkeyUser2 := model.GenerateKeyPair()
 	_, pubkeyUser3 := model.GenerateKeyPair()
@@ -687,7 +687,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 	var post *model.Event
 	dBadgeTagVal := "verified"
 	t.Run("create post with complex settings", func(t *testing.T) {
-		settingsConfiguration := fmt.Sprintf("%v,%v,%v|%v:%v:%v", model.FollowingWhoCanReplySettings, model.MentionWhoCanReplySettings, model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)
+		settingsConfiguration := fmt.Sprintf("%v,%v,%v|%v:%v:%v", model.FollowingWhoCanReplySettings, model.MentionWhoCanReplySettings, model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)
 		pkey, err := nip19.EncodePublicKey(pubkeyUser3)
 		require.NoError(t, err)
 		post = &model.Event{Event: nostr.Event{
@@ -723,7 +723,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 				{"description", "Verified user badge"},
 			},
 		}}
-		helperSignWithMinLeadingZeroBits(t, defineBadgeEv, privkeyPostOwner)
+		helperSignWithMinLeadingZeroBits(t, defineBadgeEv, badgeIssuerPrivKey)
 		require.NoError(t, relay.Publish(ctx, defineBadgeEv.Event))
 	})
 	var awardEvent *model.Event
@@ -732,11 +732,11 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindBadgeAward,
 			Tags: nostr.Tags{
-				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 				{"p", pubkeyUser2, ""},
 			},
 		}}
-		helperSignWithMinLeadingZeroBits(t, awardEvent, privkeyPostOwner)
+		helperSignWithMinLeadingZeroBits(t, awardEvent, badgeIssuerPrivKey)
 		require.NoError(t, relay.Publish(ctx, awardEvent.Event))
 	})
 	t.Run("profile badges event", func(t *testing.T) {
@@ -744,7 +744,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindProfileBadges,
 			Tags: nostr.Tags{
-				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+				{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 				{"e", awardEvent.GetID(), ""},
 				{"d", "profile_badges"},
 			},
@@ -803,7 +803,7 @@ func TestWhoCanReplySettings_ComplexSettings(t *testing.T) {
 }
 
 func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
-	privkeyPostOwner, pubkeyPostOwner := model.GenerateKeyPair()
+	privkeyPostOwner, _ := model.GenerateKeyPair()
 	privkeyUser1, pubkeyUser1 := model.GenerateKeyPair()
 	privkeyUser2, _ := model.GenerateKeyPair()
 	privkeyUser3, pubkeyUser3 := model.GenerateKeyPair()
@@ -827,7 +827,7 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 				Content:   "Post restricted to premium users",
 				Tags: nostr.Tags{
-					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
+					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal), strconv.FormatInt(time.Now().Unix(), 10)},
 				},
 			}}
 			helperSignWithMinLeadingZeroBits(t, post, privkeyPostOwner)
@@ -846,7 +846,7 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 					{"thumb", "https://example.com/premium.png"},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, premiumBadgeDefinition, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, premiumBadgeDefinition, badgeIssuerPrivKey)
 			require.NoError(t, relay.Publish(ctx, premiumBadgeDefinition.Event))
 		})
 
@@ -856,11 +856,11 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeAward,
 				Tags: nostr.Tags{
-					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 					{"p", pubkeyUser1, ""},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, premiumAward, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, premiumAward, badgeIssuerPrivKey)
 			require.NoError(t, relay.Publish(ctx, premiumAward.Event))
 		})
 
@@ -869,7 +869,7 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindProfileBadges,
 				Tags: nostr.Tags{
-					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, pubkeyPostOwner, dBadgeTagVal)},
+					{"a", fmt.Sprintf("%v:%v:%v", nostr.KindBadgeDefinition, badgeIssuerPubKey, dBadgeTagVal)},
 					{"e", premiumAward.GetID(), ""},
 					{"d", "profile_badges"},
 				},
@@ -917,7 +917,7 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 				Kind:      nostr.KindTextNote,
 				Content:   "Developer-only discussion",
 				Tags: nostr.Tags{
-					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, devBadgeTag), strconv.FormatInt(time.Now().Unix(), 10)},
+					{"settings", model.WhoCanReplySettings, fmt.Sprintf("%v|%v:%v:%v", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, devBadgeTag), strconv.FormatInt(time.Now().Unix(), 10)},
 				},
 			}}
 			helperSignWithMinLeadingZeroBits(t, devPost, privkeyPostOwner)
@@ -945,7 +945,7 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 					{"description", "Software developer badge"},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, devBadgeDefinition, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, devBadgeDefinition, badgeIssuerPrivKey)
 
 			badgeDefAckContent, err := devBadgeDefinition.MarshalJSON()
 			require.NoError(t, err)
@@ -963,11 +963,11 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      nostr.KindBadgeAward,
 				Tags: nostr.Tags{
-					{"a", fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, pubkeyPostOwner, devBadgeTag)},
+					{"a", fmt.Sprintf("%d:%s:%s", nostr.KindBadgeDefinition, badgeIssuerPubKey, devBadgeTag)},
 					{"p", pubkeyUser3},
 				},
 			}}
-			helperSignWithMinLeadingZeroBits(t, devBadgeAward, privkeyPostOwner)
+			helperSignWithMinLeadingZeroBits(t, devBadgeAward, badgeIssuerPrivKey)
 
 			badgeAwardAckContent, err := devBadgeAward.MarshalJSON()
 			require.NoError(t, err)
@@ -987,8 +987,8 @@ func TestWhoCanReplySettings_MultipleBadgeTypes(t *testing.T) {
 	t.Run("Multiple badge types allowed", func(t *testing.T) {
 		t.Run("create post allowing both premium and developer badges", func(t *testing.T) {
 			settingsValue := fmt.Sprintf("%v|%v:%v:%v,%v|%v:%v:%v",
-				model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, "verified",
-				model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, pubkeyPostOwner, "developer")
+				model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, "verified",
+				model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey, "developer")
 
 			post2 = &model.Event{Event: nostr.Event{
 				CreatedAt: nostr.Now(),

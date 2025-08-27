@@ -2,6 +2,7 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -16,7 +17,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	MustInit()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	MustInit(ctx, WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 	goleak.VerifyTestMain(m)
 }
 
@@ -195,7 +198,7 @@ func TestRejectEphemeralWithAuthoritative(t *testing.T) {
 	t.Parallel()
 
 	var db fixture.MemDB
-	v := newEventValidator(global.Validator.Config, WithQueryFunc(db.SelectEvents))
+	v := newEventValidator(t.Context(), global.Validator.Config, WithQueryFunc(db.SelectEvents), WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 
 	var ev model.Event
 	ev.Kind = model.CustomIONKindEphemeralEmbedding
@@ -208,4 +211,8 @@ func TestRejectEphemeralWithAuthoritative(t *testing.T) {
 
 	err := v.Validate(ctx, model.Events{&ev})
 	require.ErrorIs(t, err, ErrEphemeralForbidden)
+}
+
+func emptyIONIdentityKeys() []string {
+	return nil
 }

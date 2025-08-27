@@ -16,7 +16,6 @@ import (
 
 func TestPublishingNIP01NIP24Events(t *testing.T) {
 	privkey := model.GeneratePrivateKey()
-	badgeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
 	userPrivKey, _ := model.GenerateKeyPair()
 	storedEvents := []*model.Event{}
 	helperRegisterWSEventListenerProxyWithStorage(t, &storedEvents)
@@ -109,7 +108,7 @@ func TestPublishingNIP01NIP24Events(t *testing.T) {
 			Kind:      nostr.KindTextNote,
 			Content:   "Badge restricted post",
 			Tags: nostr.Tags{
-				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%s|%d:%s:verified", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubkey), strconv.FormatInt(time.Now().Unix(), 10)},
+				{"settings", model.WhoCanReplySettings, fmt.Sprintf("%s|%d:%s:verified", model.BadgeWhoCanReplySettingsPrefix, nostr.KindBadgeDefinition, badgeIssuerPubKey), strconv.FormatInt(time.Now().Unix(), 10)},
 			},
 		}}
 		helperSignWithMinLeadingZeroBits(t, restrictedPost, privkey)

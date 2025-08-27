@@ -10,6 +10,7 @@ import (
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	identitypubkeys "github.com/ice-blockchain/subzero/validation/internal/ion-identity-pubkeys"
 )
 
 type (
@@ -21,12 +22,14 @@ type (
 	}
 
 	eventValidator struct {
-		Config    *Config
-		QueryFunc func(context.Context, ...model.Filter) query.EventIterator
+		Config                *Config
+		QueryFunc             func(context.Context, ...model.Filter) query.EventIterator
+		IONIdentityPublicKeys func() []string
 	}
 	ruleSet struct {
-		SkipKindProfileProofEventsVerify bool
-		BroadcastMode                    bool
+		SkipKindProfileProofEventsVerify      bool
+		SkipKindAttestationProofDevicesVerify bool
+		BroadcastMode                         bool
 	}
 )
 
@@ -42,6 +45,10 @@ func (v *eventValidator) Validate(ctx context.Context, batch model.Events, rules
 
 	ruleSet.Configure(rules...)
 
+	if true { // TODO: remove once FE implemented
+		ruleSet.SkipKindAttestationProofDevicesVerify = true
+	}
+
 	for _, e := range batch {
 		if err := v.validate(ctx, &ruleSet, batch, e); err != nil {
 			return errors.Wrap(err, "validation failed")
@@ -56,6 +63,11 @@ func WithQueryFunc(f func(context.Context, ...model.Filter) query.EventIterator)
 		v.QueryFunc = f
 	}
 }
+func WithIONIdentityPublicKeys(f func() []string) Option {
+	return func(v *eventValidator) {
+		v.IONIdentityPublicKeys = f
+	}
+}
 
 func RuleWithBroadcastMode() Rule {
 	return func(v *ruleSet) {
@@ -68,12 +80,17 @@ func RuleWithSkipProfileMetadataProofEventsVerify() Rule {
 		v.SkipKindProfileProofEventsVerify = true
 	}
 }
-
-func New(opts ...Option) Validator {
-	return newEventValidator(cfg.MustGet[Config](), opts...)
+func RuleWithSkipDeviceIdentificationProofEventsVerify() Rule {
+	return func(v *ruleSet) {
+		v.SkipKindAttestationProofDevicesVerify = true
+	}
 }
 
-func newEventValidator(cfg *Config, opts ...Option) *eventValidator {
+func New(ctx context.Context, opts ...Option) Validator {
+	return newEventValidator(ctx, cfg.MustGet[Config](), opts...)
+}
+
+func newEventValidator(ctx context.Context, cfg *Config, opts ...Option) *eventValidator {
 	validator := eventValidator{
 		Config:    cfg,
 		QueryFunc: query.GetStoredEvents,
@@ -82,6 +99,9 @@ func newEventValidator(cfg *Config, opts ...Option) *eventValidator {
 	for _, opt := range opts {
 		opt(&validator)
 	}
-
+	if validator.IONIdentityPublicKeys == nil {
+		pubKeys := identitypubkeys.MustNewIONIdentityPublicKeys(ctx, cfg.IONIdentityBaseURL)
+		WithIONIdentityPublicKeys(pubKeys.PublicKeys)(&validator)
+	}
 	return &validator
 }

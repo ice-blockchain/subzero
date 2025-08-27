@@ -785,8 +785,6 @@ func helperCreateUsernameBadge(t *testing.T, username, userPrivKey string, relay
 	userPubKey, err := model.GetPublicKey(userPrivKey)
 	require.NoError(t, err)
 
-	badgeIssuerPrivKey, _ := model.GenerateKeyPair()
-
 	badgeDefinition := &model.Event{Event: nostr.Event{
 		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindBadgeDefinition,

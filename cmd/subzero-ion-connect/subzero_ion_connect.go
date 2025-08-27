@@ -43,7 +43,7 @@ var (
 		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
-			validation.MustInit()
+			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
 			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())

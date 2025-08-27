@@ -23,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
+	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/validation"
@@ -34,8 +35,9 @@ const (
 )
 
 var (
-	pubsubServers      []*fixture.MockService
-	pubsubServersExtra []*fixture.MockService // For `TestConsensusEvents`.
+	pubsubServers                         []*fixture.MockService
+	pubsubServersExtra                    []*fixture.MockService // For `TestConsensusEvents`.
+	badgeIssuerPrivKey, badgeIssuerPubKey = model.GenerateKeyPair()
 )
 
 type globalCfg struct {
@@ -62,7 +64,7 @@ func TestMain(m *testing.M) {
 		return nil
 	})
 
-	validation.MustInit()
+	validation.MustInit(ctx, validation.WithIONIdentityPublicKeys(func() []string { return []string{badgeIssuerPubKey} }))
 	dvm.MustInit(ctx)
 
 	for _, wsPort := range []uint16{9988, 9977, 9966, 9955} {

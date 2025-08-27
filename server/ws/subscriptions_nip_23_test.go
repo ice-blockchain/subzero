@@ -5,6 +5,7 @@ package ws
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -19,7 +20,7 @@ func TestPublishingNIP23Events(t *testing.T) {
 	ctx := t.Context()
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
-	badgeDefinition, badgeAward, profileMetadata := helperCreateUsernameBadge(t, "testuser", privkey, relay)
+	badgeDefinition, badgeAward, profileMetadata := helperCreateUsernameBadge(t, uuid.NewString(), privkey, relay)
 	require.NoError(t, query.AcceptEvents(ctx, badgeDefinition, badgeAward, profileMetadata))
 
 	var validEventKindArticle, validEventKindBlogPost *model.Event

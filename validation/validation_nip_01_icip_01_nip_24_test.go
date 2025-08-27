@@ -205,7 +205,7 @@ func TestValidateKindProfileMetadataEvent(t *testing.T) {
 				},
 			}
 			require.NoError(t, event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			validator := newEventValidator(nil)
+			validator := newEventValidator(t.Context(), global.Validator.Config, WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 			rules := new(ruleSet).Configure(
 				RuleWithSkipProfileMetadataProofEventsVerify(),
 			)
