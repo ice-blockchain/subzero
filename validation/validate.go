@@ -393,7 +393,14 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 	case model.CustomIONKindDeviceRegistration:
 		return ev.validateKindDeviceRegistration(ctx, rules, batch, e)
 	case model.CustomIONKindEphemeralEmbedding:
-		return ev.validateKindEphemeralEmbeddingEvent(ctx, rules, batch, e)
+		wrappedRules := &ruleSet{
+			SkipKindProfileProofEventsVerify: true,
+		}
+		if rules != nil {
+			wrappedRules.SkipKindAttestationProofDevicesVerify = rules.SkipKindAttestationProofDevicesVerify
+			wrappedRules.BroadcastMode = rules.BroadcastMode
+		}
+		return ev.validateKindEphemeralEmbeddingEvent(ctx, wrappedRules, batch, e)
 	default:
 		if e.IsJobResponse() {
 			return validateKindJobResult(e)
