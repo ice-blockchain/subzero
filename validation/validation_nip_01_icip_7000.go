@@ -77,11 +77,16 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 			if err != nil {
 				return errors.Wrap(err, "failed to parse ephemeral ack events")
 			}
-			for _, ack := range ephemeralAckEvents[e.Address()] {
-				if ack.ContentEvent != nil && ack.ContentEvent.Kind == nostr.KindProfileMetadata &&
-					ack.ContentEvent.GetMasterPublicKey() == e.GetMasterPublicKey() {
-					profileMetadata = ack.ContentEvent
+			for _, acks := range ephemeralAckEvents {
+				for _, ack := range acks {
+					if ack.ContentEvent != nil && ack.ContentEvent.Kind == nostr.KindProfileMetadata &&
+						ack.ContentEvent.GetMasterPublicKey() == e.GetMasterPublicKey() {
+						profileMetadata = ack.ContentEvent
 
+						break
+					}
+				}
+				if profileMetadata != nil {
 					break
 				}
 			}
