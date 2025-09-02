@@ -38,7 +38,7 @@ func (ev *eventValidator) validateTextNote(ctx context.Context, rules *ruleSet, 
 		if err := ev.validateWhoCanReplySettings(ctx, rules, batch, e); err != nil {
 			return errors.Wrap(err, "validate who can reply settings")
 		}
-		if err := ev.validateRootContentNFTCollections(ctx, e); err != nil {
+		if err := ev.validateRootContentNFTCollections(ctx, batch, e); err != nil {
 			return errors.Wrap(err, "validate root content NFT collections")
 		}
 	}
@@ -46,7 +46,7 @@ func (ev *eventValidator) validateTextNote(ctx context.Context, rules *ruleSet, 
 	return nil
 }
 
-func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context, e *model.Event) error {
+func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context, batch model.Events, e *model.Event) error {
 	if e.IsComment() || e.IsStory() || e.IsCommunityPost() {
 		return nil
 	}
@@ -71,9 +71,26 @@ func (ev *eventValidator) validateRootContentNFTCollections(ctx context.Context,
 	}
 
 	if profileMetadata == nil {
-		return errors.Wrapf(ErrActionForbidden,
-			"profile metadata not found for user %s creating root %d content",
-			e.GetMasterPublicKey(), e.Kind)
+		userData := model.GetUserDataFromContext(ctx)
+		if !userData.Authoritative {
+			ephemeralAckEvents, err := model.ParseEphemeralEmbeddingEvents(batch...)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse ephemeral ack events")
+			}
+			for _, ack := range ephemeralAckEvents[e.Address()] {
+				if ack.ContentEvent != nil && ack.ContentEvent.Kind == nostr.KindProfileMetadata &&
+					ack.ContentEvent.GetMasterPublicKey() == e.GetMasterPublicKey() {
+					profileMetadata = ack.ContentEvent
+
+					break
+				}
+			}
+		}
+		if profileMetadata == nil {
+			return errors.Wrapf(ErrActionForbidden,
+				"profile metadata not found for user %s creating root %d content",
+				e.GetMasterPublicKey(), e.Kind)
+		}
 	}
 	var parsedContent model.ProfileMetadataContent
 	if err := json.Unmarshal([]byte(profileMetadata.Content), &parsedContent); err != nil {
