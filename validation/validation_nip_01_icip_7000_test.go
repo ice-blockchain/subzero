@@ -116,7 +116,7 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 				QueryFunc: createMockQueryFunc(tt.profileMetadata, tt.profileMetadataErr),
 			}
 
-			err := validator.validateRootContentNFTCollections(t.Context(), tt.event)
+			err := validator.validateRootContentNFTCollections(t.Context(), model.Events{}, tt.event)
 
 			if tt.shouldError {
 				require.Error(t, err, "Expected error for test case: %s", tt.name)
@@ -126,6 +126,73 @@ func TestValidateRootContentNFTCollections(t *testing.T) {
 			} else {
 				require.NoError(t, err, "Expected no error for test case: %s", tt.name)
 			}
+		})
+	}
+}
+
+func TestValidateRootContentNFTCollectionsWithEphemeralEvents(t *testing.T) {
+	t.Parallel()
+
+	privKey, _ := model.GenerateKeyPair()
+	masterPrivKey, masterPubkey := model.GenerateKeyPair()
+
+	testEvent := helperCreateArticleEventForTest(t, privKey, masterPubkey, "Test Article", "Article content")
+	profileMetadata := helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
+		"name":                        "testuser",
+		"display_name":                "Test User",
+		"ion_content_nft_collections": helperCreateTestNFTCollectionsWithIon(t),
+	})
+	ephemeralEvent := helperCreateEphemeralEmbeddingEvent(t, masterPrivKey, testEvent.Address(), profileMetadata)
+	tests := []struct {
+		name        string
+		event       *model.Event
+		batch       model.Events
+		shouldError bool
+	}{
+		{
+			name:        "profile found in ephemeral events with NFT collections should pass",
+			event:       testEvent,
+			batch:       model.Events{ephemeralEvent},
+			shouldError: false,
+		},
+		{
+			name:        "profile not found in ephemeral events should fail",
+			event:       testEvent,
+			batch:       model.Events{},
+			shouldError: true,
+		},
+		{
+			name:  "profile in ephemeral events with empty NFT collections should fail",
+			event: testEvent,
+			batch: model.Events{helperCreateEphemeralEmbeddingEvent(t, masterPrivKey, testEvent.Address(),
+				helperCreateProfileMetadataWithNFTCollections(t, masterPrivKey, masterPubkey, map[string]interface{}{
+					"name":                        "testuser",
+					"display_name":                "Test User",
+					"ion_content_nft_collections": map[string]interface{}{},
+				}))},
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := &eventValidator{
+				QueryFunc: createMockQueryFunc(nil, nil),
+			}
+			nonAuthoritativeCtx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+				Authoritative: false,
+			})
+			err := validator.validateRootContentNFTCollections(nonAuthoritativeCtx, tt.batch, tt.event)
+			if tt.shouldError {
+				require.Error(t, err, "Expected error for test case with non-authoritative context: %s", tt.name)
+			} else {
+				require.NoError(t, err, "Expected no error for test case with non-authoritative context: %s", tt.name)
+			}
+
+			authoritativeCtx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+				Authoritative: true,
+			})
+			require.Error(t, validator.validateRootContentNFTCollections(authoritativeCtx, tt.batch, tt.event), "Expected error for test case with authoritative context: %s", tt.name)
 		})
 	}
 }
@@ -215,6 +282,22 @@ func helperCreateTestNFTCollectionsWithIon(t *testing.T) map[string]interface{} 
 			"created_by": "0:1825C553BC67ED4DAFFE789C921FFEC7E3005EF88CE3B58F4E5A73AF6DCD08D4",
 		},
 	}
+}
+
+func helperCreateEphemeralEmbeddingEvent(t *testing.T, privKey string, refAddress string, contentEvent *model.Event) *model.Event {
+	t.Helper()
+	event := &model.Event{
+		Event: nostr.Event{
+			Kind:    model.CustomIONKindEphemeralEmbedding,
+			Content: contentEvent.String(),
+			Tags: model.Tags{
+				{"a", refAddress},
+			},
+		},
+	}
+	require.NoError(t, event.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	return event
 }
 
 func createMockQueryFunc(profileMetadata *model.Event, queryError error) func(context.Context, ...model.Filter) query.EventIterator {
