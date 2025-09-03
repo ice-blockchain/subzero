@@ -27,9 +27,10 @@ type (
 		IONIdentityPublicKeys func() []string
 	}
 	ruleSet struct {
-		SkipKindProfileProofEventsVerify      bool
-		SkipKindAttestationProofDevicesVerify bool
-		BroadcastMode                         bool
+		SkipKindProfileProofEventsVerify        bool
+		SkipKindAttestationProofDevicesVerify   bool
+		SkipRootContentNFTCollectionsValidation bool
+		BroadcastMode                           bool
 	}
 )
 
@@ -83,6 +84,12 @@ func RuleWithSkipProfileMetadataProofEventsVerify() Rule {
 func RuleWithSkipDeviceIdentificationProofEventsVerify() Rule {
 	return func(v *ruleSet) {
 		v.SkipKindAttestationProofDevicesVerify = true
+	}
+}
+
+func RuleWithSkipRootContentNFTCollectionsValidation() Rule {
+	return func(v *ruleSet) {
+		v.SkipRootContentNFTCollectionsValidation = true
 	}
 }
 

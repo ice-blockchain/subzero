@@ -17,7 +17,16 @@ func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, rules *ru
 
 	if err := repostedEvent.UnmarshalJSON([]byte(e.Content)); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: wrong json fields: %v", err)
-	} else if err := ev.validate(ctx, rules, batch, &repostedEvent); err != nil && !errors.IsAny(err, ErrPollTTLExpired) {
+	}
+	repostRules := &ruleSet{
+		SkipRootContentNFTCollectionsValidation: true,
+	}
+	if rules != nil {
+		repostRules.SkipKindProfileProofEventsVerify = rules.SkipKindProfileProofEventsVerify
+		repostRules.SkipKindAttestationProofDevicesVerify = rules.SkipKindAttestationProofDevicesVerify
+		repostRules.BroadcastMode = rules.BroadcastMode
+	}
+	if err := ev.validate(ctx, repostRules, batch, &repostedEvent); err != nil && !errors.IsAny(err, ErrPollTTLExpired) {
 		return errors.Wrapf(ErrWrongEventParams, "nip-18: invalid reposted event: %v", err)
 	}
 
