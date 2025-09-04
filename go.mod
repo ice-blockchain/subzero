@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.25.0
+go 1.25.1
 
 replace (
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20250728142820-30f40fab82c5
