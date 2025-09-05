@@ -442,7 +442,6 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 				}
 				errChan <- err
 			}
-
 		}(notification)
 	}
 
