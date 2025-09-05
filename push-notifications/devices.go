@@ -76,6 +76,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	}
 
 	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
+	log.Printf("[push-notifications] added device for masterPubKey:%s to cache, deviceID: %s", masterPubKey, deviceID)
 
 	return nil
 }

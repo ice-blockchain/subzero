@@ -344,6 +344,9 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 			return nil, errors.Wrap(err, "failed to get authoritative events")
 		}
 		if isAuthoritative {
+			if profileMetadataEvent == nil || attestationEvent == nil {
+				return nil, fmt.Errorf("empty profile metadata or attestation event for event %s", event.ID)
+			}
 			relevantEvents = append(relevantEvents, pm.createEphemeralEmbeddingEvent(profileMetadataEvent), pm.createEphemeralEmbeddingEvent(attestationEvent))
 		}
 	}
@@ -383,7 +386,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		return pm.handleNewFollowerEvent(ctx, event, relevantEvents...)
 	}
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to handle event %s", event.ID)
 	}
 
 	return notifications, nil
@@ -434,8 +437,12 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 				invalidDevicesMutex.Unlock()
 				errChan <- nil
 			} else {
+				if err == nil {
+					log.Printf("[push-notifications] sent notification for device: %s, kind: %d", n.Target.Event.ID, n.Kind)
+				}
 				errChan <- err
 			}
+
 		}(notification)
 	}
 
