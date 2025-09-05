@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -201,6 +202,11 @@ func init() {
 			log.Printf("INFO: broadcast %d events (%v) [duration %s]", len(events), model.Events(events).IDs(), end)
 		})
 		antsPool.Submit(func() {
+			var ids []string
+			for _, event := range events {
+				ids = append(ids, event.ID)
+			}
+			log.Printf("[push-notifications-broadcast] accepting events for pushes: %s", strings.Join(ids, ", "))
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}
