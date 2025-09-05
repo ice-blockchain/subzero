@@ -276,11 +276,9 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 		}
 		var relevantEvents []*model.Event
 		if !shouldSkipEphemeralEvent(event) {
-			evs, ok := ephemeralEvents[event.ID]
-			if !ok || len(evs) == 0 {
-				continue
+			if evs, ok := ephemeralEvents[event.ID]; ok && len(evs) > 0 {
+				relevantEvents = evs
 			}
-			relevantEvents = evs
 		}
 		notifications, err := pm.processEvent(ctx, event, relevantEvents...)
 		if err != nil {

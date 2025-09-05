@@ -583,19 +583,19 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		require.Empty(t, topic)
 	})
 
-	t.Run("Skips events that require ephemeral events when no ephemeral events exist", func(t *testing.T) {
-		recipientPubKey := "recipient-pubkey-for-skip-test"
-		devicePubKey := "device-pubkey-for-skip-test"
-		deviceID := "device-id-for-skip-test"
+	t.Run("Processes events without ephemeral events correctly", func(t *testing.T) {
+		recipientPubKey := "recipient-pubkey-for-process-test"
+		devicePubKey := "device-pubkey-for-process-test"
+		deviceID := "device-id-for-process-test"
 		deviceTags := nostr.Tags{
 			{"d", deviceID},
 			{"t", "ios"},
-			{"token", "test-token-for-skip-test"},
+			{"token", "test-token-for-process-test"},
 		}
 
 		deviceEvent := &model.Event{
 			Event: nostr.Event{
-				ID:     "device-event-id-for-skip-test",
+				ID:     "device-event-id-for-process-test",
 				PubKey: devicePubKey,
 				Tags:   deviceTags,
 			},
@@ -629,7 +629,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		single, topic, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.Empty(t, single)
+		require.NotEmpty(t, single, "Should process events even without ephemeral events")
 		require.Empty(t, topic)
 	})
 
