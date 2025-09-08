@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/goccy/go-json"
 	"github.com/imroc/req/v3"
 )
 
@@ -36,6 +37,8 @@ func MustNewIONIdentityPublicKeys(ctx context.Context, baseUrl string) IONIdenti
 		Client: req.C().
 			SetBaseURL(baseUrl).
 			SetTimeout(30 * time.Second).
+			SetJsonMarshal(json.Marshal).
+			SetJsonUnmarshal(json.Unmarshal).
 			EnableH2C(),
 	}
 
