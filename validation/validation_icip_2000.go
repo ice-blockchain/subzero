@@ -39,7 +39,7 @@ const (
 	deviceIdentificationProof = "device_identification_proof"
 )
 
-func validateAttestationEvent(v *eventValidator, e *model.Event) error {
+func validateAttestationEvent(_ *eventValidator, e *model.Event) error {
 	type attestationState struct {
 		Name      string
 		Timestamp model.Timestamp

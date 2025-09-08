@@ -4,25 +4,23 @@ package ionidentitypubkeys
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/goccy/go-json"
 	"github.com/imroc/req/v3"
-	"golang.org/x/net/http2"
 )
 
 type (
-	IONIdentityKeys interface {
+	IONIdentityKeysProvider interface {
 		PublicKeys() []string
 	}
 	ionIdentityPublicKeysFetcher struct {
-		client     *req.Client
-		publicKeys atomic.Pointer[publicKeys]
+		Client *req.Client
+		Stored atomic.Pointer[publicKeys]
 	}
 	publicKeys struct {
 		Keys    []string
@@ -30,70 +28,83 @@ type (
 	}
 )
 
-func MustNewIONIdentityPublicKeys(ctx context.Context, baseUrl string) IONIdentityKeys {
+func MustNewIONIdentityPublicKeys(ctx context.Context, baseUrl string) IONIdentityKeysProvider {
 	if baseUrl == "" {
 		log.Panic(errors.New("ion identity public keys base url not set"))
 	}
-	f := ionIdentityPublicKeysFetcher{
-		client: req.C().SetBaseURL(baseUrl),
+
+	f := &ionIdentityPublicKeysFetcher{
+		Client: req.C().
+			SetBaseURL(baseUrl).
+			SetTimeout(30 * time.Second).
+			SetJsonMarshal(json.Marshal).
+			SetJsonUnmarshal(json.Unmarshal).
+			EnableH2C(),
 	}
-	f.client.GetClient().Transport = &http2.Transport{}
-	f.client.GetClient().Timeout = 30 * time.Second
-	f.client.SetJsonMarshal(json.Marshal)
-	f.client.SetJsonUnmarshal(json.Unmarshal)
-	err := f.syncPubKeys()
+
+	err := f.syncPubKeys(ctx)
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to sync ion identity public keys during startup"))
+		log.Panicf("failed to sync ion identity public keys during startup: %v", err)
 	}
-	go f.startSync(ctx)
-	return &f
+
+	go f.backgroundSync(ctx)
+
+	return f
 }
 
 func (f *ionIdentityPublicKeysFetcher) PublicKeys() []string {
-	if keys := f.publicKeys.Load(); keys != nil {
-		return keys.Keys
+	data := f.Stored.Load()
+
+	if data != nil && len(data.Keys) > 0 {
+		return data.Keys
 	}
-	err := f.syncPubKeys()
-	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to sync ion identity public keys during startup"))
-	}
-	keys := f.publicKeys.Load()
-	return keys.Keys
+	return []string{}
 }
-func (f *ionIdentityPublicKeysFetcher) startSync(ctx context.Context) {
+
+func (f *ionIdentityPublicKeysFetcher) backgroundSync(ctx context.Context) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
+
 	for ctx.Err() == nil {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := f.syncPubKeys(); err != nil {
+			if err := f.syncPubKeys(ctx); err != nil {
 				log.Printf("failed to sync ion identity public keys: %v", err)
 			}
 		}
 	}
 }
 
-func (f *ionIdentityPublicKeysFetcher) syncPubKeys() error {
-	reqCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	prev := f.publicKeys.Load()
-	version := "0"
-	if prev != nil {
-		version = prev.Version
+func (f *ionIdentityPublicKeysFetcher) GetCurrentVersion() string {
+	data := f.Stored.Load()
+	if data != nil {
+		return data.Version
 	}
-	keys, err := f.fetchPubKeys(reqCtx, version)
+	return "0"
+}
+
+func (f *ionIdentityPublicKeysFetcher) syncPubKeys(ctx context.Context) error {
+	keys, err := f.fetchPubKeys(ctx, f.GetCurrentVersion())
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch public keys from ion identity")
+	} else if keys == nil {
+		// Notihing has changed.
+		return nil
 	}
-	f.publicKeys.Store(keys)
+
+	f.Stored.Store(keys)
+	log.Printf("fetched %d ion identity public keys, version: %s", len(keys.Keys), keys.Version)
 
 	return nil
 }
 
+// fetchPubKeys fetches the public keys from the ion identity service.
+// It uses the version parameter to avoid fetching the same keys again.
+// If the version is the same as the current version, it returns nil.
 func (f *ionIdentityPublicKeysFetcher) fetchPubKeys(ctx context.Context, version string) (*publicKeys, error) {
-	resp, err := f.client.R().
+	resp, err := f.Client.R().
 		SetContext(ctx).
 		SetRetryCount(5).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
@@ -129,20 +140,19 @@ func (f *ionIdentityPublicKeysFetcher) fetchPubKeys(ctx context.Context, version
 	}
 	if resp.GetStatusCode() != http.StatusOK {
 		if resp.GetStatusCode() == http.StatusNoContent {
-			return f.publicKeys.Load(), nil
+			return nil, nil
 		}
-		return nil, fmt.Errorf("ion identity public keys service responded with status: %d", resp.GetStatusCode())
-	} else if body, bErr := resp.ToBytes(); bErr != nil {
-		return nil, errors.Wrap(bErr, "failed to read ion identity public keys response")
-	} else {
-		var keys []string
-		err = json.Unmarshal(body, &keys)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to unmarshal ion identity public keys response: %v", string(body))
-		}
-		return &publicKeys{
-			Keys:    keys,
-			Version: resp.GetHeader("X-Version"),
-		}, nil
+		return nil, errors.Errorf("ion identity public keys service responded with status: %d", resp.GetStatusCode())
 	}
+
+	var keys []string
+	err = resp.UnmarshalJson(&keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal ion identity public keys response")
+	}
+
+	return &publicKeys{
+		Keys:    keys,
+		Version: resp.GetHeader("X-Version"),
+	}, nil
 }

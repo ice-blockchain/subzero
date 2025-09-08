@@ -328,9 +328,7 @@ func TestValidateAttestationEvent(t *testing.T) {
 	t.Run("run badges/devices validation", func(t *testing.T) {
 		t.Run("disabled", func(t *testing.T) {
 			customValidator := newEventValidator(t.Context(), &Config{}, WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
-				return func(yield func(*model.Event, error) bool) {
-					return
-				}
+				return func(yield func(*model.Event, error) bool) {}
 			}), WithIONIdentityPublicKeys(emptyIONIdentityKeys))
 			var ev model.Event
 			ev.PubKey = "master_key"
@@ -343,15 +341,15 @@ func TestValidateAttestationEvent(t *testing.T) {
 		})
 		t.Run("no old attestation - new device - require badges", func(t *testing.T) {
 			bagdeIssuerPrivKey, badgeIssuerPubkey := model.GenerateKeyPair()
-			customValidator := newEventValidator(t.Context(), &Config{},
+			customValidator := newEventValidator(t.Context(),
+				&Config{},
 				WithIONIdentityPublicKeys(func() []string {
 					return []string{badgeIssuerPubkey}
 				}),
 				WithQueryFunc(func(ctx context.Context, filter ...model.Filter) query.EventIterator {
-					return func(yield func(*model.Event, error) bool) {
-						return
-					}
-				}))
+					return func(yield func(*model.Event, error) bool) {}
+				}),
+			)
 			var ev model.Event
 			ev.Kind = model.CustomIONKindAttestation
 			ev.Tags = model.Tags{
