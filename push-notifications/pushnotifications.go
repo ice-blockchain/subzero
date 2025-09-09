@@ -514,7 +514,9 @@ func (pm *PushNotificationManager) createNotifications(
 			return nil, errors.Wrap(err, "failed to compress relevant events data")
 		}
 	}
+	var deviceEventIDs []string
 	for _, event := range deviceRegistrationEvents {
+		deviceEventIDs = append(deviceEventIDs, event.ID)
 		data := map[string]interface{}{
 			"compression": CompressionMethodZlib,
 			"event":       compressedEvent,
@@ -541,6 +543,7 @@ func (pm *PushNotificationManager) createNotifications(
 			})
 		}
 	}
+	log.Printf("[push-notifications] created %d notifications for event %s, deviceEventIDs: %v", len(notifications), incomingEvent.ID, deviceEventIDs)
 
 	return notifications, nil
 }
@@ -561,6 +564,7 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 			devices = append(devices, deviceInfo.Event)
 		}
 	}
+	log.Printf("[push-notifications] collected %d valid devices for pubkey %s, event:%s", len(devices), pubKey, event.ID)
 
 	return devices
 }
