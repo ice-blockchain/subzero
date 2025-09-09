@@ -74,9 +74,13 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	if _, ok := pm.userDevicesMap[masterPubKey]; !ok {
 		pm.userDevicesMap[masterPubKey] = make(map[DeviceID]DeviceInfo)
 	}
+	var deviceEventIDs []string
+	for _, device := range pm.userDevicesMap[masterPubKey] {
+		deviceEventIDs = append(deviceEventIDs, device.Event.ID)
+	}
 
 	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
-	log.Printf("[push-notifications] added device for masterPubKey:%s to cache, deviceID: %s", masterPubKey, deviceID)
+	log.Printf("[push-notifications] pm.relayURL: %s, added device for masterPubKey:%s to cache, deviceID: %s, existing devices before adding new one (event IDs): %v", pm.relayURL, masterPubKey, deviceID, deviceEventIDs)
 
 	return nil
 }
