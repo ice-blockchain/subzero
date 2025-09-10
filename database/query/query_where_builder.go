@@ -732,44 +732,41 @@ select
 	to_timestamp_nano(cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as lookup_created_at,
 	'' as id,
 	'' as address,
-	t.pubkey,
-	t.master_pubkey,
+	mainev.pubkey,
+	mainev.master_pubkey,
 	'' as sig,
-	cast(jsonb_object_agg(t.option, t.votes) as text) AS content,
+	CAST(
+		COALESCE(
+			jsonb_object_agg(
+				ec.reference_type,
+				ec.value
+			) FILTER (WHERE ec.kind IS NOT NULL),
+			CAST('{}' AS jsonb)
+		)
+	AS text) as content,
 	cast(jsonb_build_array(jsonb_build_object(
 		'kinds', jsonb_build_array(1754),
-		subzero_nostr_get_event_address_tag(t.kind), jsonb_build_array(t.address))
+		subzero_nostr_get_event_address_tag(mainev.kind), jsonb_build_array(mainev.address))
 	) as text) as d_tag,
-	t.h_tag,
+	mainev.h_tag,
 	jsonb_build_array(
 		jsonb_build_array('output', 'JSON'),
 		jsonb_build_array('param', 'group', 'content')
 	) as tags,
-	'' as origin
-from (
-	select
-		mainev.id AS poll_id,
-		mainev.pubkey,
-		mainev.master_pubkey,
-		mainev.kind,
-		mainev.address,
-		mainev.h_tag,
-		mainev.d_tag,
-		coalesce(cast(j.value as text), '') as option,
-		COUNT(j.value) AS votes
-	from `)
+	:`)
+	b.WriteValue(filterID, "poll_origin", filterID)
+	b.WriteString(` as origin
+from `)
 	b.WriteString(cteName)
 	b.WriteString(` mainev
-	left join event_tags et ON et.event_tag_value1 = mainev.address AND et.event_tag_key in ('a', 'e')
-	left join events ve ON ve.id = et.event_id AND ve.kind = 1754
-	left join jsonb_array_elements(cast(ve.content as jsonb)) j on true
-	where exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll') and mainev.kind = :`)
+	left join event_counters ec
+		ON ec.reference_id = mainev.address AND ec.kind = 1754
+	where
+		exists (select true from event_tags WHERE event_id = mainev.id AND event_tag_key = 'poll')
+		and mainev.kind = :`)
 	b.WriteValue(filterID, "kind", filter.Start.Kind)
 	b.WriteString(`
-	group by poll_id, option, mainev.pubkey, mainev.master_pubkey, mainev.kind, mainev.h_tag, mainev.d_tag, mainev.address
-) t
-left join jsonb_each_text(jsonb_build_object(cast(t.option AS text), t.votes)) AS json_each ON true
-group by t.poll_id, t.pubkey, t.master_pubkey, t.kind, t.h_tag, t.d_tag, t.address
+	group by mainev.id, mainev.pubkey, mainev.master_pubkey, mainev.kind, mainev.h_tag, mainev.d_tag, mainev.address
 `)
 }
 

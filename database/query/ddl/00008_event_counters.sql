@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: ice License 1.0
 
- CREATE TABLE IF NOT EXISTS event_counters
+CREATE TABLE IF NOT EXISTS event_counters
 (
     kind           INTEGER NOT NULL,
     value          INTEGER NOT NULL DEFAULT 0,
