@@ -12,6 +12,31 @@ RETURNS TEXT AS $$
     LIMIT 1;
 $$ LANGUAGE sql IMMUTABLE;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM event_counters WHERE kind = 1754 LIMIT 1) THEN
+        INSERT INTO event_counters (kind, value, reference_id, reference_type)
+        SELECT
+            1754 AS kind,
+            COUNT(*) AS value,
+            ref.id AS reference_id,
+            vote_option.val AS reference_type
+        FROM
+            events AS v,
+            LATERAL extract_reference_id(v.tags) AS ref(id),
+            LATERAL json_array_elements_text(CAST(v.content AS json)) AS vote_option(val)
+        WHERE
+            v.kind = 1754
+            AND NOT v.deleted
+            AND NOT v.hidden
+            AND ref.id IS NOT NULL
+        GROUP BY
+            ref.id,
+            vote_option.val;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION trigger_events_after_insert_vote_inc_counter()
 RETURNS TRIGGER AS $$
 DECLARE
