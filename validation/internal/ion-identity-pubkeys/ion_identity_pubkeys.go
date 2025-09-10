@@ -121,7 +121,12 @@ func (f *ionIdentityPublicKeysFetcher) fetchPubKeys(ctx context.Context, version
 			if err != nil {
 				log.Printf("failed to fetch ion identity public keys, retrying...: %v", err)
 			} else {
-				log.Printf("failed to fetch ion identity public keys with status code:%v, retrying...", resp.GetStatusCode())
+				log.Printf("failed to fetch ion identity public keys with status code: %v, retrying...", resp.GetStatusCode())
+				if v, respErr := resp.ToString(); respErr == nil {
+					log.Println("error response", v)
+				} else {
+					log.Printf("error reading response body: %v", respErr)
+				}
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {
