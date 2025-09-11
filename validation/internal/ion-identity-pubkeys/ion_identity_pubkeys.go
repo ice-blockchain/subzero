@@ -38,8 +38,7 @@ func MustNewIONIdentityPublicKeys(ctx context.Context, baseUrl string) IONIdenti
 			SetBaseURL(baseUrl).
 			SetTimeout(30 * time.Second).
 			SetJsonMarshal(json.Marshal).
-			SetJsonUnmarshal(json.Unmarshal).
-			EnableH2C(),
+			SetJsonUnmarshal(json.Unmarshal),
 	}
 
 	err := f.syncPubKeys(ctx)
