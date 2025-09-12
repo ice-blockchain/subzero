@@ -158,7 +158,7 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 	d.IsRootReply = rootOf != "" && replyOf != "" && rootOf == replyOf
 }
 
-func generateGiftWrapID(e *model.Event) string {
+func generateGiftWrapSystemID(e *model.Event) string {
 	return e.ID
 }
 
@@ -184,15 +184,15 @@ func findReferenceTagValue(tags model.Tags) (val string) {
 	return val
 }
 
-func newBaseDigest(e *model.Event) *xxh3.Hasher {
+func newBaseDigestSystemID(e *model.Event) *xxh3.Hasher {
 	h := xxh3.New()
 	h.WriteString(e.GetMasterPublicKey())
 	binary.Write(h, binary.BigEndian, uint32(e.Kind))
 	return h
 }
 
-func generateReferenceBasedID(e *model.Event) string {
-	h := newBaseDigest(e)
+func generateReferenceBasedIDSystemID(e *model.Event) string {
+	h := newBaseDigestSystemID(e)
 
 	if e.Kind == model.CustomIONKindPollVote {
 		writePollVoteContent(h, e.Content)
@@ -207,7 +207,7 @@ func generateReferenceBasedID(e *model.Event) string {
 	return hex.EncodeToString(b[:])
 }
 
-func writeGenericTags(digest *xxh3.Hasher, tags model.Tags) {
+func writeGenericTagsSystemID(digest *xxh3.Hasher, tags model.Tags) {
 	if len(tags) == 0 {
 		return
 	}
@@ -237,10 +237,10 @@ func writeGenericTags(digest *xxh3.Hasher, tags model.Tags) {
 	}
 }
 
-func generateGenericID(e *model.Event) string {
-	h := newBaseDigest(e)
+func generateGenericIDSystemID(e *model.Event) string {
+	h := newBaseDigestSystemID(e)
 	h.WriteString(e.Content)
-	writeGenericTags(h, e.Tags)
+	writeGenericTagsSystemID(h, e.Tags)
 	b := h.Sum128().Bytes()
 	return hex.EncodeToString(b[:])
 }
@@ -248,11 +248,11 @@ func generateGenericID(e *model.Event) string {
 func generateSystemID(e *model.Event) string {
 	switch e.Kind {
 	case nostr.KindGiftWrap:
-		return generateGiftWrapID(e)
+		return generateGiftWrapSystemID(e)
 	case model.CustomIONKindPollVote, nostr.KindReaction:
-		return generateReferenceBasedID(e)
+		return generateReferenceBasedIDSystemID(e)
 	default:
-		return generateGenericID(e)
+		return generateGenericIDSystemID(e)
 	}
 }
 

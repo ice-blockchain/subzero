@@ -437,7 +437,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 		if errors.Is(err, query.ErrReadOnly) {
 			return errRelayReadOnly
 		} else if errors.Is(err, query.ErrRaceCondition) {
-			return errRaceCondition
+			return errDuplicate
 		}
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}
