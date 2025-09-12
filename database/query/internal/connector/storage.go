@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -76,7 +77,13 @@ func (db *DB) assignPreferredMaster(ctx context.Context, newIdx uint64, newConn 
 		db.writeLB.SwitchMu.Unlock()
 		log.Printf("[DATABASE]: INFO: new preferred master is %v after all nodes become available", newIdx)
 		if err := db.switchMaster(ctx, errPreferredAvailable, newConn, &newIdx); err != nil {
-			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[newIdx], err)
+			masterDSN := db.writeLB.Masters[newIdx]
+			parsed, errParse := url.Parse(masterDSN)
+			hostInfo := fmt.Sprintf("idx=%d", newIdx)
+			if errParse == nil && parsed.Host != "" {
+				hostInfo = fmt.Sprintf("host=%s (idx=%d)", parsed.Host, newIdx)
+			}
+			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %s", hostInfo, sanitizeError(err))
 			newConn.Close()
 		}
 		return
@@ -101,14 +108,14 @@ func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.
 			defer wg.Done()
 			conn, err := poolConnect(ctx, connectionString, logger)
 			if err != nil {
-				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
+				log.Printf("[DATABASE]: WARNING: cannot connect to master at index %d: %s", i, sanitizeError(err))
 				latencies <- connectionLatency{conn: nil, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
 				return
 			}
 			pingStart := time.Now()
 			err = conn.Ping(ctx)
 			if err != nil {
-				log.Printf("[DATABASE]: WARNING: cannot ping master %s: %v", connectionString, err)
+				log.Printf("[DATABASE]: WARNING: cannot ping master idx=%d: %s", i, sanitizeError(err))
 				latencies <- connectionLatency{conn: conn, latency: time.Duration(math.MaxInt64), idx: uint64(i)}
 				return
 			}
@@ -148,7 +155,7 @@ func WithReadURLs(urls ...string) Option {
 		for _, connectionString := range urls {
 			conn, err := poolConnect(ctx, connectionString, db)
 			if err != nil {
-				return errors.Wrap(err, "cannot connect to replica")
+				return errors.Wrap(sanitizeErr(err), "cannot connect to replica")
 			}
 
 			db.readLB.Replicas = append(db.readLB.Replicas, conn)
@@ -197,7 +204,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		readLB:  new(readLB),
 		writeLB: new(writeLB),
 		closed:  new(atomic.Bool),
-		logging: true,
+		logging: false, // TODO: make it true when full sql logging is required.
 	}
 
 	if ok {
@@ -240,7 +247,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 func poolConnect(ctx context.Context, connectionString string, log tracelog.Logger) (*pgxpool.Pool, error) {
 	conf, err := pgxpool.ParseConfig(connectionString)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot parse connection string")
+		return nil, errors.Wrap(sanitizeErr(err), "cannot parse connection string")
 	}
 
 	conf.ConnConfig.StatementCacheCapacity = 1024
@@ -372,7 +379,7 @@ func (db *DB) switchMaster(ctx context.Context, reason error, preferredConn *pgx
 		for _, i := range CalculateConnectOrder(db.writeLB.Masters, int(db.writeLB.CurrentIndex)) {
 			conn, err := poolConnect(ctx, db.writeLB.Masters[i], db)
 			if err != nil {
-				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.writeLB.Masters[i], err)
+				log.Printf("[DATABASE]: WARNING: cannot connect to master at index %d: %s", i, sanitizeError(err))
 				continue
 			}
 			log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.writeLB.CurrentIndex, i, reason)
@@ -432,7 +439,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 	for ctx.Err() == nil {
 		conn, err := poolConnect(ctx, db.writeLB.Masters[preferredIdx], db)
 		if err != nil {
-			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
+			log.Printf("[DATABASE]: WARNING: cannot connect to preferred master at index %d, still down: %s", preferredIdx, sanitizeError(err))
 			if err := SleepContext(ctx, 10*time.Second); err != nil {
 				return
 			}
@@ -445,7 +452,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 			if successfulPings >= pingsForPreferredMasterSwitch {
 				log.Printf("[DATABASE]: INFO: connecting to preferred master: %d -> %d", db.writeLB.CurrentIndex, preferredIdx)
 				if err = db.switchMaster(ctx, errors.Wrapf(errPreferredAvailable, "preferred master %d is available", preferredIdx), conn, &preferredIdx); err != nil {
-					log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s: %v", db.writeLB.Masters[preferredIdx], err)
+					log.Printf("[DATABASE]: WARNING: cannot connect to preferred master at index %d: %s", preferredIdx, sanitizeError(err))
 					conn.Close()
 				}
 				return
@@ -458,7 +465,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 		}
 		conn.Close()
 		successfulPings = 0
-		log.Printf("[DATABASE]: WARNING: cannot connect to preferred master %s, still down: %v", db.writeLB.Masters[preferredIdx], err)
+		log.Printf("[DATABASE]: WARNING: cannot connect to preferred master at index %d, still down: %s", preferredIdx, sanitizeError(err))
 		if err := SleepContext(ctx, 10*time.Second); err != nil {
 			return
 		}
@@ -508,6 +515,12 @@ func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data
 		if v.UserAgent != "" {
 			prefix += " agent: [" + v.UserAgent + "]"
 		}
+	}
+	if host, ok := data["host"].(string); ok {
+		data["host"] = sanitizeDSN(host)
+	}
+	if database, ok := data["database"].(string); ok {
+		data["database"] = sanitizeDSN(database)
 	}
 	log.Printf(prefix+": %s: %s %v", level, msg, data)
 }
