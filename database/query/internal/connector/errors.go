@@ -3,12 +3,62 @@
 package connector
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 )
+
+type sanitizedError struct {
+	original error
+	message  string
+}
+
+var (
+	reUser        = regexp.MustCompile("user=[^\\s`]+")
+	reDatabase    = regexp.MustCompile("database=[^\\s`]+")
+	reDbname      = regexp.MustCompile("dbname=[^\\s`]+")
+	rePassword    = regexp.MustCompile("password=[^\\s`]+")
+	reURIUserInfo = regexp.MustCompile(`://[^/]+@`) // postgres://user:pass@host
+)
+
+func (e sanitizedError) Error() string { return e.message }
+func (e sanitizedError) Unwrap() error { return e.original }
+
+func sanitizeErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := sanitizeError(err)
+	if msg == err.Error() {
+		return err
+	}
+
+	return sanitizedError{original: err, message: msg}
+}
+
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	return sanitizeDSN(err.Error())
+}
+
+func sanitizeDSN(s string) string {
+	if s == "" {
+		return s
+	}
+	s = reUser.ReplaceAllString(s, "user=***")
+	s = reDatabase.ReplaceAllString(s, "database=***")
+	s = reDbname.ReplaceAllString(s, "dbname=***")
+	s = rePassword.ReplaceAllString(s, "password=***")
+	s = reURIUserInfo.ReplaceAllString(s, "://***@")
+
+	return s
+}
 
 func parseError(err error) error {
 	var dbErr *Error
@@ -66,5 +116,5 @@ func parseError(err error) error {
 		}
 	}
 
-	return err
+	return sanitizeErr(err)
 }
