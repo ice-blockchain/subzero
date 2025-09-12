@@ -48,6 +48,7 @@ var (
 		"hasvideos":       "has_videos",
 		"addressvalue":    "address",
 		"tagid":           "tag_id",
+		"systemid":        "system_id",
 		"lookupcreatedat": "lookup_created_at",
 		"hasreferences":   "has_references",
 	}

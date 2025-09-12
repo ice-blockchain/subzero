@@ -436,6 +436,8 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 	if err := wsEventListener(ctx, events...); err != nil {
 		if errors.Is(err, query.ErrReadOnly) {
 			return errRelayReadOnly
+		} else if errors.Is(err, query.ErrRaceCondition) {
+			return errRaceCondition
 		}
 		return errors.Wrapf(err, "failed to handle events: %s", model.Events(events).String())
 	}

@@ -11,9 +11,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type DuplicateError struct {
+	Constraint string
+	Object     string
+	Original   error
+}
+
 type sanitizedError struct {
-	original error
-	message  string
+	Original error
+	Message  string
 }
 
 var (
@@ -24,8 +30,23 @@ var (
 	reURIUserInfo = regexp.MustCompile(`://[^/]+@`) // postgres://user:pass@host
 )
 
-func (e sanitizedError) Error() string { return e.message }
-func (e sanitizedError) Unwrap() error { return e.original }
+func (e DuplicateError) Error() string {
+	msg := "duplicate value violates unique constraint"
+	if e.Constraint != "" {
+		msg += ": " + e.Constraint
+	}
+
+	if e.Object != "" {
+		msg += " (object: " + e.Object + ")"
+	}
+
+	return msg
+}
+
+func (e DuplicateError) Unwrap() error { return e.Original }
+
+func (e sanitizedError) Error() string { return e.Message }
+func (e sanitizedError) Unwrap() error { return e.Original }
 
 func sanitizeErr(err error) error {
 	if err == nil {
@@ -36,7 +57,7 @@ func sanitizeErr(err error) error {
 		return err
 	}
 
-	return sanitizedError{original: err, message: msg}
+	return sanitizedError{Original: err, Message: msg}
 }
 
 func sanitizeError(err error) string {
@@ -72,14 +93,16 @@ func parseError(err error) error {
 	if errors.As(err, &dbErr) {
 		switch dbErr.SQLState() {
 		case pgerrcode.UniqueViolation:
+			dupErr := DuplicateError{Constraint: dbErr.ConstraintName, Original: err, Object: dbErr.Detail}
+
 			if strings.HasSuffix(dbErr.ConstraintName, "_pkey") {
-				return errors.Wrap(ErrDuplicate, dbErr.ConstraintName)
+				return errors.Join(errors.Wrap(ErrDuplicate, dbErr.ConstraintName), dupErr)
 			} else {
 				column := strings.ReplaceAll(dbErr.ConstraintName, dbErr.TableName, "")
 				column = strings.ReplaceAll(column, "_key", "")
 				column = strings.ReplaceAll(column, "_", "")
 
-				return errors.Wrap(ErrDuplicate, column)
+				return errors.Join(errors.Wrap(ErrDuplicate, column), dupErr)
 			}
 		case pgerrcode.ForeignKeyViolation:
 			column := strings.ReplaceAll(dbErr.ConstraintName, dbErr.TableName, "")

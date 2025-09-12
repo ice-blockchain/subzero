@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS events (
     sig_alg        TEXT    NOT NULL DEFAULT '',
     reference_id   TEXT    DEFAULT NULL REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     gift_receiver_pubkey TEXT,
+    system_id      TEXT    NOT NULL CONSTRAINT uniq_events_system_id UNIQUE,
     tags           JSONB   NOT NULL DEFAULT '[]',
     t_tags         TEXT[]  NOT NULL DEFAULT ARRAY[]::TEXT[],
     has_images     BOOLEAN NOT NULL DEFAULT FALSE,
@@ -43,3 +44,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_events_address ON events(address);
 --------
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
   where kind = 31750;
+--------
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'events' AND column_name = 'system_id') THEN
+      ALTER TABLE events ADD COLUMN system_id TEXT;
+      UPDATE events SET system_id = id;
+      ALTER TABLE events ALTER COLUMN system_id SET NOT NULL;
+      ALTER TABLE events ADD CONSTRAINT uniq_events_system_id UNIQUE (system_id);
+    END IF;
+END $$;

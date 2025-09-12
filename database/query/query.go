@@ -5,6 +5,9 @@ package query
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"log"
 	"slices"
 	"strconv"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
@@ -57,6 +61,7 @@ type (
 		Lookup          string
 		SaveMergeAction string
 		Origin          string
+		SystemID        string
 		Deleted         bool
 		HasImages       bool
 		HasVideos       bool
@@ -153,6 +158,104 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 	d.IsRootReply = rootOf != "" && replyOf != "" && rootOf == replyOf
 }
 
+func generateGiftWrapID(e *model.Event) string {
+	return e.ID
+}
+
+func writePollVoteContent(h *xxh3.Hasher, content string) {
+	var options []int32
+	if err := json.Unmarshal([]byte(content), &options); err == nil {
+		slices.Sort(options)
+		for _, o := range options {
+			binary.Write(h, binary.BigEndian, o)
+		}
+	} else {
+		// If content is not valid JSON, fall back to hashing the raw string.
+		h.WriteString(content)
+	}
+}
+
+func findReferenceTagValue(tags model.Tags) (val string) {
+	for _, t := range tags {
+		if k := t.Key(); (k == "e" || k == "a") && t.Value() != "" {
+			val = t.Value()
+		}
+	}
+	return val
+}
+
+func newBaseDigest(e *model.Event) *xxh3.Hasher {
+	h := xxh3.New()
+	h.WriteString(e.GetMasterPublicKey())
+	binary.Write(h, binary.BigEndian, uint32(e.Kind))
+	return h
+}
+
+func generateReferenceBasedID(e *model.Event) string {
+	h := newBaseDigest(e)
+
+	if e.Kind == model.CustomIONKindPollVote {
+		writePollVoteContent(h, e.Content)
+	} else {
+		h.WriteString(e.Content)
+	}
+
+	h.WriteString(findReferenceTagValue(e.Tags))
+
+	b := h.Sum128().Bytes()
+
+	return hex.EncodeToString(b[:])
+}
+
+func writeGenericTags(digest *xxh3.Hasher, tags model.Tags) {
+	if len(tags) == 0 {
+		return
+	}
+
+	// Clone to avoid modifying the original event's tags.
+	sortedTags := slices.Clone(tags)
+	slices.SortStableFunc(sortedTags, func(a, b model.Tag) int {
+		return strings.Compare(a.Key(), b.Key())
+	})
+
+	seen := make(map[xxh3.Uint128]struct{}, len(sortedTags))
+	tagDigest := xxh3.New()
+
+	for _, t := range sortedTags {
+		tagDigest.Reset()
+		for _, v := range t {
+			tagDigest.WriteString(v)
+		}
+		hash := tagDigest.Sum128()
+
+		if _, exists := seen[hash]; !exists {
+			seen[hash] = struct{}{}
+			for _, v := range t {
+				digest.WriteString(v)
+			}
+		}
+	}
+}
+
+func generateGenericID(e *model.Event) string {
+	h := newBaseDigest(e)
+	h.WriteString(e.Content)
+	writeGenericTags(h, e.Tags)
+	b := h.Sum128().Bytes()
+	return hex.EncodeToString(b[:])
+}
+
+func generateSystemID(e *model.Event) string {
+	switch e.Kind {
+	case nostr.KindGiftWrap:
+		return generateGiftWrapID(e)
+	case model.CustomIONKindPollVote, nostr.KindReaction:
+		return generateReferenceBasedID(e)
+	default:
+		return generateGenericID(e)
+	}
+}
+
 func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	event := databaseEvent{
 		Event:        e,
@@ -160,6 +263,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		MasterPubKey: e.GetMasterPublicKey(),
 		Dtag:         e.Tags.GetD(),
 		Htag:         e.GetHTag(),
+		SystemID:     generateSystemID(e),
 	}
 
 	sigAlg, keyAlg, err := parseSigKeyAlg(e)
@@ -492,6 +596,7 @@ func (db *dbClient) saveEvents(
 		"kind",
 		"created_at",
 		"id",
+		"system_id",
 		"address",
 		"pubkey",
 		"master_pubkey",
@@ -549,6 +654,10 @@ WITH replaced AS (
 			{
 				Name:  "id",
 				Value: events[i].ID,
+			},
+			{
+				Name:  "system_id",
+				Value: events[i].SystemID,
 			},
 			{
 				Name:  "address",
@@ -666,7 +775,7 @@ pre_update_data AS (SELECT t.* FROM source_data sd LEFT JOIN events AS t ON t.ad
 	builder.WriteString(`
 update_data AS (
 	INSERT INTO events (
-		id, kind, created_at,
+		id, system_id, kind, created_at,
 		pubkey, master_pubkey,
 		gift_receiver_pubkey,
 		sig, sig_alg, key_alg,
@@ -681,7 +790,7 @@ update_data AS (
 		expiration
 	)
 	SELECT
-		sd.id, sd.kind, sd.created_at,
+		sd.id, sd.system_id, sd.kind, sd.created_at,
 		sd.pubkey, sd.master_pubkey,
 		sd.gift_receiver_pubkey,
 		sd.sig, sd.sig_alg, sd.key_alg,
@@ -697,6 +806,7 @@ update_data AS (
 	FROM source_data sd
 	ON CONFLICT (address) DO UPDATE SET
 		id = EXCLUDED.id,
+		system_id = EXCLUDED.system_id,
 		kind = EXCLUDED.kind,
 		created_at = EXCLUDED.created_at,
 		pubkey = EXCLUDED.pubkey,
@@ -757,7 +867,15 @@ WHERE
 		ctx,
 		db.db,
 		func(err error) (doRetry bool) {
-			return errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation, connector.ErrSerializationFailure)
+			if errors.IsAny(err, connector.ErrExclusionViolation, connector.ErrSerializationFailure) {
+				return true
+			}
+
+			var dErr *connector.DuplicateError
+			if errors.As(err, &dErr) {
+				return dErr.Constraint != "uniq_events_system_id"
+			}
+			return false
 		},
 		builder.String(),
 		builder.Params,
@@ -1063,6 +1181,7 @@ func handleError(err error) error {
 		log.Printf("[DB] error: %v: %s", err, errors.FlattenDetails(err))
 		return ErrInvalidRequest
 	case errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation):
+		log.Printf("[DB] race error: %v: %s", err, errors.FlattenDetails(err))
 		return ErrRaceCondition
 	}
 
