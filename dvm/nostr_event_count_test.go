@@ -4,6 +4,7 @@ package dvm
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -612,6 +613,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				var reply1 model.Event
 				reply1.CreatedAt = 1
 				reply1.Kind = nostr.KindTextNote
+				reply1.Content = "Hello world! reply 1"
 				reply1.Tags = model.Tags{
 					{"e", ev1.ID, "", model.TagMarkerRoot},
 					{"e", ev1.ID, "", model.TagMarkerReply},
@@ -622,6 +624,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				reply2.CreatedAt = 2
 				reply2.Kind = nostr.KindTextNote
 				reply2.Tags = reply1.Tags
+				reply2.Content = "Hello world! reply 2"
 				require.NoError(t, reply2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &reply1, &reply2}
@@ -651,7 +654,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindTextNote
-				ev1.Content = "Hello world!"
+				ev1.Content = "Hello world!!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
 				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
@@ -666,7 +669,8 @@ func TestEventCountersConsistency(t *testing.T) {
 				repost2.CreatedAt = 2
 				repost2.Kind = nostr.KindRepost
 				repost2.Content = ev1.String()
-				repost2.Tags = repost1.Tags
+				repost2.Tags = slices.Clone(repost1.Tags)
+				repost2.Tags = append(repost2.Tags, model.Tag{"extra", "tag"})
 				require.NoError(t, repost2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				return []*model.Event{&ev1, &repost1, &repost2}
@@ -696,19 +700,21 @@ func TestEventCountersConsistency(t *testing.T) {
 				var ev1 model.Event
 
 				ev1.Kind = nostr.KindTextNote
-				ev1.Content = "Hello world!"
+				ev1.Content = "Hello world!!!"
 				ev1.Tags = append(ev1.Tags, model.Tag{"x", "y"})
 				require.NoError(t, ev1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var quote1 model.Event
 				quote1.CreatedAt = 1
 				quote1.Kind = nostr.KindTextNote
+				quote1.Content = "quote 1"
 				quote1.Tags = append(quote1.Tags, model.Tag{"q", ev1.ID})
 				require.NoError(t, quote1.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 				var quote2 model.Event
 				quote2.CreatedAt = 2
 				quote2.Kind = nostr.KindTextNote
+				quote2.Content = "quote 2"
 				quote2.Tags = quote1.Tags
 				require.NoError(t, quote2.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
