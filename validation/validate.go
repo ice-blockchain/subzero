@@ -75,13 +75,30 @@ var (
 	}
 
 	KindSupportedTags = map[model.Kind]kindValidator{
-		nostr.KindProfileMetadata:   tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:          tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
-		nostr.KindDirectMessage:     tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
-		nostr.KindFollowList:        tagsTable("p"),
-		nostr.KindDeletion:          newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
-		nostr.KindRepost:            newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
-		nostr.KindReaction:          newKindValidatorBuilder().Required("p", "k").OneOf("e", "a").Build(),
+		nostr.KindProfileMetadata: tagsTable("e", "p", "a", "alt"),
+		nostr.KindTextNote:        tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
+		nostr.KindDirectMessage:   tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
+		nostr.KindFollowList:      tagsTable("p"),
+		nostr.KindDeletion:        newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
+		nostr.KindRepost:          newKindValidatorBuilder().Optional(model.CustomIONTagCommunity, "k").Required("p").OneOf("e", "a").Build(),
+		nostr.KindReaction: newKindValidatorBuilder().
+			Required("p", "k").
+			OneOf("e", "a").
+			Validate(func(v *eventValidator, e *model.Event) error {
+				kTag := e.GetTag("k").Value()
+				kValue, err := strconv.Atoi(kTag)
+				if err != nil {
+					return errors.Wrap(ErrWrongEventParams, "tag k: value should be an integer")
+				}
+				switch kValue {
+				case nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote:
+					if e.Content != "+" {
+						return errors.Wrapf(ErrWrongEventParams, "%q: for text notes and articles only '+' reactions are allowed", e.Content)
+					}
+				}
+				return nil
+			}).
+			Build(),
 		nostr.KindBadgeAward:        newKindValidatorBuilder().Optional("a", "p").RequireIONIdentitySignature().Build(),
 		nostr.KindGenericRepost:     newKindValidatorBuilder().Optional(model.CustomIONTagCommunity).Required("p", "k").OneOf("e", "a").Build(),
 		nostr.KindReactionToWebsite: tagsTable("r"),

@@ -67,12 +67,12 @@ func ExecNamed[T any](ctx context.Context, db Querier, stmt string, params map[s
 }
 
 func ExecNamedManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf func(err error) bool, stmt string, params map[string]any) ([]*T, error) {
-	now := time.Now()
 	query, argList, err := bindNamed(stmt, params)
 	if err != nil {
 		return nil, err
 	}
 
+	now := time.Now()
 	res, err := ExecManyWithCustomRetry[T](ctx, db, retryIf, query, argList...)
 	duration := time.Since(now)
 	if duration > 150*time.Millisecond {

@@ -692,6 +692,7 @@ func TestSelectEventsExpiration(t *testing.T) {
 			var event model.Event
 			event.Kind = nostr.KindTextNote
 			event.ID = fmt.Sprintf("expired:%v", i)
+			event.Content = event.ID
 			event.PubKey = "1"
 			event.Tags = model.Tags{{"expiration", strconv.FormatInt(time.Now().Unix()-int64(i), 10)}, {"q", "fooo"}}
 			event.CreatedAt = 1

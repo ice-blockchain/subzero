@@ -348,6 +348,7 @@ func TestSelectWithDependencies(t *testing.T) {
 
 		ev.ID = "t2id4"
 		ev.Kind = nostr.KindTextNote
+		ev.Content = "text note 4"
 		ev.PubKey = "t2pk1"
 		ev.CreatedAt = 1
 		err = db.AcceptEvents(t.Context(), &ev)
@@ -356,6 +357,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.ID = "t2id2"
 		ev.Kind = nostr.KindTextNote
 		ev.PubKey = "t2pk2"
+		ev.Content = "text note 2"
 		ev.CreatedAt = 2
 		ev.Tags = model.Tags{
 			{"e", "t2id1", "", "root"},
@@ -366,6 +368,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.ID = "t2id3"
 		ev.Kind = nostr.KindTextNote
 		ev.PubKey = "t2pk2"
+		ev.Content = "text note 3"
 		ev.CreatedAt = 3
 		ev.Tags = model.Tags{
 			{"e", "t2id1", "", "root"},
@@ -376,6 +379,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.ID = "t2id5"
 		ev.Kind = nostr.KindTextNote
 		ev.PubKey = "t2pk2"
+		ev.Content = "text note 5"
 		ev.CreatedAt = 4
 		ev.Tags = model.Tags{
 			{"e", "id2", "", "root"},
@@ -387,6 +391,7 @@ func TestSelectWithDependencies(t *testing.T) {
 		ev.ID = "t2id6"
 		ev.Kind = nostr.KindTextNote
 		ev.PubKey = "t2pk2"
+		ev.Content = "text note 6"
 		ev.CreatedAt = 5
 		ev.Tags = model.Tags{
 			{"e", "id2", "", "root"},
@@ -1562,7 +1567,7 @@ func TestDependencyWithMasterAndAddress(t *testing.T) {
 	})
 
 	var repost model.Event
-	t.Run("Create report", func(t *testing.T) {
+	t.Run("Create repost", func(t *testing.T) {
 		repost.Kind = nostr.KindGenericRepost
 		repost.CreatedAt = 3
 		repost.Content = root.String()

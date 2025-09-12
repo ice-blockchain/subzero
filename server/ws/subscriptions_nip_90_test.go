@@ -103,7 +103,7 @@ func TestJobOnline(t *testing.T) {
 			Tags: model.Tags{
 				model.Tag{"e", article1.ID, "relay"},
 				model.Tag{"p", article1.PubKey},
-				model.Tag{"k", strconv.Itoa(article1.Kind)},
+				model.Tag{"k", "1"},
 			},
 			Content: "+",
 		},
@@ -115,7 +115,7 @@ func TestJobOnline(t *testing.T) {
 			Tags: model.Tags{
 				model.Tag{"e", article1.ID, "relay"},
 				model.Tag{"p", article1.PubKey},
-				model.Tag{"k", strconv.Itoa(article1.Kind)},
+				model.Tag{"k", "2"},
 			},
 			Content: "-",
 		},

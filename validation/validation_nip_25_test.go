@@ -23,7 +23,8 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 			name: "valid reaction with e tag",
 			event: &model.Event{
 				Event: nostr.Event{
-					Kind: nostr.KindReaction,
+					Kind:    nostr.KindReaction,
+					Content: "+",
 					Tags: model.Tags{
 						{"e", "event_id"},
 						{"p", "pubkey"},
@@ -37,7 +38,8 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 			name: "valid reaction with a tag",
 			event: &model.Event{
 				Event: nostr.Event{
-					Kind: nostr.KindReaction,
+					Kind:    nostr.KindReaction,
+					Content: "+",
 					Tags: model.Tags{
 						{"a", "30023:alice:article"},
 						{"p", "pubkey"},
@@ -51,7 +53,8 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 			name: "invalid reaction with both e and a tags",
 			event: &model.Event{
 				Event: nostr.Event{
-					Kind: nostr.KindReaction,
+					Kind:    nostr.KindReaction,
+					Content: "+",
 					Tags: model.Tags{
 						{"e", "event_id"},
 						{"a", "30023:alice:article"},
@@ -66,7 +69,8 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 			name: "invalid reaction with no e or a tags",
 			event: &model.Event{
 				Event: nostr.Event{
-					Kind: nostr.KindReaction,
+					Kind:    nostr.KindReaction,
+					Content: "+",
 					Tags: model.Tags{
 						{"p", "pubkey"},
 						{"k", "1"},
@@ -79,7 +83,8 @@ func TestValidateReactionsAndTagsOneOf(t *testing.T) {
 			name: "invalid reaction missing required p tag",
 			event: &model.Event{
 				Event: nostr.Event{
-					Kind: nostr.KindReaction,
+					Kind:    nostr.KindReaction,
+					Content: "+",
 					Tags: model.Tags{
 						{"e", "event_id"},
 						{"k", "1"},

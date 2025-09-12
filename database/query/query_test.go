@@ -1364,7 +1364,7 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 			var ev model.Event
 			ev.Kind = nostr.KindTextNote
 			ev.CreatedAt = model.Timestamp(1 + i)
-			ev.Content = "hello world"
+			ev.Content = "hello world from " + key
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPub}}
 			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
@@ -2043,5 +2043,300 @@ func TestEventEnricherKind0Multi(t *testing.T) {
 			Search: "include:dependencies:kind1>kind0 include:dependencies:kind30175>kind0 include:dependencies:kind30023>kind0",
 		})
 		require.Len(t, events, 5, "Should return 3 original events and 2 auto-generated kind0 events")
+	})
+}
+func TestGenerateSystemID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("GiftWrap event", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				ID:        "test-gift-wrap-id",
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindGiftWrap,
+			},
+		}
+
+		actual := generateSystemID(ev)
+
+		require.Equal(t, ev.ID, actual)
+	})
+
+	t.Run("Generic event with tags", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				ID:        "generic-id",
+				PubKey:    "test-pubkey",
+				Kind:      nostr.KindTextNote,
+				CreatedAt: nostr.Now(),
+				Content:   "test content",
+				Tags: model.Tags{
+					{"t", "hashtag"},
+					{"p", "mentioned-pubkey"},
+					{"e", "referenced-event"},
+				},
+			},
+		}
+
+		systemID := generateSystemID(ev)
+		require.NotZero(t, systemID)
+	})
+
+	t.Run("Same events produce same SystemID", func(t *testing.T) {
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      nostr.KindTextNote,
+				Content:   "same content",
+				CreatedAt: nostr.Now(),
+				Tags: model.Tags{
+					{"t", "tag1"},
+					{"p", "pubkey1"},
+				},
+			},
+		}
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      nostr.KindTextNote,
+				Content:   "same content",
+				CreatedAt: nostr.Now(),
+				Tags: model.Tags{
+					{"p", "pubkey1"},
+					{"t", "tag1"},
+				},
+			},
+		}
+
+		systemID1 := generateSystemID(ev1)
+		systemID2 := generateSystemID(ev2)
+
+		require.Equal(t, systemID1, systemID2)
+	})
+
+	t.Run("Different events produce different SystemID", func(t *testing.T) {
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				ID:        "id1",
+				PubKey:    "pubkey1",
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "content1",
+			},
+		}
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				ID:        "id2",
+				PubKey:    "pubkey2",
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "content2",
+			},
+		}
+
+		systemID1 := generateSystemID(ev1)
+		systemID2 := generateSystemID(ev2)
+
+		require.NotEqual(t, systemID1, systemID2)
+	})
+
+	t.Run("Tag order doesn't affect SystemID", func(t *testing.T) {
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      nostr.KindTextNote,
+				Content:   "same content",
+				Tags: model.Tags{
+					{"a", "value1"},
+					{"b", "value2"},
+					{"c", "value3"},
+				},
+			},
+		}
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Content:   "same content",
+				Tags: model.Tags{
+					{"c", "value3"},
+					{"a", "value1"},
+					{"b", "value2"},
+				},
+			},
+		}
+
+		systemID1 := generateSystemID(ev1)
+		systemID2 := generateSystemID(ev2)
+
+		require.Equal(t, systemID1, systemID2, "tag order should not affect SystemID")
+	})
+
+	t.Run("Duplicate tags are deduplicated", func(t *testing.T) {
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      nostr.KindTextNote,
+				Content:   "same content",
+				CreatedAt: nostr.Now(),
+				Tags: model.Tags{
+					{"t", "hashtag"},
+					{"t", "hashtag"}, // Duplicate.
+				},
+			},
+		}
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      nostr.KindTextNote,
+				Content:   "same content",
+				CreatedAt: nostr.Now(),
+				Tags: model.Tags{
+					{"t", "hashtag"}, // Single occurrence.
+				},
+			},
+		}
+
+		systemID1 := generateSystemID(ev1)
+		systemID2 := generateSystemID(ev2)
+
+		require.Equal(t, systemID1, systemID2, "duplicate tags should be deduplicated")
+	})
+
+	t.Run("Empty tags", func(t *testing.T) {
+		ev := &model.Event{
+			Event: nostr.Event{
+				ID:        "empty-tags-id",
+				CreatedAt: nostr.Now(),
+				PubKey:    "test-pubkey",
+				Kind:      nostr.KindTextNote,
+				Content:   "content with no tags",
+				Tags:      model.Tags{},
+			},
+		}
+
+		systemID := generateSystemID(ev)
+		require.NotZero(t, systemID)
+	})
+
+	t.Run("Kind encoding in SystemID", func(t *testing.T) {
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      1,
+				Content:   "same content",
+			},
+		}
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				ID:        "same-id",
+				PubKey:    "same-pubkey",
+				Kind:      2,
+				CreatedAt: nostr.Now(),
+				Content:   "same content",
+			},
+		}
+
+		systemID1 := generateSystemID(ev1)
+		systemID2 := generateSystemID(ev2)
+
+		require.NotEqual(t, systemID1, systemID2, "different kinds should produce different SystemIDs")
+	})
+
+	t.Run("Vote option order doesn't affect SystemID", func(t *testing.T) {
+		ev1 := &model.Event{
+			Event: nostr.Event{
+				ID:        "vote-id",
+				PubKey:    "voter-pubkey",
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindPollVote,
+				Content:   "[1,2]",
+				Tags: model.Tags{
+					{"e", "event1"},
+				},
+			},
+		}
+
+		ev2 := &model.Event{
+			Event: nostr.Event{
+				ID:        "vote-id",
+				PubKey:    "voter-pubkey",
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindPollVote,
+				Content:   "[2,1]", // Different order.
+				Tags: model.Tags{
+					{"e", "event1"},
+				},
+			},
+		}
+
+		systemID1 := generateSystemID(ev1)
+		systemID2 := generateSystemID(ev2)
+
+		require.Equal(t, systemID1, systemID2, "vote option order should not affect SystemID")
+	})
+}
+
+func TestSoftDeduplicationForRegularEvents(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	priv := model.GeneratePrivateKey()
+	t.Run("Votes", func(t *testing.T) {
+		var vote1 model.Event
+
+		vote1.Kind = model.CustomIONKindPollVote
+		vote1.CreatedAt = nostr.Now()
+		vote1.Content = "[1,2]"
+		vote1.Tags = model.Tags{
+			{"e", "event1"},
+		}
+		require.NoError(t, vote1.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		vote2 := vote1
+		vote2.CreatedAt++
+		require.NoError(t, vote2.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NotEqual(t, vote1.ID, vote2.ID)
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &vote1))
+		require.ErrorIs(t, db.AcceptEvents(t.Context(), &vote2), ErrRaceCondition)
+	})
+	t.Run("Reactions", func(t *testing.T) {
+		var reaction1 model.Event
+
+		reaction1.Kind = nostr.KindReaction
+		reaction1.CreatedAt = nostr.Now()
+		reaction1.Content = "+"
+		reaction1.Tags = model.Tags{
+			{"e", "event1"},
+		}
+		require.NoError(t, reaction1.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		reaction2 := reaction1
+		reaction2.CreatedAt++
+		require.NoError(t, reaction2.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NotEqual(t, reaction1.ID, reaction2.ID)
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &reaction1))
+		require.ErrorIs(t, db.AcceptEvents(t.Context(), &reaction2), ErrRaceCondition)
 	})
 }
