@@ -197,7 +197,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		readLB:  new(readLB),
 		writeLB: new(writeLB),
 		closed:  new(atomic.Bool),
-		logging: true,
+		logging: false,
 	}
 
 	if ok {
@@ -283,8 +283,8 @@ func poolDoAfterConnect(ctx context.Context, conn *pgx.Conn) error {
 	}
 
 	sql := fmt.Sprintf(`SELECT name, setting
-						FROM pg_settings
-						WHERE name IN (%v)`, strings.Join(values, ","))
+							FROM pg_settings
+							WHERE name IN (%v)`, strings.Join(values, ","))
 	rows, qErr := conn.Query(ctx, sql)
 	if qErr != nil {
 		return errors.Wrapf(qErr, "validation select failed")
