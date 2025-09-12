@@ -568,7 +568,6 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	pm.deviceMutex.Lock()
 	pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
 		DeviceID(deviceID): {
-			DeviceID: DeviceID(deviceID),
 			Filters: nostr.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},

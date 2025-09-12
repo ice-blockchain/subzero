@@ -44,9 +44,8 @@ func TestProcessEventWithQuotes(t *testing.T) {
 
 		pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
 			DeviceID(deviceID): {
-				DeviceID: DeviceID(deviceID),
-				Filters:  filters,
-				Event:    deviceEvent,
+				Filters: filters,
+				Event:   deviceEvent,
 			},
 		}
 
@@ -98,11 +97,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 			},
 		}
 
-		deviceInfo := DeviceInfo{
-			Filters:  filters,
-			Event:    registrationEvent,
-			DeviceID: DeviceID(deviceID),
-		}
+		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
 
 		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
 			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)

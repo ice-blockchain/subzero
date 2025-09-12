@@ -209,11 +209,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 			},
 		}
 
-		deviceInfo := DeviceInfo{
-			DeviceID: deviceID,
-			Filters:  filters,
-			Event:    deviceEvent,
-		}
+		deviceInfo := DeviceInfo{Filters: filters, Event: deviceEvent}
 
 		pm.deviceMutex.Lock()
 		pm.userDevicesMap[pubKey] = map[DeviceID]DeviceInfo{
@@ -478,6 +474,19 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		require.Empty(t, single)
 		require.Empty(t, topic)
 	})
+	t.Run("Skips unsupported kinds", func(t *testing.T) {
+		unsupported := &model.Event{
+			Event: nostr.Event{
+				ID:   "unsupported-kind",
+				Kind: 9999,
+			},
+		}
+
+		single, topic, err := pm.collectNotifications(t.Context(), []*model.Event{unsupported})
+		require.NoError(t, err)
+		require.Empty(t, single)
+		require.Empty(t, topic)
+	})
 
 	t.Run("Processes multiple events correctly", func(t *testing.T) {
 		events := []*model.Event{
@@ -605,8 +614,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
 		}
 		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
-			DeviceID: DeviceID(deviceID),
-			Event:    deviceEvent,
+			Event: deviceEvent,
 			Filters: nostr.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
@@ -654,10 +662,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
 			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
 		}
-		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
-			DeviceID: DeviceID(deviceID),
-			Event:    deviceEvent,
-		}
+		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{Event: deviceEvent}
 		pm.deviceMutex.Unlock()
 
 		giftWrapEvent := &model.Event{

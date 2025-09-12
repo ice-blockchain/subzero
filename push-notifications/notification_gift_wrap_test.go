@@ -411,11 +411,7 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 		var filters nostr.Filters
 		require.NoError(t, json.Unmarshal([]byte(jsonContent), &filters))
 
-		deviceInfo := DeviceInfo{
-			Filters:  filters,
-			Event:    registrationEvent,
-			DeviceID: DeviceID(deviceID),
-		}
+		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
 
 		if _, ok := pm.userDevicesMap[userPubKey]; !ok {
 			pm.userDevicesMap[userPubKey] = make(map[DeviceID]DeviceInfo)

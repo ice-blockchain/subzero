@@ -21,9 +21,8 @@ import (
 type (
 	DeviceID   = pn.DeviceID
 	DeviceInfo struct {
-		Filters  model.Filters
-		Event    *model.Event
-		DeviceID DeviceID
+		Filters model.Filters
+		Event   *model.Event
 	}
 )
 
@@ -50,9 +49,6 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 }
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
-	if event.GetTag("relay").Value() != pm.relayURL {
-		return nil
-	}
 	deviceID := DeviceID(event.Tags.GetD())
 
 	var filters nostr.Filters
@@ -60,16 +56,26 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 		return errors.Wrap(err, "failed to unmarshal device filters")
 	}
 
-	deviceInfo := DeviceInfo{
-		DeviceID: deviceID,
-		Filters:  filters,
-		Event:    event,
-	}
+	deviceInfo := DeviceInfo{Filters: filters, Event: event}
 
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
 	masterPubKey := event.GetMasterPublicKey()
+
+	if event.GetTag("relay").Value() != pm.relayURL {
+		if devicesByUser, ok := pm.userDevicesMap[masterPubKey]; ok {
+			if _, exists := devicesByUser[deviceID]; exists {
+				delete(devicesByUser, deviceID)
+				if len(devicesByUser) == 0 {
+					delete(pm.userDevicesMap, masterPubKey)
+				}
+				log.Printf("[push-notifications] pm.relayURL: %s, removed device for masterPubKey:%s from cache due to relay mismatch, deviceID: %s", pm.relayURL, masterPubKey, deviceID)
+			}
+		}
+
+		return nil
+	}
 
 	if _, ok := pm.userDevicesMap[masterPubKey]; !ok {
 		pm.userDevicesMap[masterPubKey] = make(map[DeviceID]DeviceInfo)
