@@ -67,7 +67,6 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
 
 		deviceInfo := pm.userDevicesMap[masterPubKey][DeviceID(deviceID)]
-		require.Equal(t, DeviceID(deviceID), deviceInfo.DeviceID)
 		require.Equal(t, event, deviceInfo.Event)
 
 		var parsedFilters nostr.Filters
@@ -174,9 +173,8 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 
 		pm.userDevicesMap[otherPubKey] = make(map[DeviceID]DeviceInfo)
 		pm.userDevicesMap[otherPubKey][DeviceID(deviceID)] = DeviceInfo{
-			DeviceID: DeviceID(deviceID),
-			Event:    event,
-			Filters:  filters,
+			Event:   event,
+			Filters: filters,
 		}
 		require.Len(t, pm.userDevicesMap, 2)
 		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))

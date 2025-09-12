@@ -375,7 +375,6 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	pm.deviceMutex.Lock()
 	pm.userDevicesMap[mentionedPubKey] = map[DeviceID]DeviceInfo{
 		DeviceID(deviceID): {
-			DeviceID: DeviceID(deviceID),
 			Filters: nostr.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},

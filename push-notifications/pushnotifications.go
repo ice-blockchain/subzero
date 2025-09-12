@@ -186,6 +186,15 @@ var (
 			},
 		},
 	}
+	allowedPushEventKinds = map[int]struct{}{
+		nostr.KindTextNote:                  {},
+		model.CustomIONKindEditableTextNote: {},
+		nostr.KindGenericRepost:             {},
+		nostr.KindReaction:                  {},
+		nostr.KindGiftWrap:                  {},
+		nostr.KindFollowList:                {},
+		model.CustomIONSystemMessage:        {},
+	}
 )
 
 func MustInit() {
@@ -269,6 +278,9 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 	ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
 
 	for _, event := range nonEphemeralEvents {
+		if _, ok := allowedPushEventKinds[event.Kind]; !ok {
+			continue
+		}
 		if event.Kind == model.CustomIONSystemMessage {
 			if notifications := pm.handleSystemEvent(event); notifications != nil {
 				topicNotifications = append(topicNotifications, notifications...)

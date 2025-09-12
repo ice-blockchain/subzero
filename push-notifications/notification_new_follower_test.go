@@ -524,9 +524,8 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	pm.deviceMutex.Lock()
 	pm.userDevicesMap[targetPubKey] = map[DeviceID]DeviceInfo{
 		DeviceID("device1_" + testSuffix): {
-			DeviceID: DeviceID("device1_" + testSuffix),
-			Filters:  filters,
-			Event:    deviceEvent,
+			Filters: filters,
+			Event:   deviceEvent,
 		},
 	}
 	pm.deviceMutex.Unlock()
