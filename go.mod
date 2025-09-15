@@ -47,7 +47,7 @@ require (
 	github.com/mxschmitt/golang-combinations v1.2.0
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/puzpuzpuz/xsync/v4 v4.1.0
+	github.com/puzpuzpuz/xsync/v4 v4.2.0
 	github.com/quic-go/quic-go v0.54.0
 	github.com/quic-go/webtransport-go v0.9.0
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
@@ -256,7 +256,7 @@ require (
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/xssnick/raptorq v1.1.0 // indirect
+	github.com/xssnick/raptorq v1.2.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect

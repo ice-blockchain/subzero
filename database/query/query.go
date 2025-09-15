@@ -1170,7 +1170,7 @@ func handleError(err error) error {
 			case "attestation list update must be linear":
 				return ErrAttestationUpdateRejected
 			case "onbehalf permission denied":
-				return ErrOnBehalfAccessDenied
+				return errors.Wrap(ErrOnBehalfAccessDenied, sqlError.Detail)
 			case "repost of deleted post":
 				return ErrRepostOfDeletedPost
 			}
