@@ -49,7 +49,7 @@ var (
 			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
-			pushnotifications.MustInit()
+			pushnotifications.MustInit(cmd.Context())
 			hashtagssender.MustInit(cmd.Context())
 			nftcontentsender.MustInit(cmd.Context())
 			followerssender.MustInit(cmd.Context())
