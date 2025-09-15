@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -199,7 +198,7 @@ var (
 	}
 )
 
-func MustInit() {
+func MustInit(ctx context.Context) {
 	userDevicesMap := make(map[PublicKey]map[DeviceID]DeviceInfo)
 
 	var pnClient pn.Client
@@ -208,10 +207,10 @@ func MustInit() {
 	config := cfg.MustGet[config]()
 
 	if config.FCMCredentialsFile == "" {
-		panic("FCM credentials not provided")
+		panic("[push-notifications]FCM credentials not provided")
 	}
 	if config.PrivateKey == "" {
-		panic("private key is empty")
+		panic("[push-notifications] private key is empty")
 	}
 	var opts []pn.Option
 	if strings.HasPrefix(strings.TrimSpace(config.FCMCredentialsFile), "{") {
@@ -227,9 +226,9 @@ func MustInit() {
 
 	pnClient, err = pn.New(context.Background(), opts...)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create push notification client: %v", err))
+		panic(fmt.Sprintf("[push-notifications] failed to create push notification client: %v", err))
 	}
-	runSelfTest(pnClient, config.PrivateKey)
+	mustRunSelfTest(ctx, pnClient, config.PrivateKey)
 
 	globalPushNotificationManager = &PushNotificationManager{
 		userDevicesMap:         userDevicesMap,
@@ -242,26 +241,24 @@ func MustInit() {
 	}
 }
 
-func runSelfTest(pnClient pn.Client, privateKey string) {
-	testCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) error {
 	devicePriv, devicePub := model.GenerateKeyPair()
 	serverPrivX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
 	if err != nil {
-		panic("[push-notifications] self-test: failed to convert server private key: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to convert server private key")
 	}
 	devicePubX25519, err := nip44.ConvertEd25519PublicKeyToX25519(devicePub)
 	if err != nil {
-		panic("[push-notifications] self-test: failed to convert device pubkey: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to convert device pubkey")
 	}
 	convKey, err := nip44.GenerateConversationKeyX25519(serverPrivX25519, devicePubX25519)
 	if err != nil {
-		panic("[push-notifications] self-test: failed to derive conversation key: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to derive conversation key")
 	}
 	bogusToken := "self-test-invalid-token"
 	encryptedToken, err := nip44.EncryptX25519(bogusToken, convKey, nil)
 	if err != nil {
-		panic("[push-notifications] self-test: failed to encrypt token: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to encrypt token")
 	}
 	incomingEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindEditableTextNote,
@@ -270,15 +267,15 @@ func runSelfTest(pnClient pn.Client, privateKey string) {
 		Tags:      nostr.Tags{{"test", "test"}},
 	}}
 	if err := incomingEvent.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		panic("[push-notifications] self-test: failed to sign event: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to sign event")
 	}
 	compressedEvent, err := compressAndEncodeBase64(incomingEvent.String())
 	if err != nil {
-		panic("[push-notifications] self-test: failed to compress event: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to compress event")
 	}
 	compressedRelevantEvents, err := compressAndEncodeBase64("[]")
 	if err != nil {
-		panic("[push-notifications] self-test: failed to compress relevant events: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to compress relevant events")
 	}
 	deviceRegistrationEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindDeviceRegistration,
@@ -286,7 +283,7 @@ func runSelfTest(pnClient pn.Client, privateKey string) {
 		Tags:      nostr.Tags{{"token", encryptedToken}},
 	}}
 	if err := deviceRegistrationEvent.SignWithAlg(devicePriv, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		panic("[push-notifications] self-test: failed to sign device registration event: " + err.Error())
+		return errors.Wrap(err, "[push-notifications] self-test: failed to sign device registration event")
 	}
 	n := &pn.Notification[*DeviceRegistrationEvent]{
 		Target: deviceRegistrationEvent,
@@ -299,8 +296,16 @@ func runSelfTest(pnClient pn.Client, privateKey string) {
 		Title: "self-test",
 		Body:  "self-test",
 	}
-	if err = pnClient.SendSingle(testCtx, n); err != nil && !pn.IsInvalidDeviceToken(err) {
-		panic("[push-notifications] self-test: unexpected error: " + err.Error())
+	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceToken(err) {
+		return errors.Wrap(err, "[push-notifications] self-test: unexpected error")
+	}
+
+	return nil
+}
+
+func mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
+	if err := runSelfTest(ctx, pnClient, privateKey); err != nil {
+		panic("[push-notifications] self-test: failed: " + err.Error())
 	}
 }
 
