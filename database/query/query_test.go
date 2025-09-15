@@ -2342,3 +2342,67 @@ func TestSoftDeduplicationForRegularEvents(t *testing.T) {
 		require.ErrorIs(t, db.AcceptEvents(t.Context(), &reaction2), ErrRaceCondition)
 	})
 }
+
+func TestVoteEventWithEphemeralAttestation(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	masterPriv, masterPub := model.GenerateKeyPair()
+	userPriv, userPub := model.GenerateKeyPair()
+
+	var attestationEvent model.Event
+	attestationEvent.Kind = model.CustomIONKindAttestation
+	attestationEvent.CreatedAt = nostr.Now()
+	attestationEvent.Tags = model.Tags{
+		{model.TagAttestationName, userPub, "", model.CustomIONAttestationKindActive + ":1"},
+	}
+	require.NoError(t, attestationEvent.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var profileEvent model.Event
+	profileEvent.Kind = nostr.KindProfileMetadata
+	profileEvent.CreatedAt = nostr.Now()
+	profileEvent.Content = `{"name":"test","display_name":"Test User"}`
+	profileEvent.Tags = model.Tags{
+		{model.CustomIONTagOnBehalfOf, masterPub},
+	}
+	require.NoError(t, profileEvent.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var voteEvent model.Event
+	voteEvent.CreatedAt = nostr.Now()
+	voteEvent.Kind = model.CustomIONKindPollVote
+	voteEvent.Content = "[0]"
+	voteEvent.Tags = model.Tags{
+		{"a", "some_event_address"},
+		{model.CustomIONTagOnBehalfOf, masterPub},
+	}
+	require.NoError(t, voteEvent.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var embeddingEventProfile model.Event
+	embeddingEventProfile.CreatedAt = nostr.Now()
+	embeddingEventProfile.Kind = model.CustomIONKindEphemeralEmbedding
+	embeddingEventProfile.Tags = model.Tags{
+		{model.CustomIONTagOnBehalfOf, masterPub},
+		{"e", voteEvent.Address(), "", masterPub},
+	}
+	embeddingEventProfile.Content = profileEvent.String()
+	require.NoError(t, embeddingEventProfile.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var embeddingEventAttestation model.Event
+	embeddingEventAttestation.CreatedAt = nostr.Now()
+	embeddingEventAttestation.Kind = model.CustomIONKindEphemeralEmbedding
+	embeddingEventAttestation.Tags = model.Tags{
+		{model.CustomIONTagOnBehalfOf, masterPub},
+		{"e", voteEvent.Address(), "", masterPub},
+	}
+	embeddingEventAttestation.Content = attestationEvent.String()
+	require.NoError(t, embeddingEventAttestation.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	// Accept all events in a single batch.
+	require.NoError(t, db.AcceptEvents(t.Context(), &voteEvent, &embeddingEventProfile, &embeddingEventAttestation))
+
+	events := helperSelectEvents(t, db)
+	require.Len(t, events, 1) // Only vote event should be returned.
+	require.Equal(t, voteEvent.ID, events[0].ID)
+}

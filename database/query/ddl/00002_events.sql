@@ -37,13 +37,16 @@ CREATE TABLE IF NOT EXISTS events (
     is_quote       BOOLEAN NOT NULL DEFAULT FALSE,
     has_references BOOLEAN NOT NULL DEFAULT FALSE,
     deleted        BOOLEAN NOT NULL DEFAULT FALSE,
-    hidden         BOOLEAN NOT NULL DEFAULT FALSE
+    hidden         BOOLEAN NOT NULL DEFAULT FALSE,
+    has_ephemeral_attestation BOOLEAN NOT NULL DEFAULT FALSE
 ) WITH (FILLFACTOR = 70);
 --------
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_events_address ON events(address);
 --------
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
   where kind = 31750;
+--------
+ALTER TABLE events ADD COLUMN IF NOT EXISTS has_ephemeral_attestation BOOLEAN NOT NULL DEFAULT FALSE;
 --------
 DO $$
 BEGIN

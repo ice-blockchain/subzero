@@ -46,29 +46,30 @@ type (
 
 	databaseEvent struct {
 		*model.Event
-		LookupCreatedAt int64
-		TagID           int64
-		Expiration      sql.NullInt64
-		ReferenceID     sql.NullString
-		GiftReceiver    sql.NullString
-		Ttags           []string
-		SigAlg          string
-		KeyAlg          string
-		MasterPubKey    string
-		Dtag            string
-		Htag            string
-		AddressValue    string
-		Lookup          string
-		SaveMergeAction string
-		Origin          string
-		SystemID        string
-		Deleted         bool
-		HasImages       bool
-		HasVideos       bool
-		HasReferences   bool
-		IsReply         bool
-		IsQuote         bool
-		IsRootReply     bool
+		LookupCreatedAt         int64
+		TagID                   int64
+		Expiration              sql.NullInt64
+		ReferenceID             sql.NullString
+		GiftReceiver            sql.NullString
+		Ttags                   []string
+		SigAlg                  string
+		KeyAlg                  string
+		MasterPubKey            string
+		Dtag                    string
+		Htag                    string
+		AddressValue            string
+		Lookup                  string
+		SaveMergeAction         string
+		Origin                  string
+		SystemID                string
+		Deleted                 bool
+		HasImages               bool
+		HasVideos               bool
+		HasReferences           bool
+		HasEphemeralAttestation bool
+		IsReply                 bool
+		IsQuote                 bool
+		IsRootReply             bool
 	}
 	databaseRollbackRequest struct {
 		databaseBatchRequest
@@ -296,27 +297,12 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	return &event, nil
 }
 
-func (req *databaseBatchRequest) Save(e *model.Event) error {
+func (req *databaseBatchRequest) Save(e *model.Event, ephemeralAttestation bool) error {
 	dbEvent, err := toDatabaseEvent(e)
 	if err != nil {
 		return err
 	}
-	req.InsertOrReplace = append(req.InsertOrReplace, *dbEvent)
-	return nil
-}
-
-func (req *databaseBatchRequest) SaveWithExpiration(e *model.Event, ttl time.Duration) error {
-	dbEvent, err := toDatabaseEvent(e)
-	if err != nil {
-		return err
-	}
-
-	if ttl > 0 {
-		dbEvent.Expiration = sql.NullInt64{
-			Valid: true,
-			Int64: int64(time.Now().Add(ttl).UnixNano()),
-		}
-	}
+	dbEvent.HasEphemeralAttestation = ephemeralAttestation
 
 	req.InsertOrReplace = append(req.InsertOrReplace, *dbEvent)
 	return nil
@@ -364,20 +350,23 @@ func (db *dbClient) AcceptEvents(ctx context.Context, events ...*model.Event) (e
 				continue
 			}
 			if embeddings, hasEmbeddings := ephemeralEmbeddings[events[i].Address()]; hasEmbeddings && eventValidForEphemeralAttestation(events[i]) {
-				if err = verifyEphemeralAttestation(embeddings, events[i], &req); err != nil {
+				if allowed, err := verifyEphemeralAttestation(events[i], embeddings...); err != nil {
 					return err
+				} else if !allowed {
+					return errors.Wrapf(ErrOnBehalfAccessDenied, "ephemeral attestation does not allow deletion for pubkey %s", events[i].PubKey)
 				}
 			}
 			if err := req.Remove(events[i]); err != nil {
 				return err
 			}
 		} else {
+			var allowed bool
 			if embeddings, hasEmbeddings := ephemeralEmbeddings[events[i].Address()]; hasEmbeddings && eventValidForEphemeralAttestation(events[i]) {
-				if err = verifyEphemeralAttestation(embeddings, events[i], &req); err != nil {
+				if allowed, err = verifyEphemeralAttestation(events[i], embeddings...); err != nil {
 					return err
 				}
 			}
-			if err := req.Save(events[i]); err != nil {
+			if err := req.Save(events[i], allowed); err != nil {
 				return err
 			}
 		}
@@ -547,7 +536,7 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 	}
 	if filters.EventsHash != nil {
 		for _, e := range deleted {
-			if err = eventsToRollback.Save(e); err != nil {
+			if err = eventsToRollback.Save(e, false); err != nil {
 				return errors.Wrapf(err, "failed to convert event to dbEvent: %v", e.String())
 			}
 		}
@@ -561,7 +550,7 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 			}
 			if filters.EventsHash != nil {
 				for _, e := range batchDelete {
-					if err = eventsToRollback.Save(e); err != nil {
+					if err = eventsToRollback.Save(e, false); err != nil {
 						return errors.Wrapf(err, "failed to convert event to dbEvent: %v", e.String())
 					}
 				}
@@ -615,6 +604,7 @@ func (db *dbClient) saveEvents(
 		"is_reply",
 		"is_root_reply",
 		"is_quote",
+		"has_ephemeral_attestation",
 		"has_references",
 		"hidden",
 		"lookup",
@@ -745,6 +735,11 @@ WITH replaced AS (
 				Value:  events[i].IsQuote,
 			},
 			{
+				Name:   "has_ephemeral_attestation",
+				CastTo: "bool",
+				Value:  events[i].HasEphemeralAttestation,
+			},
+			{
 				Name:   "has_references",
 				CastTo: "bool",
 				Value:  events[i].HasReferences,
@@ -784,7 +779,9 @@ update_data AS (
 		d_tag, h_tag,
 		deleted,
 		has_images, has_videos,
-		is_reply, is_root_reply, is_quote, has_references,
+		is_reply, is_root_reply, is_quote,
+		has_ephemeral_attestation,
+		has_references,
 		hidden,
 		lookup,
 		expiration
@@ -799,7 +796,9 @@ update_data AS (
 		sd.d_tag, sd.h_tag,
 		sd.deleted,
 		sd.has_images, sd.has_videos,
-		sd.is_reply, sd.is_root_reply, sd.is_quote, sd.has_references,
+		sd.is_reply, sd.is_root_reply, sd.is_quote,
+		sd.has_ephemeral_attestation,
+		sd.has_references,
 		sd.hidden,
 		sd.lookup,
 		sd.expiration
@@ -826,6 +825,7 @@ update_data AS (
 		is_reply = EXCLUDED.is_reply,
 		is_root_reply = EXCLUDED.is_root_reply,
 		is_quote = EXCLUDED.is_quote,
+		has_ephemeral_attestation = EXCLUDED.has_ephemeral_attestation,
 		has_references = EXCLUDED.has_references,
 		hidden = EXCLUDED.hidden,
 		lookup = EXCLUDED.lookup,
@@ -1407,31 +1407,36 @@ func (db *dbClient) prepareCommunityDeleteFilters(ctx context.Context, incomingE
 	return filters, nil
 }
 
-func verifyEphemeralAttestation(embeddings []*model.EphemeralEmbeddingEvent, event *model.Event, req *databaseBatchRequest) error {
+func verifyEphemeralAttestation(event *model.Event, embeddings ...*model.EphemeralEmbeddingEvent) (allowed bool, err error) {
 	var ephemeralAttestationEvent *model.Event
+
+	targetMasterKey := event.GetMasterPublicKey()
+	if targetMasterKey == event.PubKey {
+		// No master key, so no attestation is needed.
+		return true, nil
+	}
+
 	for _, embedding := range embeddings {
-		if embedding.ContentEvent.Kind == model.CustomIONKindAttestation && event.GetMasterPublicKey() == embedding.ContentEvent.GetMasterPublicKey() {
+		if embedding.ContentEvent.Kind == model.CustomIONKindAttestation && targetMasterKey == embedding.ContentEvent.PubKey {
 			ephemeralAttestationEvent = embedding.ContentEvent
 			break
 		}
 	}
-	if ephemeralAttestationEvent != nil {
-		allowed, err := model.OnBehalfIsAccessAllowed(ephemeralAttestationEvent.Tags, event.PubKey, event.Kind, nostr.Now())
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse attestation event")
-		}
-		if !allowed {
-			return errors.Wrapf(model.ErrOnBehalfAccessDenied, "event id %s / kind %d", event.ID, event.Kind)
-		}
-		return req.SaveWithExpiration(ephemeralAttestationEvent, time.Minute)
+	if ephemeralAttestationEvent == nil {
+		return false, nil
 	}
-	return nil
+
+	allowed, err = model.OnBehalfIsAccessAllowed(ephemeralAttestationEvent.Tags, event.PubKey, event.Kind, nostr.Now())
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to check ephemeral attestation access")
+	}
+	return allowed, nil
 }
 
 func eventValidForEphemeralAttestation(event *model.Event) bool {
 	switch event.Kind {
 	case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
-		// reply, quote or mention
+		// Reply, quote or mention.
 		eTag := event.GetTag("e")
 		if eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
 			return true
@@ -1448,6 +1453,8 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 	case nostr.KindFollowList:
 		return true
 	case nostr.KindReaction:
+		return true
+	case model.CustomIONKindPollVote:
 		return true
 	case nostr.KindGenericRepost, nostr.KindRepost:
 		return true

@@ -34,7 +34,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 			ev.Content = "content" + strconv.FormatInt(i, 10)
 			ev.Kind = nostr.KindTextNote
 			require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, req.Save(&ev))
+			require.NoError(t, req.Save(&ev, false))
 			req.EventsHash = &mockHash
 		}
 
@@ -75,7 +75,7 @@ func TestQueryBatchProcessor(t *testing.T) {
 			ev.Content = "content" + strconv.FormatInt(i, 10)
 			ev.Kind = nostr.KindTextNote
 			require.NoError(t, ev.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(t, req.Save(&ev))
+			require.NoError(t, req.Save(&ev, false))
 			events = append(events, &ev)
 		}
 
