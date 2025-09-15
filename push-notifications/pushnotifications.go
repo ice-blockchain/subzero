@@ -226,7 +226,7 @@ func MustInit(ctx context.Context) {
 
 	pnClient, err = pn.New(ctx, opts...)
 	if err != nil {
-		panic(fmt.Sprintf("[push-notifications] failed to create push notification client: %v", err))
+		log.Panicf("[push-notifications] failed to create push notification client: %v", err)
 	}
 	mustRunSelfTest(ctx, pnClient, config.PrivateKey)
 
@@ -245,20 +245,20 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 	devicePriv, devicePub := model.GenerateKeyPair()
 	serverPrivX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
 	if err != nil {
-		return errors.Wrap(err, "self-test: failed to convert server private key")
+		return errors.Wrap(err, "failed to convert server private key")
 	}
 	devicePubX25519, err := nip44.ConvertEd25519PublicKeyToX25519(devicePub)
 	if err != nil {
-		return errors.Wrap(err, "self-test: failed to convert device pubkey")
+		return errors.Wrap(err, "failed to convert device pubkey")
 	}
 	convKey, err := nip44.GenerateConversationKeyX25519(serverPrivX25519, devicePubX25519)
 	if err != nil {
-		return errors.Wrap(err, "self-test: failed to derive conversation key")
+		return errors.Wrap(err, "failed to derive conversation key")
 	}
 	bogusToken := "self-test-invalid-token"
 	encryptedToken, err := nip44.EncryptX25519(bogusToken, convKey, nil)
 	if err != nil {
-		return errors.Wrap(err, "self-test: failed to encrypt token")
+		return errors.Wrap(err, "failed to encrypt token")
 	}
 	incomingEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindEditableTextNote,
@@ -267,15 +267,15 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 		Tags:      nostr.Tags{{"test", "test"}},
 	}}
 	if err := incomingEvent.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		return errors.Wrap(err, "self-test: failed to sign event")
+		return errors.Wrap(err, "failed to sign event")
 	}
 	compressedEvent, err := compressAndEncodeBase64(incomingEvent.String())
 	if err != nil {
-		return errors.Wrap(err, "self-test: failed to compress event")
+		return errors.Wrap(err, "failed to compress event")
 	}
 	compressedRelevantEvents, err := compressAndEncodeBase64("[]")
 	if err != nil {
-		return errors.Wrap(err, "self-test: failed to compress relevant events")
+		return errors.Wrap(err, "failed to compress relevant events")
 	}
 	deviceRegistrationEvent := &model.Event{Event: nostr.Event{
 		Kind:      model.CustomIONKindDeviceRegistration,
@@ -283,7 +283,7 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 		Tags:      nostr.Tags{{"token", encryptedToken}},
 	}}
 	if err := deviceRegistrationEvent.SignWithAlg(devicePriv, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		return errors.Wrap(err, "self-test: failed to sign device registration event")
+		return errors.Wrap(err, "failed to sign device registration event")
 	}
 	n := &pn.Notification[*DeviceRegistrationEvent]{
 		Target: deviceRegistrationEvent,
@@ -297,7 +297,7 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 		Body:  "self-test",
 	}
 	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceToken(err) {
-		return errors.Wrap(err, "self-test: unexpected error")
+		return errors.Wrap(err, "unexpected error")
 	}
 
 	return nil
@@ -305,7 +305,7 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 
 func mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
 	if err := runSelfTest(ctx, pnClient, privateKey); err != nil {
-		panic("[push-notifications] self-test: failed: " + err.Error())
+		panic("[push-notifications] self-test failed: " + err.Error())
 	}
 }
 
