@@ -308,7 +308,10 @@ BEGIN
             NEW.kind,
             get_current_timestamp_nano()
         ) THEN
-            RAISE EXCEPTION 'onbehalf permission denied';
+            RAISE EXCEPTION 'onbehalf permission denied'
+                USING
+                    HINT = 'pubkey record not found or kind not allowed or permission expired',
+                    DETAIL = 'master_pubkey=' || NEW.master_pubkey || ', pubkey=' || NEW.pubkey || ', kind=' || NEW.kind;
         END IF;
     END IF;
 

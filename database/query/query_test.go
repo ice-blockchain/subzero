@@ -645,7 +645,9 @@ func TestQueryEventAttestation(t *testing.T) {
 			ev.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, model.GeneratePrivateKey()}}
 			require.NoError(t, ev.SignWithAlg(active, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			t.Logf("event %+v", ev)
-			require.ErrorIs(t, db.AcceptEvents(t.Context(), &ev), model.ErrOnBehalfAccessDenied)
+			err := db.AcceptEvents(t.Context(), &ev)
+			t.Logf("err = %v", err)
+			require.ErrorIs(t, err, model.ErrOnBehalfAccessDenied)
 		})
 		otherUserMasterPrivKey, otherUserMasterPubkey := model.GenerateKeyPair()
 		t.Run("OnBehalfOfUnknownUserWithEphemeralEmbedding", func(t *testing.T) {
