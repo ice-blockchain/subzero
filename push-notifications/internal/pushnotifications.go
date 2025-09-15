@@ -148,12 +148,12 @@ func New(ctx context.Context, opts ...Option) (Client, error) {
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create firebase app")
 	}
 
 	fcmClient, err := app.Messaging(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create fcm client")
 	}
 	x25519PrivateKey, err := nip44.ConvertEd25519PrivateKeyToX25519(options.privateKey)
 	if err != nil {
