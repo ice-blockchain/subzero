@@ -207,7 +207,7 @@ func MustInit(ctx context.Context) {
 	config := cfg.MustGet[config]()
 
 	if config.FCMCredentialsFile == "" {
-		panic("[push-notifications]FCM credentials not provided")
+		panic("[push-notifications] FCM credentials not provided")
 	}
 	if config.PrivateKey == "" {
 		panic("[push-notifications] private key is empty")
@@ -237,7 +237,7 @@ func MustInit(ctx context.Context) {
 	}
 
 	if err := globalPushNotificationManager.syncDevices(ctx); err != nil {
-		panic(errors.Wrap(err, "[push-notifications] failed to perform full device synchronization at startup"))
+		log.Panicf("[push-notifications] failed to perform full device synchronization at startup: %v", err)
 	}
 }
 
@@ -305,7 +305,7 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 
 func mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
 	if err := runSelfTest(ctx, pnClient, privateKey); err != nil {
-		panic("[push-notifications] self-test failed: " + err.Error())
+		log.Panicf("[push-notifications] self-test failed: %v", err)
 	}
 }
 
