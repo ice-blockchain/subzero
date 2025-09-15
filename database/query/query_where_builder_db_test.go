@@ -199,7 +199,7 @@ func helperGenerateEvent(
 	}
 
 	var req databaseBatchRequest
-	require.NoError(t, req.Save(&ev))
+	require.NoError(t, req.Save(&ev, false))
 	require.NoError(t, db.executeBatch(t.Context(), &req))
 
 	return ev

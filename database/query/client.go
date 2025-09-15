@@ -37,20 +37,21 @@ var (
 	ddl embed.FS
 
 	databaseEventFieldMap = map[string]string{
-		"createdat":       "created_at",
-		"referenceid":     "reference_id",
-		"sigalg":          "sig_alg",
-		"keyalg":          "key_alg",
-		"masterpubkey":    "master_pubkey",
-		"dtag":            "d_tag",
-		"htag":            "h_tag",
-		"hasimages":       "has_images",
-		"hasvideos":       "has_videos",
-		"addressvalue":    "address",
-		"tagid":           "tag_id",
-		"systemid":        "system_id",
-		"lookupcreatedat": "lookup_created_at",
-		"hasreferences":   "has_references",
+		"createdat":               "created_at",
+		"referenceid":             "reference_id",
+		"sigalg":                  "sig_alg",
+		"keyalg":                  "key_alg",
+		"masterpubkey":            "master_pubkey",
+		"dtag":                    "d_tag",
+		"htag":                    "h_tag",
+		"hasimages":               "has_images",
+		"hasvideos":               "has_videos",
+		"addressvalue":            "address",
+		"tagid":                   "tag_id",
+		"systemid":                "system_id",
+		"lookupcreatedat":         "lookup_created_at",
+		"hasreferences":           "has_references",
+		"hasephemeralattestation": "has_ephemeral_attestation",
 	}
 )
 

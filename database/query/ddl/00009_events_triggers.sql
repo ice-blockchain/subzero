@@ -249,6 +249,7 @@ BEGIN
         is_reply,
         is_root_reply,
         is_quote,
+        has_ephemeral_attestation,
         has_references,
         hidden,
         replaced_by_id
@@ -279,6 +280,7 @@ BEGIN
             old.is_reply,
             old.is_root_reply,
             old.is_quote,
+            old.has_ephemeral_attestation,
             old.has_references,
             old.hidden,
             new.id
@@ -322,13 +324,24 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER trigger_events_before_insert_check_onbehalf_permission
 BEFORE INSERT ON events
 FOR EACH ROW
-WHEN (NEW.hidden = FALSE AND NEW.master_pubkey != NEW.pubkey AND (NEW.pubkey != '' AND NEW.master_pubkey != ''))
+WHEN (
+    NEW.hidden = FALSE
+    AND NEW.has_ephemeral_attestation = FALSE
+    AND NEW.master_pubkey != NEW.pubkey
+    AND (NEW.pubkey != '' AND NEW.master_pubkey != '')
+)
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
 
 CREATE OR REPLACE TRIGGER trigger_events_before_update_check_onbehalf_permission
 BEFORE UPDATE ON events
 FOR EACH ROW
-WHEN (NEW.hidden = FALSE AND (NEW.master_pubkey != NEW.pubkey AND (NEW.pubkey != '' AND NEW.master_pubkey != '')) AND (OLD.id != NEW.id))
+WHEN (
+    NEW.hidden = FALSE
+    AND NEW.has_ephemeral_attestation = FALSE
+    AND (NEW.master_pubkey != NEW.pubkey
+    AND (NEW.pubkey != '' AND NEW.master_pubkey != ''))
+    AND (OLD.id != NEW.id)
+)
 EXECUTE FUNCTION trigger_events_before_insert_check_onbehalf_permission();
 --------
 CREATE OR REPLACE FUNCTION trigger_events_after_insert_score_add()
