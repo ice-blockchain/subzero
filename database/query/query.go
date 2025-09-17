@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"log"
 	"slices"
 	"strconv"
@@ -163,19 +162,6 @@ func generateGiftWrapSystemID(e *model.Event) string {
 	return e.ID
 }
 
-func writePollVoteContent(h *xxh3.Hasher, content string) {
-	var options []int32
-	if err := json.Unmarshal([]byte(content), &options); err == nil {
-		slices.Sort(options)
-		for _, o := range options {
-			binary.Write(h, binary.BigEndian, o)
-		}
-	} else {
-		// If content is not valid JSON, fall back to hashing the raw string.
-		h.WriteString(content)
-	}
-}
-
 func findReferenceTagValue(tags model.Tags) (val string) {
 	for _, t := range tags {
 		if k := t.Key(); (k == "e" || k == "a") && t.Value() != "" {
@@ -195,9 +181,7 @@ func newBaseDigestSystemID(e *model.Event) *xxh3.Hasher {
 func generateReferenceBasedIDSystemID(e *model.Event) string {
 	h := newBaseDigestSystemID(e)
 
-	if e.Kind == model.CustomIONKindPollVote {
-		writePollVoteContent(h, e.Content)
-	} else {
+	if e.Kind != model.CustomIONKindPollVote {
 		h.WriteString(e.Content)
 	}
 
