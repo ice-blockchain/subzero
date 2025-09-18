@@ -1,0 +1,299 @@
+version: '3'
+
+services:
+  postgres:
+    container_name: opentelemetry-postgres
+    image: postgres:latest
+    restart: unless-stopped
+    networks: ["nats"]
+    environment:
+      POSTGRES_USER: opentelemetry
+      POSTGRES_PASSWORD: opentelemetry
+      POSTGRES_DB: opentelemetry
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  postgres-openfga:
+    container_name: openfga-postgres
+    image: postgres:latest
+    restart: unless-stopped
+    networks: ["nats"]
+    environment:
+      POSTGRES_USER: openfga
+      POSTGRES_PASSWORD: openfga
+      POSTGRES_DB: openfga
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ACCESS_KEY: opentelemetryadmin
+      MINIO_SECRET_KEY: opentelemetryadmin
+    networks: ["nats"]
+    ports:
+      - "9001:9001"
+    volumes:
+      - minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+  createbuckets:
+    image: minio/mc
+    networks: ["nats"]
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 opentelemetryadmin opentelemetryadmin;
+      /usr/bin/mc mb myminio/openobserve;
+      exit 0;
+      "
+  openobserve-1:
+    container_name: openobserve-1
+    #image: public.ecr.aws/zinclabs/openobserve:latest
+    image: public.ecr.aws/zinclabs/openobserve-enterprise:latest
+    restart: unless-stopped
+    networks: ["nats"]
+    environment:
+      ZO_ROOT_USER_EMAIL: "root@example.com"
+      ZO_ROOT_USER_PASSWORD: "pass"
+      ZO_DATA_DIR: "/data"
+      ZO_INSTANCE_NAME: "1"
+      ZO_LOCAL_MODE: "false"
+      ZO_CLUSTER_COORDINATOR: "nats"
+      ZO_NATS_ADDR: "nats:4222"
+      ZO_META_STORE: postgres
+      ZO_META_POSTGRES_DSN: postgres://opentelemetry:opentelemetry@postgres:5432/opentelemetry
+      ZO_S3_PROVIDER: "minio"
+      ZO_S3_ACCESS_KEY: "opentelemetryadmin"
+      ZO_S3_SECRET_KEY: "opentelemetryadmin"
+      ZO_S3_SERVER_URL: "http://minio:9000"
+      ZO_S3_BUCKET_NAME: "openobserve"
+      ZO_FEATURE_PER_THREAD_LOCK: "true"
+      RUST_LOG: "info"
+      ZO_GRPC_MAX_MESSAGE_SIZE: 100
+      ZO_GRPC_TLS_ENABLED: "true"
+      ZO_GRPC_TLS_CERT_DOMAIN: "localhost"
+      ZO_GRPC_TLS_CERT_PATH: /tls/localhost.pem
+      ZO_GRPC_TLS_KEY_PATH: /tls/localhost.key
+      #rbac/enterprise only
+      O2_OPENFGA_ENABLED: "true"
+      O2_OPENFGA_BASE_URL: "http://openfga:8080"
+    volumes:
+      - openobserve1:/data
+      - ./server.crt:/tls/localhost.pem
+      - ./server.key:/tls/localhost.key
+    ports:
+      - "5080:5080"
+      - "5081:5081"
+    depends_on:
+      - minio
+      - postgres
+      - openfga
+      - nats
+
+  openobserve-2:
+    container_name: openobserve-2
+    #image: public.ecr.aws/zinclabs/openobserve:latest
+    image: public.ecr.aws/zinclabs/openobserve-enterprise:latest
+    restart: unless-stopped
+    networks: ["nats"]
+    environment:
+      ZO_ROOT_USER_EMAIL: "root@example.com"
+      ZO_ROOT_USER_PASSWORD: "pass"
+      ZO_DATA_DIR: "/data"
+      ZO_INSTANCE_NAME: "2"
+      ZO_LOCAL_MODE: "false"
+      ZO_CLUSTER_COORDINATOR: "nats"
+      ZO_NATS_ADDR: "nats:4222"
+      ZO_META_STORE: postgres
+      ZO_META_POSTGRES_DSN: postgres://opentelemetry:opentelemetry@postgres:5432/opentelemetry
+      ZO_S3_PROVIDER: "minio"
+      ZO_S3_ACCESS_KEY: "opentelemetryadmin"
+      ZO_S3_SECRET_KEY: "opentelemetryadmin"
+      ZO_S3_SERVER_URL: "http://minio:9000"
+      ZO_S3_BUCKET_NAME: "openobserve"
+      ZO_FEATURE_PER_THREAD_LOCK: "true"
+      RUST_LOG: "info"
+      ZO_GRPC_MAX_MESSAGE_SIZE: 100
+      ZO_GRPC_TLS_ENABLED: "true"
+      ZO_GRPC_TLS_CERT_DOMAIN: "localhost"
+      ZO_GRPC_TLS_CERT_PATH: /tls/localhost.pem
+      ZO_GRPC_TLS_KEY_PATH: /tls/localhost.key
+      #rbac/enterprise only
+      O2_OPENFGA_ENABLED: "true"
+      O2_OPENFGA_BASE_URL: "http://openfga:8080"
+    volumes:
+      - openobserve2:/data
+      - ./server.crt:/tls/localhost.pem
+      - ./server.key:/tls/localhost.key
+    ports:
+      - "5090:5080"
+      - "5091:5081"
+    depends_on:
+      - minio
+      - postgres
+      - openfga
+      - openobserve-1
+      - nats
+
+  openobserve-3:
+    container_name: openobserve-3
+    #image: public.ecr.aws/zinclabs/openobserve:latest
+    image: public.ecr.aws/zinclabs/openobserve-enterprise:latest
+    restart: unless-stopped
+    networks: ["nats"]
+    environment:
+      ZO_ROOT_USER_EMAIL: "root@example.com"
+      ZO_ROOT_USER_PASSWORD: "pass"
+      ZO_DATA_DIR: "/data"
+      ZO_INSTANCE_NAME: "3"
+      ZO_LOCAL_MODE: "false"
+      ZO_NATS_ADDR: "nats:4222"
+      ZO_CLUSTER_COORDINATOR: "nats"
+      ZO_META_STORE: postgres
+      ZO_META_POSTGRES_DSN: postgres://opentelemetry:opentelemetry@postgres:5432/opentelemetry
+      ZO_S3_PROVIDER: "minio"
+      ZO_S3_ACCESS_KEY: "opentelemetryadmin"
+      ZO_S3_SECRET_KEY: "opentelemetryadmin"
+      ZO_S3_SERVER_URL: "http://minio:9000"
+      ZO_S3_BUCKET_NAME: "openobserve"
+      ZO_FEATURE_PER_THREAD_LOCK: "true"
+      RUST_LOG: "info"
+      ZO_GRPC_MAX_MESSAGE_SIZE: 100
+      ZO_GRPC_TLS_ENABLED: "true"
+      ZO_GRPC_TLS_CERT_DOMAIN: "localhost"
+      ZO_GRPC_TLS_CERT_PATH: /tls/localhost.pem
+      ZO_GRPC_TLS_KEY_PATH: /tls/localhost.key
+      #rbac/enterprise only
+      O2_OPENFGA_ENABLED: "true"
+      O2_OPENFGA_BASE_URL: "http://openfga:8080"
+    volumes:
+      - openobserve3:/data
+      - ./server.crt:/tls/localhost.pem
+      - ./server.key:/tls/localhost.key
+    ports:
+      - "5070:5080"
+      - "5071:5081"
+    depends_on:
+      - minio
+      - postgres
+      - openfga
+      - openobserve-1
+      - openobserve-2
+      - nats
+  nats:
+    image: nats:latest
+    container_name: nats
+    networks: ["nats"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats0:/data
+    command:
+      - "--name=nats"
+      - "--cluster_name=c1"
+      - "--cluster=nats://nats:6222"
+      - "--routes=nats-route://nats:6222,nats-route://nats1:6222,nats-route://nats2:6222"
+      - "--http_port=8222"
+      - "--js"
+      - "--sd=/data"
+
+  nats1:
+    image: nats:latest
+    container_name: nats1
+    networks: ["nats"]
+    ports:
+      - "4223:4222"
+      - "8223:8222"
+    volumes:
+      - nats1:/data
+    command:
+      - "--name=nats1"
+      - "--cluster_name=c1"
+      - "--cluster=nats://nats1:6222"
+      - "--routes=nats-route://nats:6222,nats-route://nats1:6222,nats-route://nats2:6222"
+      - "--http_port=8222"
+      - "--js"
+      - "--sd=/data"
+
+  nats2:
+    image: nats:latest
+    container_name: nats2
+    networks: ["nats"]
+    ports:
+      - "4224:4222"
+      - "8224:8222"
+    volumes:
+      - nats2:/data
+    command:
+      - "--name=nats2"
+      - "--cluster_name=c1"
+      - "--cluster=nats://nats2:6222"
+      - "--routes=nats-route://nats:6222,nats-route://nats1:6222,nats-route://nats2:6222"
+      - "--http_port=8222"
+      - "--js"
+      - "--sd=/data"
+  #openfga for rbac to work on enterprise build
+  migrate:
+    depends_on:
+      postgres-openfga:
+        condition: service_healthy
+    image: openfga/openfga:latest
+    container_name: migrate
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@postgres-openfga:5432/openfga?sslmode=disable
+    command: migrate
+    networks: ["nats"]
+
+  openfga:
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    image: openfga/openfga:latest
+    container_name: openfga
+    hostname: openfga
+    command: run
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@postgres-openfga:5432/openfga?sslmode=disable
+    networks: ["nats"]
+    ports:
+      - "8080:8080" #http
+      - "8081:8081" #grpc
+      - "3000:3000" #playground
+      - "2112:2112" #prometheus metrics
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/grpc_health_probe",
+          "-addr=openfga:8081"
+        ]
+      interval: 5s
+      timeout: 30s
+      retries: 3
+
+networks:
+  nats:
+
+volumes:
+  minio: {}
+  openobserve1: {}
+  openobserve2: {}
+  openobserve3: {}
+  nats0: {}
+  nats1: {}
+  nats2: {}

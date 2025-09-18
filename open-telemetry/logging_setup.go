@@ -5,8 +5,10 @@ package opentelemetry
 import (
 	"context"
 	"fmt"
+	"io"
 	stdliblog "log"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,7 +17,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/go-logr/logr"
 	"github.com/goccy/go-json"
-	"github.com/hashicorp/go-multierror"
+	"github.com/jellydator/ttlcache/v3"
+	zerolog "github.com/rs/zerolog/log"
 	"github.com/tidwall/wal"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
@@ -27,7 +30,25 @@ import (
 	otelsdklog "go.opentelemetry.io/otel/sdk/log"
 	otelsdkresource "go.opentelemetry.io/otel/sdk/resource"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/encoding/gzip"
 )
+
+const logRecordID = "logRecordID"
+
+func LogWriter() io.Writer {
+	var verbosity int
+	switch strings.ToLower(globalTelemetry.cfg.LogLevel) {
+	case "trace":
+		verbosity = 12
+	case "debug":
+		verbosity = 8
+	case "info":
+		verbosity = 4
+	case "warn", "warning":
+		verbosity = 1
+	}
+	return &otelLogWriter{level: verbosity}
+}
 
 func (t *telemetry) mustInitLogProvider(ctx context.Context, res *otelsdkresource.Resource, exporterConns []*grpc.ClientConn) {
 	var otlpRemoteExporters []otelsdklog.Exporter
@@ -35,10 +56,21 @@ func (t *telemetry) mustInitLogProvider(ctx context.Context, res *otelsdkresourc
 		otlpRemoteExporters = make([]otelsdklog.Exporter, 0, len(exporterConns))
 		for ix, exporterConn := range exporterConns {
 			otlpRemoteExporter, err := otlploggrpc.New(ctx,
-				//TODO: proper setup
+				otlploggrpc.WithCompressor(gzip.Name),
+				otlploggrpc.WithRetry(otlploggrpc.RetryConfig{
+					Enabled:         true,
+					InitialInterval: 500 * time.Millisecond,
+					MaxInterval:     5 * time.Second,
+					MaxElapsedTime:  defaultExportTimeout,
+				}),
 				otlploggrpc.WithGRPCConn(exporterConn),
-				otlploggrpc.WithHeaders(map[string]string{"service": fmt.Sprintf("subzero/%v %v", t.cfg.Version, t.cfg.RelayURL)}),
-				otlploggrpc.WithTimeout(time.Minute),
+				otlploggrpc.WithHeaders(map[string]string{
+					"service":       fmt.Sprintf("subzero/%v %v", t.cfg.Version, t.cfg.RelayURL),
+					"Authorization": fmt.Sprintf("Basic %v", t.cfg.AuthToken),
+					"stream-name":   "subzero",
+					"organization":  "default", // TODO: cfg?
+				}),
+				otlploggrpc.WithTimeout(defaultExportTimeout),
 			)
 			if err != nil {
 				globalLogger.Panic(ctx, errors.Wrapf(err, "failed to create OTLP remote log exporter %v", ix))
@@ -46,19 +78,32 @@ func (t *telemetry) mustInitLogProvider(ctx context.Context, res *otelsdkresourc
 			otlpRemoteExporters = append(otlpRemoteExporters, otlpRemoteExporter)
 		}
 	}
-	stdoutExporter, err := otelstdoutlog.New()
+	var stdoutExporter otelsdklog.Exporter
+	var err error
+	stdoutExporter, err = otelstdoutlog.New(otelstdoutlog.WithWriter(os.Stdout))
 	if err != nil {
 		globalLogger.Panic(ctx, errors.Wrap(err, "failed to create stdout log exporter"))
 	}
+	options := []otelsdklog.BatchProcessorOption{
+		otelsdklog.WithExportInterval(10 * time.Second),
+		otelsdklog.WithExportTimeout(defaultExportTimeout),
+		otelsdklog.WithExportBufferSize(1000),
+	}
 	t.redundantLogExporter.primaries = otlpRemoteExporters
+	if globalTelemetry.cfg.Debug {
+		options = append(options,
+			otelsdklog.WithExportBufferSize(1),
+			otelsdklog.WithExportMaxBatchSize(1),
+			otelsdklog.WithExportTimeout(100*time.Millisecond),
+		)
+		stdoutExporter = newNonStructuredExporter(os.Stdout)
+		t.redundantLogExporter.primaries = []otelsdklog.Exporter{stdoutExporter}
+	}
 	t.redundantLogExporter.fallback = stdoutExporter
-
 	t.logProvider = otelsdklog.NewLoggerProvider(
 		otelsdklog.WithProcessor(&batchProcessorWrapper{
 			BatchProcessor: otelsdklog.NewBatchProcessor(t.redundantLogExporter,
-				otelsdklog.WithExportBufferSize(10),
-				otelsdklog.WithExportInterval(10*time.Second),
-				otelsdklog.WithExportTimeout(time.Minute),
+				options...,
 			),
 			severity: detectLogSeverity(t.cfg.LogLevel),
 		}),
@@ -75,6 +120,7 @@ func (t *telemetry) mustInitLogProvider(ctx context.Context, res *otelsdkresourc
 	case "warn", "warning":
 		verbosity = 1
 	}
+
 	ow := &otelLogWriter{level: verbosity}
 	otel.SetLogger(logr.New(ow).V(verbosity))
 	globalotellog.SetLoggerProvider(t.logProvider)
@@ -89,6 +135,8 @@ func (t *telemetry) mustInitLogProvider(ctx context.Context, res *otelsdkresourc
 	)
 	slog.SetDefault(slog.New(slogHandler))
 	stdliblog.SetOutput(ow)
+	zerolog.Logger = zerolog.Output(ow)
+
 }
 
 func detectLogSeverity(logLevel string) otellog.Severity {
@@ -143,8 +191,56 @@ func (ow *otelLogWriter) WithName(_ string) logr.LogSink {
 }
 
 func (ow *otelLogWriter) Write(p []byte) (int, error) {
-	//TODO parse the log line
-	globalLogger.Info(context.Background(), string(p))
+	var logLevel, body string
+	if len(p) > 1 && p[0] == '{' && (p[len(p)-1] == '}' || p[len(p)-2] == '}') { // zerolog
+		type zeroLogLogLevel struct {
+			Level   string `json:"level"`
+			Message string `json:"message"`
+		}
+		var l zeroLogLogLevel
+		if err := json.Unmarshal(p, &l); err != nil {
+			return 0, errors.Wrapf(err, "malformed")
+		}
+		logLevel = strings.ToLower(l.Level)
+		body = l.Message
+	} else {
+		body = string(p)
+		if idx := strings.Index(body, " DBG "); idx >= 0 {
+			logLevel = "debug"
+			body = body[idx+5:]
+		} else if idx = strings.Index(body, " TRC "); idx >= 0 {
+			logLevel = "trace"
+			body = body[idx+5:]
+		} else if idx = strings.Index(body, " WRN "); idx >= 0 {
+			logLevel = "warn"
+			body = body[idx+5:]
+		} else if idx = strings.Index(body, " ERR "); idx >= 0 {
+			logLevel = "error"
+			body = body[idx+5:]
+		} else if idx = strings.Index(body, " PNC "); idx >= 0 {
+			logLevel = "panic"
+			body = body[idx+5:]
+		}
+	}
+	if body == "" {
+		body = string(p)
+	}
+	switch logLevel {
+	case "trace", "trc":
+		globalLogger.Trace(context.Background(), body)
+	case "debug", "dbg":
+		globalLogger.Debug(context.Background(), body)
+	case "info", "inf":
+		globalLogger.Info(context.Background(), body)
+	case "warn", "wrn":
+		globalLogger.Warn(context.Background(), body)
+	case "error", "err":
+		globalLogger.Error(context.Background(), errors.New(body))
+	case "panic", "pnc", "fatal":
+		globalLogger.Panic(context.Background(), errors.New(body))
+	default:
+		globalLogger.Info(context.Background(), body)
+	}
 	return len(p), nil
 }
 
@@ -174,14 +270,31 @@ type redundantLogExporter struct {
 
 	primaryExporterEnabled bool
 	logWALBackupEmpty      bool
+	closing                atomic.Bool
+	lastExportedLogRecords *ttlcache.Cache[string, struct{}]
+}
+
+type nonStructuredExporter struct {
+	writer    io.Writer
+	formatLog func(r otelsdklog.Record) string
 }
 
 func (re *redundantLogExporter) Export(ctx context.Context, records []otelsdklog.Record) error {
-	if len(re.primaries) == 0 {
-		return multierror.Append(
-			re.writeLogRecordsToWALBackup(records),
+	var ids []string
+	records, ids = re.deduplRecords(records)
+	if len(records) == 0 {
+		return nil
+	}
+	defer func() {
+		for i := range records {
+			re.lastExportedLogRecords.Set(ids[i], struct{}{}, 30*time.Second)
+		}
+	}()
+	if len(re.primaries) == 0 || (!re.primaryExporterEnabled && re.closing.Load()) {
+		return errors.Join(
+			re.writeLogRecordsToWALBackup(records, ids),
 			errors.Wrap(re.fallback.Export(ctx, records), "fallback.Export"),
-		).ErrorOrNil()
+		)
 	}
 	nextIndex := atomic.AddUint64(&re.currentPrimaryIndex, 1) % uint64(len(re.primaries))
 	if err := re.primaries[nextIndex].Export(ctx, records); err != nil {
@@ -190,10 +303,13 @@ func (re *redundantLogExporter) Export(ctx context.Context, records []otelsdklog
 			if uint64(ix) == nextIndex {
 				continue
 			}
-			if aggErr := primary.Export(ctx, records); aggErr != nil {
-				err = multierror.Append(err, errors.Wrapf(aggErr, "primary[%v].Export", ix))
+			exportCtx, cancel := context.WithTimeout(context.Background(), defaultExportTimeout)
+			if aggErr := primary.Export(exportCtx, records); aggErr != nil {
+				cancel()
+				err = errors.Join(err, errors.Wrapf(aggErr, "primary[%v].Export", ix))
 			} else {
 				succeeded = true
+				cancel()
 				break
 			}
 		}
@@ -213,13 +329,13 @@ func (re *redundantLogExporter) Export(ctx context.Context, records []otelsdklog
 			re.primaryExporterEnabled = false
 			re.primaryLifecycleMx.Unlock()
 		}
-
-		return multierror.Append(
-			re.writeLogRecordsToWALBackup(records),
-			errors.Wrap(re.fallback.Export(ctx, records), "fallback.Export"),
-		).ErrorOrNil()
+		exportCtx, cancel := context.WithTimeout(context.Background(), defaultExportTimeout)
+		defer cancel()
+		return errors.Join(
+			errors.Wrap(re.fallback.Export(exportCtx, records), "fallback.Export"),
+			re.writeLogRecordsToWALBackup(records, ids),
+		)
 	}
-
 	if !re.primaryExporterEnabled {
 		re.primaryLifecycleMx.Lock()
 		re.primaryExporterEnabled = true
@@ -229,7 +345,33 @@ func (re *redundantLogExporter) Export(ctx context.Context, records []otelsdklog
 	return nil
 }
 
-func (re *redundantLogExporter) writeLogRecordsToWALBackup(records []otelsdklog.Record) (err error) {
+func (re *redundantLogExporter) deduplRecords(records []otelsdklog.Record) ([]otelsdklog.Record, []string) {
+	filtered := make([]otelsdklog.Record, 0, len(records))
+	uniques := make([]string, 0, len(records))
+	for _, record := range records {
+		if record.AttributesLen() == 0 {
+			continue
+		}
+		var uniq string
+		filteredAttrs := make([]otellog.KeyValue, 0, record.AttributesLen()-1)
+		record.WalkAttributes(func(kv otellog.KeyValue) bool {
+			if kv.Key == logRecordID {
+				uniq = kv.Value.String()
+				return true
+			}
+			filteredAttrs = append(filteredAttrs, kv)
+			return true
+		})
+		record.SetAttributes(filteredAttrs...)
+		if !re.lastExportedLogRecords.Has(uniq) {
+			filtered = append(filtered, record)
+			uniques = append(uniques, uniq)
+		}
+	}
+	return filtered, uniques
+}
+
+func (re *redundantLogExporter) writeLogRecordsToWALBackup(records []otelsdklog.Record, ids []string) (err error) {
 	if re.logWALBackup == nil {
 		return nil
 	}
@@ -241,18 +383,17 @@ func (re *redundantLogExporter) writeLogRecordsToWALBackup(records []otelsdklog.
 		return errors.Wrap(err, "failed to get last logWALBackup index")
 	}
 	for ix, record := range records {
-		bytes, sErr := (&walLogRecord{actualLogRecord: record}).MarshallJSON()
+		bytes, sErr := (&walLogRecord{actualLogRecord: record, LogRecordID: ids[ix]}).MarshallJSON()
 		if sErr != nil {
-			err = multierror.Append(err, sErr).ErrorOrNil()
+			err = errors.Join(err, sErr)
 		}
 		batch.Write(uint64(ix)+1+lastIndex, bytes)
 	}
 
-	err = multierror.Append(
+	err = errors.Join(
 		err,
 		errors.Wrap(re.logWALBackup.WriteBatch(batch), "failed to write to logWALBackup"),
-	).ErrorOrNil()
-
+	)
 	if err == nil && re.logWALBackupEmpty {
 		re.logWALBackupEmpty = false
 	}
@@ -266,13 +407,10 @@ func (re *redundantLogExporter) Shutdown(ctx context.Context) error {
 
 	if len(re.primaries) == 0 {
 		var err error
-		if re.logWALBackup != nil {
-			err = errors.Wrap(re.logWALBackup.Close(), "failed to logWALBackup close")
-		}
 
-		return multierror.Append(err,
+		err = errors.Join(err,
 			errors.Wrap(re.fallback.Shutdown(ctx), "fallback.Shutdown"),
-		).ErrorOrNil()
+		)
 	}
 
 	var errs []error
@@ -280,42 +418,38 @@ func (re *redundantLogExporter) Shutdown(ctx context.Context) error {
 		errs = append(errs, errors.Wrapf(primary.Shutdown(ctx), "primary[%v].Shutdown", ix))
 	}
 
-	err := errors.Wrap(multierror.Append(nil, errs...).ErrorOrNil(), "primary.Shutdown")
-	if re.logWALBackup != nil {
-		err = multierror.Append(err, errors.Wrap(re.logWALBackup.Close(), "failed to logWALBackup close")).ErrorOrNil()
-	}
+	err := errors.Wrap(errors.Join(errs...), "primary.Shutdown")
 
-	return multierror.Append(
+	return errors.Join(
 		errors.Wrap(re.fallback.Shutdown(ctx), "fallback.Shutdown"),
 		err,
-	).ErrorOrNil()
+	)
 }
 
 func (re *redundantLogExporter) ForceFlush(ctx context.Context) error {
 	re.primaryLifecycleMx.Lock()
 	defer re.primaryLifecycleMx.Unlock()
-
-	if len(re.primaries) == 0 {
+	if len(re.primaries) == 0 || !re.primaryExporterEnabled {
 		var err error
 		if re.logWALBackup != nil {
 			err = errors.Wrap(re.logWALBackup.Sync(), "failed to logWALBackup sync")
 		}
 
-		return multierror.Append(err, errors.Wrap(re.fallback.ForceFlush(ctx), "fallback.ForceFlush")).ErrorOrNil()
+		return errors.Join(err, errors.Wrap(re.fallback.ForceFlush(ctx), "fallback.ForceFlush"))
 	}
 	var errs []error
 	for ix, primary := range re.primaries {
 		errs = append(errs, errors.Wrapf(primary.ForceFlush(ctx), "primary[%v].ForceFlush", ix))
 	}
-	err := errors.Wrap(multierror.Append(nil, errs...).ErrorOrNil(), "primary.ForceFlush")
+	err := errors.Wrap(errors.Join(errs...), "primary.ForceFlush")
 	if re.logWALBackup != nil {
-		err = multierror.Append(err, errors.Wrap(re.logWALBackup.Sync(), "failed to logWALBackup sync")).ErrorOrNil()
+		err = errors.Join(err, errors.Wrap(re.logWALBackup.Sync(), "failed to logWALBackup sync"))
 	}
 
-	return multierror.Append(
+	return errors.Join(
 		errors.Wrap(re.fallback.ForceFlush(ctx), "fallback.ForceFlush"),
 		err,
-	).ErrorOrNil()
+	)
 }
 
 type walLogRecord struct {
@@ -327,7 +461,8 @@ type walLogRecord struct {
 
 	actualLogRecord otelsdklog.Record
 
-	Severity otellog.Severity `json:"severity"`
+	Severity    otellog.Severity `json:"severity"`
+	LogRecordID string           `json:"logRecordID"`
 }
 
 func (re *walLogRecord) MarshallJSON() ([]byte, error) {
@@ -345,4 +480,35 @@ func (re *walLogRecord) MarshallJSON() ([]byte, error) {
 	bytes, err := json.Marshal(re)
 
 	return bytes, errors.Wrapf(err, "failed to marshal walLogRecord %v", re)
+}
+
+func newNonStructuredExporter(writer io.Writer) otelsdklog.Exporter {
+	exporter := &nonStructuredExporter{writer: writer}
+	exporter.formatLog = func(r otelsdklog.Record) string {
+		line := r.Timestamp().Format(time.RFC3339Nano) + " " + r.SeverityText() + " " + r.Body().AsString()
+		r.WalkAttributes(func(kv otellog.KeyValue) bool {
+			line += fmt.Sprintf(" %v=%q", kv.Key, kv.Value)
+			return true
+		})
+		return line
+	}
+
+	return exporter
+}
+
+func (n *nonStructuredExporter) Export(ctx context.Context, records []otelsdklog.Record) (err error) {
+	for _, r := range records {
+		logLine := n.formatLog(r)
+		_, wErr := n.writer.Write([]byte(logLine + "\n"))
+		err = errors.Join(err, errors.Wrapf(wErr, "failed to write log line: %v", logLine))
+	}
+	return err
+}
+
+func (n *nonStructuredExporter) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+func (n *nonStructuredExporter) ForceFlush(ctx context.Context) error {
+	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 
+	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 	"github.com/ice-blockchain/subzero/server/ws/internal/http2"
@@ -24,7 +25,11 @@ func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s := &Srv{cfg: cfg, routesSetup: router}
 	if cfg.Debug {
 		gin.SetMode(gin.DebugMode)
-		s.router = gin.Default()
+		s.router = gin.New()
+		logCfg := gin.LoggerConfig{
+			Output: opentelemetry.LogWriter(),
+		}
+		s.router.Use(gin.LoggerWithConfig(logCfg))
 		pprof.Register(s.router, "subzero/pprof")
 	} else {
 		gin.SetMode(gin.ReleaseMode)

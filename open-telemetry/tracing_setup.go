@@ -83,10 +83,11 @@ type redundantTraceExporter struct {
 
 	primaryExporterEnabled bool
 	traceWALBackupEmpty    bool
+	closing                atomic.Bool
 }
 
 func (re *redundantTraceExporter) ExportSpans(ctx context.Context, spans []otelsdktrace.ReadOnlySpan) error {
-	if len(re.primaries) == 0 {
+	if len(re.primaries) == 0 || (!re.primaryExporterEnabled && re.closing.Load()) {
 		return multierror.Append(
 			re.writeTraceSpansToWALBackup(spans),
 			errors.Wrap(re.fallback.ExportSpans(ctx, spans), "fallback.ExportSpans"),
