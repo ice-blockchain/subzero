@@ -451,7 +451,7 @@ func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.E
 		canForwardCommunityEvent(ctx, in, data.MasterPublicKey)
 }
 
-func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
+func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) (numberOfSubscriptions int) {
 	h.Subscriptions.Range(func(_ string, sub subscription) bool {
 		authData, _ := h.ConnAuth.Load(sub.Writer)
 		for _, event := range events {
@@ -470,9 +470,11 @@ func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event
 			} else {
 				sub.Source.Push(event)
 			}
+			numberOfSubscriptions++
 		}
 		return true
 	})
+	return numberOfSubscriptions
 }
 
 func (h *handler) handleCount(ctx context.Context, envelope *nostr.CountEnvelope) error {
