@@ -18,7 +18,7 @@ type (
 	Writer           = adapters.WSWriter
 	Config           = config.Config
 	EventBroadcaster interface {
-		BroadcastNewEvents(ctx context.Context, events ...*model.Event)
+		BroadcastNewEvents(ctx context.Context, events ...*model.Event) int
 	}
 	Handler interface {
 		adapters.WSHandler

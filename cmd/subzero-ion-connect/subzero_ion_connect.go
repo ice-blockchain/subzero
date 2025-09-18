@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"syscall"
 	"time"
 
@@ -197,16 +196,17 @@ func init() {
 	wsserver.RegisterWSBroadcastEventListener(func(ctx context.Context, events ...*model.Event) error {
 		antsPool.Submit(func() {
 			start := time.Now()
-			webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+			n := webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
 			end := time.Since(start)
-			log.Printf("INFO: broadcast %d events (%v) [duration %s]", len(events), model.Events(events).IDs(), end)
+			log.Printf("INFO: broadcast %d events (%v) [duration %s] for %d active subscriptions",
+				len(events),
+				model.Events(events).IDs(),
+				end,
+				n,
+			)
 		})
 		antsPool.Submit(func() {
-			var ids []string
-			for _, event := range events {
-				ids = append(ids, event.ID)
-			}
-			log.Printf("[push-notifications-broadcast] accepting events for pushes: %s", strings.Join(ids, ", "))
+			log.Printf("[push-notifications-broadcast] accepting events for pushes: %s", model.Events(events).IDs())
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
 				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
 			}

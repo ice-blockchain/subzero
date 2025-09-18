@@ -81,6 +81,7 @@ func RuleWithSkipProfileMetadataProofEventsVerify() Rule {
 		v.SkipKindProfileProofEventsVerify = true
 	}
 }
+
 func RuleWithSkipDeviceIdentificationProofEventsVerify() Rule {
 	return func(v *ruleSet) {
 		v.SkipKindAttestationProofDevicesVerify = true

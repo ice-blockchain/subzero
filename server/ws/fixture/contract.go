@@ -25,7 +25,7 @@ import (
 
 type (
 	EventBroadcaster interface {
-		BroadcastNewEvents(ctx context.Context, events ...*model.Event)
+		BroadcastNewEvents(ctx context.Context, events ...*model.Event) int
 	}
 	MockCallback func(ctx context.Context, w adapters.WSWriter, in []byte)
 	TestDB       interface {

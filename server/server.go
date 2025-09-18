@@ -165,8 +165,8 @@ func (r *router) BroadcastUserEvents(ctx context.Context, events ...*model.Event
 	return r.Broadcaster.Broadcast(ctx, events...)
 }
 
-func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event) {
-	r.Handler.BroadcastNewEvents(ctx, events...)
+func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event) int {
+	return r.Handler.BroadcastNewEvents(ctx, events...)
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {

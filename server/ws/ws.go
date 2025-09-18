@@ -217,7 +217,11 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		return
 	}
 
-	if err := validation.Validate(ctx, model.Events(e.Events), validation.RuleWithBroadcastMode()); err != nil {
+	if err := validation.Validate(ctx, model.Events(e.Events),
+		validation.RuleWithBroadcastMode(),
+		validation.RuleWithSkipProfileMetadataProofEventsVerify(),
+		validation.RuleWithSkipRootContentNFTCollectionsValidation(),
+	); err != nil {
 		log.Printf("ERROR: validation failed for broadcast %q: %v", e.Relay, err)
 		return
 	}
