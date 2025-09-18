@@ -125,7 +125,7 @@ func (c *client) fileMeta(bag *storage.Torrent) (*headerData, error) {
 		hData = []byte("{}")
 	}
 	if err := json.Unmarshal(hData, &desc); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal bag header data")
+		return nil, errors.Wrapf(err, "failed to unmarshal bag header data: %v", string(hData))
 	}
 	return &desc, nil
 }
@@ -279,7 +279,9 @@ func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
 	var metadata *headerData
 	metadata, err = c.fileMeta(bag)
 	if err != nil {
-		if errors.Is(err, errLatestBagNotDownloadedYet) {
+		var serr *json.SyntaxError
+		if errors.Is(err, errLatestBagNotDownloadedYet) || errors.As(err, &serr) {
+			log.Printf("[STORAGE] WARN: failed to detect file meta for %X: %v", bag.BagID, err.Error())
 			return filepath.Join(userPath, fmt.Sprintf("%v%v", fileHash, ext)), nil
 		}
 		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
