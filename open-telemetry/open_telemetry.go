@@ -11,6 +11,7 @@ import (
 	"github.com/tidwall/wal"
 	otelsdklog "go.opentelemetry.io/otel/sdk/log"
 	otelsdkresource "go.opentelemetry.io/otel/sdk/resource"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	otelsemconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -23,15 +24,19 @@ var (
 		redundantLogExporter: &redundantLogExporter{
 			primaryLifecycleMx: &sync.RWMutex{},
 		},
+		redundantTraceExporter: &redundantTraceExporter{
+			primaryLifecycleMx: &sync.RWMutex{},
+		},
 	}
 )
 
 type (
 	config struct {
-		LogLevel     string   `yaml:"log-level"`
-		Version      string   `yaml:"version"`
-		RelayURL     string   `yaml:"relay-url"`
-		ExporterURLs []string `yaml:"exporter-urls"`
+		LogLevel       string   `yaml:"log-level"`
+		Version        string   `yaml:"version"`
+		RelayURL       string   `yaml:"relay-url"`
+		ExporterURLs   []string `yaml:"exporter-urls"`
+		TracingEnabled bool     `yaml:"tracing-enabled"`
 	}
 	telemetry struct {
 		cfg *config
@@ -43,6 +48,8 @@ type (
 		//Metrics
 
 		//Tracing
+		traceProvider          *otelsdktrace.TracerProvider
+		redundantTraceExporter *redundantTraceExporter
 	}
 )
 
@@ -64,6 +71,10 @@ func MustInit(ctx context.Context) {
 		if err != nil {
 			globalLogger.Panic(ctx, errors.Wrap(err, "failed to init logWALBackup"))
 		}
+		globalTelemetry.redundantTraceExporter.traceWALBackup, err = wal.Open("subzero-tmp-bkp-tracefile", &wal.Options{SegmentCacheSize: 10, NoCopy: true})
+		if err != nil {
+			globalLogger.Panic(ctx, errors.Wrap(err, "failed to init traceWALBackup"))
+		}
 		exporterConns = make([]*grpc.ClientConn, len(globalTelemetry.cfg.ExporterURLs))
 		for _, exporterUrl := range globalTelemetry.cfg.ExporterURLs {
 			exporterConn, grpcErr := grpc.NewClient(exporterUrl,
@@ -80,9 +91,18 @@ func MustInit(ctx context.Context) {
 
 	globalTelemetry.mustInitLogProvider(ctx, res, exporterConns)
 	*globalLogger = *NewLogger("subzero")
+	globalTelemetry.mustInitTracingProvider(ctx, res, exporterConns)
+	*globalTracer = *NewTracer("subzero")
 }
 
+// TODO: see how u can not lose those error logs in this func
 func MustShutdown(ctx context.Context) {
+	if err := globalTelemetry.traceProvider.ForceFlush(ctx); err != nil {
+		fmt.Printf("%v %+v \n", "failed to ForceFlush traceProvider", err)
+	}
+	if err := globalTelemetry.traceProvider.Shutdown(ctx); err != nil {
+		fmt.Printf("%v %+v \n", "failed to shutdown traceProvider", err)
+	}
 	if err := globalTelemetry.logProvider.ForceFlush(ctx); err != nil {
 		fmt.Printf("%v %+v \n", "failed to ForceFlush logProvider", err)
 	}

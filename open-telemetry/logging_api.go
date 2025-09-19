@@ -17,7 +17,7 @@ import (
 
 type (
 	Logger struct {
-		logProvider          otellog.Logger
+		otelLogger           otellog.Logger
 		redundantLogExporter *redundantLogExporter
 	}
 )
@@ -32,7 +32,7 @@ func NewLogger(name string) *Logger {
 
 func (t *telemetry) NewLogger(name string) *Logger {
 	return &Logger{
-		logProvider:          t.logProvider.Logger(name),
+		otelLogger:           t.logProvider.Logger(name),
 		redundantLogExporter: t.redundantLogExporter,
 	}
 }
@@ -70,11 +70,13 @@ func (l *Logger) log(ctx context.Context, severity otellog.Severity, msg string,
 	if len(keysAndValues)%2 != 0 {
 		panic("use pairs: fieldName1, fieldValue1, fieldName2, fieldValue2, ...")
 	}
-	if !l.logProvider.Enabled(ctx, otellog.EnabledParameters{Severity: severity}) {
+	if !l.otelLogger.Enabled(ctx, otellog.EnabledParameters{Severity: severity}) {
 		return
 	}
 
 	l.drainWALLogRecords(ctx)
+
+	//TODO add sanitize logic for hiding sensitive data
 
 	var record otellog.Record
 	record.SetTimestamp(time.Now())
@@ -88,7 +90,7 @@ func (l *Logger) log(ctx context.Context, severity otellog.Severity, msg string,
 		record.AddAttributes(extractKeyValue(key, value))
 	}
 
-	go l.logProvider.Emit(ctx, record)
+	go l.otelLogger.Emit(ctx, record)
 }
 
 func (l *Logger) drainWALLogRecords(ctx context.Context) {
@@ -139,7 +141,7 @@ func (l *Logger) drainWALLogRecords(ctx context.Context) {
 			record.AddAttributes(extractKeyValue(key, value))
 		}
 
-		go l.logProvider.Emit(ctx, record)
+		go l.otelLogger.Emit(ctx, record)
 	}
 
 	if err = l.redundantLogExporter.logWALBackup.TruncateFront(lastIndex + 1); err != nil {

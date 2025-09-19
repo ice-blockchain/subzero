@@ -114,6 +114,7 @@ validation:
     30175: 65535
 open-telemetry:
   log-level: trace
+  tracing-enabled: true
   version: v9.9.9.local
   relay-url: *self
   exporter-urls:
