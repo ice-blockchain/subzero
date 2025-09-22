@@ -7,8 +7,9 @@ package tracing
 import (
 	"context"
 
-	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 	oteltrace "go.opentelemetry.io/otel/trace"
+
+	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 )
 
 func Start(ctx context.Context, spanName string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) {

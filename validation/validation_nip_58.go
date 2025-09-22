@@ -92,12 +92,10 @@ func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, ru
 			return errors.Wrapf(ErrWrongEventParams, "invalid badge reference format: %s", badgeRef)
 		}
 		switch {
-		case strings.HasPrefix(parts[2], "username_proof_of_ownership~") || parts[2] == "verified":
-			userPubkey = e.GetMasterPublicKey()
 		case strings.HasPrefix(parts[2], "device_identification_proof~"):
 			userPubkey = e.PubKey
 		default:
-			return errors.Wrapf(ErrWrongEventParams, "invalid badge type: %s", parts[2])
+			userPubkey = e.GetMasterPublicKey()
 		}
 		if i < len(eTags) && len(eTags[i]) >= 2 {
 			badgeAwardID := eTags[i][1]
