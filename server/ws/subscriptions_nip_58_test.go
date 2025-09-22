@@ -21,10 +21,11 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	relay := helperMustNewRelay(t, pubsubServers[0])
 
 	var validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent *model.Event
+	var validBadgeDefinitionEventForDevice, validBadgeAwardEventForDevice, validProfileBadgesEventForDevice *model.Event
 
 	t.Run("kind 30009 (Badge definition) (NIP-56): valid badge definition event", func(t *testing.T) {
 		var tags nostr.Tags
-		tags = append(tags, nostr.Tag{"d", "bravery"})
+		tags = append(tags, nostr.Tag{"d", "username_proof_of_ownership~user"})
 		tags = append(tags, nostr.Tag{"name", "Medal of Bravery"})
 		tags = append(tags, nostr.Tag{"description", "Awarded to users demonstrating bravery"})
 		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
@@ -39,7 +40,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 
 	t.Run("kind 8 (Badge award) (NIP-56): valid badge award event", func(t *testing.T) {
 		var tags nostr.Tags
-		badgeRef := fmt.Sprintf("30009:%s:bravery", badgeIssuerPubKey)
+		badgeRef := fmt.Sprintf("30009:%s:username_proof_of_ownership~user", badgeIssuerPubKey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"p", pubkey, "wss://relay"})
 		validBadgeAwardEvent = &model.Event{Event: nostr.Event{
@@ -53,7 +54,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	t.Run("kind 3008 (Profile badges) (NIP-56): valid profile badges event", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
-		badgeRef := fmt.Sprintf("30009:%s:bravery", badgeIssuerPubKey)
+		badgeRef := fmt.Sprintf("30009:%s:username_proof_of_ownership~user", badgeIssuerPubKey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"e", validBadgeAwardEvent.ID, "wss://nostr.academy"})
 		validProfileBadgesEvent = &model.Event{Event: nostr.Event{
@@ -64,6 +65,49 @@ func TestPublishingNIP58Badges(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, validProfileBadgesEvent, privkey)
 
 		require.NoError(t, relay.PublishMany(ctx, &validBadgeDefinitionEvent.Event, &validBadgeAwardEvent.Event, &validProfileBadgesEvent.Event))
+	})
+	t.Run("kind 30009 (Badge definition) (NIP-56): valid badge definition event pointing device", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", "device_identification_proof~device"})
+		tags = append(tags, nostr.Tag{"name", "Device Identification Badge"})
+		tags = append(tags, nostr.Tag{"description", "Awarded to users completed device identification"})
+		tags = append(tags, nostr.Tag{"image", "https://nostr.academy/awards/bravery.png", "1024x1024"})
+		tags = append(tags, nostr.Tag{"thumb", "https://nostr.academy/awards/bravery_256x256.png", "256x256"})
+		validBadgeDefinitionEventForDevice = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeDefinition,
+			Tags:      tags,
+		}}
+		helperSignWithMinLeadingZeroBits(t, validBadgeDefinitionEventForDevice, badgeIssuerPrivKey)
+	})
+
+	t.Run("kind 8 (Badge award) (NIP-56): valid badge award event pointing to device", func(t *testing.T) {
+		var tags nostr.Tags
+		badgeRef := fmt.Sprintf("30009:%s:device_identification_proof~device", badgeIssuerPubKey)
+		tags = append(tags, nostr.Tag{"a", badgeRef})
+		tags = append(tags, nostr.Tag{"p", pubkey, "wss://relay"})
+		validBadgeAwardEventForDevice = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindBadgeAward,
+			Tags:      tags,
+		}}
+		helperSignWithMinLeadingZeroBits(t, validBadgeAwardEventForDevice, badgeIssuerPrivKey)
+	})
+
+	t.Run("kind 3008 (Profile badges) (NIP-56): valid profile badges event pointing to device", func(t *testing.T) {
+		var tags nostr.Tags
+		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
+		badgeRef := fmt.Sprintf("30009:%s:device_identification_proof~device", badgeIssuerPubKey)
+		tags = append(tags, nostr.Tag{"a", badgeRef})
+		tags = append(tags, nostr.Tag{"e", validBadgeAwardEventForDevice.ID, "wss://nostr.academy"})
+		validProfileBadgesEventForDevice = &model.Event{Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindProfileBadges,
+			Tags:      tags,
+		}}
+		helperSignWithMinLeadingZeroBits(t, validProfileBadgesEventForDevice, privkey)
+
+		require.NoError(t, relay.PublishMany(ctx, &validBadgeDefinitionEventForDevice.Event, &validBadgeAwardEventForDevice.Event, &validProfileBadgesEventForDevice.Event))
 	})
 
 	t.Run("kind 30009 (Badge defenition) (NIP-56): invalid, no d tag", func(t *testing.T) {
@@ -108,7 +152,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	})
 	t.Run("kind 8 (Badge award) (NIP-56): invalid, a tag refers to wrong kind", func(t *testing.T) {
 		var tags nostr.Tags
-		badgeRef := fmt.Sprintf("1:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("1:%s:username_proof_of_ownership~user", pubkey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"p", "bob", "wss://relay"})
 		invalidEvent := &model.Event{Event: nostr.Event{
@@ -121,7 +165,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	})
 	t.Run("kind 8 (Badge award) (NIP-56): invalid, no at least one p tag", func(t *testing.T) {
 		var tags nostr.Tags
-		badgeRef := fmt.Sprintf("30009:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("30009:%s:username_proof_of_ownership~user", pubkey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		invalidEvent := &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
@@ -134,7 +178,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	t.Run("kind 3008 (Profile badges) (NIP-56): invalid d tag", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"d", "bogus"})
-		badgeRef := fmt.Sprintf("30009:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("30009:%s:username_proof_of_ownership~user", pubkey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
 		badgeRef2 := fmt.Sprintf("30009:%s:honor", pubkey)
@@ -151,7 +195,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	t.Run("kind 3008 (Profile badges) (NIP-56): invalid a tag", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
-		badgeRef := fmt.Sprintf("1:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("1:%s:username_proof_of_ownership~user", pubkey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
 		invalidEvent := &model.Event{Event: nostr.Event{
@@ -165,7 +209,7 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	t.Run("kind 3008 (Profile badges) (NIP-56): e/a tags mismatch", func(t *testing.T) {
 		var tags nostr.Tags
 		tags = append(tags, nostr.Tag{"d", model.ProfileBadgesIdentifier})
-		badgeRef := fmt.Sprintf("30009:%s:bravery", pubkey)
+		badgeRef := fmt.Sprintf("30009:%s:username_proof_of_ownership~user", pubkey)
 		tags = append(tags, nostr.Tag{"a", badgeRef})
 		tags = append(tags, nostr.Tag{"e", "<bravery badge award event id>", "wss://nostr.academy"})
 		badgeRef2 := fmt.Sprintf("30009:%s:honor", pubkey)
@@ -180,5 +224,8 @@ func TestPublishingNIP58Badges(t *testing.T) {
 	})
 
 	helperMustCloseRelay(t, relay)
-	require.Equal(t, []*model.Event{validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent}, storedEvents)
+	require.Equal(t, []*model.Event{
+		validBadgeDefinitionEvent, validBadgeAwardEvent, validProfileBadgesEvent,
+		validBadgeDefinitionEventForDevice, validBadgeAwardEventForDevice, validProfileBadgesEventForDevice,
+	}, storedEvents)
 }
