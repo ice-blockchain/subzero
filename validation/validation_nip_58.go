@@ -287,7 +287,7 @@ func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *rule
 			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s does not reference badge %s", badgeAwardID, badgeRef)
 			}
-			if pTag := event.GetTag("p"); pTag == nil || slices.Contains(userPubkeys, pTag.Value()) {
+			if pTag := event.GetTag("p"); pTag == nil || !slices.Contains(userPubkeys, pTag.Value()) {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %v", badgeAwardID, userPubkeys)
 			}
 
