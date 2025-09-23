@@ -132,7 +132,7 @@ var (
 		nostr.KindLabel:                 tagsTable("e", "p", "a", "r", "t"),
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
-		nostr.KindBadgeDefinition:       newKindValidatorBuilder().Optional("d", "name", "image", "description", "thumb").RequireIONIdentitySignature().Build(),
+		nostr.KindBadgeDefinition:       newKindValidatorBuilder().Optional("d", "p", "name", "image", "description", "thumb").RequireIONIdentitySignature().Build(),
 		nostr.KindArticle:               tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 		nostr.KindDraftArticle:          tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
