@@ -80,7 +80,7 @@ func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, ru
 
 	aTags := e.Tags.GetAll([]string{"a"})
 	eTags := e.Tags.GetAll([]string{"e"})
-	userPubkey := e.GetMasterPublicKey()
+	userPubkeys := []string{e.GetMasterPublicKey()}
 
 	for i, aTag := range aTags {
 		if len(aTag) < 2 {
@@ -93,14 +93,24 @@ func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, ru
 		}
 		switch {
 		case strings.HasPrefix(parts[2], "device_identification_proof~"):
-			userPubkey = e.PubKey
+			userPubkeys = []string{e.PubKey}
+			// Previous device identification badge's p points to old devices, but e.Pubkey is new, take old ones from attestation for validation.
+			for _, eventInBatch := range batch {
+				if eventInBatch.Kind != model.CustomIONKindAttestation {
+					continue
+				}
+				pTags := eventInBatch.Tags.GetAll([]string{"p"})
+				for _, pTag := range pTags {
+					userPubkeys = append(userPubkeys, pTag.Value())
+				}
+			}
 		default:
-			userPubkey = e.GetMasterPublicKey()
+			userPubkeys = []string{e.GetMasterPublicKey()}
 		}
 		if i < len(eTags) && len(eTags[i]) >= 2 {
 			badgeAwardID := eTags[i][1]
 			if badgeAwardID != "" {
-				if err := ev.validateProfileBadgeAward(ctx, rules, batch, badgeRef, badgeAwardID, userPubkey); err != nil {
+				if err := ev.validateProfileBadgeAward(ctx, rules, batch, badgeRef, badgeAwardID, userPubkeys); err != nil {
 					return errors.Wrapf(err, "invalid badge award reference %s", badgeAwardID)
 				}
 			}
@@ -249,14 +259,14 @@ func (ev *eventValidator) getEvent(ctx context.Context, address string) (event *
 	return nil, nil
 }
 
-func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *ruleSet, batch model.Events, badgeRef, badgeAwardID, userPubkey string) error {
+func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *ruleSet, batch model.Events, badgeRef, badgeAwardID string, userPubkeys []string) error {
 	for _, event := range batch {
 		if event.Kind == nostr.KindBadgeAward && event.GetID() == badgeAwardID {
 			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s does not reference badge %s", badgeAwardID, badgeRef)
 			}
-			if pTag := event.GetTag("p"); pTag == nil || pTag.Value() != userPubkey {
-				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %s", badgeAwardID, userPubkey)
+			if pTag := event.GetTag("p"); pTag == nil || !slices.Contains(userPubkeys, pTag.Value()) {
+				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %v", badgeAwardID, userPubkeys)
 			}
 
 			return nil
@@ -277,8 +287,8 @@ func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *rule
 			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s does not reference badge %s", badgeAwardID, badgeRef)
 			}
-			if pTag := event.GetTag("p"); pTag == nil || pTag.Value() != userPubkey {
-				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %s", badgeAwardID, userPubkey)
+			if pTag := event.GetTag("p"); pTag == nil || slices.Contains(userPubkeys, pTag.Value()) {
+				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %v", badgeAwardID, userPubkeys)
 			}
 
 			return nil
