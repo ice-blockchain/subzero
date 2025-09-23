@@ -84,9 +84,10 @@ type (
 		Extra             []string // Extra `where` clauses, ANDed to the main filter.
 	}
 	databaseFilterDelete struct {
-		Author    string
-		IDs       []string
-		Addresses []string
+		Author        string
+		IDs           []string
+		Addresses     []string
+		AccountDelete bool
 	}
 	databaseFilterMarker struct {
 		Tag     string
@@ -119,6 +120,12 @@ func parseEventAsFilterForDelete(e *model.Event) (*databaseFilterDelete, error) 
 			}
 		}
 	}
+
+	// Account deletion request contains no IDs nor addresses, and must be signed by the master key only.
+	filter.AccountDelete =
+		len(filter.IDs) == 0 &&
+			len(filter.Addresses) == 0 &&
+			filter.Author == e.PubKey
 
 	return &filter, nil
 }
@@ -1376,6 +1383,33 @@ func (b *queryBuilder) BuildWhere(filter *databaseFilterSearch) (sql string, par
 	return b.String(), b.Params, nil
 }
 
+func (b *queryBuilder) BuildForAccountDelete(masterKey string) (where string, params map[string]any, err error) {
+	masterValueName := b.PushValue("accountdelete", "master_pubkey", masterKey)
+	b.WriteString(`e.id in (
+		select
+			ev.id
+		from
+			events ev
+		where
+			ev.master_pubkey = :` + masterValueName + `
+			and ev.hidden=false
+		union all
+		select
+			badges.id
+		from
+			event_tags et
+		inner join events badges on et.event_id = badges.id
+		where
+			badges.kind in (30009, 8)
+			and badges.pubkey = badges.master_pubkey
+			and badges.hidden=false
+			and et.event_tag_key = 'p'
+			and et.event_tag_value1 = :` + masterValueName + `
+		)
+	`)
+	return b.String(), b.Params, nil
+}
+
 func (b *queryBuilder) ApplyDeleteFilter(idx int, filter *databaseFilterDelete) {
 	filterID := "deletefilter" + strconv.Itoa(idx) + "_"
 
@@ -1416,7 +1450,11 @@ func (b *queryBuilder) ApplyDeleteFilter(idx int, filter *databaseFilterDelete) 
 	b.WriteString(")))))")
 }
 
-func (b *queryBuilder) BuildForDelete(filters ...databaseFilterDelete) (sql string, params map[string]any, err error) {
+func (b *queryBuilder) BuildForDelete(filters ...databaseFilterDelete) (where string, params map[string]any, err error) {
+	if len(filters) == 1 && filters[0].AccountDelete {
+		return b.BuildForAccountDelete(filters[0].Author)
+	}
+
 	for idx := range filters {
 		b.MaybeOR()
 		b.ApplyDeleteFilter(idx, &filters[idx])

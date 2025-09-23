@@ -298,6 +298,12 @@ func (req *databaseBatchRequest) Remove(e *model.Event) error {
 		return errors.Wrap(err, "failed to detect events for delete")
 	}
 
+	if f.AccountDelete && len(req.Delete) > 0 {
+		return errors.Wrap(ErrInvalidRequest, "account delete must be the only delete operation in the batch")
+	} else if len(req.Delete) > 0 && req.Delete[0].AccountDelete {
+		return errors.Wrap(ErrInvalidRequest, "cannot mix account delete with other delete operations in the same batch")
+	}
+
 	req.Delete = append(req.Delete, *f)
 
 	return nil

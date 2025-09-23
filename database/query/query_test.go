@@ -1400,6 +1400,66 @@ func TestAccountDeleteWithSubAccounts(t *testing.T) {
 	})
 }
 
+func TestAccountDeleteWithIONBadges(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	masterPriv, masterPub := model.GenerateKeyPair()
+	_, user1Pub := model.GenerateKeyPair()
+	_, user2Pub := model.GenerateKeyPair()
+
+	t.Run("Add attestation", func(t *testing.T) {
+		var attestation model.Event
+		attestation.Kind = model.CustomIONKindAttestation
+		attestation.CreatedAt = 1
+		attestation.Tags = model.Tags{
+			{model.TagAttestationName, user1Pub, "", model.CustomIONAttestationKindActive + ":1"},
+			{model.TagAttestationName, user2Pub, "", model.CustomIONAttestationKindActive + ":1"},
+		}
+		require.NoError(t, attestation.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &attestation))
+	})
+	t.Run("Add ION badges", func(t *testing.T) {
+		ionKey := model.GeneratePrivateKey()
+		badgeDefinitionEvent := model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindBadgeDefinition,
+				Tags: model.Tags{
+					{"d", "root"},
+					{"description", "Root badge"},
+					{"p", masterPub},
+				},
+			},
+		}
+		require.NoError(t, badgeDefinitionEvent.SignWithAlg(ionKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		badgeAwardEvent := model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindBadgeAward,
+				Tags: model.Tags{
+					{"a", badgeDefinitionEvent.Address()},
+					{"p", masterPub},
+				},
+			},
+		}
+		require.NoError(t, badgeAwardEvent.SignWithAlg(ionKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &badgeDefinitionEvent, &badgeAwardEvent))
+	})
+	t.Run("Root account delete", func(t *testing.T) {
+		var delete model.Event
+		delete.Kind = nostr.KindDeletion
+		delete.CreatedAt = 3
+		delete.Tags = model.Tags{{model.CustomIONTagOnBehalfOf, masterPub}}
+		require.NoError(t, delete.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &delete))
+		require.Zero(t, len(helperSelectEvents(t, db)), "all events should be deleted")
+	})
+}
+
 func TestSelectSoftDeletedPosts(t *testing.T) {
 	t.Parallel()
 
