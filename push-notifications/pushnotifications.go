@@ -345,9 +345,15 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 	topicNotifications []*pn.Notification[pn.SubscriptionTopic],
 	err error,
 ) {
-	ephemeralEvents, nonEphemeralEvents := pm.sortEphemeralEvents(events)
-
-	for _, event := range nonEphemeralEvents {
+	ephemeralByRef, parseErr := model.ParseEphemeralEmbeddingEvents(events...)
+	if parseErr != nil {
+		log.Printf("[push-notifications] failed to parse ephemeral embedding events: %v", parseErr)
+		ephemeralByRef = make(map[string][]*model.EphemeralEmbeddingEvent)
+	}
+	for _, event := range events {
+		if event.Kind == model.CustomIONKindEphemeralEmbedding {
+			continue
+		}
 		if _, ok := allowedPushEventKinds[event.Kind]; !ok {
 			continue
 		}
@@ -358,8 +364,10 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 		}
 		var relevantEvents []*model.Event
 		if !shouldSkipEphemeralEvent(event) {
-			if evs, ok := ephemeralEvents[event.ID]; ok && len(evs) > 0 {
-				relevantEvents = evs
+			if embeddings, ok := ephemeralByRef[event.Address()]; ok && len(embeddings) > 0 {
+				for _, emb := range embeddings {
+					relevantEvents = append(relevantEvents, emb.Event)
+				}
 			}
 		}
 		notifications, err := pm.processEvent(ctx, event, relevantEvents...)
@@ -372,44 +380,6 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 	}
 
 	return singleNotifications, topicNotifications, nil
-}
-
-func (pm *PushNotificationManager) sortEphemeralEvents(events []*model.Event) (map[string][]*model.Event, []*model.Event) {
-	ephemeralEvents := make(map[string][]*model.Event)
-	nonEphemeralEvents := make([]*model.Event, 0)
-
-	for _, event := range events {
-		if event.Kind == model.CustomIONKindEphemeralEmbedding {
-			var refID string
-			if eTag := event.GetTag("e"); eTag != nil {
-				refID = eTag.Value()
-			} else if aTag := event.GetTag("a"); aTag != nil {
-				var pubKey string
-				parts := strings.Split(aTag.Value(), ":")
-				if len(parts) >= 2 {
-					pubKey = parts[1]
-				}
-				for _, e := range events {
-					if e.Kind != model.CustomIONKindEphemeralEmbedding && e.GetMasterPublicKey() == pubKey {
-						refID = e.ID
-
-						break
-					}
-				}
-			}
-
-			if refID != "" {
-				if _, exists := ephemeralEvents[refID]; !exists {
-					ephemeralEvents[refID] = make([]*model.Event, 0)
-				}
-				ephemeralEvents[refID] = append(ephemeralEvents[refID], event)
-			}
-		} else {
-			nonEphemeralEvents = append(nonEphemeralEvents, event)
-		}
-	}
-
-	return ephemeralEvents, nonEphemeralEvents
 }
 
 func shouldSkipEphemeralEvent(event *model.Event) bool {
@@ -519,10 +489,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 				invalidDevicesMutex.Unlock()
 				errChan <- nil
 			} else {
-				if err == nil {
-					log.Printf("[push-notifications] sent notification for device: %s, kind: %d", n.Target.Event.ID, n.Kind)
-				}
-				errChan <- err
+				errChan <- errors.Wrap(err, "failed to send notification")
 			}
 		}(notification)
 	}
@@ -625,7 +592,6 @@ func (pm *PushNotificationManager) createNotifications(
 			})
 		}
 	}
-	log.Printf("[push-notifications] created %d notifications for event %s, deviceEventIDs: %v", len(notifications), incomingEvent.ID, deviceEventIDs)
 
 	return notifications, nil
 }
@@ -646,7 +612,6 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 			devices = append(devices, deviceInfo.Event)
 		}
 	}
-	log.Printf("[push-notifications] collected %d valid devices for pubkey %s, event:%s", len(devices), pubKey, event.ID)
 
 	return devices
 }
