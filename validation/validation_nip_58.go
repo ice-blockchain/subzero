@@ -20,7 +20,7 @@ var (
 
 func validateKindBadgeDefinitionEvent(e *model.Event) error {
 	if dTag := e.Tags.GetD(); dTag == "" {
-		return errors.Wrapf(ErrWrongEventParams, "nip-58, no required d tag: %+v", e)
+		return errors.Wrap(ErrWrongEventParams, "nip-58: d tag is required")
 	}
 
 	return nil
