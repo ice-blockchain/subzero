@@ -8,14 +8,14 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dundee/gdu/v5/pkg/analyze"
+	"github.com/dundee/gdu/v5/pkg/fs"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/shirou/gopsutil/v4/cpu"
-	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 
@@ -209,26 +209,17 @@ func (n *nip11handler) collectMetrics(ctx context.Context) (*SystemMetrics, erro
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to collect memory usage for nip-11 system metrics")
 	}
-	fileStorageDiskUsage, err := disk.Usage(n.storagePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to collect file storage usage for nip-11 system metrics")
-	}
+	storageDiskCalculator := analyze.CreateAnalyzer()
+	fileStorageDiskUsage := storageDiskCalculator.AnalyzeDir(n.storagePath, func(name, path string) bool { return false }, true)
+	fileStorageDiskUsage.UpdateStats(make(fs.HardLinkedItems, 1))
+	fileStorageDiskUsed := uint64(fileStorageDiskUsage.GetSize())
 	commandStorageUsed := uint64(0)
 	_, err = os.Stat(n.commandPath)
 	if n.commandPath != "" && !os.IsNotExist(err) {
-		commandStorageDiskUsage, err := disk.Usage(n.commandPath)
-		if err != nil {
-			if strings.Contains(err.Error(), "no such file or directory") {
-				err = nil
-				commandStorageDiskUsage = &disk.UsageStat{
-					Used: 0,
-				}
-			}
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to collect command storage usage for nip-11 system metrics")
-			}
-		}
-		commandStorageUsed = commandStorageDiskUsage.Used
+		commandDiskCalculator := analyze.CreateAnalyzer()
+		commandDiskUsage := commandDiskCalculator.AnalyzeDir(n.commandPath, func(name, path string) bool { return false }, true)
+		fileStorageDiskUsage.UpdateStats(make(fs.HardLinkedItems, 1))
+		commandStorageUsed = uint64(commandDiskUsage.GetSize())
 	}
 	bandwidthUsage, err := net.IOCountersWithContext(reqCtx, false)
 	if err != nil {
@@ -239,9 +230,9 @@ func (n *nip11handler) collectMetrics(ctx context.Context) (*SystemMetrics, erro
 	return &SystemMetrics{
 		UsedCPU:             uint16(cpuUsages[0]),
 		UsedMemory:          memUsage.Used,
-		UsedFileStorage:     fileStorageDiskUsage.Used,
+		UsedFileStorage:     fileStorageDiskUsed,
 		UsedDatabaseStorage: usedDatabaseStorage,
-		UsedTotalStorage:    fileStorageDiskUsage.Used + usedDatabaseStorage + commandStorageUsed,
+		UsedTotalStorage:    fileStorageDiskUsed + usedDatabaseStorage + commandStorageUsed,
 		UsedBandwidth:       n.calcBandwidth(bandwidthUsage),
 	}, nil
 }
