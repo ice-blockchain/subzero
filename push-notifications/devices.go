@@ -70,7 +70,6 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 				if len(devicesByUser) == 0 {
 					delete(pm.userDevicesMap, masterPubKey)
 				}
-				log.Printf("[push-notifications] pm.relayURL: %s, removed device for masterPubKey:%s from cache due to relay mismatch, deviceID: %s", pm.relayURL, masterPubKey, deviceID)
 			}
 		}
 
@@ -84,9 +83,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	for _, device := range pm.userDevicesMap[masterPubKey] {
 		deviceEventIDs = append(deviceEventIDs, device.Event.ID)
 	}
-
 	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
-	log.Printf("[push-notifications] pm.relayURL: %s, added device for masterPubKey:%s to cache, deviceID: %s, existing devices before adding new one (event IDs): %v", pm.relayURL, masterPubKey, deviceID, deviceEventIDs)
 
 	return nil
 }
