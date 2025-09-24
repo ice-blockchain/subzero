@@ -31,6 +31,7 @@ type (
 		config     *Config
 		relay      *nostr.Relay
 		sub        *nostr.Subscription
+		events     chan *nostr.Event
 		privateKey string
 		publicKey  string
 		stats      *Stats

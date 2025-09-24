@@ -132,6 +132,7 @@ func (nc *NostrClient) Subscribe(ctx context.Context) error {
 	}
 
 	nc.sub = sub
+	nc.events = sub.Events
 	log.Printf("Client %d: Subscribed with ID: %s", nc.id, sub.GetID())
 
 	// Start event handler
@@ -146,7 +147,7 @@ func (nc *NostrClient) handleEvents(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case event := <-nc.sub.Events:
+		case event := <-nc.events:
 			if event == nil {
 				continue
 			}
