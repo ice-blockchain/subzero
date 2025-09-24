@@ -1427,19 +1427,35 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 	switch event.Kind {
 	case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
 		// Reply, quote or mention.
-		eTag := event.GetTag("e")
-		if eTag != nil && eTag.Value() != "" && len(eTag) >= 4 && eTag[3] == model.TagMarkerReply {
-			return true
+		refTags := map[string]struct{}{
+			"e": {},
+			"p": {},
+			"a": {},
+			"q": {},
+			"Q": {},
 		}
-		refTags := []string{"q", "Q", "a", "p"}
-		hasRefTags := false
-		for _, tagName := range refTags {
-			if tag := event.GetTag(tagName); tag != nil && tag.Value() != "" {
-				hasRefTags = true
-				break
+		var hasRichTextTag bool
+		for _, tag := range event.Tags {
+			hasRichTextTag = hasRichTextTag || tag.Key() == model.CustomIONTagRichText
+			if _, ok := refTags[tag.Key()]; !ok {
+				continue
+			}
+			switch tag.Key() {
+			case "e": // Reply.
+				if len(tag) >= 4 && tag[3] == model.TagMarkerReply {
+					return true
+				}
+			default: // Quote or mention.
+				if tag.Value() != "" {
+					return true
+				}
 			}
 		}
-		return hasRefTags
+		// Possible soft delete.
+		if len(event.Content) < 1 && !hasRichTextTag {
+			val, err := nostr.ParseTimestamp(event.GetTag("published_at").Value())
+			return err == nil && event.CreatedAt.After(val)
+		}
 	case nostr.KindFollowList:
 		return true
 	case nostr.KindReaction:
@@ -1462,10 +1478,8 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 				return false
 			}
 		}
-		return false
-	default:
-		return false
 	}
+	return false
 }
 
 func (db *dbClient) queryDatabaseSize(ctx context.Context) (uint64, error) {

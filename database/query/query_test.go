@@ -2444,40 +2444,77 @@ func TestVoteEventWithEphemeralAttestation(t *testing.T) {
 	}
 	require.NoError(t, profileEvent.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	var voteEvent model.Event
-	voteEvent.CreatedAt = nostr.Now()
-	voteEvent.Kind = model.CustomIONKindPollVote
-	voteEvent.Content = "[0]"
-	voteEvent.Tags = model.Tags{
-		{"a", "some_event_address"},
-		{model.CustomIONTagOnBehalfOf, masterPub},
-	}
-	require.NoError(t, voteEvent.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	t.Run("Vote", func(t *testing.T) {
+		var voteEvent model.Event
+		voteEvent.CreatedAt = nostr.Now()
+		voteEvent.Kind = model.CustomIONKindPollVote
+		voteEvent.Content = "[0]"
+		voteEvent.Tags = model.Tags{
+			{"a", "some_event_address"},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, voteEvent.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	var embeddingEventProfile model.Event
-	embeddingEventProfile.CreatedAt = nostr.Now()
-	embeddingEventProfile.Kind = model.CustomIONKindEphemeralEmbedding
-	embeddingEventProfile.Tags = model.Tags{
-		{model.CustomIONTagOnBehalfOf, masterPub},
-		{"e", voteEvent.Address(), "", masterPub},
-	}
-	embeddingEventProfile.Content = profileEvent.String()
-	require.NoError(t, embeddingEventProfile.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		var embeddingEventProfile model.Event
+		embeddingEventProfile.CreatedAt = nostr.Now()
+		embeddingEventProfile.Kind = model.CustomIONKindEphemeralEmbedding
+		embeddingEventProfile.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPub},
+			{"e", voteEvent.Address(), "", masterPub},
+		}
+		embeddingEventProfile.Content = profileEvent.String()
+		require.NoError(t, embeddingEventProfile.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	var embeddingEventAttestation model.Event
-	embeddingEventAttestation.CreatedAt = nostr.Now()
-	embeddingEventAttestation.Kind = model.CustomIONKindEphemeralEmbedding
-	embeddingEventAttestation.Tags = model.Tags{
-		{model.CustomIONTagOnBehalfOf, masterPub},
-		{"e", voteEvent.Address(), "", masterPub},
-	}
-	embeddingEventAttestation.Content = attestationEvent.String()
-	require.NoError(t, embeddingEventAttestation.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		var embeddingEventAttestation model.Event
+		embeddingEventAttestation.CreatedAt = nostr.Now()
+		embeddingEventAttestation.Kind = model.CustomIONKindEphemeralEmbedding
+		embeddingEventAttestation.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPub},
+			{"e", voteEvent.Address(), "", masterPub},
+		}
+		embeddingEventAttestation.Content = attestationEvent.String()
+		require.NoError(t, embeddingEventAttestation.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	// Accept all events in a single batch.
-	require.NoError(t, db.AcceptEvents(t.Context(), &voteEvent, &embeddingEventProfile, &embeddingEventAttestation))
+		// Accept all events in a single batch.
+		require.NoError(t, db.AcceptEvents(t.Context(), &voteEvent, &embeddingEventProfile, &embeddingEventAttestation))
 
-	events := helperSelectEvents(t, db)
-	require.Len(t, events, 1) // Only vote event should be returned.
-	require.Equal(t, voteEvent.ID, events[0].ID)
+		events := helperSelectEvents(t, db)
+		require.Len(t, events, 1) // Only vote event should be returned.
+		require.Equal(t, voteEvent.ID, events[0].ID)
+	})
+
+	t.Run("Soft delete text note", func(t *testing.T) {
+		var textNote model.Event
+		textNote.CreatedAt = nostr.Now()
+		textNote.Kind = model.CustomIONKindEditableTextNote
+		textNote.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPub},
+			{"published_at", "1234567890"},
+			{"d", "fooo"},
+		}
+		require.NoError(t, textNote.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		var embeddingEventAttestationNote model.Event
+		embeddingEventAttestationNote.CreatedAt = nostr.Now()
+		embeddingEventAttestationNote.Kind = model.CustomIONKindEphemeralEmbedding
+		embeddingEventAttestationNote.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPub},
+			{"a", textNote.Address(), "", masterPub},
+		}
+		embeddingEventAttestationNote.Content = attestationEvent.String()
+		require.NoError(t, embeddingEventAttestationNote.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &textNote, &embeddingEventAttestationNote))
+
+		events := helperSelectEvents(t, db)
+		require.Len(t, events, 1) // No text note.
+		require.Equal(t, model.CustomIONKindPollVote, events[0].Kind)
+
+		// Request by ID.
+		eventsByID := helperSelectEvents(t, db, model.Filter{
+			IDs: []string{textNote.ID},
+		})
+		require.Len(t, eventsByID, 1) // Must return the soft-deleted text note.
+		require.Equal(t, textNote.ID, eventsByID[0].ID)
+	})
 }
