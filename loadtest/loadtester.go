@@ -4,9 +4,11 @@ package loadtest
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -28,46 +30,29 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 	setupWg := sync.WaitGroup{}
 
 	for i := 0; i < lt.config.Connections; i++ {
-		setupWg.Add(1)
-		go func(id int) {
-			defer setupWg.Done()
-
+		id := i
+		setupWg.Go(func() {
 			log.Printf("Client %d: Starting setup...", id)
 
-			// Create client with unique or shared key
-			client, err := NewNostrClient(id, lt.config)
+			client, err := lt.connect(ctx, id)
 			if err != nil {
-				errChan <- errors.Wrapf(err, "client %d creation", id)
+				errChan <- err
 				return
 			}
 
-			// Connect and subscribe
-			if err := client.Connect(ctx); err != nil {
-				errChan <- errors.Wrapf(err, "client %d connection", id)
-				return
-			}
-
-			if err := client.Subscribe(ctx); err != nil {
-				errChan <- errors.Wrapf(err, "client %d subscription", id)
-				client.Close()
-				return
-			}
+			// Start client runtime goroutine
+			lt.wg.Go(func() {
+				defer client.Close()
+				<-ctx.Done()
+				log.Printf("Client %d: Shutting down", id)
+			})
 
 			lt.mu.Lock()
 			lt.clients = append(lt.clients, client)
 			lt.mu.Unlock()
 
 			log.Printf("Client %d: Setup completed successfully", id)
-
-			// Start client runtime goroutine
-			lt.wg.Add(1)
-			go func() {
-				defer lt.wg.Done()
-				defer client.Close()
-				<-ctx.Done()
-				log.Printf("Client %d: Shutting down", id)
-			}()
-		}(i)
+		})
 	}
 
 	// Wait for setup completion
@@ -104,28 +89,46 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 	}
 
 	log.Printf("Successfully established %d/%d connections", connectedCount, lt.config.Connections)
-	lt.PublishTestEvents(ctx)
 
 	return nil
 }
 
-// PublishTestEvents publishes test events from all connected clients
-func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
-	lt.mu.RLock()
-	defer lt.mu.RUnlock()
-
-	successCount := 0
-	for i, c := range lt.clients {
-		content := "Test message from client " + strconv.Itoa(i) + " at " + time.Now().Format(time.RFC3339)
-		if err := c.PublishEvent(ctx, content); err != nil {
-			log.Printf("Failed to publish from client %d: %v", i, err)
-		} else {
-			successCount++
-		}
-		time.Sleep(100 * time.Millisecond)
+func (lt *LoadTester) connect(ctx context.Context, id int) (*NostrClient, error) {
+	// Create client with unique or shared key
+	client, err := NewNostrClient(id, lt.config)
+	if err != nil {
+		return nil, fmt.Errorf("client creation error: %w", err)
 	}
 
-	log.Printf("Published test events from %d/%d clients", successCount, len(lt.clients))
+	// Connect and subscribe
+	if err := client.Connect(ctx); err != nil {
+		return nil, fmt.Errorf("client connection error: %w", err)
+	}
+
+	if err := client.Subscribe(ctx); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("client subscription error: %w", err)
+	}
+	return client, nil
+}
+
+// PublishTestEvents publishes test events from all connected clients
+func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
+	successCount := atomic.Int32{}
+	wg := sync.WaitGroup{}
+	for i, c := range lt.clients {
+		wg.Go(func() {
+			content := "Test message from client " + strconv.Itoa(i) + " at " + time.Now().Format(time.RFC3339)
+			if err := c.PublishEvent(ctx, content); err != nil {
+				log.Printf("Failed to publish from client %d: %v", i, err)
+			} else {
+				successCount.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+
+	log.Printf("Published test events from %d/%d clients", successCount.Load(), len(lt.clients))
 }
 
 // PrintStats prints current statistics for all clients

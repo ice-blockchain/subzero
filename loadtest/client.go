@@ -4,13 +4,12 @@ package loadtest
 
 import (
 	"context"
+	"github.com/ice-blockchain/subzero/model"
 	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
-
-	"github.com/ice-blockchain/subzero/model"
 )
 
 // NewNostrClient creates a new Nostr client for load testing
@@ -32,7 +31,7 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 	} else {
 		// Generate unique key pair using the project's model package
 		client.privateKey, client.publicKey = model.GenerateKeyPair()
-		log.Printf("Client %d: Generated new key pair (pubkey: %s...)", id, client.publicKey[:8])
+		log.Printf("Client %d: Generated new key pair (pubkey: %s...)", id, client.publicKey)
 	}
 
 	return client, nil
@@ -40,9 +39,6 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 
 // Connect establishes a connection to the Nostr relay with authentication
 func (nc *NostrClient) Connect(ctx context.Context) error {
-	nc.mu.Lock()
-	defer nc.mu.Unlock()
-
 	log.Printf("Client %d: Connecting to %s...", nc.id, nc.config.RelayURL)
 
 	relay, err := nostr.RelayConnect(ctx, nc.config.RelayURL)
@@ -53,9 +49,8 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 	// Try to publish an initial auth event to trigger auth if needed
 	authEvent := &model.Event{
 		Event: nostr.Event{
-			PubKey:    nc.publicKey,
 			CreatedAt: nostr.Now(),
-			Kind:      22242, // NIP-42 AUTH kind
+			Kind:      nostr.KindClientAuthentication,
 			Tags: nostr.Tags{
 				{"relay", nc.config.RelayURL},
 				{"challenge", "init-auth"},
@@ -64,8 +59,8 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 		},
 	}
 
-	if err := authEvent.Sign(nc.privateKey); err != nil {
-		relay.Close()
+	if err := authEvent.SignWithAlg(nc.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+		_ = relay.Close()
 		return errors.Wrap(err, "failed to sign init auth event")
 	}
 
@@ -73,9 +68,10 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 	if err != nil && (err.Error() == "auth-required:" || err.Error() == "restricted: auth-required") {
 		// Relay requires authentication
 		err = relay.Auth(ctx, func(event *nostr.Event) error {
+			panic("auth")
 			subZeroEvent := model.Event{Event: *event}
 			// Use standard Nostr signing
-			if err := subZeroEvent.Sign(nc.privateKey); err != nil {
+			if err := subZeroEvent.SignWithAlg(nc.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 				return err
 			}
 			*event = subZeroEvent.Event
@@ -83,7 +79,7 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 		})
 
 		if err != nil {
-			relay.Close()
+			_ = relay.Close()
 			return errors.Wrap(err, "failed to authenticate to relay")
 		}
 		log.Printf("Client %d: Successfully authenticated to relay", nc.id)
@@ -161,19 +157,19 @@ func (nc *NostrClient) PublishEvent(ctx context.Context, content string) error {
 		return errors.New("not connected")
 	}
 
-	event := nostr.Event{
-		PubKey:    nc.publicKey,
-		CreatedAt: nostr.Now(),
-		Kind:      nostr.KindTextNote,
-		Tags:      nil,
-		Content:   content,
+	event := model.Event{
+		Event: nostr.Event{
+			CreatedAt: nostr.Now(),
+			Kind:      nostr.KindTextNote,
+			Tags:      nil,
+			Content:   content,
+		},
 	}
-
-	if err := event.Sign(nc.privateKey); err != nil {
+	if err := event.SignWithAlg(nc.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		return errors.Wrap(err, "failed to sign event")
 	}
 
-	if err := nc.relay.Publish(ctx, event); err != nil {
+	if err := nc.relay.Publish(ctx, event.Event); err != nil {
 		return errors.Wrap(err, "failed to publish")
 	}
 
@@ -211,7 +207,7 @@ func (nc *NostrClient) Close() {
 	}
 
 	if nc.relay != nil {
-		nc.relay.Close()
+		_ = nc.relay.Close()
 		nc.relay = nil
 	}
 

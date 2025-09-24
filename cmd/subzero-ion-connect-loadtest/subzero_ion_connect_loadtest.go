@@ -96,6 +96,7 @@ func main() {
 	publishTicker := time.NewTicker(60 * time.Second)
 	defer publishTicker.Stop()
 
+	tester.PublishTestEvents(ctx)
 	log.Println("Connections are open. Press Ctrl+C to close connections and shutdown...")
 
 	for {
@@ -104,7 +105,6 @@ func main() {
 			log.Println("Received shutdown signal...")
 			tester.PrintStats()
 			cancel()
-			tester.Shutdown()
 			return
 		case <-statsTicker.C:
 			tester.PrintStats()
