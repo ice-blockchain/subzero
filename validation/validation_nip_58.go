@@ -182,32 +182,25 @@ func (ev *eventValidator) validateKindBadgeAwardOwnership(ctx context.Context, _
 	return nil
 }
 
-func extractUsernameFromProofBadge(ev *model.Event) (bool, string) {
-	const usernameProofOfOwnership = "username_proof_of_ownership"
-	if ev.Kind == nostr.KindBadgeAward {
-		if aTag := ev.GetTag("a"); len(aTag) >= 2 {
-			parts := strings.Split(aTag.Value(), ":")
-			// For badge award: kind:pubkey:username_proof_of_ownership~username
-			if len(parts) >= 3 && strings.HasPrefix(parts[2], usernameProofOfOwnership+"~") {
-				username := strings.TrimPrefix(parts[2], usernameProofOfOwnership+"~")
-				if username != "" {
-					return true, username
-				}
-			}
-		}
-	} else if ev.Kind == nostr.KindBadgeDefinition {
+func extractUsernameProofFromAddressTag(tag model.Tag) (username string, found bool) {
+	parts := strings.Split(tag.Value(), ":")
+	if len(parts) < 3 { // kind : pubkey : username_proof_of_ownership~username.
+		return "", false
+	}
+	return strings.CutPrefix(parts[2], model.TagSuffixUsernameProof+"~")
+}
+
+func extractUsernameFromProofBadge(ev *model.Event) (string, bool) {
+	switch ev.Kind {
+	case nostr.KindBadgeAward:
+		return extractUsernameProofFromAddressTag(ev.GetTag("a"))
+	case nostr.KindBadgeDefinition:
 		if dTag := ev.GetTag("d"); len(dTag) >= 2 {
-			// For badge definition d-tag: username_proof_of_ownership~username
-			if strings.HasPrefix(dTag.Value(), usernameProofOfOwnership+"~") {
-				username := strings.TrimPrefix(dTag.Value(), usernameProofOfOwnership+"~")
-				if username != "" {
-					return true, username
-				}
-			}
+			// For badge definition d-tag: username_proof_of_ownership~username.
+			return strings.CutPrefix(dTag.Value(), model.TagSuffixUsernameProof+"~")
 		}
 	}
-
-	return false, ""
+	return "", false
 }
 
 func checkProofOfOwnershipBadges(_ context.Context, _ *ruleSet, batch model.Events, username string, masterKey string) error {
@@ -221,7 +214,7 @@ func checkProofOfOwnershipBadges(_ context.Context, _ *ruleSet, batch model.Even
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] missing badge definition or award events for username %s", username)
 	}
 	badgeDefinition := batch[badgeDefinitionIndex]
-	_, badgeUsername := extractUsernameFromProofBadge(badgeDefinition)
+	badgeUsername, _ := extractUsernameFromProofBadge(badgeDefinition)
 	if badgeUsername == "" {
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] badge definition does not have username proof of ownership")
 	}
@@ -229,7 +222,7 @@ func checkProofOfOwnershipBadges(_ context.Context, _ *ruleSet, batch model.Even
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] username in badge definition (%s) doesn't match username (%s)", badgeUsername, username)
 	}
 	badgeAward := batch[badgeAwardIndex]
-	_, badgeUsername = extractUsernameFromProofBadge(badgeAward)
+	badgeUsername, _ = extractUsernameFromProofBadge(badgeAward)
 	if badgeUsername == "" {
 		return errors.Wrapf(ErrUsernameProofOfOwnershipFailed, "[proof-of-ownership] badge award does not have username proof of ownership")
 	}

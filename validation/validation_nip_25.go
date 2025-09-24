@@ -5,10 +5,8 @@ package validation
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/cockroachdb/errors"
-	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -19,18 +17,17 @@ var (
 
 func validateKindReactionToWebsiteEvent(e *model.Event) error {
 	if e.Content != "+" && e.Content != "-" && e.Content != "" {
-		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong content value: %+v", e)
+		return errors.Wrap(ErrWrongEventParams, "nip-25: wrong content value")
 	}
-	if rTag := e.Tags.GetFirst([]string{"r"}); rTag == nil || rTag.Value() == "" {
-		return errors.Wrapf(ErrWrongEventParams, "nip-25, wrong r tag value: %+v", e)
+	if rTag := e.GetTag("r").Value(); rTag == "" {
+		return errors.Wrap(ErrWrongEventParams, "nip-25: 'r' tag is missing or empty")
 	}
 
 	return nil
 }
 
-func (ev *eventValidator) validateProfileMetadataNameChange(ctx context.Context, e *model.Event, masterKey string) (bool, string, error) {
-	profileAddress := fmt.Sprintf("%d:%s:", nostr.KindProfileMetadata, masterKey)
-	oldProfile, err := ev.getEvent(ctx, profileAddress)
+func (ev *eventValidator) validateProfileMetadataNameChange(ctx context.Context, e *model.Event) (bool, string, error) {
+	oldProfile, err := ev.getEvent(ctx, e.Address())
 	if err != nil {
 		return false, "", errors.Wrapf(err, "[proof-of-ownership] failed to get old profile metadata")
 	}

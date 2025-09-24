@@ -14,11 +14,32 @@ import (
 func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, rules *ruleSet, batch model.Events, e *model.Event) error {
 	var parsedContent model.ProfileMetadataContent
 	if err := json.Unmarshal([]byte(e.Content), &parsedContent); err != nil {
-		return errors.Wrapf(ErrWrongEventParams, "nip-01,nip-24: wrong json fields for: %+v", e)
+		return errors.Wrapf(ErrWrongEventParams, "nip-01,nip-24: json unmarshal failed: %v", err)
 	}
+
 	if parsedContent.Name == "" {
-		return errors.Wrapf(ErrWrongEventParams, "nip-01: there are no required content fields: %+v", e)
+		return errors.Wrap(ErrWrongEventParams, "nip-01: profile name cannot be empty")
 	}
+
+	var usernameOwnersip string
+	for _, tag := range e.Tags {
+		if tag.Key() != "a" {
+			continue
+		}
+		username, found := extractUsernameProofFromAddressTag(tag)
+		if !found {
+			continue
+		}
+		if username != "" && usernameOwnersip != "" {
+			return errors.Wrapf(ErrWrongEventParams, "nip-24: multiple 'a' tags with %s found", model.TagSuffixUsernameProof)
+		}
+		usernameOwnersip = username
+	}
+
+	if usernameOwnersip != "" && parsedContent.Name != usernameOwnersip {
+		return errors.Wrapf(ErrWrongEventParams, "nip-24: profile name %q does not match username proof of ownership %q", parsedContent.Name, usernameOwnersip)
+	}
+
 	for collectionName, collectionMetadata := range parsedContent.IONContentNFTCollections {
 		if collectionName == "" {
 			return errors.Wrapf(ErrWrongEventParams, "icip-01: ion_content_nft_collections: collection name cannot be empty: %s", e.ID)
@@ -32,7 +53,7 @@ func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, 
 	}
 	if !rules.SkipKindProfileProofEventsVerify {
 		masterKey := e.GetMasterPublicKey()
-		nameChanged, username, err := ev.validateProfileMetadataNameChange(ctx, e, masterKey)
+		nameChanged, username, err := ev.validateProfileMetadataNameChange(ctx, e)
 		if err != nil {
 			return errors.Wrapf(err, "failed to validate profile metadata name change")
 		}

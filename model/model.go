@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -99,6 +100,8 @@ const (
 
 	ExtensionTextMRF = `most relevant followers`
 
+	TagSuffixUsernameProof = `username_proof_of_ownership`
+
 	QuillDeltaProtocol string = "quill_delta"
 
 	KindJobTextExtraction            = 5000
@@ -166,3 +169,11 @@ type (
 const (
 	DVMJobResultExpiration = 5 * time.Minute
 )
+
+func (meta ProfileMetadataContent) String() string {
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err.Error()
+	}
+	return string(data)
+}
