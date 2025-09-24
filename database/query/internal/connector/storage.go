@@ -199,6 +199,7 @@ func WithFieldNameMapper(mapper NameMapperFunc) Option {
 }
 
 func New(ctx context.Context, opts ...Option) (*DB, error) {
+	const ddlLockMagicNumber int64 = 1753772468014996478
 	val, ok := os.LookupEnv(envLoggigEnabled)
 	db := &DB{
 		readLB:  new(readLB),
@@ -224,6 +225,13 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 
 	if db.ddl != "" && len(db.writeLB.Masters) > 0 {
 		err := DoInTransaction(ctx, db, func(conn QueryExecer) error {
+			val, err := Get[bool](ctx, conn, "SELECT pg_try_advisory_xact_lock($1)", ddlLockMagicNumber)
+			if err != nil {
+				return errors.Wrap(err, "cannot acquire advisory lock for ddl")
+			} else if val != nil && !*val {
+				log.Printf("INFO: another instance is running DDL, skipping DDL execution")
+				return nil
+			}
 			for statement := range strings.SplitSeq(db.ddl, "--------") {
 				_, err := conn.Exec(ctx, statement)
 				if err != nil {
