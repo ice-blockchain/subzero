@@ -248,6 +248,22 @@ func TestValidateKindProfileMetadataProofOfOwnership(t *testing.T) {
 			},
 		},
 		{
+			Name: "profile with single proof badge and incorrect name",
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindProfileMetadata,
+					Content: model.ProfileMetadataContent{
+						Name:        "testuser",
+						DisplayName: "Test User",
+					}.String(),
+					Tags: model.Tags{
+						{"a", "30023:ABCDEF:username_proof_of_ownership~testuser42"},
+					},
+				},
+			},
+			WantErr: true,
+		},
+		{
 			Name:    "profile with single two proof badges",
 			WantErr: true,
 			Event: &model.Event{

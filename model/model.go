@@ -3,11 +3,11 @@
 package model
 
 import (
-	"encoding/json"
 	"errors"
 	"math"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -171,6 +171,9 @@ const (
 )
 
 func (meta ProfileMetadataContent) String() string {
-	data, _ := json.Marshal(meta)
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err.Error()
+	}
 	return string(data)
 }
