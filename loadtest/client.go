@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/ice-blockchain/subzero/model"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -31,7 +32,7 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 	} else {
 		// Generate unique key pair using the project's model package
 		client.privateKey, client.publicKey = model.GenerateKeyPair()
-		log.Printf("Client %d: Generated new key pair (pubkey: %s...)", id, client.publicKey)
+		log.Printf("Client %d: Generated new key pair (pubkey: %s)", id, client.publicKey)
 	}
 
 	return client, nil
@@ -41,7 +42,11 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 func (nc *NostrClient) Connect(ctx context.Context) error {
 	log.Printf("Client %d: Connecting to %s...", nc.id, nc.config.RelayURL)
 
-	relay, err := nostr.RelayConnect(ctx, nc.config.RelayURL)
+	relay, err := nostr.RelayConnect(ctx, nc.config.RelayURL, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
+		ev := model.Event{Event: *e}
+		ok, err := ev.CheckSignature()
+		return ok && err == nil
+	}))
 	if err != nil {
 		return errors.Wrap(err, "relay connection failed")
 	}
@@ -65,30 +70,44 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 	}
 
 	err = relay.Publish(ctx, authEvent.Event)
-	if err != nil && (err.Error() == "auth-required:" || err.Error() == "restricted: auth-required") {
-		// Relay requires authentication
-		err = relay.Auth(ctx, func(event *nostr.Event) error {
-			panic("auth")
-			subZeroEvent := model.Event{Event: *event}
-			// Use standard Nostr signing
-			if err := subZeroEvent.SignWithAlg(nc.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-				return err
-			}
-			*event = subZeroEvent.Event
-			return nil
-		})
-
+	if nc.authRequired(err) {
+		err = nc.doAuth(ctx, relay)
 		if err != nil {
-			_ = relay.Close()
-			return errors.Wrap(err, "failed to authenticate to relay")
+			return err
 		}
 		log.Printf("Client %d: Successfully authenticated to relay", nc.id)
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to authenticate")
 	}
 
 	nc.relay = relay
 	nc.stats.Connected = true
 	log.Printf("Client %d: Successfully connected", nc.id)
 	return nil
+}
+
+func (nc *NostrClient) doAuth(ctx context.Context, relay *nostr.Relay) error {
+	// Relay requires authentication
+	err := relay.Auth(ctx, func(event *nostr.Event) error {
+		subZeroEvent := model.Event{Event: *event}
+		// Use standard Nostr signing
+		if err := subZeroEvent.SignWithAlg(nc.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+			return err
+		}
+		*event = subZeroEvent.Event
+		return nil
+	})
+
+	if err != nil {
+		_ = relay.Close()
+		return errors.Wrap(err, "failed to authenticate to relay")
+	}
+	return nil
+}
+
+func (nc *NostrClient) authRequired(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "auth-required:")
 }
 
 // Subscribe creates a subscription to receive events from the relay

@@ -93,7 +93,7 @@ func main() {
 	statsTicker := time.NewTicker(30 * time.Second)
 	defer statsTicker.Stop()
 
-	publishTicker := time.NewTicker(60 * time.Second)
+	publishTicker := time.NewTicker(10 * time.Second)
 	defer publishTicker.Stop()
 
 	tester.PublishTestEvents(ctx)
