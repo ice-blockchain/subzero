@@ -3,6 +3,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"time"
@@ -99,6 +100,8 @@ const (
 
 	ExtensionTextMRF = `most relevant followers`
 
+	TagSuffixUsernameProof = `username_proof_of_ownership`
+
 	QuillDeltaProtocol string = "quill_delta"
 
 	KindJobTextExtraction            = 5000
@@ -166,3 +169,8 @@ type (
 const (
 	DVMJobResultExpiration = 5 * time.Minute
 )
+
+func (meta ProfileMetadataContent) String() string {
+	data, _ := json.Marshal(meta)
+	return string(data)
+}

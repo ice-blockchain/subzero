@@ -218,3 +218,64 @@ func TestValidateKindProfileMetadataEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateKindProfileMetadataProofOfOwnership(t *testing.T) {
+	t.Parallel()
+
+	validator := newEventValidator(t.Context(), global.Validator.Config, WithIONIdentityPublicKeys(emptyIONIdentityKeys))
+	rules := new(ruleSet).Configure(
+		RuleWithSkipProfileMetadataProofEventsVerify(),
+	)
+
+	var cases = []struct {
+		Name    string
+		Event   *model.Event
+		WantErr bool
+	}{
+		{
+			Name: "profile with single proof badge",
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindProfileMetadata,
+					Content: model.ProfileMetadataContent{
+						Name:        "testuser",
+						DisplayName: "Test User",
+					}.String(),
+					Tags: model.Tags{
+						{"a", "30023:ABCDEF:username_proof_of_ownership~testuser"},
+					},
+				},
+			},
+		},
+		{
+			Name:    "profile with single two proof badges",
+			WantErr: true,
+			Event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindProfileMetadata,
+					Content: model.ProfileMetadataContent{
+						Name:        "testuser",
+						DisplayName: "Test User",
+					}.String(),
+					Tags: model.Tags{
+						{"a", "30023:ABCDEF:username_proof_of_ownership~testuser"},
+						{"a", "30023:ABCDEF:username_proof_of_ownership~testuser2"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			tc.Event.CreatedAt = nostr.Now()
+			require.NoError(t, tc.Event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			err := validator.validateKindProfileMetadataEvent(t.Context(), rules, model.Events{}, tc.Event)
+			if tc.WantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
