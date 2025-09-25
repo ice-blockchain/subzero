@@ -108,7 +108,7 @@ func (lt *LoadTester) connect(ctx context.Context, id int) (*NostrClient, error)
 		return nil, errors.Wrapf(err, "client connection error")
 	}
 
-	kinds := []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindChannelMessage}
+	kinds := []int{nostr.KindTextNote}
 	offset := time.Duration(0)
 	if lt.config.Mode == ModeNoDB {
 		kinds = []int{nostr.KindBidConfirmation}
