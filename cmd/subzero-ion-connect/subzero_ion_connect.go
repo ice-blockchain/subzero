@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -33,6 +34,10 @@ import (
 	"github.com/ice-blockchain/subzero/validation"
 )
 
+type Config struct {
+	Shutup bool `yaml:"shutup"`
+}
+
 var (
 	configPath string
 	antsPool   *ants.Pool
@@ -43,6 +48,11 @@ var (
 		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
+
+			if v, _ := cfg.Get[Config](); v != nil && v.Shutup {
+				log.SetOutput(io.Discard)
+			}
+
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
 			command.MustInit(cmd.Context())
