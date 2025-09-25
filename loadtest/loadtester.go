@@ -132,6 +132,8 @@ func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
 	}
 	for i, c := range lt.clients {
 		wg.Go(func() {
+			randomDelay := rand.Int63n(lt.config.sendDuration.Milliseconds())
+			time.Sleep(time.Duration(randomDelay) * time.Millisecond)
 			content := "Test message from client " + strconv.Itoa(i) + " at " + time.Now().Format(time.RFC3339)
 			if err := c.PublishEvent(ctx, kind, content); err != nil {
 				log.Printf("Failed to publish from client %d: %v", i, err)

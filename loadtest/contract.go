@@ -18,8 +18,9 @@ type (
 		PrivateKey    string `yaml:"privateKey" mapstructure:"privateKey"`
 		Mode          string `yaml:"mode" mapstructure:"mode"`
 		SetupDuration string `yaml:"setupDuration" mapstructure:"setupDuration"`
-
+		SendDuration  string `yaml:"sendDuration" mapstructure:"sendDuration"`
 		setupDuration time.Duration
+		sendDuration  time.Duration
 	}
 
 	// LoadTester orchestrates multiple Nostr clients for load testing
@@ -59,6 +60,9 @@ func (c *Config) Defaults() {
 	if c.SetupDuration == "" {
 		c.SetupDuration = (time.Second * time.Duration(c.Connections)).String()
 	}
+	if c.SendDuration == "" {
+		c.SendDuration = c.SetupDuration
+	}
 }
 
 func (c *Config) Validate() error {
@@ -75,7 +79,21 @@ func (c *Config) Validate() error {
 	}
 	c.setupDuration = setupDuration
 
+	sendDuration, err := time.ParseDuration(c.SendDuration)
+	if err != nil {
+		return fmt.Errorf("bad send duration: %w", err)
+	}
+	c.sendDuration = sendDuration
+
 	return nil
+}
+
+func (c *Config) GetSetupDuration() time.Duration {
+	return c.setupDuration
+}
+
+func (c *Config) GetSendDuration() time.Duration {
+	return c.sendDuration
 }
 
 const (

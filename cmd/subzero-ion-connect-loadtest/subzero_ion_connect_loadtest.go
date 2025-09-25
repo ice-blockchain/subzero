@@ -20,8 +20,9 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Parse command line flags
+	sendDuration := flag.String("send-duration", "", "Loadtest event (text or ephemeral) sending duration (like 5m or 5s), events will be randomly spread over given duration, if not provided, will be defaulted to number of connection seconds")
 	setupDuration := flag.String("setup-duration", "", "Loadtest setup duration (like 5m or 5s), connections will be randomly spread over given duration, if not provided, will be defaulted to number of connection seconds")
-	mode := flag.String("mode", "full", "Loadtest mode: full, no-db")
+	mode := flag.String("mode", "", "Loadtest mode: full, no-db")
 	relayURL := flag.String("relay", "", "Nostr relay URL (e.g., wss://relay.example.com)")
 	connections := flag.Int("connections", 1, "Number of connections to open")
 	privateKey := flag.String("key", "", "Private key (hex format, optional - will generate unique keys if not provided)")
@@ -58,6 +59,9 @@ func main() {
 	if *setupDuration != "" {
 		config.SetupDuration = *setupDuration
 	}
+	if *sendDuration != "" {
+		config.SendDuration = *sendDuration
+	}
 
 	// Override with environment variables
 	if envRelay := os.Getenv("NOSTR_RELAY"); envRelay != "" {
@@ -76,6 +80,9 @@ func main() {
 	}
 	if envSetupDuration := os.Getenv("LT_SETUP_DURATION"); envSetupDuration != "" {
 		config.SetupDuration = envSetupDuration
+	}
+	if envSendDuration := os.Getenv("LT_SEND_DURATION"); envSendDuration != "" {
+		config.SendDuration = envSendDuration
 	}
 
 	// Validate configuration
@@ -114,7 +121,7 @@ func main() {
 	statsTicker := time.NewTicker(30 * time.Second)
 	defer statsTicker.Stop()
 
-	publishTicker := time.NewTicker(10 * time.Second)
+	publishTicker := time.NewTicker(config.GetSendDuration() + 10*time.Second)
 	defer publishTicker.Stop()
 
 	tester.PublishTestEvents(ctx)
