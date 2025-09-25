@@ -79,6 +79,7 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 		log.Printf("Client %d: Successfully authenticated to relay", nc.id)
 	}
 	if err != nil {
+		_ = relay.Close()
 		return errors.Wrap(err, "failed to authenticate")
 	}
 
