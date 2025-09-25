@@ -25,7 +25,7 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 		// Use shared key
 		client.privateKey = config.PrivateKey
 		var err error
-		client.publicKey, err = nostr.GetPublicKey(client.privateKey)
+		client.publicKey, err = model.GetPublicKey(client.privateKey)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to derive public key from provided private key")
 		}
