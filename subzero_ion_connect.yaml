@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: ice License 1.0
 
+main:
+  shutup: false
+
 server:
   relay-url: &self "wss://example.com"
   acme:
