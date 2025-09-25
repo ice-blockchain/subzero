@@ -206,7 +206,7 @@ func (w *WebsocketAdapter) ReadMessage() (messageType int, p []byte, err error) 
 		return int(typ), msgBytes, err
 	}
 	if typ == ws.OpPing {
-		err = wsutil.WriteServerMessage(w.conn, ws.OpPong, nil)
+		_, err = w.conn.Write(ws.CompiledPong)
 		if err == nil {
 			return w.ReadMessage()
 		}
@@ -234,7 +234,7 @@ func (w *WebsocketAdapter) Close() error {
 
 	var wErr error
 	if w.wrErr == nil || !isConnClosedErr(w.wrErr) {
-		wErr = wsutil.WriteServerMessage(w.conn, ws.OpClose, ws.NewCloseFrameBody(ws.StatusNormalClosure, ""))
+		_, wErr = w.conn.Write(ws.CompiledCloseNormalClosure)
 		if wErr != nil && isConnClosedErr(wErr) {
 			wErr = nil
 		}
