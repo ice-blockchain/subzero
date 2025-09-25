@@ -20,7 +20,8 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Parse command line flags
-	mode := flag.String("mode", "full", "Nostr relay URL (e.g., wss://relay.example.com)")
+	setupDuration := flag.String("setup-duration", "", "Loadtest setup duration (like 5m or 5s), connections will be randomly spread over given duration, if not provided, will be defaulted to number of connection seconds")
+	mode := flag.String("mode", "full", "Loadtest mode: full, no-db")
 	relayURL := flag.String("relay", "", "Nostr relay URL (e.g., wss://relay.example.com)")
 	connections := flag.Int("connections", 1, "Number of connections to open")
 	privateKey := flag.String("key", "", "Private key (hex format, optional - will generate unique keys if not provided)")
@@ -54,6 +55,9 @@ func main() {
 	if *mode != "" {
 		config.Mode = *mode
 	}
+	if *setupDuration != "" {
+		config.SetupDuration = *setupDuration
+	}
 
 	// Override with environment variables
 	if envRelay := os.Getenv("NOSTR_RELAY"); envRelay != "" {
@@ -70,6 +74,9 @@ func main() {
 	if envMode := os.Getenv("LT_MODE"); envMode != "" {
 		config.Mode = envMode
 	}
+	if envSetupDuration := os.Getenv("LT_SETUP_DURATION"); envSetupDuration != "" {
+		config.SetupDuration = envSetupDuration
+	}
 
 	// Validate configuration
 	if config.RelayURL == "" {
@@ -78,6 +85,8 @@ func main() {
 	if config.Connections <= 0 {
 		config.Connections = 1
 	}
+
+	config.Defaults()
 
 	err = config.Validate()
 	if err != nil {

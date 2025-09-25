@@ -13,10 +13,13 @@ import (
 type (
 	// Config holds the configuration for the load tester
 	Config struct {
-		RelayURL    string `yaml:"relayURL" mapstructure:"relayURL"`
-		Connections int    `yaml:"connections" mapstructure:"connections"`
-		PrivateKey  string `yaml:"privateKey" mapstructure:"privateKey"`
-		Mode        string `yaml:"mode" ma;structure:"mode"`
+		RelayURL      string `yaml:"relayURL" mapstructure:"relayURL"`
+		Connections   int    `yaml:"connections" mapstructure:"connections"`
+		PrivateKey    string `yaml:"privateKey" mapstructure:"privateKey"`
+		Mode          string `yaml:"mode" mapstructure:"mode"`
+		SetupDuration string `yaml:"setupDuration" mapstructure:"setupDuration"`
+
+		setupDuration time.Duration
 	}
 
 	// LoadTester orchestrates multiple Nostr clients for load testing
@@ -49,14 +52,29 @@ type (
 	}
 )
 
+func (c *Config) Defaults() {
+	if c.Mode == "" {
+		c.Mode = ModeFull
+	}
+	if c.SetupDuration == "" {
+		c.SetupDuration = (time.Second * time.Duration(c.Connections)).String()
+	}
+}
+
 func (c *Config) Validate() error {
 	switch c.Mode {
 	case ModeFull:
 	case ModeNoDB:
-		break
 	default:
 		return fmt.Errorf("invalid mode: %s", c.Mode)
 	}
+
+	setupDuration, err := time.ParseDuration(c.SetupDuration)
+	if err != nil {
+		return fmt.Errorf("bad setup duration: %w", err)
+	}
+	c.setupDuration = setupDuration
+
 	return nil
 }
 

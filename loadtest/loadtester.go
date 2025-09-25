@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/nbd-wtf/go-nostr"
 	"log"
+	"math/rand"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -33,6 +34,8 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 	for i := 0; i < lt.config.Connections; i++ {
 		id := i
 		setupWg.Go(func() {
+			randomDelay := rand.Int63n(lt.config.setupDuration.Milliseconds())
+			time.Sleep(time.Duration(randomDelay) * time.Millisecond)
 			log.Printf("Client %d: Starting setup...", id)
 
 			client, err := lt.connect(ctx, id)
@@ -72,7 +75,7 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 			}
 		}
 		log.Printf("Setup phase completed")
-	case <-time.After(30 * time.Second):
+	case <-time.After(2 * lt.config.setupDuration):
 		lt.mu.RLock()
 		currentCount := len(lt.clients)
 		lt.mu.RUnlock()
