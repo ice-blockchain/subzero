@@ -39,24 +39,24 @@ type (
 		UsedBandwidth       uint64 `json:"used_bandwidth"`
 	}
 	RelayInformationDocument struct {
-		nip11.RelayInformationDocument `json:",inline"`
-		FCMAndroidConfigs              []FCMConfig    `json:"fcm_android_configs"`
-		FCMIOSConfigs                  []FCMConfig    `json:"fcm_ios_configs"`
-		FCMWebConfigs                  []FCMConfig    `json:"fcm_web_configs"`
 		SystemMetrics                  *SystemMetrics `json:"system_metrics,omitempty"`
+		nip11.RelayInformationDocument `json:",inline"`
+		FCMAndroidConfigs              []FCMConfig `json:"fcm_android_configs"`
+		FCMIOSConfigs                  []FCMConfig `json:"fcm_ios_configs"`
+		FCMWebConfigs                  []FCMConfig `json:"fcm_web_configs"`
 	}
 	Config struct {
-		MinLeadingZeroBits int
+		PrivateKey         string
 		FCMAndroidConfigs  []string
 		FCMIOSConfigs      []string
 		FCMWebConfigs      []string
-		PrivateKey         string
+		MinLeadingZeroBits int
 	}
 	nip11handler struct {
 		cfg                  *Config
+		systemMetrics        *atomic.Pointer[SystemMetrics]
 		storagePath          string
 		commandPath          string
-		systemMetrics        *atomic.Pointer[SystemMetrics]
 		lastBandwidthBytes   uint64
 		lastBandwidthBytesAt int64
 	}

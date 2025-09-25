@@ -21,8 +21,8 @@ import (
 type (
 	DeviceID   = pn.DeviceID
 	DeviceInfo struct {
-		Filters model.Filters
 		Event   *model.Event
+		Filters model.Filters
 	}
 )
 

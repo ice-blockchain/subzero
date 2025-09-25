@@ -34,11 +34,11 @@ var (
 type (
 	Option func(context.Context, *DB) error
 	DB     struct {
-		ddl     string
-		logging bool
 		writeLB *writeLB
 		readLB  *readLB
 		closed  *atomic.Bool
+		ddl     string
+		logging bool
 	}
 	Iterator[T any] = iter.Seq2[T, error]
 	Error           = pgconn.PgError
@@ -51,12 +51,12 @@ type (
 		CurrentIndex uint64
 	}
 	writeLB struct {
+		Active                      atomic.Pointer[pgxpool.Pool]
+		CancelPreferredMasterSwitch context.CancelFunc
 		Masters                     []string
 		PreferredUrl                uint64
-		Active                      atomic.Pointer[pgxpool.Pool]
 		CurrentIndex                uint64
 		SwitchMu                    sync.Mutex
-		CancelPreferredMasterSwitch context.CancelFunc
 	}
 )
 

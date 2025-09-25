@@ -220,8 +220,8 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 		Status:  "success",
 		Message: "Upload successful.",
 		Nip94Event: struct {
-			Tags    nostr.Tags `json:"tags"`
 			Content string     `json:"content"`
+			Tags    nostr.Tags `json:"tags"`
 		}{
 			Tags: nostr.Tags{
 				{"url", url},

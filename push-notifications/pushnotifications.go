@@ -31,9 +31,9 @@ type (
 
 	PushNotificationManager struct {
 		userDevicesMap         map[PublicKey]map[DeviceID]DeviceInfo
-		deviceMutex            sync.RWMutex
 		pushNotificationClient *pn.Client
 		relayURL               string
+		deviceMutex            sync.RWMutex
 	}
 
 	notificationTranslation struct {
@@ -44,11 +44,11 @@ type (
 
 	config struct {
 		FCMCredentialsFile string   `yaml:"fcm-credentials-file"`
+		PrivateKey         string   `yaml:"private-key"`
+		RelayURL           string   `yaml:"relay-url"`
 		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
 		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
 		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
-		PrivateKey         string   `yaml:"private-key"`
-		RelayURL           string   `yaml:"relay-url"`
 	}
 )
 

@@ -58,10 +58,10 @@ var (
 type Config struct {
 	AbsoluteRootPath           string `yaml:"absolute-root-path"`
 	AbsoluteNodePrivateKeyPath string `yaml:"absolute-node-private-key-path"`
-	DiscoveryPort              uint16 `yaml:"discovery-port"`
 	ExternalAddress            string `yaml:"external-address"`
-	Debug                      bool   `yaml:"debug"`
 	RelayUrl                   string `yaml:"relay-url"`
+	DiscoveryPort              uint16 `yaml:"discovery-port"`
+	Debug                      bool   `yaml:"debug"`
 }
 
 type Option func(*consensus)

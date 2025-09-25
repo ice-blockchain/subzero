@@ -64,18 +64,18 @@ type (
 		Message       string `json:"message"`
 		ProcessingURL string `json:"processing_url"`
 		Nip94Event    struct {
-			Tags    nostr.Tags `json:"tags"`
 			Content string     `json:"content"`
+			Tags    nostr.Tags `json:"tags"`
 		} `json:"nip94_event"`
 	}
 	listedFiles struct {
-		Total uint32 `json:"total"`
-		Page  uint32 `json:"page"`
 		Files []struct {
-			Tags      nostr.Tags `json:"tags"`
 			Content   string     `json:"content"`
+			Tags      nostr.Tags `json:"tags"`
 			CreatedAt uint64     `json:"created_at"`
 		}
+		Total uint32 `json:"total"`
+		Page  uint32 `json:"page"`
 	}
 )
 
@@ -149,8 +149,8 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			Status:  "success",
 			Message: "Upload successful.",
 			Nip94Event: struct {
-				Tags    nostr.Tags `json:"tags"`
 				Content string     `json:"content"`
+				Tags    nostr.Tags `json:"tags"`
 			}{
 				Tags: nostr.Tags{
 					nostr.Tag{"url", url},
@@ -323,15 +323,15 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 			Total: total,
 			Page:  params.Page,
 			Files: []struct {
-				Tags      nostr.Tags `json:"tags"`
 				Content   string     `json:"content"`
+				Tags      nostr.Tags `json:"tags"`
 				CreatedAt uint64     `json:"created_at"`
 			}{},
 		}
 		for _, f := range filesList {
 			res.Files = append(res.Files, struct {
-				Tags      nostr.Tags `json:"tags"`
 				Content   string     `json:"content"`
+				Tags      nostr.Tags `json:"tags"`
 				CreatedAt uint64     `json:"created_at"`
 			}{Tags: f.ToTags(), Content: f.Content, CreatedAt: f.CreatedAt})
 		}

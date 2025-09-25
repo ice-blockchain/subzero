@@ -13,16 +13,16 @@ type (
 	token = tokenizer.TokenKey
 
 	filterDependencyStart struct {
+		Tag           string
 		Kind          int
 		ProfileBadges bool
-		Tag           string
 	}
 
 	filterDependencyReduce struct {
-		Kinds      []int
 		Author     string
 		Tag        string
 		Context    string
+		Kinds      []int
 		Group      bool
 		Expiration bool
 	}

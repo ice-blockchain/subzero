@@ -49,10 +49,10 @@ type (
 		IONStorageConfigURL     string `yaml:"ion-storage-config-url"`
 		AbsoluteRootStoragePath string `yaml:"absolute-root-storage-path"`
 		ExternalADNLAddress     string `yaml:"external-adnl-address"`
+		RelayURL                string `yaml:"relay-url"`
 		ExternalADNLPort        int    `yaml:"external-adnl-port"`
 		Debug                   bool   `yaml:"debug"`
 		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
-		RelayURL                string `yaml:"relay-url"`
 	}
 	Option     func(*client)
 	acceptorFn func(ctx context.Context, fh, master, infohash string) error

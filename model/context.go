@@ -8,12 +8,12 @@ import (
 
 type (
 	UserDataContext struct {
+		Kinds           map[int]struct{}
 		PublicKey       string
 		MasterPublicKey string
 		UserAgent       string
 		Authenticated   bool
 		Authoritative   bool
-		Kinds           map[int]struct{}
 	}
 	userKey string
 )

@@ -12,9 +12,9 @@ import (
 )
 
 type DuplicateError struct {
+	Original   error
 	Constraint string
 	Object     string
-	Original   error
 }
 
 type sanitizedError struct {

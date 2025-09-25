@@ -53,24 +53,21 @@ type (
 		strings.Builder
 	}
 	queryBuildResult struct {
-		Statement string
 		Params    map[string]any
 		Filters   map[string]*databaseFilterTree // Origin/cte name -> filter.
+		Statement string
 	}
 	queryBuilderValue struct {
+		Value  any
 		Name   string
 		CastTo string // If empty, no cast is applied.
 		Func   string // If non-empty, the value is passed to the function.
-		Value  any
 	}
 	databaseFilterTree struct {
 		Root  *databaseFilterSearch
 		Leafs map[string]*filterDependency // Origin/dependency name -> dependency.
 	}
 	databaseFilterSearch struct {
-		model.Filter
-		ID                string
-		SearchText        string
 		Expiration        *bool
 		Videos            *bool
 		Images            *bool
@@ -78,10 +75,13 @@ type (
 		Quotes            *bool
 		References        *bool
 		CurrentUserPubkey *string
-		TagMarkers        []databaseFilterMarker
-		Dependencies      []*filterDependency
-		Rank              rank
-		Extra             []string // Extra `where` clauses, ANDed to the main filter.
+		ID                string
+		SearchText        string
+		model.Filter
+		TagMarkers   []databaseFilterMarker
+		Dependencies []*filterDependency
+		Extra        []string // Extra `where` clauses, ANDed to the main filter.
+		Rank         rank
 	}
 	databaseFilterDelete struct {
 		Author        string
@@ -95,10 +95,10 @@ type (
 		Exclude bool
 	}
 	databaseCTE struct {
+		Filter  *databaseFilterSearch
 		Name    string
 		Body    string
 		OrderBy string
-		Filter  *databaseFilterSearch
 	}
 )
 
@@ -202,10 +202,10 @@ func (b *queryBuilder) MaybeOP(op int) {
 }
 
 type sliceBuilder[T comparable] struct {
-	Slice     []T
-	Negative  bool
 	ParamName string
+	Slice     []T
 	Op        int
+	Negative  bool
 }
 
 func (b *sliceBuilder[T]) Build(builder *queryBuilder, filterID string, name string) *queryBuilder {

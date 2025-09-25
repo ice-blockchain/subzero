@@ -38,8 +38,8 @@ type (
 	}
 	notificationClient struct {
 		client     *messaging.Client
-		retry      RetryConfig
 		privateKey string
+		retry      RetryConfig
 	}
 	Notification[TARGET SubscriptionTopic | *DeviceRegistrationEvent] struct {
 		Data     map[string]interface{} `json:"data,omitempty"`
@@ -58,9 +58,9 @@ type (
 
 	options struct {
 		credentialsFile string
+		privateKey      string
 		credentialsJSON []byte
 		retryConfig     RetryConfig
-		privateKey      string
 	}
 )
 

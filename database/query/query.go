@@ -45,12 +45,6 @@ type (
 
 	databaseEvent struct {
 		*model.Event
-		LookupCreatedAt         int64
-		TagID                   int64
-		Expiration              sql.NullInt64
-		ReferenceID             sql.NullString
-		GiftReceiver            sql.NullString
-		Ttags                   []string
 		SigAlg                  string
 		KeyAlg                  string
 		MasterPubKey            string
@@ -61,6 +55,12 @@ type (
 		SaveMergeAction         string
 		Origin                  string
 		SystemID                string
+		ReferenceID             sql.NullString
+		GiftReceiver            sql.NullString
+		Ttags                   []string
+		Expiration              sql.NullInt64
+		LookupCreatedAt         int64
+		TagID                   int64
 		Deleted                 bool
 		HasImages               bool
 		HasVideos               bool
@@ -81,10 +81,10 @@ type (
 		Empty() bool
 	}
 	byAuthorEventEnricher struct {
-		Kind       int                 // Target kind to enrich, like `nostr.KindProfileMetadata`.
 		Origin     map[string]struct{} // Origin of the event, i.e. source. Like `filter0_events_cte`.
 		KindOrigin map[string]struct{} // The loaded dependency origin, like `filter0_events_cte_dep9`.
 		Signer     func(event *databaseEvent)
+		Kind       int // Target kind to enrich, like `nostr.KindProfileMetadata`.
 	}
 	byAuthorKind0EventEnricher struct {
 		byAuthorEventEnricher
@@ -93,12 +93,12 @@ type (
 
 type databaseBatchRequest struct {
 	EventsHash *eventHash
+	// IDs of replaceable events to rollback update
+	Rollback map[string]bool
 	// Events to store or replace.
 	InsertOrReplace []databaseEvent
 	// Events to delete.
 	Delete []databaseFilterDelete
-	// IDs of replaceable events to rollback update
-	Rollback map[string]bool
 }
 
 func (d *databaseEvent) FromTags(tags model.Tags) {

@@ -10,15 +10,14 @@ import (
 
 type (
 	Subscription struct {
-		ID      string
-		Filters Filters
-		OneShot bool
-
-		live      atomic.Bool
 		addresses map[string]int
-		pending   Events
 		reduce    func(*Event) (skip bool)
+		ID        string
+		Filters   Filters
+		pending   Events
 		mu        sync.Mutex
+		live      atomic.Bool
+		OneShot   bool
 	}
 )
 

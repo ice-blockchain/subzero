@@ -11,8 +11,8 @@ import (
 )
 
 type MemDB struct {
-	mu     sync.RWMutex
 	events []*model.Event
+	mu     sync.RWMutex
 }
 
 func (m *MemDB) AcceptEvents(_ context.Context, events ...*model.Event) error {

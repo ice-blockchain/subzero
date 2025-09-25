@@ -29,9 +29,9 @@ type (
 		mu     sync.RWMutex
 	}
 	Config struct {
+		QueryFunc  func(ctx context.Context, filters ...model.Filter) query.EventIterator
 		RelayURL   string
 		PrivateKey string
-		QueryFunc  func(ctx context.Context, filters ...model.Filter) query.EventIterator
 	}
 )
 
