@@ -4,6 +4,7 @@ package loadtest
 
 import (
 	"context"
+	"github.com/panjf2000/ants/v2"
 	"log"
 	"math/rand"
 	"strconv"
@@ -28,11 +29,18 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 	log.Printf("Starting load test with %d connections to %s", lt.config.Connections, lt.config.RelayURL)
 
 	errChan := make(chan error, lt.config.Connections)
+	pool, err := ants.NewPool(1024)
+	if err != nil {
+		return errors.Wrap(err, "can not create goroutine pool")
+	}
 	setupWg := sync.WaitGroup{}
 
 	for i := 0; i < lt.config.Connections; i++ {
 		id := i
-		setupWg.Go(func() {
+		setupWg.Add(1)
+		err = pool.Submit(func() {
+			defer setupWg.Done()
+
 			randomDelay := rand.Int63n(lt.config.setupDuration.Milliseconds())
 			time.Sleep(time.Duration(randomDelay) * time.Millisecond)
 			log.Printf("Client %d: Starting setup...", id)
@@ -55,6 +63,9 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 			lt.mu.Unlock()
 			log.Printf("[%d/%d] Client %d: Setup completed successfully", len(lt.clients), lt.config.Connections, id)
 		})
+		if err != nil {
+			return errors.Wrap(err, "error submitting setup goroutine")
+		}
 	}
 
 	// Wait for setup completion
