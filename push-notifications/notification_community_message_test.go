@@ -237,8 +237,8 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.Len(t, notifications, 1, "Should create one notification")
 
 		notification := notifications[0]
-		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Title, "Title should match")
-		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Body, "Body should match")
+		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
+		assert.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
 		assert.Equal(t, deviceEvent, notification.Target, "Target should match")
 		assert.Contains(t, notification.Data, "event", "Data should contain event")
 	})
@@ -498,8 +498,8 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			require.Contains(t, notification.Data, "event", "Data should contain event")
 
 			if platform == model.DeviceTokenOSIOS || platform == model.DeviceTokenOSWeb {
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title(), notification.Title, "Title should match")
-				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body(), notification.Body, "Body should match")
+				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
+				require.Equal(t, DefaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
 			} else if platform == model.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android devices")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android devices")
@@ -591,9 +591,9 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	require.Len(t, notifications, 1)
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")

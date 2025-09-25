@@ -3,15 +3,13 @@
 package pushnotifications
 
 import (
-	"context"
-
 	"github.com/cockroachdb/errors"
 
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleNewFollowerEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) handleNewFollowerEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	newlyFollowedPubKeys := model.GetNewlyFollowedPubkeys(event, event.Previous)
 	if len(newlyFollowedPubKeys) == 0 {
 		return nil, nil

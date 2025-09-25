@@ -108,9 +108,9 @@ func TestCreateNotifications(t *testing.T) {
 				require.Empty(t, notification.Body)
 				require.Empty(t, notification.ImageURL)
 			} else {
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL)
 			}
 		}
 	})
@@ -742,150 +742,31 @@ func TestGetTranslationWithRelevantInfo(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
+	t.Run("Returns default translation", func(t *testing.T) {
+		translation := pm.getTranslation(NotificationTypeReaction)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
 
-	t.Run("Returns default translation when no relevant events", func(t *testing.T) {
-		translation := pm.getTranslationWithRelevantInfo(NotificationTypeReaction)
+		translation = pm.getTranslation(NotificationTypeMentionReply)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, translation.ImageURL)
 
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
-	})
+		translation = pm.getTranslation(NotificationTypeNewFollower)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, translation.ImageURL)
 
-	t.Run("Returns translation with display name when available", func(t *testing.T) {
-		profileData := struct {
-			Name        string `json:"name,omitempty"`
-			DisplayName string `json:"display_name,omitempty"`
-		}{
-			Name:        "username",
-			DisplayName: "User Display Name",
-		}
+		translation = pm.getTranslation(NotificationTypeRepost)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title, translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body, translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeRepost].ImageURL, translation.ImageURL)
 
-		content, err := json.Marshal(profileData)
-		require.NoError(t, err)
-
-		profileEvent := &model.Event{
-			Event: nostr.Event{
-				Kind:    nostr.KindProfileMetadata,
-				Content: string(content),
-			},
-		}
-
-		translation := pm.getTranslationWithRelevantInfo(NotificationTypeMentionReply, profileEvent)
-
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), translation.ImageURL)
-	})
-
-	t.Run("Returns translation with name when display name not available", func(t *testing.T) {
-		profileData := struct {
-			Name        string `json:"name,omitempty"`
-			DisplayName string `json:"display_name,omitempty"`
-		}{
-			Name: "username",
-		}
-
-		content, err := json.Marshal(profileData)
-		require.NoError(t, err)
-
-		profileEvent := &model.Event{
-			Event: nostr.Event{
-				Kind:    nostr.KindProfileMetadata,
-				Content: string(content),
-			},
-		}
-
-		translation := pm.getTranslationWithRelevantInfo(NotificationTypeNewFollower, profileEvent)
-
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(profileEvent), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), translation.ImageURL)
-	})
-
-	t.Run("Returns default translation with 'Someone' when no name or display name", func(t *testing.T) {
-		profileData := struct {
-			Name        string `json:"name,omitempty"`
-			DisplayName string `json:"display_name,omitempty"`
-		}{}
-
-		content, err := json.Marshal(profileData)
-		require.NoError(t, err)
-
-		profileEvent := &model.Event{
-			Event: nostr.Event{
-				Kind:    nostr.KindProfileMetadata,
-				Content: string(content),
-			},
-		}
-
-		translation := pm.getTranslationWithRelevantInfo(NotificationTypeRepost, profileEvent)
-
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title(), translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body(), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].ImageURL(), translation.ImageURL)
-	})
-
-	t.Run("Returns default translation when profile event has invalid JSON", func(t *testing.T) {
-		profileEvent := &model.Event{
-			Event: nostr.Event{
-				Kind:    nostr.KindProfileMetadata,
-				Content: "invalid json",
-			},
-		}
-
-		translation := pm.getTranslationWithRelevantInfo(NotificationTypeReaction, profileEvent)
-
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
-	})
-
-	t.Run("Uses first profile metadata event when multiple provided", func(t *testing.T) {
-		profileData1 := struct {
-			Name        string `json:"name,omitempty"`
-			DisplayName string `json:"display_name,omitempty"`
-		}{
-			DisplayName: "First User",
-		}
-
-		content1, err := json.Marshal(profileData1)
-		require.NoError(t, err)
-
-		profileEvent1 := &model.Event{
-			Event: nostr.Event{
-				Kind:    nostr.KindProfileMetadata,
-				Content: string(content1),
-			},
-		}
-
-		profileData2 := struct {
-			Name        string `json:"name,omitempty"`
-			DisplayName string `json:"display_name,omitempty"`
-		}{
-			DisplayName: "Second User",
-		}
-
-		content2, err := json.Marshal(profileData2)
-		require.NoError(t, err)
-
-		profileEvent2 := &model.Event{
-			Event: nostr.Event{
-				Kind:    nostr.KindProfileMetadata,
-				Content: string(content2),
-			},
-		}
-
-		otherEvent := &model.Event{
-			Event: nostr.Event{
-				Kind: nostr.KindTextNote,
-			},
-		}
-
-		translation := pm.getTranslationWithRelevantInfo(NotificationTypeReaction, otherEvent, profileEvent1, profileEvent2)
-
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(profileEvent1), translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), translation.ImageURL)
+		translation = pm.getTranslation(NotificationTypeReaction)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, translation.Body)
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
 	})
 }
 func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
@@ -988,8 +869,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body, "Body should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body, "Body should match")
 	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 
@@ -1006,8 +887,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Len(t, notificationsFromProcessEvent, 1, "Should create one notification")
 
 	notificationFromProcessEvent := notificationsFromProcessEvent[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notificationFromProcessEvent.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notificationFromProcessEvent.Body, "Body should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notificationFromProcessEvent.Title, "Title should match")
+	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notificationFromProcessEvent.Body, "Body should match")
 	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")
 	require.Contains(t, notificationFromProcessEvent.Data, "event", "Data should contain event")
 
