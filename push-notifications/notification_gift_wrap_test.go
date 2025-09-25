@@ -195,11 +195,11 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 
 			notification := notifications[0]
 			if tc.notifyType == NotificationTypeReaction {
-				require.Equal(t, DefaultTranslations[tc.notifyType].Title(), notification.Title, "Title should match for "+tc.description)
-				require.Equal(t, DefaultTranslations[tc.notifyType].Body(), notification.Body, "Body should match for "+tc.description)
+				require.Equal(t, DefaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
+				require.Equal(t, DefaultTranslations[tc.notifyType].Body, notification.Body, "Body should match for "+tc.description)
 			} else {
-				require.Equal(t, DefaultTranslations[tc.notifyType].Title(), notification.Title, "Title should match for "+tc.description)
-				require.Equal(t, DefaultTranslations[tc.notifyType].Body(), notification.Body, "Body should match for "+tc.description)
+				require.Equal(t, DefaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
+				require.Equal(t, DefaultTranslations[tc.notifyType].Body, notification.Body, "Body should match for "+tc.description)
 			}
 			require.Equal(t, deviceEvent, notification.Target, "Target should match for "+tc.description)
 			require.Contains(t, notification.Data, "event", "Data should contain event for "+tc.description)
@@ -289,9 +289,9 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android")
 				require.Equal(t, "", notification.Body, "Body should be empty for Android")
 			} else {
-				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title(), notification.Title,
+				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Title, notification.Title,
 					"Title should match for "+device.platform)
-				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Body(), notification.Body,
+				require.Equal(t, DefaultTranslations[NotificationTypeDirectMessage].Body, notification.Body,
 					"Body should match for "+device.platform)
 			}
 
@@ -364,9 +364,9 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 		require.Len(t, notifications, 1)
 
 		notification := notifications[0]
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title(), notification.Title, "Title should match")
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body(), notification.Body, "Body should match for reaction")
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL(), notification.ImageURL, "Image URL should match")
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body, "Body should match for reaction")
+		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL, "Image URL should match")
 		require.Equal(t, deviceEvent, notification.Target)
 
 		require.Contains(t, notification.Data, "event", "Data should contain event")

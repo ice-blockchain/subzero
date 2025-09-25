@@ -150,9 +150,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
@@ -281,9 +281,9 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
 		if platform == model.DeviceTokenOSIOS || platform == model.DeviceTokenOSWeb {
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title, "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body, "Body should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL, "Image URL should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL, "Image URL should match")
 		} else if platform == model.DeviceTokenOSAndroid {
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
@@ -389,7 +389,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
 		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 
-		notifications, err := pm.handleNewFollowerEvent(t.Context(), followListEvent)
+		notifications, err := pm.handleNewFollowerEvent(followListEvent)
 
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
@@ -457,7 +457,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
 		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
 
-		notifications, err := pm.handleNewFollowerEvent(t.Context(), newFollowListEvent)
+		notifications, err := pm.handleNewFollowerEvent(newFollowListEvent)
 
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
@@ -537,9 +537,9 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(profileEvent), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
@@ -562,10 +562,54 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
-	privKey, pubKey := model.GenerateKeyPair()
+	privKey, followListAuthorPubKey := model.GenerateKeyPair()
 	recipientPubKey1 := "recipient1_" + testSuffix
 	recipientPubKey2 := "recipient2_" + testSuffix
 	recipientPubKey3 := "recipient3_" + testSuffix
+
+	profileData := model.ProfileMetadataContent{
+		Name:        "TestFollower",
+		DisplayName: "Test Follower Display Name",
+	}
+	profileJSON, err := json.Marshal(profileData)
+	require.NoError(t, err)
+
+	followListAuthorProfileEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindProfileMetadata,
+			CreatedAt: nostr.Now(),
+			Content:   string(profileJSON),
+		},
+	}
+	require.NoError(t, followListAuthorProfileEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorProfileEvent))
+	followListAuthorAttestationEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", followListAuthorPubKey, "", "active:" + nostr.Now().String() + ":1,7"},
+			},
+			Content: "",
+		},
+	}
+	require.NoError(t, followListAuthorAttestationEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorAttestationEvent))
+
+	pm.relayURL = "wss://test-follower-relay.example.com"
+	followListAuthorRelayListEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindRelayListMetadata,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"r", pm.relayURL, "read"},
+				{"r", pm.relayURL, "write"},
+			},
+			Content: "",
+		},
+	}
+	require.NoError(t, followListAuthorRelayListEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorRelayListEvent))
 
 	filters := nostr.Filters{
 		{
@@ -580,6 +624,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		nostr.Tags{
 			{"t", "ios"},
 			{"d", "device1_" + testSuffix},
+			{"relay", pm.relayURL},
 			{"token", "token1_" + testSuffix},
 		},
 		filters,
@@ -594,6 +639,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		nostr.Tags{
 			{"t", "android"},
 			{"d", "device2_" + testSuffix},
+			{"relay", pm.relayURL},
 			{"token", "token2_" + testSuffix},
 		},
 		filters,
@@ -608,6 +654,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		nostr.Tags{
 			{"t", "web"},
 			{"d", "device3_" + testSuffix},
+			{"relay", pm.relayURL},
 			{"token", "token3_" + testSuffix},
 		},
 		filters,
@@ -622,11 +669,14 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 
 	initialEvent := &model.Event{
 		Event: nostr.Event{
+			PubKey:    followListAuthorPubKey,
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
-			PubKey:    pubKey,
-			Tags:      model.Tags{{"p", "existing_follower1"}, {"p", recipientPubKey1}},
-			Content:   "initial follow list",
+			Tags: model.Tags{
+				{"p", "existing_follower1"},
+				{"p", recipientPubKey1},
+			},
+			Content: "initial follow list",
 		},
 	}
 	require.NoError(t, initialEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
@@ -636,7 +686,6 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
-			PubKey:    pubKey,
 			Tags: model.Tags{
 				{"p", "existing_follower1"},
 				{"p", recipientPubKey1},
@@ -652,8 +701,8 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	require.NotNil(t, updatedEvent.Previous, "Updated event should have previous version")
 	require.Equal(t, initialEvent.Event, updatedEvent.Previous.Event, "Previous event should match initial event")
 
-	notifications, err := pm.handleNewFollowerEvent(t.Context(), updatedEvent)
-	require.NoError(t, err, "handleNewFollowerEvent should not return error")
+	notifications, err := pm.processEvent(t.Context(), updatedEvent)
+	require.NoError(t, err, "processEvent should not return error")
 
 	require.Len(t, notifications, 2, "Should have two notifications for the two new followers")
 
@@ -671,9 +720,10 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 			require.Equal(t, "", notification.Body, "Android notifications should have empty body")
 			require.Equal(t, "", notification.ImageURL, "Android notifications should have empty image URL")
 		} else {
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body)
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body,
+				"Should use default translation")
+			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 		}
 		require.Contains(t, notification.Data, "event", "Data should contain event")
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Should use zlib compression")

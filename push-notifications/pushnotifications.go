@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 
@@ -30,11 +29,6 @@ type (
 	PublicKey               = string
 	NotificationType        string
 
-	NotificationTranslation struct {
-		Title    string
-		Body     string
-		ImageURL string
-	}
 	PushNotificationManager struct {
 		userDevicesMap         map[PublicKey]map[DeviceID]DeviceInfo
 		deviceMutex            sync.RWMutex
@@ -42,10 +36,10 @@ type (
 		relayURL               string
 	}
 
-	notificationTranslationFuncs struct {
-		Title    func(events ...*model.Event) string
-		Body     func(events ...*model.Event) string
-		ImageURL func(events ...*model.Event) string
+	notificationTranslation struct {
+		Title    string
+		Body     string
+		ImageURL string
 	}
 
 	config struct {
@@ -75,116 +69,56 @@ const (
 
 var (
 	globalPushNotificationManager *PushNotificationManager
-	DefaultTranslations           = map[NotificationType]notificationTranslationFuncs{
+	DefaultTranslations           = map[NotificationType]notificationTranslation{
 		NotificationTypeReaction: {
-			Title: func(events ...*model.Event) string {
-				return "New reaction"
-			},
-			Body: func(events ...*model.Event) string {
-				return "Someone reacted to your post"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New reaction",
+			Body:     "Someone reacted to your post",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeRepost: {
-			Title: func(events ...*model.Event) string {
-				return "New repost"
-			},
-			Body: func(events ...*model.Event) string {
-				return fmt.Sprintf("%s reposted your post", getDisplayNameFromRelevantEvents(events))
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New repost",
+			Body:     "Someone reposted your post",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeMentionReply: {
-			Title: func(events ...*model.Event) string {
-				return "New mention/reply"
-			},
-			Body: func(events ...*model.Event) string {
-				return fmt.Sprintf("%s mentioned/replied you", getDisplayNameFromRelevantEvents(events))
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New mention/reply",
+			Body:     "Someone mentioned/replied you",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeDirectMessage: {
-			Title: func(events ...*model.Event) string {
-				return "New message"
-			},
-			Body: func(events ...*model.Event) string {
-				return "You have a new message"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New message",
+			Body:     "You have a new message",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeGroupChatMessage: {
-			Title: func(events ...*model.Event) string {
-				return "New group message"
-			},
-			Body: func(events ...*model.Event) string {
-				return "New message in group"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New group message",
+			Body:     "New message in group",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeChannelMessage: {
-			Title: func(events ...*model.Event) string {
-				return "New channel message"
-			},
-			Body: func(events ...*model.Event) string {
-				return "New message in channel"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New channel message",
+			Body:     "New message in channel",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypePaymentRequest: {
-			Title: func(events ...*model.Event) string {
-				return "Payment request"
-			},
-			Body: func(events ...*model.Event) string {
-				return "Someone requested a payment"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "Payment request",
+			Body:     "Someone requested a payment",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypePaymentReceived: {
-			Title: func(events ...*model.Event) string {
-				return "Payment received"
-			},
-			Body: func(events ...*model.Event) string {
-				return "You received a payment"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "Payment received",
+			Body:     "You received a payment",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeSystem: {
-			Title: func(events ...*model.Event) string {
-				return "System notification"
-			},
-			Body: func(events ...*model.Event) string {
-				return "System notification"
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "System notification",
+			Body:     "System notification",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeNewFollower: {
-			Title: func(events ...*model.Event) string {
-				return "New follower"
-			},
-			Body: func(events ...*model.Event) string {
-				return fmt.Sprintf("%s is now following you", getDisplayNameFromRelevantEvents(events))
-			},
-			ImageURL: func(events ...*model.Event) string {
-				return "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png"
-			},
+			Title:    "New follower",
+			Body:     "Someone is now following you",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
@@ -435,7 +369,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		notifications, err = pm.handleGiftWrapEvent(event)
 		err = errors.Wrap(err, "failed to handle gift wrap event")
 	case nostr.KindFollowList:
-		return pm.handleNewFollowerEvent(ctx, event, relevantEvents...)
+		return pm.handleNewFollowerEvent(event, relevantEvents...)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to handle event %s", event.ID)
@@ -546,7 +480,7 @@ func (pm *PushNotificationManager) createNotifications(
 	}
 
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
-	defaultTranslation := pm.getTranslationWithRelevantInfo(notificationType, relevantEvents...)
+	defaultTranslation := pm.getTranslation(notificationType)
 
 	compressedEvent, err := compressAndEncodeBase64(incomingEvent.String())
 	if err != nil {
@@ -649,53 +583,19 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 	return notifications, nil
 }
 
-func getDisplayNameFromRelevantEvents(events []*model.Event) string {
-	const defaultDisplayName = "Someone"
-	if len(events) == 0 {
-		return defaultDisplayName
-	}
-	profileMetadataIndex := slices.IndexFunc(events, func(event *model.Event) bool {
-		return event.Kind == nostr.KindProfileMetadata
-	})
-	if profileMetadataIndex == -1 {
-		return defaultDisplayName
-	}
-	var profileData struct {
-		Name        string `json:"name,omitempty"`
-		DisplayName string `json:"display_name,omitempty"`
-	}
-
-	if err := json.Unmarshal([]byte(events[profileMetadataIndex].Content), &profileData); err != nil {
-		log.Printf("failed to unmarshal profile metadata: %v", err)
-
-		return defaultDisplayName
-	}
-	if profileData.DisplayName != "" {
-		return "@" + profileData.DisplayName
-	} else if profileData.Name != "" {
-		return "@" + profileData.Name
-	}
-
-	return defaultDisplayName
-}
-
-func (pm *PushNotificationManager) getTranslationWithRelevantInfo(notificationType NotificationType, relevantEvents ...*model.Event) NotificationTranslation {
-	translationTemplate, ok := DefaultTranslations[notificationType]
+func (pm *PushNotificationManager) getTranslation(notificationType NotificationType) notificationTranslation {
+	translation, ok := DefaultTranslations[notificationType]
 	if !ok {
 		log.Printf("missing translation for notification type: %s", notificationType)
 
-		return NotificationTranslation{
+		return notificationTranslation{
 			Title:    "Notification",
 			Body:     "You have a new notification",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		}
 	}
 
-	return NotificationTranslation{
-		Title:    translationTemplate.Title(relevantEvents...),
-		Body:     translationTemplate.Body(relevantEvents...),
-		ImageURL: translationTemplate.ImageURL(relevantEvents...),
-	}
+	return translation
 }
 
 func compressAndEncodeBase64(data string) (string, error) {

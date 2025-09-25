@@ -103,9 +103,9 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		require.Len(t, notifications, 2)
 		for _, notification := range notifications {
 			if notification.Target.GetTag("t").Value() == "ios" {
-				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
-				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
-				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
 			} else {
 				require.Equal(t, "", notification.Title, "Title should match")
 				require.Equal(t, "", notification.Body, "Body should match")
@@ -147,9 +147,9 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		require.Len(t, notifications, 2, "Should notify mentioned user on both devices")
 		for _, notification := range notifications {
 			if notification.Target.GetTag("t").Value() == "ios" {
-				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
-				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(), notification.Body)
-				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
+				require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
 			} else {
 				require.Equal(t, "", notification.Title, "Title should match")
 				require.Equal(t, "", notification.Body, "Body should match")
@@ -202,7 +202,7 @@ func TestMention(t *testing.T) {
 		notifications, err := pm.handleMentionReplyEvent(event)
 		require.NoError(t, err)
 		require.Len(t, notifications, 1)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
 	})
 
 	t.Run("rich_text nprofile mention", func(t *testing.T) {
@@ -246,7 +246,7 @@ func TestMention(t *testing.T) {
 		notifications, err := pm.handleMentionReplyEvent(event)
 		require.NoError(t, err)
 		require.Len(t, notifications, 1)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
 	})
 
 	t.Run("both content and p tag mention - no duplicate", func(t *testing.T) {
@@ -265,7 +265,7 @@ func TestMention(t *testing.T) {
 		notifications, err := pm.handleMentionReplyEvent(event)
 		require.NoError(t, err)
 		require.Len(t, notifications, 1, "Should not create duplicate notifications for the same user")
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notifications[0].Title)
+		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
 	})
 }
 
@@ -389,9 +389,9 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title(), notification.Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body(profileEvent), notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL(), notification.ImageURL)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
+	require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 	require.Contains(t, notification.Data, "relevant_events", "Data should contain relevant events")
