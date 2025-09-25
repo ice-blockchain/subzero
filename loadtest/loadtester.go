@@ -51,13 +51,6 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 				return
 			}
 
-			// Start client runtime goroutine
-			lt.wg.Go(func() {
-				defer client.Close()
-				<-ctx.Done()
-				log.Printf("Client %d: Shutting down", id)
-			})
-
 			lt.mu.Lock()
 			lt.clients = append(lt.clients, client)
 			lt.mu.Unlock()
@@ -203,6 +196,9 @@ func (lt *LoadTester) PrintLastStats() {
 func (lt *LoadTester) Shutdown() {
 	lt.lastStats = lt.GetStats()
 	log.Println("Shutting down load tester...")
-	lt.wg.Wait()
+	for _, client := range lt.clients {
+		log.Printf("Client %d: Shutting down", client.id)
+		client.Close()
+	}
 	log.Println("Load tester shutdown complete")
 }

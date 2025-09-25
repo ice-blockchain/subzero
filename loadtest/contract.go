@@ -29,7 +29,6 @@ type (
 		config    *Config
 		clients   []*NostrClient
 		mu        sync.RWMutex
-		wg        sync.WaitGroup
 		lastStats *LoadTestStats
 	}
 
