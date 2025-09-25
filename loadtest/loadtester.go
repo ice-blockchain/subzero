@@ -4,7 +4,6 @@ package loadtest
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math/rand"
 	"strconv"
@@ -101,12 +100,12 @@ func (lt *LoadTester) connect(ctx context.Context, id int) (*NostrClient, error)
 	// Create client with unique or shared key
 	client, err := NewNostrClient(id, lt.config)
 	if err != nil {
-		return nil, fmt.Errorf("client creation error: %w", err)
+		return nil, errors.Wrapf(err, "client creation error")
 	}
 
 	// Connect and subscribe
 	if err := client.Connect(ctx); err != nil {
-		return nil, fmt.Errorf("client connection error: %w", err)
+		return nil, errors.Wrapf(err, "client connection error")
 	}
 
 	kinds := []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindChannelMessage}
@@ -117,7 +116,7 @@ func (lt *LoadTester) connect(ctx context.Context, id int) (*NostrClient, error)
 	}
 	if err := client.Subscribe(ctx, offset, kinds...); err != nil {
 		client.Close()
-		return nil, fmt.Errorf("client subscription error: %w", err)
+		return nil, errors.Wrapf(err, "client subscription error")
 	}
 	return client, nil
 }

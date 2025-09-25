@@ -74,6 +74,7 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 	if nc.authRequired(err) {
 		err = nc.doAuth(ctx, relay)
 		if err != nil {
+			_ = relay.Close()
 			return err
 		}
 		log.Printf("Client %d: Successfully authenticated to relay", nc.id)
@@ -102,7 +103,6 @@ func (nc *NostrClient) doAuth(ctx context.Context, relay *nostr.Relay) error {
 	})
 
 	if err != nil {
-		_ = relay.Close()
 		return errors.Wrap(err, "failed to authenticate to relay")
 	}
 	return nil
