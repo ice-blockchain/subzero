@@ -49,7 +49,7 @@ func mustInit(absoluteCfgPaths ...string) {
 		yamlConfigurationFilePath = DefaultYAMLConfigurationFilePath
 		globalViper.SetConfigFile(yamlConfigurationFilePath)
 		if err := globalViper.ReadInConfig(); err != nil {
-			log.Panicf("failed to read yaml config file at `%v`", yamlConfigurationFilePath)
+			log.Panic(errors.Wrapf(err, "failed to read yaml config file at `%v`", yamlConfigurationFilePath))
 		}
 	}
 }
