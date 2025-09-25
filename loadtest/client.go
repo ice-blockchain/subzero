@@ -4,11 +4,11 @@ package loadtest
 
 import (
 	"context"
-	"github.com/cenkalti/backoff/v5"
 	"log"
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 

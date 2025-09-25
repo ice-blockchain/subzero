@@ -4,7 +4,6 @@ package loadtest
 
 import (
 	"context"
-	"github.com/panjf2000/ants/v2"
 	"log"
 	"math/rand"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
 )
 
 // NewLoadTester creates a new LoadTester instance
