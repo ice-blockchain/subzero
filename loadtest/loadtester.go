@@ -5,6 +5,7 @@ package loadtest
 import (
 	"context"
 	"fmt"
+	"github.com/nbd-wtf/go-nostr"
 	"log"
 	"strconv"
 	"sync"
@@ -105,7 +106,13 @@ func (lt *LoadTester) connect(ctx context.Context, id int) (*NostrClient, error)
 		return nil, fmt.Errorf("client connection error: %w", err)
 	}
 
-	if err := client.Subscribe(ctx); err != nil {
+	kinds := []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindChannelMessage}
+	offset := time.Duration(0)
+	if lt.config.Mode == ModeNoDB {
+		kinds = []int{nostr.KindBidConfirmation}
+		offset = 100 * time.Hour
+	}
+	if err := client.Subscribe(ctx, offset, kinds...); err != nil {
 		client.Close()
 		return nil, fmt.Errorf("client subscription error: %w", err)
 	}
@@ -116,10 +123,14 @@ func (lt *LoadTester) connect(ctx context.Context, id int) (*NostrClient, error)
 func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
 	successCount := atomic.Int32{}
 	wg := sync.WaitGroup{}
+	kind := nostr.KindTextNote
+	if lt.config.Mode == ModeNoDB {
+		kind = 20000 // ephemeral, should not be stored in DB
+	}
 	for i, c := range lt.clients {
 		wg.Go(func() {
 			content := "Test message from client " + strconv.Itoa(i) + " at " + time.Now().Format(time.RFC3339)
-			if err := c.PublishEvent(ctx, content); err != nil {
+			if err := c.PublishEvent(ctx, kind, content); err != nil {
 				log.Printf("Failed to publish from client %d: %v", i, err)
 			} else {
 				successCount.Add(1)

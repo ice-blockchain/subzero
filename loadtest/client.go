@@ -111,7 +111,7 @@ func (nc *NostrClient) authRequired(err error) bool {
 }
 
 // Subscribe creates a subscription to receive events from the relay
-func (nc *NostrClient) Subscribe(ctx context.Context) error {
+func (nc *NostrClient) Subscribe(ctx context.Context, offset time.Duration, kinds ...int) error {
 	nc.mu.Lock()
 	defer nc.mu.Unlock()
 
@@ -119,9 +119,9 @@ func (nc *NostrClient) Subscribe(ctx context.Context) error {
 		return errors.New("not connected")
 	}
 
-	since := nostr.Now() - 3600 // 1 hour ago
+	since := nostr.Now().Add(offset)
 	filters := []nostr.Filter{{
-		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindChannelMessage},
+		Kinds: kinds,
 		Limit: 100,
 		Since: &since,
 	}}
@@ -169,7 +169,7 @@ func (nc *NostrClient) handleEvents(ctx context.Context) {
 }
 
 // PublishEvent publishes a test event to the relay
-func (nc *NostrClient) PublishEvent(ctx context.Context, content string) error {
+func (nc *NostrClient) PublishEvent(ctx context.Context, kind int, content string) error {
 	nc.mu.RLock()
 	defer nc.mu.RUnlock()
 
@@ -180,7 +180,7 @@ func (nc *NostrClient) PublishEvent(ctx context.Context, content string) error {
 	event := model.Event{
 		Event: nostr.Event{
 			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindTextNote,
+			Kind:      kind,
 			Tags:      nil,
 			Content:   content,
 		},

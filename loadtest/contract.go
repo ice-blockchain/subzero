@@ -3,6 +3,7 @@
 package loadtest
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ type (
 		RelayURL    string `yaml:"relayURL" mapstructure:"relayURL"`
 		Connections int    `yaml:"connections" mapstructure:"connections"`
 		PrivateKey  string `yaml:"privateKey" mapstructure:"privateKey"`
+		Mode        string `yaml:"mode" ma;structure:"mode"`
 	}
 
 	// LoadTester orchestrates multiple Nostr clients for load testing
@@ -45,4 +47,20 @@ type (
 		LastEventTime  time.Time
 		mu             sync.RWMutex
 	}
+)
+
+func (c *Config) Validate() error {
+	switch c.Mode {
+	case ModeFull:
+	case ModeNoDB:
+		break
+	default:
+		return fmt.Errorf("invalid mode: %s", c.Mode)
+	}
+	return nil
+}
+
+const (
+	ModeNoDB = "no-db"
+	ModeFull = "full"
 )
