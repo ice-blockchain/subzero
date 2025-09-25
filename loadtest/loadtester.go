@@ -5,7 +5,6 @@ package loadtest
 import (
 	"context"
 	"fmt"
-	"github.com/nbd-wtf/go-nostr"
 	"log"
 	"math/rand"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 // NewLoadTester creates a new LoadTester instance

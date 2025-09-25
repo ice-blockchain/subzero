@@ -4,13 +4,14 @@ package loadtest
 
 import (
 	"context"
-	"github.com/ice-blockchain/subzero/model"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 // NewNostrClient creates a new Nostr client for load testing
