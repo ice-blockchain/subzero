@@ -562,10 +562,54 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 	}
 
-	privKey, pubKey := model.GenerateKeyPair()
+	privKey, followListAuthorPubKey := model.GenerateKeyPair()
 	recipientPubKey1 := "recipient1_" + testSuffix
 	recipientPubKey2 := "recipient2_" + testSuffix
 	recipientPubKey3 := "recipient3_" + testSuffix
+
+	profileData := model.ProfileMetadataContent{
+		Name:        "TestFollower",
+		DisplayName: "Test Follower Display Name",
+	}
+	profileJSON, err := json.Marshal(profileData)
+	require.NoError(t, err)
+
+	followListAuthorProfileEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindProfileMetadata,
+			CreatedAt: nostr.Now(),
+			Content:   string(profileJSON),
+		},
+	}
+	require.NoError(t, followListAuthorProfileEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorProfileEvent))
+	followListAuthorAttestationEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindAttestation,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", followListAuthorPubKey, "", "active:" + nostr.Now().String() + ":1,7"},
+			},
+			Content: "",
+		},
+	}
+	require.NoError(t, followListAuthorAttestationEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorAttestationEvent))
+
+	pm.relayURL = "wss://test-follower-relay.example.com"
+	followListAuthorRelayListEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindRelayListMetadata,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"r", pm.relayURL, "read"},
+				{"r", pm.relayURL, "write"},
+			},
+			Content: "",
+		},
+	}
+	require.NoError(t, followListAuthorRelayListEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorRelayListEvent))
 
 	filters := nostr.Filters{
 		{
@@ -580,6 +624,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		nostr.Tags{
 			{"t", "ios"},
 			{"d", "device1_" + testSuffix},
+			{"relay", pm.relayURL},
 			{"token", "token1_" + testSuffix},
 		},
 		filters,
@@ -594,6 +639,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		nostr.Tags{
 			{"t", "android"},
 			{"d", "device2_" + testSuffix},
+			{"relay", pm.relayURL},
 			{"token", "token2_" + testSuffix},
 		},
 		filters,
@@ -608,6 +654,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		nostr.Tags{
 			{"t", "web"},
 			{"d", "device3_" + testSuffix},
+			{"relay", pm.relayURL},
 			{"token", "token3_" + testSuffix},
 		},
 		filters,
@@ -622,11 +669,14 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 
 	initialEvent := &model.Event{
 		Event: nostr.Event{
+			PubKey:    followListAuthorPubKey,
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
-			PubKey:    pubKey,
-			Tags:      model.Tags{{"p", "existing_follower1"}, {"p", recipientPubKey1}},
-			Content:   "initial follow list",
+			Tags: model.Tags{
+				{"p", "existing_follower1"},
+				{"p", recipientPubKey1},
+			},
+			Content: "initial follow list",
 		},
 	}
 	require.NoError(t, initialEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
@@ -636,7 +686,6 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindFollowList,
-			PubKey:    pubKey,
 			Tags: model.Tags{
 				{"p", "existing_follower1"},
 				{"p", recipientPubKey1},
@@ -652,8 +701,8 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	require.NotNil(t, updatedEvent.Previous, "Updated event should have previous version")
 	require.Equal(t, initialEvent.Event, updatedEvent.Previous.Event, "Previous event should match initial event")
 
-	notifications, err := pm.handleNewFollowerEvent(t.Context(), updatedEvent)
-	require.NoError(t, err, "handleNewFollowerEvent should not return error")
+	notifications, err := pm.processEvent(t.Context(), updatedEvent)
+	require.NoError(t, err, "processEvent should not return error")
 
 	require.Len(t, notifications, 2, "Should have two notifications for the two new followers")
 
@@ -672,7 +721,8 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 			require.Equal(t, "", notification.ImageURL, "Android notifications should have empty image URL")
 		} else {
 			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title(), notification.Title)
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body(), notification.Body)
+			require.Equal(t, "@Test Follower Display Name is now following you", notification.Body,
+				"Should use display name from profile metadata stored in database")
 			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL(), notification.ImageURL)
 		}
 		require.Contains(t, notification.Data, "event", "Data should contain event")

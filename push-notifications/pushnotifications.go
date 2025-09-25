@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 
@@ -71,6 +70,8 @@ const (
 	NotificationTypeNewFollower      NotificationType = "new_follower"
 
 	CompressionMethodZlib = "zlib"
+
+	defaultDisplayName = "Someone"
 )
 
 var (
@@ -650,24 +651,31 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 }
 
 func getDisplayNameFromRelevantEvents(events []*model.Event) string {
-	const defaultDisplayName = "Someone"
 	if len(events) == 0 {
 		return defaultDisplayName
 	}
-	profileMetadataIndex := slices.IndexFunc(events, func(event *model.Event) bool {
-		return event.Kind == nostr.KindProfileMetadata
-	})
-	if profileMetadataIndex == -1 {
-		return defaultDisplayName
-	}
-	var profileData struct {
-		Name        string `json:"name,omitempty"`
-		DisplayName string `json:"display_name,omitempty"`
+	for _, event := range events {
+		if event.Kind != model.CustomIONKindEphemeralEmbedding {
+			continue
+		}
+		var embeddedEvent model.Event
+		if err := json.Unmarshal([]byte(event.Content), &embeddedEvent); err != nil {
+			log.Printf("failed to unmarshal ephemeral embedding event: %v", err)
+
+			continue
+		}
+		if embeddedEvent.Kind == nostr.KindProfileMetadata {
+			return extractDisplayNameFromProfileContent(embeddedEvent.Content)
+		}
 	}
 
-	if err := json.Unmarshal([]byte(events[profileMetadataIndex].Content), &profileData); err != nil {
-		log.Printf("failed to unmarshal profile metadata: %v", err)
+	return defaultDisplayName
+}
 
+func extractDisplayNameFromProfileContent(content string) string {
+	var profileData model.ProfileMetadataContent
+	if err := json.Unmarshal([]byte(content), &profileData); err != nil {
+		log.Printf("failed to unmarshal profile metadata content: %v", err)
 		return defaultDisplayName
 	}
 	if profileData.DisplayName != "" {
