@@ -113,6 +113,8 @@ func main() {
 	if err := tester.Start(ctx); err != nil {
 		log.Fatal("Failed to start load test:", err)
 	}
+
+	defer tester.PrintLastStats()
 	defer tester.Shutdown()
 
 	// Setup periodic stats and publishing
@@ -129,7 +131,6 @@ func main() {
 		select {
 		case <-sigChan:
 			log.Println("Received shutdown signal...")
-			tester.PrintStats()
 			cancel()
 			return
 		case <-statsTicker.C:

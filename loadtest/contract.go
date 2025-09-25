@@ -4,6 +4,7 @@ package loadtest
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -25,10 +26,11 @@ type (
 
 	// LoadTester orchestrates multiple Nostr clients for load testing
 	LoadTester struct {
-		config  *Config
-		clients []*NostrClient
-		mu      sync.RWMutex
-		wg      sync.WaitGroup
+		config    *Config
+		clients   []*NostrClient
+		mu        sync.RWMutex
+		wg        sync.WaitGroup
+		lastStats *LoadTestStats
 	}
 
 	// NostrClient represents a single Nostr client connection
@@ -50,6 +52,23 @@ type (
 		Connected      bool
 		LastEventTime  time.Time
 		mu             sync.RWMutex
+	}
+
+	// ClientStats represents statistics for a single client
+	ClientStats struct {
+		ID             int
+		Connected      bool
+		EventsReceived int64
+		LastEventTime  time.Time
+	}
+
+	// LoadTestStats represents aggregated statistics for the entire load test
+	LoadTestStats struct {
+		ActiveClients    int
+		TotalClients     int
+		ConnectedClients int
+		TotalEvents      int64
+		ClientStats      []ClientStats
 	}
 )
 
@@ -100,3 +119,23 @@ const (
 	ModeNoDB = "no-db"
 	ModeFull = "full"
 )
+
+// Print outputs the load test statistics in a formatted way
+func (s *LoadTestStats) Print() {
+	log.Println("\n=== Load Test Statistics ===")
+	log.Printf("Active clients: %d/%d", s.ActiveClients, s.TotalClients)
+	log.Printf("Total events received: %d", s.TotalEvents)
+	log.Printf("Connected clients: %d/%d", s.ConnectedClients, s.ActiveClients)
+
+	for _, client := range s.ClientStats {
+		lastEventStr := "Never"
+		if !client.LastEventTime.IsZero() {
+			lastEventStr = client.LastEventTime.Format("15:04:05")
+		}
+
+		log.Printf("  Client %d: Connected=%v, Events=%d, LastEvent=%s",
+			client.ID, client.Connected, client.EventsReceived, lastEventStr)
+	}
+
+	log.Println("============================\n")
+}

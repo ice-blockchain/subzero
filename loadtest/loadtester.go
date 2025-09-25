@@ -146,40 +146,52 @@ func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
 	log.Printf("Published test events from %d/%d clients", successCount.Load(), len(lt.clients))
 }
 
-// PrintStats prints current statistics for all clients
-func (lt *LoadTester) PrintStats() {
+// GetStats returns aggregated statistics for all clients
+func (lt *LoadTester) GetStats() *LoadTestStats {
 	lt.mu.RLock()
 	defer lt.mu.RUnlock()
 
-	log.Println("\n=== Load Test Statistics ===")
-	log.Printf("Active clients: %d/%d", len(lt.clients), lt.config.Connections)
-
-	totalEvents := int64(0)
-	connectedCount := 0
-
-	for i, c := range lt.clients {
-		stats := c.GetStats()
-		if c.IsConnected() {
-			connectedCount++
-		}
-		totalEvents += stats.EventsReceived
-
-		lastEventStr := "Never"
-		if !stats.LastEventTime.IsZero() {
-			lastEventStr = stats.LastEventTime.Format("15:04:05")
-		}
-
-		log.Printf("  Client %d: Connected=%v, Events=%d, LastEvent=%s",
-			i, c.IsConnected(), stats.EventsReceived, lastEventStr)
+	stats := &LoadTestStats{
+		ActiveClients: len(lt.clients),
+		TotalClients:  lt.config.Connections,
+		ClientStats:   make([]ClientStats, 0, len(lt.clients)),
 	}
 
-	log.Printf("\nTotal events received: %d", totalEvents)
-	log.Printf("Connected clients: %d/%d", connectedCount, len(lt.clients))
-	log.Println("============================\n")
+	for i, c := range lt.clients {
+		clientStats := c.GetStats()
+		isConnected := c.IsConnected()
+		if isConnected {
+			stats.ConnectedClients++
+		}
+		stats.TotalEvents += clientStats.EventsReceived
+
+		stats.ClientStats = append(stats.ClientStats, ClientStats{
+			ID:             i,
+			Connected:      isConnected,
+			EventsReceived: clientStats.EventsReceived,
+			LastEventTime:  clientStats.LastEventTime,
+		})
+	}
+
+	return stats
+}
+
+// PrintStats prints current statistics for all clients
+func (lt *LoadTester) PrintStats() {
+	stats := lt.GetStats()
+	stats.Print()
+}
+
+// PrintLastStats prints last statistics for all clients before shutdown
+func (lt *LoadTester) PrintLastStats() {
+	if lt.lastStats != nil {
+		lt.lastStats.Print()
+	}
 }
 
 // Shutdown gracefully closes all client connections
 func (lt *LoadTester) Shutdown() {
+	lt.lastStats = lt.GetStats()
 	log.Println("Shutting down load tester...")
 	lt.wg.Wait()
 	log.Println("Load tester shutdown complete")
