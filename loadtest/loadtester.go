@@ -53,8 +53,7 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 			lt.mu.Lock()
 			lt.clients = append(lt.clients, client)
 			lt.mu.Unlock()
-
-			log.Printf("Client %d: Setup completed successfully", id)
+			log.Printf("[%d/%d] Client %d: Setup completed successfully", len(lt.clients), lt.config.Connections, id)
 		})
 	}
 
