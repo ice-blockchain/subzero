@@ -32,8 +32,6 @@ func main() {
 	// Initialize configuration system
 	if *configFile != "" {
 		cfg.MustInit(*configFile)
-	} else {
-		cfg.MustInit()
 	}
 
 	// Load configuration
