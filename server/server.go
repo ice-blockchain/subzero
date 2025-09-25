@@ -33,14 +33,14 @@ type (
 		TLSCert             string `yaml:"tls-cert"`
 		TLSKey              string `yaml:"tls-key"`
 		RelayURL            string `yaml:"relay-url"     validate:"required,url"`
-		Port                uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
-		IONLibertyDisabled  bool   `yaml:"ion-liberty-disabled"`
-		Debug               bool   `yaml:"debug"`
 		PrivateKey          string `yaml:"private-key"`
 		BroadcastPrivateKey string `yaml:"broadcast-private-key" validate:"required"`
 		ACME                struct {
 			APIKey string `yaml:"api-key"`
 		} `yaml:"acme"`
+		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
+		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
+		Debug              bool   `yaml:"debug"`
 	}
 	Option func(*router)
 

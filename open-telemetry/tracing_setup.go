@@ -74,15 +74,15 @@ func (t *telemetry) mustInitTracingProvider(ctx context.Context, res *otelsdkres
 }
 
 type redundantTraceExporter struct {
+	fallback           otelsdktrace.SpanExporter
+	primaryLifecycleMx *sync.RWMutex
+
+	traceWALBackup      *wal.Log
 	primaries           []otelsdktrace.SpanExporter
-	fallback            otelsdktrace.SpanExporter
 	currentPrimaryIndex uint64
 
 	primaryExporterEnabled bool
 	traceWALBackupEmpty    bool
-	primaryLifecycleMx     *sync.RWMutex
-
-	traceWALBackup *wal.Log
 }
 
 func (re *redundantTraceExporter) ExportSpans(ctx context.Context, spans []otelsdktrace.ReadOnlySpan) error {
@@ -201,25 +201,26 @@ func (re *redundantTraceExporter) Shutdown(ctx context.Context) error {
 }
 
 type walTraceSpan struct {
-	actualTraceSpan otelsdktrace.ReadOnlySpan
-
-	//TODO see if all those fields are serialised properly
-	Name                 string                       `json:"name,omitempty"`
-	SpanContext          oteltrace.SpanContext        `json:"spanContext,omitempty"`
-	Parent               oteltrace.SpanContext        `json:"parent,omitempty"`
-	SpanKind             oteltrace.SpanKind           `json:"spanKind,omitempty"`
+	InstrumentationScope otelsdkinstrumentation.Scope `json:"instrumentationScope,omitempty"`
 	StartTime            time.Time                    `json:"startTime,omitempty"`
 	EndTime              time.Time                    `json:"endTime,omitempty"`
-	Attributes           []otelattribute.KeyValue     `json:"attributes,omitempty"`
-	Links                []otelsdktrace.Link          `json:"links,omitempty"`
-	Events               []otelsdktrace.Event         `json:"events,omitempty"`
-	Status               otelsdktrace.Status          `json:"status,omitempty"`
-	InstrumentationScope otelsdkinstrumentation.Scope `json:"instrumentationScope,omitempty"`
-	Resource             *otelsdkresource.Resource    `json:"resource,omitempty"`
-	DroppedAttributes    int                          `json:"droppedAttributes,omitempty"`
-	DroppedLinks         int                          `json:"droppedLinks,omitempty"`
-	DroppedEvents        int                          `json:"droppedEvents,omitempty"`
-	ChildSpanCount       int                          `json:"childSpanCount,omitempty"`
+	actualTraceSpan      otelsdktrace.ReadOnlySpan
+
+	Resource *otelsdkresource.Resource `json:"resource,omitempty"`
+	Status   otelsdktrace.Status       `json:"status,omitempty"`
+
+	//TODO see if all those fields are serialised properly
+	Name              string                   `json:"name,omitempty"`
+	Attributes        []otelattribute.KeyValue `json:"attributes,omitempty"`
+	Links             []otelsdktrace.Link      `json:"links,omitempty"`
+	Events            []otelsdktrace.Event     `json:"events,omitempty"`
+	SpanContext       oteltrace.SpanContext    `json:"spanContext,omitempty"`
+	Parent            oteltrace.SpanContext    `json:"parent,omitempty"`
+	SpanKind          oteltrace.SpanKind       `json:"spanKind,omitempty"`
+	DroppedAttributes int                      `json:"droppedAttributes,omitempty"`
+	DroppedLinks      int                      `json:"droppedLinks,omitempty"`
+	DroppedEvents     int                      `json:"droppedEvents,omitempty"`
+	ChildSpanCount    int                      `json:"childSpanCount,omitempty"`
 }
 
 func (re *walTraceSpan) MarshallJSON() ([]byte, error) {

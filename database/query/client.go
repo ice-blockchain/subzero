@@ -23,10 +23,10 @@ import (
 type (
 	dbClient struct {
 		db                 *connector.DB
-		hasReadURLs        bool
+		rollbackableEvents *xsync.Map[eventHash, *databaseRollbackRequest]
 		relayPrivateKey    string
 		relayURL           string
-		rollbackableEvents *xsync.Map[eventHash, *databaseRollbackRequest]
+		hasReadURLs        bool
 	}
 
 	eventHash [sha256.Size]byte

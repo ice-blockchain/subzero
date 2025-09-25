@@ -19,8 +19,8 @@ import (
 
 type (
 	Event struct {
-		nostr.Event
 		Previous *Event `db:"-" json:"-" swaggerignore:"true"` // Previous version of the event, if any.
+		nostr.Event
 	}
 	Events                  []*Event
 	EventSignAlg            string

@@ -12,8 +12,8 @@ import (
 
 var (
 	global struct {
-		sync.Once
 		Validator *eventValidator
+		sync.Once
 	}
 )
 

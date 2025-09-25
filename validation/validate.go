@@ -33,18 +33,18 @@ const (
 type (
 	tagState uint
 	tagData  struct {
-		// Tag state, one of: required, optional, forbidden, etc.
-		State tagState
 		// Additional tags.
 		Tags []string
+		// Tag state, one of: required, optional, forbidden, etc.
+		State tagState
 	}
 	kindValidator struct {
 		// Tag map: tag key -> tag state.
 		Tags map[string]tagData
-		// Additional flags for given kind.
-		Flags uint
 		// Additional validation function.
 		Validate func(v *eventValidator, e *model.Event) error
+		// Additional flags for given kind.
+		Flags uint
 	}
 )
 

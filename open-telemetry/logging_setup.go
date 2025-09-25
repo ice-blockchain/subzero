@@ -165,15 +165,15 @@ func (bp *batchProcessorWrapper) Enabled(_ context.Context, param otelsdklog.Ena
 }
 
 type redundantLogExporter struct {
+	fallback           otelsdklog.Exporter
+	primaryLifecycleMx *sync.RWMutex
+
+	logWALBackup        *wal.Log
 	primaries           []otelsdklog.Exporter
-	fallback            otelsdklog.Exporter
 	currentPrimaryIndex uint64
 
 	primaryExporterEnabled bool
 	logWALBackupEmpty      bool
-	primaryLifecycleMx     *sync.RWMutex
-
-	logWALBackup *wal.Log
 }
 
 func (re *redundantLogExporter) Export(ctx context.Context, records []otelsdklog.Record) error {
@@ -319,14 +319,15 @@ func (re *redundantLogExporter) ForceFlush(ctx context.Context) error {
 }
 
 type walLogRecord struct {
+	Timestamp time.Time `json:"timestamp"`
+
+	Attributes   map[string]any `json:"attributes"`
+	SeverityText string         `json:"severityText"`
+	Body         string         `json:"body"`
+
 	actualLogRecord otelsdklog.Record
 
-	Timestamp    time.Time        `json:"timestamp"`
-	Severity     otellog.Severity `json:"severity"`
-	SeverityText string           `json:"severityText"`
-	Body         string           `json:"body"`
-
-	Attributes map[string]any `json:"attributes"`
+	Severity otellog.Severity `json:"severity"`
 }
 
 func (re *walLogRecord) MarshallJSON() ([]byte, error) {

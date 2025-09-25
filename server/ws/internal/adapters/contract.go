@@ -40,34 +40,34 @@ type (
 		Write(ctx context.Context)
 	}
 	WebtransportAdapterConfig struct {
+		CloseChannel <-chan struct{}
+		Handshake    ws.Handshake
 		WriteTimeout time.Duration
 		ReadTimeout  time.Duration
-		Handshake    ws.Handshake
-		CloseChannel <-chan struct{}
 	}
 	WebtransportAdapter struct {
 		stream       Stream
+		wrErr        error
 		session      *webtransport.Session
 		reader       *bufio.Reader
 		closeChannel chan struct{}
-		closed       atomic.Bool
-		wrErr        error
-		wrErrMx      sync.Mutex
 		out          chan []byte
 		writeTimeout time.Duration
 		readTimeout  time.Duration
+		wrErrMx      sync.Mutex
+		closed       atomic.Bool
 	}
 
 	WebsocketAdapter struct {
 		conn         net.Conn
+		wrErr        error
 		out          chan wsWrite
 		closeChannel chan struct{}
-		wrErr        error
-		wrErrMx      sync.Mutex
-		closed       atomic.Bool
+		framer       func(int, []byte) (ws.Frame, error)
 		writeTimeout time.Duration
 		readTimeout  time.Duration
-		framer       func(int, []byte) (ws.Frame, error)
+		wrErrMx      sync.Mutex
+		closed       atomic.Bool
 	}
 )
 

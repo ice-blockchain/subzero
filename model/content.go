@@ -17,8 +17,8 @@ import (
 
 type (
 	deltaOperation struct {
-		Insert     json.RawMessage            `json:"insert"`
 		Attributes map[string]json.RawMessage `json:"attributes,omitempty"`
+		Insert     json.RawMessage            `json:"insert"`
 	}
 	deltaInsertObject struct {
 		TextEditorProfile     string `json:"text-editor-profile,omitempty"`

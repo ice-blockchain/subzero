@@ -23,8 +23,8 @@ type (
 		Stored atomic.Pointer[publicKeys]
 	}
 	publicKeys struct {
-		Keys    []string
 		Version string
+		Keys    []string
 	}
 )
 

@@ -29,12 +29,12 @@ type (
 		Events []*model.Event `json:"events"`
 	}
 	sender struct {
-		eventsToSend chan []*model.Event
-		mu           sync.Mutex
 		lastSent     time.Time
+		eventsToSend chan []*model.Event
 		config       *Config
 		client       *req.Client
 		eventsQueue  []*model.Event
+		mu           sync.Mutex
 	}
 )
 

@@ -144,7 +144,8 @@ type (
 	JobFeedbackStatus      string
 	Role                   string
 	ProfileMetadataContent struct {
-		RegisteredAt             Timestamp                                                       `json:"registered_at" `
+		IONContentNFTCollections map[IONContentNFTCollectionName]IONContentNFTCollectionMetadata `json:"ion_content_nft_collections" `
+		Wallets                  map[string]string                                               `json:"wallets"`
 		Name                     string                                                          `json:"name" example:"username"`
 		About                    string                                                          `json:"about" example:"about"`
 		Picture                  string                                                          `json:"picture" example:"https://example.com/pic.jpg"`
@@ -152,11 +153,10 @@ type (
 		Website                  string                                                          `json:"website" example:"https://ice.io"`
 		Banner                   string                                                          `json:"banner" example:"https://example.com/banner.jpg"`
 		Location                 string                                                          `json:"location" example:"New York, USA"`
-		IONContentNFTCollections map[IONContentNFTCollectionName]IONContentNFTCollectionMetadata `json:"ion_content_nft_collections" `
 		Category                 string                                                          `json:"category" example:"Crypto"`
 		WhoCanMessageYou         string                                                          `json:"who_can_message_you" example:"friends"`
 		WhoCanInviteYouToGroups  string                                                          `json:"who_can_invite_you_to_groups" example:"friends"`
-		Wallets                  map[string]string                                               `json:"wallets"`
+		RegisteredAt             Timestamp                                                       `json:"registered_at" `
 		Bot                      bool                                                            `json:"bot" example:"false"`
 	}
 	IONContentNFTCollectionName     string

@@ -58,11 +58,11 @@ type (
 		Caption     string `json:"c"`
 		Alt         string `json:"a"`
 		Owner       string `json:"o"`
+		ContentType string `json:"-"`
+		Filename    string `json:"-"`
 		Hash        []byte `json:"h"`
 		CreatedAt   uint64 `json:"cAt"`
-		ContentType string `json:"-"`
 		FileSize    uint64 `json:"-"`
-		Filename    string `json:"-"`
 	}
 	FileMetadata struct {
 		*nip94.FileMetadata
@@ -81,9 +81,9 @@ type (
 		downloadQueue     chan queueItem
 		activeDownloads   map[string]bool
 		activeDownloadsMx *sync.RWMutex
+		config            *Config
 		rootStoragePath   string
 		closed            atomic.Bool
-		config            *Config
 	}
 	queueItem struct {
 		tor       *storage.Torrent
