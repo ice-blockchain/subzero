@@ -4,6 +4,7 @@ package loadtest
 
 import (
 	"context"
+	"github.com/cenkalti/backoff/v5"
 	"log"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/ice-blockchain/subzero/model"
 )
+
+const maxConnectTime = time.Minute
 
 // NewNostrClient creates a new Nostr client for load testing
 func NewNostrClient(id int, config *Config) (*NostrClient, error) {
@@ -43,11 +46,13 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 func (nc *NostrClient) Connect(ctx context.Context) error {
 	log.Printf("Client %d: Connecting to %s...", nc.id, nc.config.RelayURL)
 
-	relay, err := nostr.RelayConnect(ctx, nc.config.RelayURL, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
-		ev := model.Event{Event: *e}
-		ok, err := ev.CheckSignature()
-		return ok && err == nil
-	}))
+	relay, err := backoff.Retry(ctx, func() (*nostr.Relay, error) {
+		return nostr.RelayConnect(ctx, nc.config.RelayURL, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
+			ev := model.Event{Event: *e}
+			ok, err := ev.CheckSignature()
+			return ok && err == nil
+		}))
+	}, backoff.WithBackOff(backoff.NewExponentialBackOff()), backoff.WithMaxElapsedTime(maxConnectTime))
 	if err != nil {
 		return errors.Wrap(err, "relay connection failed")
 	}

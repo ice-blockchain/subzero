@@ -111,7 +111,7 @@ func main() {
 
 	// Start load test
 	if err := tester.Start(ctx); err != nil {
-		log.Fatal("Failed to start load test:", err)
+		log.Fatal("Failed to start load test: ", err)
 	}
 
 	defer tester.PrintLastStats()

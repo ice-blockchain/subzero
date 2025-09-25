@@ -77,7 +77,7 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 			}
 		}
 		log.Printf("Setup phase completed")
-	case <-time.After(2 * lt.config.setupDuration):
+	case <-time.After(maxConnectTime):
 		lt.mu.RLock()
 		currentCount := len(lt.clients)
 		lt.mu.RUnlock()
