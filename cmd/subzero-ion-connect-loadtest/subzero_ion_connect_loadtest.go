@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -107,13 +108,30 @@ func main() {
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
+	doneChan := make(chan struct{}, 1)
+	started := atomic.Bool{}
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		for {
+			select {
+			case <-sigChan:
+				if started.Load() {
+					doneChan <- struct{}{}
+				} else {
+					cancel()
+				}
+				return
+			}
+		}
+	}()
 
 	// Start load test
 	if err := tester.Start(ctx); err != nil {
 		log.Fatal("Failed to start load test: ", err)
 	}
 
+	started.Store(true)
 	defer tester.PrintLastStats()
 	defer tester.Shutdown()
 
@@ -129,7 +147,7 @@ func main() {
 
 	for {
 		select {
-		case <-sigChan:
+		case <-doneChan:
 			log.Println("Received shutdown signal...")
 			cancel()
 			return
