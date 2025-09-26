@@ -5,7 +5,6 @@ package dvm
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
@@ -71,13 +71,13 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 
 	server.PublicKey, err = model.GetPublicKey(server.Config.PrivateKey)
 	if err != nil {
-		log.Panicf("DVM: can't get public key from private key: %v", err)
+		log.Panic().Str("context", "DVM").Err(err).Msg("can't get public key from private key")
 	}
 
 	go server.ResponseCache.Start()
 	go func() {
 		<-ctx.Done()
-		log.Printf("DVM: shutting down")
+		log.Trace().Str("context", "DVM").Msg("shutting down")
 		server.WG.Wait()
 		server.ResponseCache.Stop()
 	}()
@@ -89,7 +89,10 @@ func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Eve
 	d.acceptDVMResponseEvent(result)
 	select {
 	case <-time.After(time.Minute):
-		log.Printf("DVM: job %v: result submission timeout", task.Event.ID)
+		log.Warn().
+			Str("context", "DVM").
+			Str("job_id", task.Event.ID).
+			Msg("job result submission timeout")
 	case <-ctx.Done():
 	case task.Result <- result:
 	}
@@ -107,7 +110,10 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.
 	// Disabled for now.
 	if false {
 		if event.GetTag("p").Value() != d.PublicKey {
-			log.Printf("dvm job is not for specified for this service provider: %v", event)
+			log.Trace().
+				Str("context", "DVM").
+				Interface("event", event).
+				Msg("dvm job is not for specified for this service provider")
 			return nil, nil
 		}
 	}
@@ -140,7 +146,11 @@ func (d *dvm) handleDeletionEvent(ctx context.Context, event *model.Event) error
 		return nil
 	}
 
-	log.Printf("DVM: job delete request: %v / %v", stopEventID, kTag)
+	log.Trace().
+		Str("context", "DVM").
+		Str("stop_event_id", stopEventID).
+		Str("k_tag", kTag).
+		Msg("job delete request")
 
 	stopEventKind, err := strconv.Atoi(kTag)
 	if err != nil {
@@ -163,7 +173,11 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 		job = newNostrEventCountJob(d)
 
 	default:
-		log.Printf("DVM: job %v: kind: %v: not supported", task.Event.ID, task.Event.Kind)
+		log.Trace().
+			Str("context", "DVM").
+			Str("job_id", task.Event.ID).
+			Int("kind", task.Event.Kind).
+			Msg("job kind not supported")
 
 		return
 	}
@@ -171,28 +185,43 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 	start := time.Now()
 	defer func() {
 		if elapsed := time.Since(start); elapsed > logThreshold {
-			log.Printf("DVM: job %v: processed in %v", task.Event.ID, elapsed)
+			log.Trace().
+				Str("context", "DVM").
+				Str("job_id", task.Event.ID).
+				Dur("elapsed", elapsed).
+				Msg("job processed")
 		}
 	}()
 
 	bidTag := task.Event.GetTag("bid")
 	if bidTag != nil && !job.IsBidAmountEnough(bidTag.Value()) {
 		if err := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusPaymentRequired, "Bid amount is not enough", job.RequiredPaymentAmount()); err != nil {
-			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, err)
+			log.Error().
+				Str("context", "DVM").
+				Err(err).
+				Str("job_id", task.Event.ID).
+				Msg("job failed to publish job feedback")
 		}
 		return
 	}
 
 	jobResult, err := job.Process(ctx, task.Event)
 	if errors.Is(ctx.Err(), context.Canceled) {
-		log.Printf("DVM: job %v: canceled", task.Event.ID)
+		log.Trace().
+			Str("context", "DVM").
+			Str("job_id", task.Event.ID).
+			Msg("job canceled")
 
 		return
 	}
 
 	if err != nil {
 		if fErr := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
-			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, fErr)
+			log.Error().
+				Str("context", "DVM").
+				Err(fErr).
+				Str("job_id", task.Event.ID).
+				Msg("job failed to publish job feedback")
 		}
 		return
 	}
@@ -200,14 +229,22 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 	result, err := d.finalizeJob(task.Event, jobResult, job.RequiredPaymentAmount())
 	if err != nil {
 		if fErr := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
-			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, fErr)
+			log.Error().
+				Str("context", "DVM").
+				Err(fErr).
+				Str("job_id", task.Event.ID).
+				Msg("job failed to publish job feedback")
 		}
 		return
 	}
 
 	if err := d.publishJobResult(ctx, task, result); err != nil {
 		if fErr := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusError, "error: "+err.Error(), job.RequiredPaymentAmount()); fErr != nil {
-			log.Printf("DVM: job %v: failed to publish job feedback: %v", task.Event.ID, fErr)
+			log.Error().
+				Str("context", "DVM").
+				Err(fErr).
+				Str("job_id", task.Event.ID).
+				Msg("job failed to publish job feedback")
 		}
 	}
 }
@@ -245,7 +282,12 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 	list := collectTargetRelayURLsFromEvent(task.Event)
 	if len(list) > 0 {
 		// TODO: Ignore for now but replace with panic later.
-		log.Printf("DVM: job %v: found %d target relay(s): %v", task.Event.ID, len(list), list)
+		log.Trace().
+			Str("context", "DVM").
+			Str("job_id", task.Event.ID).
+			Int("relay_count", len(list)).
+			Interface("relays", list).
+			Msg("job found target relays")
 		return nil
 	}
 
@@ -277,7 +319,12 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 				}
 			}
 			if err != nil {
-				log.Printf("DVM: job %v: failed to publish job result to relay: %v, err: %v", task.Event.ID, relay, err)
+				log.Error().
+					Str("context", "DVM").
+					Err(err).
+					Str("job_id", task.Event.ID).
+					Str("relay", relay.URL).
+					Msg("job failed to publish job result to relay")
 				return
 			}
 			successfull.Add(1)
@@ -295,7 +342,7 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 func (d *dvm) stopEvent(ctx context.Context, event *model.Event, stopJobID string) error {
 	jobInfo, ok := d.Jobs.LoadAndDelete(stopJobID)
 	if !ok {
-		log.Printf("DVM: job stop: job %s not found", stopJobID)
+		log.Trace().Str("context", "DVM").Str("stop_job_id", stopJobID).Msg("job stop: job not found")
 
 		return nil
 	}
@@ -344,7 +391,12 @@ func connectToRelays(ctx context.Context, jobID string, relayList []string) (res
 	for _, relayUrl := range relayList {
 		relay, err := connectToRelay(ctx, relayUrl)
 		if err != nil {
-			log.Printf("DVM: job %v: error: failed to connect to relay: %v, err: %v", jobID, relayUrl, err)
+			log.Error().
+				Str("context", "DVM").
+				Err(err).
+				Str("job_id", jobID).
+				Str("relay_url", relayUrl).
+				Msg("job error: failed to connect to relay")
 		} else {
 			resultRelays = append(resultRelays, relay)
 		}
@@ -371,7 +423,11 @@ func connectToRelay(ctx context.Context, url string) (*nostr.Relay, error) {
 func closeRelays(relayList []*nostr.Relay) {
 	for _, r := range relayList {
 		if err := r.Close(); err != nil {
-			log.Printf("[DVM]: can't close relay:%v, err:%v", r.URL, err)
+			log.Error().
+				Str("context", "DVM").
+				Err(err).
+				Str("relay_url", r.URL).
+				Msg("can't close relay")
 			continue
 		}
 	}

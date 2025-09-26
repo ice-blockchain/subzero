@@ -5,7 +5,6 @@ package statistics
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/rcrowley/go-metrics"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
 )
@@ -58,28 +58,28 @@ func NewStatistics(rootStorageDir string, debug bool) Statistics {
 		rootStorageDir: rootStorageDir,
 	}
 	if err := s.metrics.Register(imageWidth, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", imageWidth))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", imageWidth).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(imageHeight, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", imageHeight))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", imageHeight).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(videoWidth, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", videoWidth))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", videoWidth).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(videoHeight, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", videoHeight))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", videoHeight).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(duration, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", duration))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", duration).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(videoBitrate, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", videoBitrate))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", videoBitrate).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(audioBitrate, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", audioBitrate))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", audioBitrate).Msg("failed to register metric")
 	}
 	if err := s.metrics.Register(fileSize, metrics.NewHistogram(metrics.NewExpDecaySample(10000, 0.15))); err != nil {
-		log.Panic(errors.Wrapf(err, "failed to register metric %v", fileSize))
+		log.Panic().Str("context", "STORAGE").Err(err).Str("metric", fileSize).Msg("failed to register metric")
 	}
 	go func() {
 		for _ = range time.Tick(60 * time.Second) {
@@ -92,7 +92,7 @@ func NewStatistics(rootStorageDir string, debug bool) Statistics {
 func (s *statistics) writeJSON() {
 	statsFile, err := os.OpenFile(filepath.Join(s.rootStorageDir, "stats.json"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		log.Printf("ERROR: %v", errors.Wrapf(err, "failed to open file for stats collection"))
+		log.Error().Str("context", "STORAGE").Err(err).Msg("failed to open file for stats collection")
 	}
 	defer func() {
 		statsFile.Sync()
@@ -114,7 +114,7 @@ func (s *statistics) ProcessFile(filePath, contentType string, size uint64) {
 	go func() {
 		md, err := s.metaExtractor.Extract(filePath, contentType, size)
 		if err != nil {
-			log.Printf("Error extracting metadata for file stats: %v\n", err)
+			log.Error().Str("context", "STORAGE").Err(err).Msg("error extracting metadata for file stats")
 		}
 		if md == nil {
 			return

@@ -4,8 +4,9 @@ package http3
 
 import (
 	"context"
-	"log"
 	"net/http"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
@@ -14,7 +15,7 @@ import (
 func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h3ws adapters.WSWithWriter, ctx context.Context, err error) {
 	conn, _, hs, err := cws.New().Upgrade(req, writer)
 	if err != nil {
-		log.Printf("[http3] ERROR: upgrading http3/websocket failed: %v", err)
+		log.Error().Str("context", "http3").Err(err).Msg("upgrading http3/websocket failed")
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return

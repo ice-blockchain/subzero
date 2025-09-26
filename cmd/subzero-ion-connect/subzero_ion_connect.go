@@ -5,8 +5,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -17,6 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/panjf2000/ants/v2"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -25,6 +24,7 @@ import (
 	"github.com/ice-blockchain/subzero/dvm"
 	followerssender "github.com/ice-blockchain/subzero/followers-sender"
 	hashtagssender "github.com/ice-blockchain/subzero/hashtags-sender"
+	subzeroLog "github.com/ice-blockchain/subzero/log"
 	"github.com/ice-blockchain/subzero/model"
 	nftcontentsender "github.com/ice-blockchain/subzero/nft-content-sender"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
@@ -33,10 +33,6 @@ import (
 	"github.com/ice-blockchain/subzero/storage"
 	"github.com/ice-blockchain/subzero/validation"
 )
-
-type Config struct {
-	Shutup bool `yaml:"shutup"`
-}
 
 var (
 	configPath string
@@ -48,11 +44,7 @@ var (
 		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
-
-			if v, _ := cfg.Get[Config](); v != nil && v.Shutup {
-				log.SetOutput(io.Discard)
-			}
-
+			subzeroLog.MustInit()
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
 			command.MustInit(cmd.Context())
@@ -145,7 +137,10 @@ func init() {
 
 		antsPool.Submit(func() {
 			if err := webserver.BroadcastUserEvents(context.WithoutCancel(ctx), events...); err != nil {
-				log.Printf("failed to webserver.BroadcastUserEvents(%s): %v", model.Events(events).String(), err)
+				log.Error().Str("context", "MAIN").
+					Err(err).
+					Str("events", model.Events(events).String()).
+					Msg("failed to webserver.BroadcastUserEvents")
 			}
 		})
 
@@ -157,7 +152,7 @@ func init() {
 				}
 			})
 		} else if err != nil {
-			log.Printf("DVM: failed to accept job for event %s: %v", events[0].ID, err)
+			log.Error().Str("context", "MAIN").Err(err).Str("event_id", events[0].ID).Msg("dvm failed to accept job for event")
 		}
 
 		if err := command.AcceptEvents(ctx, events...); err != nil {
@@ -170,31 +165,31 @@ func init() {
 
 		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
-				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents")
 			}
 		})
 
 		antsPool.Submit(func() {
 			if err := storage.ReplicateFileOnPeers(ctx, events...); err != nil {
-				log.Printf("failed to storage.ReplicateFileOnPeers(%s): %v", model.Events(events).String(), err)
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to storage.ReplicateFileOnPeers")
 			}
 		})
 
 		antsPool.Submit(func() {
 			if err := hashtagssender.AcceptEvents(ctx, events...); err != nil {
-				log.Printf("failed to hashtagssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to hashtagssender.AcceptEvents")
 			}
 		})
 
 		antsPool.Submit(func() {
 			if err := nftcontentsender.AcceptEvents(ctx, events...); err != nil {
-				log.Printf("failed to nftcontentsender.AcceptEvents(%s): %v", model.Events(events).String(), err)
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to nftcontentsender.AcceptEvents")
 			}
 		})
 
 		antsPool.Submit(func() {
 			if err := followerssender.AcceptEvents(ctx, events...); err != nil {
-				log.Printf("failed to followerssender.AcceptEvents(%s): %v", model.Events(events).String(), err)
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to followerssender.AcceptEvents")
 			}
 		})
 
@@ -208,16 +203,11 @@ func init() {
 			start := time.Now()
 			n := webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
 			end := time.Since(start)
-			log.Printf("INFO: broadcast %d events (%v) [duration %s] for %d active subscriptions",
-				len(events),
-				model.Events(events).IDs(),
-				end,
-				n,
-			)
+			log.Info().Int("event_count", len(events)).Strs("event_ids", model.Events(events).IDs()).Dur("duration", end).Int("subscription_count", n).Msg("broadcast events")
 		})
 		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
-				log.Printf("failed to pushnotifications.AcceptEvents(%s): %v", model.Events(events).String(), err)
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents")
 			}
 		})
 
@@ -234,10 +224,10 @@ func newContext() context.Context {
 		force := false
 		for sig := range c {
 			if force {
-				log.Println("force shutdown", "signal", sig.String())
+				log.Warn().Str("signal", sig.String()).Msg("force shutdown")
 				os.Exit(2)
 			} else {
-				log.Println("graceful shutdown", "signal", sig.String())
+				log.Info().Str("signal", sig.String()).Msg("graceful shutdown")
 				cancel()
 				force = true
 			}
@@ -250,13 +240,13 @@ func newContext() context.Context {
 func main() {
 	pool, err := ants.NewPool(10_000 * runtime.NumCPU())
 	if err != nil {
-		log.Panicf("failed to create ants pool: %v", err)
+		log.Panic().Err(err).Msg("failed to create ants pool")
 	}
 	defer pool.Release()
 
 	antsPool = pool
 	err = subzero.ExecuteContext(newContext())
 	if err != nil {
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 }

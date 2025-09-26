@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha512"
 	"encoding/base64"
-	"log"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -90,7 +90,7 @@ func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey
 	}
 	communityDefinitionEvent, err := validation.GetCommunityDefinition(ctx, hTag)
 	if err != nil {
-		log.Printf("ERROR: failed to get community event: %v", err)
+		log.Error().Str("context", "WEBSOCKET").Err(err).Msg("failed to get community event")
 
 		return false
 	}
@@ -130,7 +130,7 @@ func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
 		Writer: respWriter,
 	})
 	if loaded {
-		log.Printf("WARN: subscription %s already exists, overwriting it", sub.ID)
+		log.Warn().Str("context", "WEBSOCKET").Str("subscription_id", sub.ID).Msg("subscription already exists, overwriting it")
 	}
 }
 
@@ -330,7 +330,10 @@ func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, s
 		return nil
 	}
 
-	log.Printf("INFO: subscription %s has %d buffered events", sub.ID, len(bufferedEvents))
+	log.Info().Str("context", "WEBSOCKET").
+		Str("subscription_id", sub.ID).
+		Int("buffered_events", len(bufferedEvents)).
+		Msg("subscription has buffered events")
 	now := time.Now()
 	for i := range bufferedEvents {
 		err := h.writeResponse(
@@ -379,7 +382,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 	if wsSubscriptionListeners != nil {
 		err = h.streamEvents(ctx, respWriter, sub)
 	} else {
-		log.Printf("WARN: RegisterWSSubscriptionListener not registered, ignoring query part")
+		log.Warn().Msg("registerWSSubscriptionListener not registered, ignoring query part")
 	}
 
 	if err != nil {
@@ -409,7 +412,7 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 	}
 
 	if wsEventListener == nil {
-		log.Panic("wsEventListener is not set")
+		log.Fatal().Msg("wsEventListener is not set")
 	}
 
 	if eventMustAuth != nil {
@@ -465,7 +468,11 @@ func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event
 					SubscriptionID: &sub.Source.ID,
 				})
 				if err != nil {
-					log.Printf("WARN: failed to write event %s to subscription %s: %v", event.ID, sub.Source.ID, err)
+					log.Warn().Str("context", "WEBSOCKET").
+						Err(err).
+						Str("event_id", event.ID).
+						Str("subscription_id", sub.Source.ID).
+						Msg("failed to write event to subscription")
 				}
 			} else {
 				sub.Source.Push(event)

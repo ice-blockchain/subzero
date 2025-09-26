@@ -4,9 +4,54 @@ package log
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"sync"
 
 	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+
+	"github.com/ice-blockchain/subzero/cfg"
 )
+
+var (
+	globalInitializer sync.Once
+)
+
+type (
+	Config struct {
+		Level string `yaml:"level" validate:"omitempty,oneof=trace debug info warn error fatal panic"`
+	}
+	Option func(*Config)
+)
+
+func MustInit(opts ...Option) {
+	config, err := cfg.Get[Config]()
+	if config == nil || err != nil {
+		fmt.Println("no log configuration found, using default values", err)
+		config = &Config{
+			Level: zerolog.InfoLevel.String(),
+		}
+	}
+
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	level, err := zerolog.ParseLevel(config.Level)
+	if err != nil {
+		panic(fmt.Sprintf("invalid log level: %v", err))
+	}
+	zerolog.SetGlobalLevel(level)
+
+	globalInitializer.Do(func() {
+		log.Logger = log.Output(zerolog.ConsoleWriter{
+			Out:     os.Stdout,
+			NoColor: true,
+		})
+	})
+}
 
 func Trace(ctx context.Context, msg string, keysAndValues ...any) {
 	opentelemetry.DefaultLogger().Trace(ctx, msg, keysAndValues...)

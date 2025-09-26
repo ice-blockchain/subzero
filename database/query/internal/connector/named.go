@@ -5,12 +5,12 @@ package connector
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -85,7 +85,7 @@ func ExecNamedManyWithCustomRetry[T any](ctx context.Context, db Querier, retryI
 		}
 		conn := db.(*DB).writeLB.Active.Load()
 		prefix += ": query saving to host %v, pool stats %v"
-		log.Printf(prefix, conn.Config().ConnConfig.Host, formatStat(conn.Stat()))
+		log.Trace().Str("prefix", prefix).Str("host", conn.Config().ConnConfig.Host).Str("stat", formatStat(conn.Stat())).Msg("database connector stat")
 	}
 	return res, err
 }

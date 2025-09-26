@@ -4,13 +4,13 @@ package loadtest
 
 import (
 	"context"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -36,7 +36,7 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 	} else {
 		// Generate unique key pair using the project's model package
 		client.privateKey, client.publicKey = model.GenerateKeyPair()
-		log.Printf("Client %d: Generated new key pair (pubkey: %s)", id, client.publicKey)
+		log.Info().Str("context", "LOADTEST").Int("client_id", id).Str("pubkey", client.publicKey).Msg("client generated new key pair")
 	}
 
 	return client, nil
@@ -44,7 +44,7 @@ func NewNostrClient(id int, config *Config) (*NostrClient, error) {
 
 // Connect establishes a connection to the Nostr relay with authentication
 func (nc *NostrClient) Connect(ctx context.Context) error {
-	log.Printf("Client %d: Connecting to %s...", nc.id, nc.config.RelayURL)
+	log.Info().Str("context", "LOADTEST").Int("client_id", nc.id).Str("relay_url", nc.config.RelayURL).Msg("client connecting")
 
 	relay, err := backoff.Retry(ctx, func() (*nostr.Relay, error) {
 		return nostr.RelayConnect(ctx, nc.config.RelayURL, nostr.WithSignatureChecker(func(e *nostr.Event) bool {
@@ -82,7 +82,7 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 			_ = relay.Close()
 			return err
 		}
-		log.Printf("Client %d: Successfully authenticated to relay", nc.id)
+		log.Info().Str("context", "LOADTEST").Int("client_id", nc.id).Msg("client successfully authenticated to relay")
 	}
 	if err != nil {
 		_ = relay.Close()
@@ -91,7 +91,7 @@ func (nc *NostrClient) Connect(ctx context.Context) error {
 
 	nc.relay = relay
 	nc.stats.Connected = true
-	log.Printf("Client %d: Successfully connected", nc.id)
+	log.Info().Str("context", "LOADTEST").Int("client_id", nc.id).Msg("client successfully connected")
 	return nil
 }
 
@@ -140,7 +140,7 @@ func (nc *NostrClient) Subscribe(ctx context.Context, offset time.Duration, kind
 
 	nc.sub = sub
 	nc.events = sub.Events
-	log.Printf("Client %d: Subscribed with ID: %s", nc.id, sub.GetID())
+	log.Info().Str("context", "LOADTEST").Int("client_id", nc.id).Str("subscription_id", sub.GetID()).Msg("client subscribed")
 
 	// Start event handler
 	go nc.handleEvents(ctx)
@@ -169,8 +169,12 @@ func (nc *NostrClient) handleEvents(ctx context.Context) {
 				contentPreview = contentPreview[:100] + "..."
 			}
 
-			log.Printf("Client %d: Event received - Kind: %d, Author: %s, Content: %s",
-				nc.id, event.Kind, event.PubKey[:8], contentPreview)
+			log.Info().Str("context", "LOADTEST").
+				Int("client_id", nc.id).
+				Int("event_kind", event.Kind).
+				Str("author", event.PubKey[:8]).
+				Str("content_preview", contentPreview).
+				Msg("client event received")
 		}
 	}
 }
@@ -200,7 +204,7 @@ func (nc *NostrClient) PublishEvent(ctx context.Context, kind int, content strin
 		return errors.Wrap(err, "failed to publish")
 	}
 
-	log.Printf("Client %d: Published event %s", nc.id, event.ID)
+	log.Info().Str("context", "LOADTEST").Int("client_id", nc.id).Str("event_id", event.ID).Msg("client published event")
 	return nil
 }
 
@@ -239,5 +243,5 @@ func (nc *NostrClient) Close() {
 	}
 
 	nc.stats.Connected = false
-	log.Printf("Client %d: Closed", nc.id)
+	log.Info().Str("context", "LOADTEST").Int("client_id", nc.id).Msg("client closed")
 }

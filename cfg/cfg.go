@@ -3,7 +3,6 @@
 package cfg
 
 import (
-	"log"
 	"reflect"
 	"strings"
 	"sync"
@@ -11,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/go-playground/validator/v10"
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -44,12 +44,15 @@ func mustInit(absoluteCfgPaths ...string) {
 	}
 	if yamlConfigurationFilePath == "" {
 		if len(absoluteCfgPaths) > 0 && absoluteCfgPaths[0] != "" {
-			log.Printf("warn: could not find any of the provided file paths %+v, defaulting to `%v`", absoluteCfgPaths, DefaultYAMLConfigurationFilePath)
+			log.Warn().Strs("provided_paths", absoluteCfgPaths).Str("default_path", DefaultYAMLConfigurationFilePath).Msg("could not find any of the provided file paths, using default value")
 		}
 		yamlConfigurationFilePath = DefaultYAMLConfigurationFilePath
 		globalViper.SetConfigFile(yamlConfigurationFilePath)
 		if err := globalViper.ReadInConfig(); err != nil {
-			log.Panic(errors.Wrapf(err, "failed to read yaml config file at `%v`", yamlConfigurationFilePath))
+			log.Panic().
+				Err(err).
+				Str("file_path", yamlConfigurationFilePath).
+				Msg("failed to read yaml config file")
 		}
 	}
 }
@@ -57,7 +60,7 @@ func mustInit(absoluteCfgPaths ...string) {
 func MustGet[T any]() *T {
 	value, err := Get[T]()
 	if err != nil {
-		log.Panicf("failed to get config: %v", err)
+		log.Panic().Err(err).Msg("failed to get config")
 	}
 	return value
 }

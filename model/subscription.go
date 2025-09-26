@@ -3,9 +3,10 @@
 package model
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
+
+	"github.com/rs/zerolog/log"
 )
 
 type (
@@ -29,7 +30,7 @@ func NewSubscription(id string, filters Filters) *Subscription {
 	}
 
 	if s.ID == "" {
-		log.Panicf("Subscription ID cannot be empty, filters: %s", filters.String())
+		log.Panic().Str("context", "MODEL").Str("filters", filters.String()).Msg("subscription ID cannot be empty")
 	}
 
 	return s

@@ -4,11 +4,11 @@ package loadtest
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 )
 
 type (
@@ -121,10 +121,11 @@ const (
 
 // Print outputs the load test statistics in a formatted way
 func (s *LoadTestStats) Print() {
-	log.Println("\n=== Load Test Statistics ===")
-	log.Printf("Active clients: %d/%d", s.ActiveClients, s.TotalClients)
-	log.Printf("Total events received: %d", s.TotalEvents)
-	log.Printf("Connected clients: %d/%d", s.ConnectedClients, s.ActiveClients)
+	log.Info().
+		Int("connected-clients", s.ConnectedClients).
+		Int("active-clients", s.ActiveClients).
+		Int("total-clients", s.TotalClients).
+		Int("events-received", s.TotalClients)
 
 	for _, client := range s.ClientStats {
 		lastEventStr := "Never"
@@ -132,9 +133,11 @@ func (s *LoadTestStats) Print() {
 			lastEventStr = client.LastEventTime.Format("15:04:05")
 		}
 
-		log.Printf("  Client %d: Connected=%v, Events=%d, LastEvent=%s",
-			client.ID, client.Connected, client.EventsReceived, lastEventStr)
+		log.Info().
+			Int("client_id", client.ID).
+			Bool("connected", client.Connected).
+			Int64("events_received", client.EventsReceived).
+			Str("last_event", lastEventStr).
+			Msg("client status")
 	}
-
-	log.Println("============================\n")
 }

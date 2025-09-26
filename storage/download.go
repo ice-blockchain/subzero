@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -17,6 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 	"github.com/xssnick/tonutils-go/adnl/keys"
 	"github.com/xssnick/tonutils-storage/storage"
 	"golang.org/x/sync/errgroup"
@@ -51,7 +51,10 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 }
 
 func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx context.Context, fh, master, infohash string) error) error {
-	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 with new files for user %v: %v", event.GetMasterPublicKey(), event.String())
+	log.Info().Str("context", "STORAGE").
+		Str("user", event.GetMasterPublicKey()).
+		Str("event", event.String()).
+		Msg("accepting NIP-94 with new files")
 	infohash := event.GetTag("i").Value()
 	if infohash == "" {
 		return errors.Newf("malformed or missing i tag in event %v", event.ID)
@@ -66,7 +69,10 @@ func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx con
 }
 
 func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKey, infohash string) error {
-	log.Printf("[STORAGE] INFO: ACCEPT NIP-94 infohash with new files for user %v: %v", userMasterKey, infohash)
+	log.Info().Str("context", "STORAGE").
+		Str("user", userMasterKey).
+		Str("infohash", infohash).
+		Msg("accepting NIP-94 infohash with new files")
 	spl := strings.Split(infohash, ":")
 	if len(spl) != 3 {
 		return errors.Newf("malformed i tag %v, cannot detect bootstrap and version", infohash)
@@ -92,7 +98,12 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 	replaceBagPerUser := existingBagForUser == nil
 	if existingBagForUser != nil && hex.EncodeToString(existingBagForUser.BagID) != bagID {
 		if (existingBagForUser.Header == nil && ver < newVersion) || (existingBagForUser.Header != nil && int64(existingBagForUser.Header.FilesCount) < newVersion) {
-			log.Printf("[STORAGE] INFO: GOT NIP-94 with new files for user %v, replacing %v with %v", user, hex.EncodeToString(existingBagForUser.BagID), bagID)
+			log.Info().
+				Str("context", "STORAGE").
+				Str("user", user).
+				Hex("existing_bag_id", existingBagForUser.BagID).
+				Str("new_bag_id", bagID).
+				Msg("got NIP-94 with new files, replacing")
 			downloading := existingBagForUser.IsDownloadAll()
 			existingBagForUser.Stop()
 			c.activeDownloadsMx.Lock()
@@ -132,7 +143,11 @@ func (c *client) download(ctx context.Context, bagID, user string, bootstrap *st
 		return
 	}
 	c.activeDownloadsMx.RUnlock()
-	log.Printf("[STORAGE] INFO: ADDING %v for user %v TO DOWNLOADS, Q %v", bagID, user, len(c.downloadQueue))
+	log.Info().Str("context", "STORAGE").
+		Str("bag_id", bagID).
+		Str("user", user).
+		Int("queue_size", len(c.downloadQueue)).
+		Msg("adding to downloads")
 	tor := c.progressStorage.GetTorrent(bag)
 	if tor == nil {
 		tor = storage.NewTorrent(c.rootStoragePath, c.progressStorage, c.conn)
@@ -173,34 +188,41 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 
 			files, _ := tor.ListFiles()
 
-			log.Printf("[STORAGE] INFO: bag %v for user %v downloaded (%v files, %v bytes, %v content), disabling download",
-				hex.EncodeToString(tor.BagID),
-				usr,
-				tor.Header.FilesCount,
-				tor.Info.FileSize,
-				files,
-			)
+			log.Info().
+				Str("context", "STORAGE").
+				Hex("bag_id", tor.BagID).
+				Str("user", usr).
+				Uint32("files_count", tor.Header.FilesCount).
+				Uint64("file_size", tor.Info.FileSize).
+				Strs("files", files).
+				Msg("bag downloaded, disabling download")
 			if pErr := tor.Start(true, false, false); pErr != nil {
-				log.Printf("ERROR: failed to stop torrent download after downloading data for bag %v user %v: %v", hex.EncodeToString(tor.BagID), usr, pErr)
+				log.Error().Err(pErr).Hex("bag_id", tor.BagID).Str("user", usr).Msg("failed to stop torrent download after downloading data")
 			}
 			c.activeDownloadsMx.Lock()
 			delete(c.activeDownloads, hex.EncodeToString(tor.BagID))
 			c.activeDownloadsMx.Unlock()
 			ver := int64(tor.Header.FilesCount)
 			if pErr := c.saveTorrent(tor, user, nil, false, &ver); pErr != nil {
-				log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
+				log.Error().Err(pErr).Hex("bag_id", tor.BagID).Msg("failed save torrent with stopped download after downloading")
 			}
 
 		case storage.EventBagResolved:
 			if _, isUplActive := tor.IsActive(); !isUplActive {
-				log.Printf("[STORAGE] INFO: bag %v for user %v header resolved (%v files, %v bytes), enabling upload to serve clients with chunks we own", hex.EncodeToString(tor.BagID), usr, tor.Header.FilesCount, tor.Info.FileSize)
+				log.Info().
+					Str("context", "STORAGE").
+					Hex("bag_id", tor.BagID).
+					Str("user", usr).
+					Uint32("files_count", tor.Header.FilesCount).
+					Uint64("file_size", uint64(tor.Info.FileSize)).
+					Msg("bag header resolved, enabling upload to serve clients with chunks we own")
 				if pErr := tor.StartWithCallback(true, true, false, c.torrentStateCallback(tor, user)); pErr != nil {
-					log.Printf("ERROR: failed to start torrent %v upload after downloading header: %v", hex.EncodeToString(tor.BagID), pErr)
+					log.Error().Err(pErr).Hex("bag_id", tor.BagID).Msg("failed to start torrent upload after downloading header")
 				}
 				if user != nil {
 					m, err := c.fileMeta(tor)
 					if err != nil {
-						log.Printf("[STORAGE] ERROR: failed to get file meta for bag althrough it is resolved %v: %v", hex.EncodeToString(tor.BagID), err)
+						log.Error().Str("context", "STORAGE").Err(err).Hex("bag_id", tor.BagID).Msg("failed to get file meta for bag although it is resolved")
 					}
 					if m != nil {
 						*user = m.Master
@@ -208,13 +230,13 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 				}
 				ver := int64(tor.Header.FilesCount)
 				if pErr := c.saveTorrent(tor, user, nil, false, &ver); pErr != nil {
-					log.Printf("ERROR: failed save torrent %v with stopped download after downloading: %v", hex.EncodeToString(tor.BagID), pErr)
+					log.Error().Err(pErr).Hex("bag_id", tor.BagID).Msg("failed save torrent with stopped download after downloading")
 				}
 			}
 		case storage.EventFileDownloaded:
-			log.Printf("[STORAGE] DEBUG: bag %v for user %v downloaded FILE %v", hex.EncodeToString(tor.BagID), usr, event.Value)
+			log.Debug().Str("context", "STORAGE").Hex("bag_id", tor.BagID).Str("user", usr).Any("file", event.Value).Msg("bag downloaded file")
 		case storage.EventErr:
-			log.Printf("[STORAGE] ERROR: bag %v for user %v, occured error: %v", hex.EncodeToString(tor.BagID), usr, event.Value)
+			log.Error().Str("context", "STORAGE").Hex("bag_id", tor.BagID).Str("user", usr).Any("error", event.Value).Msg("bag occurred error")
 		}
 	}
 }
@@ -314,7 +336,7 @@ outerLoop:
 		for l < ConcurrentBagsDownloading {
 			select {
 			case <-ctx.Done():
-				log.Printf("[STORAGE] INFO: download loop stopped")
+				log.Info().Str("context", "STORAGE").Msg("download loop stopped")
 				return
 			case q := <-c.downloadQueue:
 				if q.tor == nil {
@@ -331,19 +353,24 @@ outerLoop:
 				if q.user != nil {
 					usr = *q.user
 				}
-				log.Printf("[STORAGE] INFO: starting download %v for user %v Q %v", hex.EncodeToString(tor.BagID), usr, len(c.downloadQueue))
+				log.Info().
+					Str("context", "STORAGE").
+					Hex("bag_id", tor.BagID).
+					Str("user", usr).
+					Int("queue_length", len(c.downloadQueue)).
+					Msg("starting download")
 				if err := tor.StartWithCallback(false, true, false, c.torrentStateCallback(tor, q.user)); err != nil {
-					log.Printf("ERROR: failed to start new torrent %v: %v", q.tor.BagID, err)
+					log.Error().Err(err).Bytes("bag_id", q.tor.BagID).Msg("failed to start new torrent")
 				}
 				if q.bootstrap != nil && *q.bootstrap != "" {
 					ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 					if err := c.connectToBootstrap(ctx, tor, *q.bootstrap); err != nil {
-						log.Printf("WARN: failed to connect to bootstrap node for bag %v, waiting for DHT: %v", hex.EncodeToString(q.tor.BagID), err)
+						log.Warn().Err(err).Hex("bag_id", q.tor.BagID).Msg("failed to connect to bootstrap node, waiting for DHT")
 					}
 					cancel()
 				}
 				if err := c.saveTorrent(tor, q.user, q.bootstrap, false, &q.version); err != nil {
-					log.Printf("ERROR: failed save updated upload / download torrrent state %v: %v", hex.EncodeToString(q.tor.BagID), err)
+					log.Error().Err(err).Hex("bag_id", q.tor.BagID).Msg("failed save updated upload / download torrent state")
 				}
 				c.activeDownloadsMx.Lock()
 				c.activeDownloads[hex.EncodeToString(tor.BagID)] = true
@@ -371,7 +398,7 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 			var err error
 			relays, err = fetchUserRelays(ctx, userMasterKey)
 			if err != nil {
-				log.Printf("WARN: failed to fetch user's relays for user %v: %v", userMasterKey, err)
+				log.Warn().Err(err).Str("user", userMasterKey).Msg("failed to fetch user's relays")
 				return ErrNoRelays
 			}
 		}
@@ -380,11 +407,11 @@ func (c *client) triggerDownloadOnAllPeers(events ...*model.Event) acceptorFn {
 		}
 
 		var eg errgroup.Group
-		log.Printf("INFO: triggering download on %#v relays for user %v file %v", relays, userMasterKey, fileHash)
+		log.Info().Strs("relays", relays).Str("user_master_key", userMasterKey).Str("file_hash", fileHash).Msg("triggering download")
 		for _, relay := range relays {
 			eg.Go(func() error {
 				if err := globalClient.Client.triggerDownloadOnRelay(ctx, relay, fileHash, userMasterKey, infohash); err != nil {
-					log.Printf("WARN: failed to trigger download on relay %v for user %v: %v", relay, userMasterKey, err)
+					log.Warn().Err(err).Str("relay", relay).Str("user", userMasterKey).Msg("failed to trigger download on relay")
 					return err
 				}
 				return nil
@@ -434,9 +461,9 @@ func (c *client) triggerDownloadOnRelay(ctx context.Context, relayUrl, fileHash,
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("failed to start storage replication of file %v : %v on %v, retrying...: %v", masterPubkey, fileHash, relayUrl, err)
+				log.Error().Err(err).Str("master_pubkey", masterPubkey).Str("file_hash", fileHash).Str("relay_url", relayUrl).Msg("failed to start storage replication of file, retrying")
 			} else {
-				log.Printf("failed to start storage replication of file %v : %v on %v:status %v, retrying...", masterPubkey, fileHash, relayUrl, resp.GetStatusCode())
+				log.Error().Str("master_pubkey", masterPubkey).Str("file_hash", fileHash).Str("relay_url", relayUrl).Int("status_code", resp.GetStatusCode()).Msg("failed to start storage replication of file with status, retrying")
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {

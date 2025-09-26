@@ -4,7 +4,6 @@ package nip11
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/imroc/req/v3"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -35,7 +35,7 @@ func NewFetcher(ctx context.Context) Fetcher {
 	go f.cache.Start()
 	go func() {
 		<-ctx.Done()
-		log.Printf("NIP11 fetcher: shutting down")
+		log.Trace().Msg("NIP11 fetcher: shutting down")
 		f.cache.Stop()
 	}()
 	return f
@@ -86,9 +86,9 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("ERROR: %v, failed to call relay %v, retrying...", err, relayUrl)
+				log.Error().Err(err).Str("relay_url", relayUrl).Msg("failed to call relay, retrying")
 			} else {
-				log.Printf("ERROR: failed to call relay %v with status code:%v, retrying...", relayUrl, resp.StatusCode)
+				log.Error().Str("relay_url", relayUrl).Int("status_code", resp.StatusCode).Msg("failed to call relay with status code, retrying")
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {

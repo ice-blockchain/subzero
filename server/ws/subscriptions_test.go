@@ -5,7 +5,6 @@ package ws
 import (
 	"context"
 	"fmt"
-	"log"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
+	"github.com/rs/zerolog/log"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
@@ -62,7 +62,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	for connIdx := 0; connIdx < connsCount; connIdx++ {
 		relay, err := fixture.NewRelayClient(ctx, pubsubServers[0].Endpoint())
 		if err != nil {
-			log.Panic(err)
+			log.Panic().Err(err)
 		}
 		subsForConn, ok := subs[relay]
 		if !ok {
@@ -72,7 +72,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		for subIdx := 0; subIdx < subsPerConnectionCount; subIdx++ {
 			sub, err := relay.Subscribe(subCtx, filters)
 			if err != nil {
-				log.Panic(err)
+				log.Panic().Err(err)
 			}
 			subsForConn[sub] = struct{}{}
 		}
@@ -99,7 +99,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic(errors.New("timeout waiting for the event"))
+					log.Panic().Err(errors.New("timeout waiting for the event"))
 				}
 				require.Equal(t, storedEvents[0].ID, ev.ID)
 				require.Equal(t, storedEvents[0].Tags, ev.Tags)
@@ -111,12 +111,12 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 				select {
 				case <-eosCh:
 				case <-ctx.Done():
-					log.Panic(errors.New("timeout waiting for EOS"))
+					log.Panic().Err(errors.New("timeout waiting for EOS"))
 				}
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic(errors.New("timeout waiting for the event"))
+					log.Panic().Err(errors.New("timeout waiting for the event"))
 				}
 				require.NotNil(t, ev)
 				require.Equal(t, storedEvents[1].ID, ev.ID)
@@ -145,7 +145,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			select {
 			case <-s.EndOfStoredEvents:
 			case <-ctx.Done():
-				log.Panic(errors.New("timeout waiting for EOS"))
+				log.Panic().Err(errors.New("timeout waiting for EOS"))
 			}
 		}
 	}

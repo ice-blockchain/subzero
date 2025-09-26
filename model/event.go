@@ -8,13 +8,13 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
+	"github.com/rs/zerolog/log"
 )
 
 type (
@@ -47,7 +47,11 @@ func (e *Event) CheckNIP13Difficulty(minLeadingZeroBits int) error {
 		return nil
 	}
 	if err := nip13.Check(e.ID, minLeadingZeroBits); err != nil {
-		log.Printf("difficulty: %v < %v, id:%v", nip13.Difficulty(e.ID), minLeadingZeroBits, e.ID)
+		log.Trace().Str("context", "MODEL").
+			Int("difficulty", nip13.Difficulty(e.ID)).
+			Int("min_leading_zero_bits", minLeadingZeroBits).
+			Str("event_id", e.ID).
+			Msg("difficulty check")
 
 		return err
 	}
@@ -61,7 +65,7 @@ func (e *Event) GenerateNIP13(ctx context.Context, minLeadingZeroBits int) error
 	}
 	tag, err := nip13.DoWork(ctx, e.Event, minLeadingZeroBits)
 	if err != nil {
-		log.Printf("can't do mining by the provided difficulty:%v", minLeadingZeroBits)
+		log.Error().Str("context", "MODEL").Int("difficulty", minLeadingZeroBits).Msg("can't do mining by the provided difficulty")
 
 		return err
 	}

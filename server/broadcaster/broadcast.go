@@ -5,7 +5,6 @@ package broadcaster
 import (
 	"context"
 	"crypto/tls"
-	"log"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -54,7 +54,7 @@ func (b *Broadcaster) newInitAuthEvent(url string) *model.Event {
 		{"challenge", "init"},
 	}
 	if err := ev.SignWithAlg(b.conf.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
-		log.Panicf("[Broadcaster] Failed to sign authentication event: %v", err)
+		log.Panic().Str("context", "BROADCASTER").Err(err).Msg("failed to sign authentication event")
 	}
 
 	return &ev
@@ -116,7 +116,7 @@ func (b *Broadcaster) ensureRelay(ctx context.Context, url string) *nostr.Relay 
 	relay, _ := b.relays.LoadOrCompute(url, func() (*nostr.Relay, bool) {
 		r, err := b.relayConnect(ctx, url)
 		if err != nil {
-			log.Printf("[Broadcaster] Failed to connect to relay: %v", err)
+			log.Error().Str("context", "BROADCASTER").Err(err).Str("relay_url", url).Msg("failed to connect to relay")
 		}
 		return r, r == nil
 	})
@@ -243,18 +243,23 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 	if err != nil {
 		return err
 	} else if len(targets) == 0 {
-		log.Printf("[Broadcaster] No targets found for %d events: %v", len(events), model.Events(events).String())
+		log.Trace().
+			Str("context", "Broadcaster").
+			Int("event_count", len(events)).
+			Str("events", model.Events(events).String()).
+			Msg("no targets found for events")
 		return nil
 	}
 	end := time.Since(start)
 
-	log.Printf("[Broadcaster] Broadcasting %d events to %d users: %v -> %v [collect duration %s]",
-		len(events),
-		len(targets),
-		model.Events(events).IDs(),
-		targets,
-		end,
-	)
+	log.Trace().
+		Str("context", "Broadcaster").
+		Int("event_count", len(events)).
+		Int("target_count", len(targets)).
+		Interface("event_ids", model.Events(events).IDs()).
+		Interface("targets", targets).
+		Dur("collect_duration", end).
+		Msg("broadcasting events to users")
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(targets))
@@ -269,8 +274,14 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 				start := time.Now()
 				bxErr := b.broadcastTo(ctx, relay, events)
 				end := time.Since(start)
-				log.Printf("[Broadcaster] Publishing %d events (%v) to %s: result: %v [duration %s]",
-					len(events), model.Events(events).IDs(), relay, bxErr, end)
+				log.Trace().
+					Str("context", "Broadcaster").
+					Int("event_count", len(events)).
+					Interface("event_ids", model.Events(events).IDs()).
+					Str("relay", relay).
+					Interface("result", bxErr).
+					Dur("duration", end).
+					Msg("publishing events to relay")
 				errCh <- errors.Wrapf(bxErr, "failed to broadcast %d event(s) of %s", len(events), pubkey)
 			}()
 		}

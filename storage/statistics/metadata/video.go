@@ -4,11 +4,11 @@ package metadata
 
 import (
 	"encoding/json"
-	"log"
 	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
@@ -116,7 +116,7 @@ func newVideoExtractor() Extractor {
 			err = nil
 		}
 		if err != nil {
-			log.Panicf("failed to call ffprobe, is ffmpeg installed? %v", err)
+			log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to call ffprobe, is ffmpeg installed?")
 		}
 	}
 	return &videoMetaExtractor{}

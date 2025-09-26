@@ -7,7 +7,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 	tusd "github.com/tus/tusd/v2/pkg/handler"
 
 	"github.com/ice-blockchain/subzero/server/http/nip11"
@@ -99,21 +99,30 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			Fragment: gCtx.Request.URL.Fragment,
 		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			log.Error().Err(authErr).Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
 		attestationValid := token.ValidateAttestation(ctx, nostr.KindFileMetadata, now)
 		if attestationValid != nil {
-			log.Printf("ERROR: on-behalf attestation failed: %v", errors.Wrap(attestationValid, "endpoint authentification failed"))
+			log.Error().
+				Err(attestationValid).
+				Str("reason", "on-behalf attestation failed").
+				Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusForbidden, uploadErr("Forbidden: on-behalf attestation failed"))
 			return
 		}
-		log.Printf("[STORAGE DURATION %v %v] validation1 %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(now), time.Since(now))
+		log.Trace().
+			Str("context", "STORAGE").
+			Str("master_pubkey", token.MasterPubKey()).
+			Str("hash", token.ExpectedHash()).
+			Dur("duration_since_start", time.Since(now)).
+			Dur("total_duration", time.Since(now)).
+			Msg("validation1")
 		hStart := time.Now()
 		uploadingFilePath, input, hash, err := s.storageClient.SaveFile(ctx, now, token.MasterPubKey(), gCtx.Request, maxUploadSize)
 		if err != nil {
-			log.Printf("ERROR: failed to save temp file while processing upload %v", err)
+			log.Error().Err(err).Msg("failed to save temp file while processing upload")
 			switch {
 			case errors.Is(err, storage.ErrValidationFailed):
 				gCtx.JSON(http.StatusBadRequest, uploadErr("failed validate upload request"))
@@ -125,10 +134,16 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			gCtx.JSON(http.StatusBadRequest, uploadErr("failed to store temporary file"))
 			return
 		}
-		log.Printf("[STORAGE DURATION %v %v] SAVING HASHING TOOK %v, whole %v", token.MasterPubKey(), token.ExpectedHash(), time.Since(hStart), time.Since(now))
+		log.Trace().
+			Str("context", "STORAGE").
+			Str("master_pubkey", token.MasterPubKey()).
+			Str("hash", token.ExpectedHash()).
+			Dur("duration_since_start", time.Since(hStart)).
+			Dur("total_duration", time.Since(now)).
+			Msg("SAVING HASHING")
 		hashHex := hex.EncodeToString(hash)
 		if hashHex != token.ExpectedHash() {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash()))
+			log.Error().Err(errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, token.ExpectedHash())).Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusForbidden, uploadErr("Unauthorized"))
 			os.Remove(uploadingFilePath)
 			return
@@ -136,7 +151,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), input.Filename, hex.EncodeToString(hash), input)
 
 		if err != nil {
-			log.Printf("ERROR: failed to upload file: %v", errors.Wrap(err, "failed to upload file to ion storage"))
+			log.Error().Err(err).Msg("failed to upload file to ion storage")
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			os.Remove(uploadingFilePath)
 			return
@@ -178,7 +193,7 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 			Fragment: gCtx.Request.URL.Fragment,
 		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			log.Error().Err(authErr).Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
@@ -199,7 +214,7 @@ func (s *storageHandler) redirectToDistributedStorageUrl() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: failed to build download url %v", err)
+			log.Error().Err(err).Msg("failed to build download url")
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -229,7 +244,7 @@ func (s *storageHandler) serveFileFromStorage() gin.HandlerFunc {
 				gCtx.Status(http.StatusNotFound)
 				return
 			}
-			log.Printf("ERROR: failed to build download url %v", err)
+			log.Error().Err(err).Msg("failed to build download url")
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -257,13 +272,16 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			Fragment: gCtx.Request.URL.Fragment,
 		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			log.Error().Err(authErr).Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
 		attestationValid := token.ValidateAttestation(ctx, nostr.KindFileMetadata, now)
 		if attestationValid != nil {
-			log.Printf("ERROR: on-behalf attestation failed: %v", errors.Wrap(attestationValid, "endpoint authentification failed"))
+			log.Error().
+				Err(attestationValid).
+				Str("reason", "on-behalf attestation failed").
+				Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusForbidden, uploadErr("Forbidden: on-behalf attestation failed"))
 			return
 		}
@@ -273,7 +291,7 @@ func (s *storageHandler) Delete() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.Delete(ctx, token.PubKey(), token.MasterPubKey(), file); err != nil {
-			log.Printf("ERROR: failed to delete file %v %v", file, err)
+			log.Error().Err(err).Str("file", file).Msg("failed to delete file")
 			if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrForbidden) {
 				gCtx.JSON(http.StatusForbidden, uploadErr("user do not own file"))
 				return
@@ -297,7 +315,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 			Fragment: gCtx.Request.URL.Fragment,
 		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			log.Error().Err(authErr).Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
@@ -306,7 +324,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 			Count uint32 `form:"count"`
 		}
 		if err := gCtx.ShouldBindWith(&params, binding.Query); err != nil {
-			log.Printf("ERROR: failed to bind data : %v", errors.Wrap(err, "failed to bind data"))
+			log.Error().Err(err).Msg("failed to bind data")
 			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data"))
 			return
 		}
@@ -315,7 +333,7 @@ func (s *storageHandler) ListFiles() gin.HandlerFunc {
 		}
 		total, filesList, err := s.storageClient.ListFiles(token.MasterPubKey(), params.Page, params.Count)
 		if err != nil {
-			log.Printf("ERROR: failed to list files for user %v %v", token.MasterPubKey(), err)
+			log.Error().Err(err).Str("user", token.MasterPubKey()).Msg("failed to list files for user")
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}
@@ -357,7 +375,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			Fragment: gCtx.Request.URL.Fragment,
 		}, gCtx.Request.Method, authHeader, now)
 		if authErr != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(authErr, "endpoint authentification failed"))
+			log.Error().Err(authErr).Msg("endpoint authentification failed")
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("Unauthorized"))
 			return
 		}
@@ -368,12 +386,12 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 		}
 		senderNIP11, err := s.nip11Fetcher.Fetch(ctx, senderUrl)
 		if err != nil {
-			log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(err, "failed to fetch sender NIP11"))
+			log.Error().Err(err).Msg("failed to fetch sender NIP11")
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred"))
 			return
 		}
 		if token.PubKey() != senderNIP11.PubKey {
-			log.Printf("ERROR: endpoint authentification failed: sender pubkey mismatch nip11>%v, token>%v", senderNIP11.PubKey, token.PubKey())
+			log.Error().Str("nip11_pubkey", senderNIP11.PubKey).Str("token_pubkey", token.PubKey()).Msg("endpoint authentification failed: sender pubkey mismatch")
 			gCtx.JSON(http.StatusUnauthorized, uploadErr("sender pubkey mismatch"))
 			return
 		}
@@ -385,7 +403,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			file = spl[1]
 		}
 		if err = storage.VerifyFileOwnershipAndAttestationForFileReplication(ctx, now, file, masterPubkey, senderUrl); err != nil {
-			log.Printf("ERROR: not owning the file: %v %v user %v req from %v", err, file, masterPubkey, senderUrl)
+			log.Error().Err(err).Str("file", file).Str("user", masterPubkey).Str("sender_url", senderUrl).Msg("not owning the file")
 			gCtx.JSON(http.StatusConflict, uploadErr("relay does not own the file"))
 			return
 		}
@@ -393,7 +411,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			I string `form:"i"`
 		}
 		if err := gCtx.ShouldBindWith(&params, binding.Query); err != nil {
-			log.Printf("ERROR: failed to bind data : %v", errors.Wrap(err, "failed to bind data"))
+			log.Error().Err(err).Msg("failed to bind data")
 			gCtx.JSON(http.StatusBadRequest, uploadErr("invalid data"))
 			return
 		}
@@ -402,7 +420,7 @@ func (s *storageHandler) CrossRelayDownload() gin.HandlerFunc {
 			return
 		}
 		if err := s.storageClient.StartDownloadNewBag(ctx, file, masterPubkey, params.I); err != nil {
-			log.Printf("ERROR: failed to accept new info hash %v for %v: %v", params.I, masterPubkey, err)
+			log.Error().Err(err).Str("info_hash", params.I).Str("user", masterPubkey).Msg("failed to accept new info hash")
 			gCtx.JSON(http.StatusInternalServerError, uploadErr("oops, error occurred!"))
 			return
 		}

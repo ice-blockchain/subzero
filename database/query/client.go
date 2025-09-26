@@ -8,13 +8,13 @@ import (
 	"embed"
 	"encoding/hex"
 	"errors"
-	"log"
 	"path"
 	"sort"
 	"strings"
 	"unicode"
 
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
@@ -60,7 +60,7 @@ func readDDL() string {
 
 	files, err := ddl.ReadDir("ddl")
 	if err != nil {
-		log.Panicf("failed to read DDL directory: %v", err)
+		log.Panic().Err(err).Msg("failed to read DDL directory")
 	}
 
 	var names []string
@@ -88,7 +88,7 @@ func readDDL() string {
 		target := path.Join("ddl", fileName)
 		content, err := ddl.ReadFile(target)
 		if err != nil {
-			log.Panicf("failed to read DDL file %s: %v", target, err)
+			log.Panic().Err(err).Str("file", target).Msg("failed to read DDL file")
 		}
 		if i > 0 {
 			sb.WriteString("--------")
@@ -127,7 +127,7 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 
 	db, err := connector.New(ctx, options...)
 	if err != nil {
-		log.Panicf("failed to open database: %v", err)
+		log.Panic().Err(err).Msg("failed to open database")
 	}
 	client.db = db
 

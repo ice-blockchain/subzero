@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/nbd-wtf/go-nostr/nip94"
+	"github.com/rs/zerolog/log"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/xssnick/tonutils-go/adnl"
 	"github.com/xssnick/tonutils-go/adnl/dht"
@@ -281,7 +281,11 @@ func (c *client) FilePath(masterKey, fileHash, ext string) (string, error) {
 	if err != nil {
 		var serr *json.SyntaxError
 		if errors.Is(err, errLatestBagNotDownloadedYet) || errors.As(err, &serr) {
-			log.Printf("[STORAGE] WARN: failed to detect file meta for %X: %v", bag.BagID, err.Error())
+			log.Warn().
+				Str("context", "STORAGE").
+				Err(err).
+				Hex("bag_id", bag.BagID).
+				Msg("failed to detect file meta")
 			return filepath.Join(userPath, fmt.Sprintf("%v%v", fileHash, ext)), nil
 		}
 		return "", errors.Wrapf(err, "failed to parse bag header data %v", hex.EncodeToString(bag.BagID))
@@ -353,7 +357,15 @@ func (c *client) report(ctx context.Context) {
 					notResolvedHeader++
 				}
 			}
-			log.Printf("[STORAGE STATS] DEBUG: Q TO DOWNLOAD %v, DOWNLOADING %v NOT COMPLETED %v, UPLOADING %v, RESOLVING INFO %v, RESOLVING HEADER %v TOTAL %v", len(c.downloadQueue), activelyDownloading, notCompleted, activeUploading, notResolvedInfo, notResolvedHeader, len(all))
+			log.Info().Str("context", "STORAGE").
+				Int("download_queue", len(c.downloadQueue)).
+				Int("actively_downloading", activelyDownloading).
+				Int("not_completed", notCompleted).
+				Int("active_uploading", activeUploading).
+				Int("not_resolved_info", notResolvedInfo).
+				Int("not_resolved_header", notResolvedHeader).
+				Int("total", len(all)).
+				Msg("storage stats")
 		}
 	}
 }

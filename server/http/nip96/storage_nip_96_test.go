@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand/v2"
 	"mime/multipart"
 	"net/http"
@@ -32,6 +31,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip94"
 	"github.com/nbd-wtf/go-nostr/nip96"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 	var err error
 	testMainStorageRoot, err = os.MkdirTemp("", "test-nip96-storage-root")
 	if err != nil {
-		log.Panicf("failed to create temp storage root: %v", err)
+		log.Panic().Err(err).Msg("failed to create temp storage root")
 	}
 
 	initServer(serverCtx, 9996, storage.WithConfig(&storage.Config{
@@ -660,13 +660,13 @@ func deleteFile(t *testing.T, ctx context.Context, sk string, fileHash string, m
 func mustAuthorizedReq(ctx context.Context, sk, method, url, fileHash, contentType string, body io.Reader, masterKey ...string) *http.Response {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		log.Panicf("failed to create request: %v", err)
+		log.Panic().Err(err).Msg("failed to create request")
 	}
 
 	req.Header.Set("Content-Type", contentType)
 	auth, err := nip98.GenerateAuthHeader(sk, method, fileHash, req.URL, masterKey...)
 	if err != nil {
-		log.Panicf("failed to generate auth header: %v", err)
+		log.Panic().Err(err).Msg("failed to generate auth header")
 	}
 	req.Header.Set("Authorization", auth)
 
@@ -683,7 +683,7 @@ func mustAuthorizedReq(ctx context.Context, sk, method, url, fileHash, contentTy
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Panicf("failed to execute request: %v", err)
+		log.Panic().Err(err).Msg("failed to execute request")
 	}
 	return resp
 }

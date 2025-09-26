@@ -5,7 +5,6 @@ package model
 import (
 	"encoding/json"
 	"html"
-	"log"
 	"regexp"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
+	"github.com/rs/zerolog/log"
 )
 
 type (
@@ -60,7 +60,7 @@ func ExtractMentionedPubkeys(e *Event) ([]string, error) {
 func parseQuillDeltaToPlainText(deltaJSON string) string {
 	var delta []deltaOperation
 	if err := json.Unmarshal([]byte(deltaJSON), &delta); err != nil {
-		log.Printf("Error unmarshalling Quill delta: %v", err)
+		log.Error().Str("context", "MODEL").Err(err).Msg("error unmarshalling Quill delta")
 
 		return ""
 	}
@@ -69,13 +69,13 @@ func parseQuillDeltaToPlainText(deltaJSON string) string {
 	cleanedDelta = ensureDeltaEndsWithNewline(cleanedDelta)
 	cleanedJSON, err := json.Marshal(cleanedDelta)
 	if err != nil {
-		log.Printf("Error marshalling cleaned delta: %v", err)
+		log.Error().Str("context", "MODEL").Err(err).Msg("error marshalling cleaned delta")
 
 		return ""
 	}
 	htmlBytes, err := quill.Render(cleanedJSON)
 	if err != nil {
-		log.Printf("Error rendering Quill delta: %v", err)
+		log.Error().Str("context", "MODEL").Err(err).Msg("error rendering Quill delta")
 
 		return ""
 	}

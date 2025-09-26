@@ -5,13 +5,13 @@ package http3
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/webtransport-go"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -70,7 +70,10 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		ws, ctx, err = s.handleWebsocket(writer, req)
 	}
 	if err != nil {
-		log.Printf("ERROR:%v", errors.Wrapf(err, "http3: upgrading failed for %v", req.Proto))
+		log.Error().
+			Err(err).
+			Str("protocol", req.Proto).
+			Msg("http3 upgrading failed")
 		writer.WriteHeader(http.StatusBadRequest)
 
 		return
@@ -79,7 +82,9 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		go func() {
 			defer func() {
 				if clErr := ws.Close(); clErr != nil {
-					log.Printf("ERROR:%v", errors.Wrap(clErr, "failed to close http3 stream"))
+					log.Error().
+						Err(clErr).
+						Msg("failed to close http3 stream")
 				}
 
 			}()

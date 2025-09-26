@@ -6,11 +6,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -57,7 +57,10 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 	}
 	if err != nil {
 		if !errors.Is(err, errNoCompression) {
-			log.Printf("ERROR:%v", errors.Wrapf(err, "upgrading failed (http2 / %v)", req.Proto))
+			log.Error().
+				Err(err).
+				Str("protocol", req.Proto).
+				Msg("upgrading failed (http2)")
 			writer.WriteHeader(http.StatusBadRequest)
 		}
 		return
@@ -66,7 +69,9 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 		go func() {
 			defer func() {
 				if clErr := wsocket.Close(); clErr != nil {
-					log.Printf("ERROR:%v", errors.Wrap(clErr, "failed to close websocket conn"))
+					log.Error().
+						Err(clErr).
+						Msg("failed to close websocket conn")
 				}
 			}()
 			go wsocket.Write(ctx)

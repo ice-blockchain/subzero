@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr/nip44"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -294,7 +294,7 @@ func retry(ctx context.Context, op func() error) error {
 			Clock:               backoff.SystemClock,
 		}, ctx),
 		func(e error, next time.Duration) {
-			log.Printf("FCM call failed. retrying in %v... Error: %v", next, e)
+			log.Error().Err(e).Dur("retry_delay", next).Msg("FCM call failed. retrying")
 		})
 }
 
@@ -322,7 +322,7 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 func calculateMessageSize(message *messaging.Message) int {
 	data, err := json.Marshal(message)
 	if err != nil {
-		log.Printf("failed to marshal message: %v", err)
+		log.Error().Err(err).Msg("failed to marshal message")
 
 		return 0
 	}

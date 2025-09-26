@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/url"
 	"slices"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
@@ -523,12 +523,12 @@ func (c *consensus) convertRelaysToBroadcastEndpoints(relays ...string) []string
 	for _, relay := range relays {
 		u, err := url.Parse(relay)
 		if err != nil {
-			log.Printf("malformed relay %v: %v", relay, err)
+			log.Error().Err(err).Str("relay", relay).Msg("malformed relay")
 			continue
 		}
 		port, err := strconv.ParseUint(u.Port(), 10, 64)
 		if err != nil {
-			log.Printf("malformed relay %v: %v", relay, err)
+			log.Error().Err(err).Str("relay", relay).Msg("malformed relay")
 			continue
 		}
 		discoveryPort := (port + 10000)

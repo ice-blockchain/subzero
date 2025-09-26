@@ -6,13 +6,13 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"log"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -291,7 +291,7 @@ func getLatestSettingsTag(event *model.Event, settingsName string) model.Tag {
 		if tag.Value() == settingsName && len(tag) > 3 {
 			timestamp, err := nostr.ParseTimestamp(tag[3])
 			if err != nil {
-				log.Printf("%v: error parsing timestamp: %v: %v", event.String(), settingsName, err)
+				log.Error().Err(err).Str("event", event.String()).Str("settings_name", settingsName).Msg("error parsing timestamp")
 
 				continue
 			}

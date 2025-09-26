@@ -7,13 +7,13 @@ package command
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/cometbft/config"
 	"github.com/ice-blockchain/cometbft/crypto/ed25519"
@@ -83,12 +83,12 @@ func newConsensusNode(ctx context.Context, nodeCfg *config.Config, port uint16, 
 	pattern := "cometbft-" + strconv.Itoa(int(port))
 	storage, err := os.MkdirTemp("", pattern+"-storage")
 	if err != nil {
-		log.Panicf("failed to create temp dir: %v", err)
+		log.Panic().Err(err).Msg("failed to create temp dir")
 	}
 
 	keyPath, err := os.CreateTemp("", pattern+"-nodekey")
 	if err != nil {
-		log.Panicf("failed to create temp file: %v", err)
+		log.Panic().Err(err).Msg("failed to create temp file")
 	}
 
 	nodeKey := &p2p.NodeKey{
@@ -96,10 +96,14 @@ func newConsensusNode(ctx context.Context, nodeCfg *config.Config, port uint16, 
 	}
 
 	if err := nodeKey.SaveAs(keyPath.Name()); err != nil {
-		log.Panicf("failed to save node key: %v in %s", err, keyPath.Name())
+		log.Panic().Err(err).Str("path", keyPath.Name()).Msg("failed to save node key")
 	}
 
-	log.Printf("createating test node: port=%d, storage=%s, keyPath=%s", port, storage, keyPath.Name())
+	log.Trace().
+		Uint16("port", port).
+		Str("storage", storage).
+		Str("key_path", keyPath.Name()).
+		Msg("creating test node")
 
 	var options = []Option{
 		WithConfig(&Config{

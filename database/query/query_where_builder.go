@@ -5,7 +5,6 @@ package query
 import (
 	"cmp"
 	"context"
-	"log"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -360,25 +360,26 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 			}
 
 			if len(values) > maxTagValues {
-				log.Printf("filter %v: %q: too many values for tag %q, only the first %d will be used",
-					filterID,
-					func() string {
-						var b strings.Builder
-						for i, v := range values {
-							if v == nil {
-								b.WriteString("nil")
-							} else {
-								b.WriteString(*v)
-							}
-							if i < len(values)-1 {
-								b.WriteString(", ")
-							}
+				filter := func() string {
+					var b strings.Builder
+					for i, v := range values {
+						if v == nil {
+							b.WriteString("nil")
+						} else {
+							b.WriteString(*v)
 						}
-						return b.String()
-					}(),
-					tagName,
-					maxTagValues,
-				)
+						if i < len(values)-1 {
+							b.WriteString(", ")
+						}
+					}
+					return b.String()
+				}()
+				log.Trace().
+					Str("filter_id", filterID).
+					Str("filter", filter).
+					Str("tag_name", tagName).
+					Int("max_tag_values", maxTagValues).
+					Msg("filter: too many values for tag, only the first will be used")
 				values = values[:maxTagValues]
 			}
 

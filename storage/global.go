@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"math"
 	"math/rand/v2"
 	"net"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 	"github.com/syndtr/goleveldb/leveldb"
 	ldbstorage "github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/xssnick/tonutils-go/adnl"
@@ -150,7 +150,11 @@ func acceptDeletion(ctx context.Context, event *model.Event) error {
 	if originalEvent == nil {
 		return nil
 	}
-	log.Printf("[STORAGE] INFO: ACCEPT FILE DELETION OF NIP-94 for user %v: %v, original event %v", event.GetMasterPublicKey(), event.String(), originalEvent.String())
+	log.Info().Str("context", "STORAGE").
+		Str("user", event.GetMasterPublicKey()).
+		Str("event", event.String()).
+		Str("original_event", originalEvent.String()).
+		Msg("accepting file deletion of NIP-94")
 	fileHashes := map[string]string{}
 	if xTag := originalEvent.GetTag("ox"); originalEvent.Kind == nostr.KindFileMetadata && xTag.Value() != "" {
 		fileHashes[xTag.Value()] = originalEvent.GetTag("url").Value()
@@ -229,14 +233,20 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey, e
 	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
 	}
-	log.Printf("[STORAGE] INFO: bag %x replaced by %v due to file deletion %+v for user %v", bag.BagID, bagID, fileHash, masterPubkey)
+	log.Info().
+		Str("context", "STORAGE").
+		Hex("old_bag_id", bag.BagID).
+		Str("new_bag_id", bagID).
+		Str("file_hash", fileHash).
+		Str("user", masterPubkey).
+		Msg("bag replaced due to file deletion")
 	return nil
 }
 
 func WithConfig(cfg *Config) Option {
 	return func(c *client) {
 		if cfg == nil {
-			log.Panicf("nil config passed to WithConfig")
+			log.Panic().Str("context", "STORAGE").Msg("nil config passed to WithConfig")
 		}
 		c.config = cfg
 	}
@@ -274,18 +284,18 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 		cl.config = cfg.MustGet[Config]()
 	} else {
 		if err := cfg.Validate(cl.config); err != nil {
-			log.Panicf("failed to validate config: %v", err)
+			log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to validate config")
 		}
 	}
 
 	storage.Logger = func(a ...any) {
 		if cl.config.Debug {
-			log.Println(a...)
+			log.Debug().Str("context", "STORAGE").Any("log", a).Msg("storage")
 		}
 		if len(a) > 0 {
 			if s, isStr := a[0].(string); isStr {
 				if strings.Contains(strings.ToLower(s), "err") {
-					log.Println(a)
+					log.Warn().Str("context", "STORAGE").Any("log", a).Msg("storage")
 				}
 			}
 		}
@@ -295,33 +305,49 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 
 	u, err := url.Parse(cl.config.IONStorageConfigURL)
 	if err != nil {
-		log.Panicf("invalid ton config url: %v: %v", cl.config.IONStorageConfigURL, err)
+		log.Panic().
+			Str("context", "STORAGE").
+			Err(err).
+			Str("url", cl.config.IONStorageConfigURL).
+			Msg("invalid ton config url")
 	}
 
 	var lsCfg *liteclient.GlobalConfig
 	if u.Scheme == "file" {
 		lsCfg, err = liteclient.GetConfigFromFile(u.Path)
 		if err != nil {
-			log.Panicf("failed to load ton network config from file: %v: %v", u.Path, err)
+			log.Panic().Str("context", "STORAGE").Err(err).Str("path", u.Path).Msg("failed to load ton network config from file")
 		}
 	} else {
 		downloadConfigCtx, cancelDownloadConfig := context.WithTimeout(ctx, 30*time.Second)
 		defer cancelDownloadConfig()
 		lsCfg, err = liteclient.GetConfigFromUrl(downloadConfigCtx, cl.config.IONStorageConfigURL)
 		if err != nil {
-			log.Panicf("failed to load ton network config from url: %v: %v", u.String(), err)
+			log.Panic().
+				Str("context", "STORAGE").
+				Err(err).
+				Str("url", u.String()).
+				Msg("failed to load ton network config from url")
 		}
 	}
 	privateKey, err := hex.DecodeString(cl.config.PrivateKey)
 	if err != nil {
-		log.Panicf("failed to decode private key as hex: %v: %v", cl.config.PrivateKey, err)
+		log.Panic().
+			Str("context", "STORAGE").
+			Err(err).
+			Str("private_key", cl.config.PrivateKey).
+			Msg("failed to decode private key as hex")
 	}
 	cl.gateway = adnl.NewGateway(privateKey)
 	ip := net.IPv4(127, 0, byte(rand.IntN(200))+1, byte(rand.IntN(200))+1) // Default to localhost.
 	if cl.config.ExternalADNLAddress != "" {
 		ip = net.ParseIP(cl.config.ExternalADNLAddress)
 		if ip == nil {
-			log.Panicf("invalid external-adnl-address: %v: %v", cl.config.ExternalADNLAddress, err)
+			log.Panic().
+				Str("context", "STORAGE").
+				Err(err).
+				Str("address", cl.config.ExternalADNLAddress).
+				Msg("invalid external-adnl-address")
 		}
 	}
 	cl.gateway.SetAddressList([]*adnlAddress.UDP{
@@ -331,27 +357,31 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 		},
 	})
 	if err = cl.gateway.StartServer(fmt.Sprintf(":%v", cl.config.ExternalADNLPort), ConcurrentBagsDownloading*threadsPerBagForDownloading); err != nil {
-		log.Panicf("failed to start adnl gateway: %v", err)
+		log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to start adnl gateway")
 	}
 
 	dhtGate := adnl.NewGateway(privateKey)
 	if err = dhtGate.StartClient(ConcurrentBagsDownloading); err != nil {
-		log.Panicf("failed to start dht: %v", err)
+		log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to start dht")
 	}
 
 	cl.dht, err = dht.NewClientFromConfig(dhtGate, lsCfg)
 	if err != nil {
-		log.Panicf("failed to create dht client: %v", err)
+		log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to create dht client")
 	}
 	cl.server = storage.NewServer(cl.dht, cl.gateway, privateKey, true, runtime.NumCPU())
 	cl.conn = storage.NewConnector(cl.server)
 	fStorage, err := ldbstorage.OpenFile(filepath.Join(cl.config.AbsoluteRootStoragePath, "db"), false)
 	if err != nil {
-		log.Panicf("failed to open leveldb storage %v: %v", filepath.Join(cl.config.AbsoluteRootStoragePath, "db"), err)
+		log.Panic().
+			Str("context", "STORAGE").
+			Err(err).
+			Str("path", filepath.Join(cl.config.AbsoluteRootStoragePath, "db")).
+			Msg("failed to open leveldb storage")
 	}
 	cl.db, err = leveldb.Open(fStorage, nil)
 	if err != nil {
-		log.Panicf("failed to open leveldb storage: %v", err)
+		log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to open leveldb storage")
 	}
 
 	cl.rootStoragePath = cl.config.AbsoluteRootStoragePath
@@ -369,20 +399,23 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 						if downloading := ev.Torrent.IsDownloadAll(); !downloading {
 							bs, bsErr := cl.bootstrapForBag(ev.Torrent.BagID)
 							if bsErr != nil {
-								log.Printf("WARN: failed to find stored bootstrap for bag %v: %v", hex.EncodeToString(ev.Torrent.BagID), bsErr)
+								log.Warn().Str("context", "STORAGE").Err(bsErr).Hex("bag_id", ev.Torrent.BagID).Msg("failed to find stored bootstrap for bag")
 							}
 							var usr string
 							if ev.Torrent.Header != nil {
 								var m *headerData
 								m, err = cl.fileMeta(ev.Torrent)
 								if err != nil {
-									log.Printf("INFO:loading bag %v into queue but it is not resolved yet: %v", hex.EncodeToString(ev.Torrent.BagID), err)
+									log.Info().Str("context", "STORAGE").Hex("bag_id", ev.Torrent.BagID).Err(err).Msg("loading bag into queue but it is not resolved yet")
 								}
 								if m != nil {
 									usr = m.Master
 								}
 							}
-							log.Printf("[STORAGE] INFO: bag %v not yet started before restart put it into queue", hex.EncodeToString(ev.Torrent.BagID))
+							log.Info().
+								Str("context", "STORAGE").
+								Hex("bag_id", ev.Torrent.BagID).
+								Msg("bag not yet started before restart put it into queue")
 							cl.downloadQueue <- queueItem{
 								tor:       ev.Torrent,
 								bootstrap: &bs,
@@ -400,7 +433,7 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 		NoRemove:   true,
 	})
 	if err != nil {
-		log.Panicf("failed to create progress storage: %v", err)
+		log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to create progress storage")
 	}
 	cl.progressStorage = progressStorage
 	cl.server.SetStorage(progressStorage)
@@ -416,7 +449,10 @@ func DeleteExpiredFiles(ctx context.Context, events ...*model.Event) error {
 		if ev.Kind != nostr.KindFileMetadata {
 			continue
 		}
-		log.Printf("[STORAGE] DEBUG: FILE expired for user %v: %v", ev.GetMasterPublicKey(), ev.String())
+		log.Debug().Str("context", "STORAGE").
+			Str("user", ev.GetMasterPublicKey()).
+			Str("event", ev.String()).
+			Msg("file expired for user")
 		fileHash := ""
 		ext := ""
 		if xTag := ev.GetTag("ox"); ev.Kind == nostr.KindFileMetadata && xTag.Value() != "" {

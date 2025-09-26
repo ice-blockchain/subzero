@@ -5,9 +5,9 @@ package model
 import (
 	"crypto/ed25519"
 	"encoding/hex"
-	"log"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 )
 
 func GeneratePrivateKey() string {
@@ -19,7 +19,7 @@ func GeneratePrivateKey() string {
 func GenerateKeyPair() (private string, public string) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		log.Panicf("failed to generate private key: %v", err)
+		log.Panic().Str("context", "MODEL").Err(err).Msg("failed to generate private key")
 	}
 
 	return hex.EncodeToString(priv), hex.EncodeToString(pub)

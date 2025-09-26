@@ -5,7 +5,6 @@ package nip11
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	"github.com/dundee/gdu/v5/pkg/analyze"
 	"github.com/dundee/gdu/v5/pkg/fs"
 	"github.com/nbd-wtf/go-nostr/nip11"
+	"github.com/rs/zerolog/log"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
@@ -84,8 +84,7 @@ func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) 
 	info := n.info()
 	bytes, err := json.Marshal(info)
 	if err != nil {
-		err = errors.Wrapf(err, "failed to serialize NIP11 json %+v", info)
-		log.Printf("ERROR:%v", err)
+		log.Error().Err(err).Interface("info", info).Msg("failed to serialize NIP11 json")
 	}
 	writer.Write(bytes)
 }
@@ -101,10 +100,10 @@ func (n *nip11handler) info() RelayInformationDocument {
 			if isValidFCMConfig(config) {
 				androidConfigs = append(androidConfigs, config)
 			} else {
-				log.Printf("Invalid Android FCM config %v: missing required fields", config)
+				log.Panic().Interface("config", config).Msg("invalid Android FCM config: missing required fields")
 			}
 		} else {
-			log.Printf("Failed to parse Android FCM config: %v", err)
+			log.Error().Err(err).Msg("failed to parse Android FCM config")
 		}
 	}
 
@@ -114,10 +113,10 @@ func (n *nip11handler) info() RelayInformationDocument {
 			if isValidFCMConfig(config) {
 				iosConfigs = append(iosConfigs, config)
 			} else {
-				log.Printf("Invalid iOS FCM config %v: missing required fields", config)
+				log.Panic().Interface("config", config).Msg("invalid iOS FCM config: missing required fields")
 			}
 		} else {
-			log.Printf("Failed to parse iOS FCM config: %v", err)
+			log.Error().Err(err).Msg("failed to parse iOS FCM config")
 		}
 	}
 	for _, jsonStr := range n.cfg.FCMWebConfigs {
@@ -126,10 +125,10 @@ func (n *nip11handler) info() RelayInformationDocument {
 			if isValidFCMConfig(config) {
 				webConfigs = append(webConfigs, config)
 			} else {
-				log.Printf("Invalid Web FCM config %v: missing required fields", config)
+				log.Panic().Interface("config", config).Msg("invalid Web FCM config: missing required fields")
 			}
 		} else {
-			log.Printf("Failed to parse Web FCM config: %v", err)
+			log.Error().Err(err).Msg("failed to parse Web FCM config")
 		}
 	}
 
@@ -138,7 +137,7 @@ func (n *nip11handler) info() RelayInformationDocument {
 		var err error
 		pubKey, err = model.GetPublicKey(n.cfg.PrivateKey)
 		if err != nil {
-			log.Printf("ERROR: failed to get public key from private key: %v", err)
+			log.Error().Err(err).Msg("failed to get public key from private key")
 		}
 	}
 
@@ -191,7 +190,7 @@ func (n *nip11handler) startSystemMetricsCollector(ctx context.Context) {
 	for range ticks {
 		metrics, err := n.collectMetrics(ctx)
 		if err != nil {
-			log.Println(errors.Wrap(err, "failed to collect system metrics"))
+			log.Error().Err(err).Msg("failed to collect system metrics")
 		}
 		n.systemMetrics.Store(metrics)
 	}
