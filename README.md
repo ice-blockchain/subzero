@@ -19,6 +19,69 @@ fmt.Println(hex.EncodeToString(key))
 ```
 * global-config-url - url (supports file:// schema) of global config (to fetch initial DHT nodes for storage), by default = mainnet url
 
+## Load Testing Tool
+
+The subzero-ion-connect-loadtest tool is included for testing Nostr relay performance and behavior with multiple authenticated connections.
+
+### Features
+
+- Multiple concurrent connections to a single Nostr relay
+- NIP-42 authentication support for each connection
+- Dynamic key generation when no key is provided (each client gets unique key)
+- Configuration via command-line flags, environment variables, or YAML config file
+- Real-time event monitoring and statistics
+- Periodic test event publishing
+- Graceful shutdown with connection statistics
+
+### Usage
+
+#### Command Line Flags
+
+```bash
+# Basic usage with 10 connections
+./cmd/subzero-ion-connect-loadtest/subzero-ion-connect-loadtest -relay wss://relay.nostr.band -connections 10
+
+# With provided key (all clients use same key)
+./cmd/subzero-ion-connect-loadtest/subzero-ion-connect-loadtest -relay wss://relay.nostr.band -connections 10 -key <private_key>
+
+# With config file
+./cmd/subzero-ion-connect-loadtest/subzero-ion-connect-loadtest -config ./subzero_ion_connect_loadtest.yaml
+```
+
+#### Environment Variables
+
+```bash
+export NOSTR_RELAY=wss://relay.nostr.band
+export NOSTR_CONNECTIONS=10
+export NOSTR_PRIVATE_KEY=<private_key>  # Optional
+./cmd/subzero-ion-connect-loadtest/subzero-ion-connect-loadtest
+```
+
+#### Configuration File
+
+Edit the `subzero_ion_connect_loadtest.yaml` config file with your settings:
+
+```yaml
+relayURL: "wss://relay.nostr.band"
+connections: 10
+# privateKey: ""  # Optional - will generate unique keys for each client if not provided
+```
+
+#### Building
+
+```bash
+cd cmd/subzero-ion-connect-loadtest
+go build -o subzero-ion-connect-loadtest .
+```
+
+#### Statistics
+
+The tool displays periodic statistics including:
+- Number of active connections
+- Events received per client
+- Last event timestamp
+- Total events received across all clients
+
 ## NIPs
 | NIPs                                                           | latest commit hash implemented                                                                                                        | comments |
 |----------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|----------|

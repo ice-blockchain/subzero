@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: ice License 1.0
+
+relayURL: "wss://relay.nostr.band"
+connections: 10
+# privateKey: ""  # Optional - will generate unique keys for each client if not provided
