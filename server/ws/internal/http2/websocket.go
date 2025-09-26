@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
@@ -55,31 +54,6 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 		WriteTimeout: s.cfg.WriteTimeout,
 		CloseChannel: s.shutdownCh,
 	})
-	go s.ping(ctx, wsocket)
 
 	return wsocket, ctx, nil
-}
-
-func (s *srv) ping(ctx context.Context, writer adapters.WSWithWriter) {
-	ticker := time.NewTicker(time.Minute)
-	defer func() {
-		ticker.Stop()
-		writer.Close()
-	}()
-	for ctx.Err() == nil {
-		select {
-		case <-ticker.C:
-			var dErr error
-			if err := errors.Join(
-				dErr,
-				writer.WriteMessage(ctx, int(ws.OpPing), nil),
-			); err != nil {
-				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send ping message"))
-			}
-		case <-ctx.Done():
-			return
-		case <-s.shutdownCh:
-			return
-		}
-	}
 }
