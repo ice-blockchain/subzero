@@ -142,11 +142,11 @@ lint:
 getAddLicense:
 	go install -v github.com/google/addlicense@latest
 
-addLicense: getAddLicense
-	`go env GOPATH`/bin/addlicense -f LICENSE.header -ignore '**/.testdata/*.html' * .github/*
+addLicense:
+	go tool addlicense -f LICENSE.header -ignore '**/.testdata/*.html' * .github/*
 
-checkLicense: getAddLicense
-	`go env GOPATH`/bin/addlicense -f LICENSE.header -check -ignore '**/.testdata/*.html' * .github/*
+checkLicense:
+	go tool addlicense -f LICENSE.header -check -ignore '**/.testdata/*.html' * .github/*
 
 fix-field-alignment:
 	go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
