@@ -1460,6 +1460,80 @@ func TestAccountDeleteWithIONBadges(t *testing.T) {
 	})
 }
 
+func TestUsernameUpdateWithIONBadges(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	masterPriv, masterPub := model.GenerateKeyPair()
+	_, user1Pub := model.GenerateKeyPair()
+	_, user2Pub := model.GenerateKeyPair()
+	systemKey := model.GeneratePrivateKey()
+
+	t.Run("Add attestation", func(t *testing.T) {
+		var attestation model.Event
+		attestation.Kind = model.CustomIONKindAttestation
+		attestation.CreatedAt = 1
+		attestation.Tags = model.Tags{
+			{model.TagAttestationName, user1Pub, "", model.CustomIONAttestationKindActive + ":1"},
+			{model.TagAttestationName, user2Pub, "", model.CustomIONAttestationKindActive + ":1"},
+		}
+		require.NoError(t, attestation.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &attestation))
+	})
+
+	for i, nickname := range []string{"root", "newusername"} {
+		msg := "Using nickname " + nickname
+		if i > 0 {
+			msg = "Updating nickname to " + nickname
+		}
+		t.Run(msg, func(t *testing.T) {
+			badgeDefinitionEvent := model.Event{
+				Event: nostr.Event{
+					CreatedAt: nostr.Now(),
+					Kind:      nostr.KindBadgeDefinition,
+					Tags: model.Tags{
+						{"d", model.TagSuffixUsernameProof + "~" + nickname},
+						{"description", "badge of " + nickname},
+						{"p", masterPub},
+					},
+				},
+			}
+			require.NoError(t, badgeDefinitionEvent.SignWithAlg(systemKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			badgeAwardEvent := model.Event{
+				Event: nostr.Event{
+					CreatedAt: nostr.Now(),
+					Kind:      nostr.KindBadgeAward,
+					Tags: model.Tags{
+						{"a", badgeDefinitionEvent.Address()},
+						{"p", masterPub},
+					},
+				},
+			}
+			require.NoError(t, badgeAwardEvent.SignWithAlg(systemKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			badges := model.Event{
+				Event: nostr.Event{
+					Kind:      nostr.KindProfileBadges,
+					CreatedAt: nostr.Now(),
+					Tags: model.Tags{
+						{model.CustomIONTagOnBehalfOf, masterPub},
+						{"a", badgeDefinitionEvent.Address()},
+						{"e", badgeAwardEvent.ID},
+					},
+				},
+			}
+			require.NoError(t, badges.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			// Accept all three events together to avoid intermediate states.
+			require.NoError(t, db.AcceptEvents(t.Context(), &badgeDefinitionEvent, &badgeAwardEvent, &badges))
+			require.Len(t, helperSelectEvents(t, db), 4) // 1 attestation, 1 badge definition, 1 badge award, 1 profile badges.
+		})
+	}
+}
+
 func TestSelectSoftDeletedPosts(t *testing.T) {
 	t.Parallel()
 

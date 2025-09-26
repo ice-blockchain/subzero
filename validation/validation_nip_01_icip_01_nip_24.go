@@ -21,25 +21,6 @@ func (ev *eventValidator) validateKindProfileMetadataEvent(ctx context.Context, 
 		return errors.Wrap(ErrWrongEventParams, "nip-01: profile name cannot be empty")
 	}
 
-	var usernameOwnersip string
-	for _, tag := range e.Tags {
-		if tag.Key() != "a" {
-			continue
-		}
-		username, found := extractUsernameProofFromAddressTag(tag)
-		if !found {
-			continue
-		}
-		if username != "" && usernameOwnersip != "" {
-			return errors.Wrapf(ErrWrongEventParams, "nip-24: multiple 'a' tags with %s found", model.TagSuffixUsernameProof)
-		}
-		usernameOwnersip = username
-	}
-
-	if usernameOwnersip != "" && parsedContent.Name != usernameOwnersip {
-		return errors.Wrapf(ErrWrongEventParams, "nip-24: profile name %q does not match username proof of ownership %q", parsedContent.Name, usernameOwnersip)
-	}
-
 	for collectionName, collectionMetadata := range parsedContent.IONContentNFTCollections {
 		if collectionName == "" {
 			return errors.Wrapf(ErrWrongEventParams, "icip-01: ion_content_nft_collections: collection name cannot be empty: %s", e.ID)
