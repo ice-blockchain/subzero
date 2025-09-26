@@ -52,7 +52,7 @@ func (w *WebsocketAdapter) initCompression() {
 	w.framer = func(opCode int, data []byte) (ws.Frame, error) {
 		frame := ws.NewFrame(ws.OpCode(opCode), true, data)
 		if opCode == int(ws.OpText) || opCode == int(ws.OpBinary) && len(data) > WebSocketCompressThresholdBytes {
-			return wsflate.CompressFrame(frame)
+			return compressFrame(frame)
 		}
 		return frame, nil
 	}
