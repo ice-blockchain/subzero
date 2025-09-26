@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -104,34 +103,13 @@ func main() {
 	// Create and start load tester
 	tester := loadtest.NewLoadTester(config)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sigChan := make(chan os.Signal, 1)
-	doneChan := make(chan struct{}, 1)
-	started := atomic.Bool{}
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		for {
-			select {
-			case <-sigChan:
-				if started.Load() {
-					doneChan <- struct{}{}
-				} else {
-					cancel()
-				}
-				return
-			}
-		}
-	}()
+	ctx := newContext()
 
 	// Start load test
 	if err := tester.Start(ctx); err != nil {
 		log.Fatal("Failed to start load test: ", err)
 	}
 
-	started.Store(true)
 	defer tester.PrintLastStats()
 	defer tester.Shutdown()
 
@@ -147,14 +125,32 @@ func main() {
 
 	for {
 		select {
-		case <-doneChan:
-			log.Println("Received shutdown signal...")
-			cancel()
-			return
 		case <-statsTicker.C:
 			tester.PrintStats()
 		case <-publishTicker.C:
 			go tester.PublishTestEvents(ctx)
 		}
 	}
+}
+
+func newContext() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		force := false
+		for sig := range c {
+			if force {
+				log.Println("force shutdown", "signal", sig.String())
+				os.Exit(2)
+			} else {
+				log.Println("graceful shutdown", "signal", sig.String())
+				cancel()
+				force = true
+			}
+		}
+	}()
+
+	return ctx
 }
