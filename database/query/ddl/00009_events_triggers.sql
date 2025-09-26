@@ -523,10 +523,22 @@ BEGIN
               )
         )
     )
+    -- This code will remove ONLY *username_proof_of_ownership* badges and awards.
+    -- Other badge types (e.g. device verification) are not affected.
     DELETE FROM events WHERE
         kind IN (8, 30009)
         AND address IN (SELECT address FROM addresses_to_delete)
-        AND EXISTS (SELECT 1 FROM event_tags et WHERE et.event_id = events.id AND et.event_tag_key = 'p' AND et.event_tag_value1 = NEW.master_pubkey)
+        AND EXISTS (
+            SELECT
+                1
+            FROM
+                event_tags et
+            WHERE
+                et.event_id = events.id
+                AND et.event_tag_key = 'p'
+                AND et.event_tag_value1 = NEW.master_pubkey -- We use master key here for permission check of username ownership
+                                                            -- but the device badge has pubkey of the device itself.
+        )
         AND hidden = FALSE;
 
     RETURN NEW;
