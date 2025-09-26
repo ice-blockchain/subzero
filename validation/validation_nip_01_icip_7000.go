@@ -35,8 +35,10 @@ func (ev *eventValidator) validateTextNote(ctx context.Context, rules *ruleSet, 
 		if err := ev.validatePostCommunityEvent(ctx, e); err != nil {
 			return errors.Wrap(err, "validate post community event")
 		}
-		if err := ev.validateWhoCanReplySettings(ctx, rules, batch, e); err != nil {
-			return errors.Wrap(err, "validate who can reply settings")
+		if !rules.SkipRootContentReplyValidation {
+			if err := ev.validateWhoCanReplySettings(ctx, rules, batch, e); err != nil {
+				return errors.Wrap(err, "validate who can reply settings")
+			}
 		}
 		if !rules.SkipRootContentNFTCollectionsValidation {
 			if err := ev.validateRootContentNFTCollections(ctx, batch, e); err != nil {
