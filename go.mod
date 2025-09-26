@@ -50,7 +50,7 @@ require (
 	github.com/nbd-wtf/go-nostr v0.0.0-00010101000000-000000000000
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/puzpuzpuz/xsync/v4 v4.2.0
-	github.com/quic-go/quic-go v0.54.0
+	github.com/quic-go/quic-go v0.54.1
 	github.com/quic-go/webtransport-go v0.9.0
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/schollz/progressbar/v3 v3.18.0
@@ -81,7 +81,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.44.0
 	golang.org/x/sync v0.17.0
-	google.golang.org/api v0.249.0
+	google.golang.org/api v0.250.0
 	google.golang.org/grpc v1.75.1
 )
 
@@ -103,9 +103,9 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.29.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.53.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.54.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
@@ -214,7 +214,7 @@ require (
 	github.com/maruel/natural v1.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/mattn/go-runewidth v0.0.17 // indirect
 	github.com/mholt/acmez/v3 v3.1.3 // indirect
 	github.com/miekg/dns v1.1.68 // indirect
 	github.com/minio/highwayhash v1.0.3 // indirect
