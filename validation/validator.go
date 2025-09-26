@@ -30,6 +30,7 @@ type (
 		SkipKindProfileProofEventsVerify        bool
 		SkipKindAttestationProofDevicesVerify   bool
 		SkipRootContentNFTCollectionsValidation bool
+		SkipRootContentReplyValidation          bool
 		BroadcastMode                           bool
 	}
 )
@@ -91,6 +92,12 @@ func RuleWithSkipDeviceIdentificationProofEventsVerify() Rule {
 func RuleWithSkipRootContentNFTCollectionsValidation() Rule {
 	return func(v *ruleSet) {
 		v.SkipRootContentNFTCollectionsValidation = true
+	}
+}
+
+func RuleWithSkipRootContentReplyValidation() Rule {
+	return func(v *ruleSet) {
+		v.SkipRootContentReplyValidation = true
 	}
 }
 
