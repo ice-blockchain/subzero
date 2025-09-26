@@ -33,6 +33,7 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "can not create goroutine pool")
 	}
+	defer pool.Release()
 	setupWg := sync.WaitGroup{}
 
 	for i := 0; i < lt.config.Connections; i++ {
