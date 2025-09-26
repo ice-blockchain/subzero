@@ -125,6 +125,8 @@ func main() {
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-statsTicker.C:
 			tester.PrintStats()
 		case <-publishTicker.C:
