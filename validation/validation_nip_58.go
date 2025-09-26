@@ -74,12 +74,30 @@ func (ev *eventValidator) validateKindProfileBadgesEvent(ctx context.Context, ru
 	if err := validateATags(e, nostr.KindBadgeDefinition); err != nil {
 		return errors.Wrap(err, "nip-58")
 	}
-	if alen, elen := len(e.Tags.GetAll([]string{"a"})), len(e.Tags.GetAll([]string{"e"})); alen != elen {
+
+	var aTags model.Tags
+	var eTags model.Tags
+	var usernameOwnersip string
+	for _, tag := range e.Tags {
+		switch tag.Key() {
+		case "a":
+			aTags = append(aTags, tag)
+			username, found := extractUsernameProofFromAddressTag(tag)
+			if found && username != "" {
+				if usernameOwnersip != "" {
+					return errors.Wrapf(ErrWrongEventParams, "nip-58: multiple 'a' tags with %q found", model.TagSuffixUsernameProof)
+				}
+				usernameOwnersip = username
+			}
+		case "e":
+			eTags = append(eTags, tag)
+		}
+	}
+
+	if alen, elen := len(aTags), len(eTags); alen != elen {
 		return errors.Wrapf(ErrWrongEventParams, "nip-58: e/a tag mismatch: a len %d, e len %d", alen, elen)
 	}
 
-	aTags := e.Tags.GetAll([]string{"a"})
-	eTags := e.Tags.GetAll([]string{"e"})
 	userPubkeys := []string{e.GetMasterPublicKey()}
 
 	for i, aTag := range aTags {
@@ -254,11 +272,11 @@ func (ev *eventValidator) getEvent(ctx context.Context, address string) (event *
 
 func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *ruleSet, batch model.Events, badgeRef, badgeAwardID string, userPubkeys []string) error {
 	for _, event := range batch {
-		if event.Kind == nostr.KindBadgeAward && event.GetID() == badgeAwardID {
-			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
+		if event.Kind == nostr.KindBadgeAward && event.ID == badgeAwardID {
+			if aTag := event.GetTag("a"); aTag.Value() != badgeRef {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s does not reference badge %s", badgeAwardID, badgeRef)
 			}
-			if pTag := event.GetTag("p"); pTag == nil || !slices.Contains(userPubkeys, pTag.Value()) {
+			if pTag := event.GetTag("p"); !slices.Contains(userPubkeys, pTag.Value()) {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %v", badgeAwardID, userPubkeys)
 			}
 
@@ -276,11 +294,11 @@ func (ev *eventValidator) validateProfileBadgeAward(ctx context.Context, _ *rule
 		if err != nil {
 			return errors.Wrapf(err, "failed to query badge award from database")
 		}
-		if event.Kind == nostr.KindBadgeAward && event.GetID() == badgeAwardID {
-			if aTag := event.GetTag("a"); aTag == nil || aTag.Value() != badgeRef {
+		if event.Kind == nostr.KindBadgeAward && event.ID == badgeAwardID {
+			if aTag := event.GetTag("a"); aTag.Value() != badgeRef {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s does not reference badge %s", badgeAwardID, badgeRef)
 			}
-			if pTag := event.GetTag("p"); pTag == nil || !slices.Contains(userPubkeys, pTag.Value()) {
+			if pTag := event.GetTag("p"); !slices.Contains(userPubkeys, pTag.Value()) {
 				return errors.Wrapf(ErrUserIsNotPresentedOnRelay, "badge award %s is not for user %v", badgeAwardID, userPubkeys)
 			}
 

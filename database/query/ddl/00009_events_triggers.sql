@@ -490,3 +490,64 @@ AFTER UPDATE ON events
 FOR EACH ROW
 WHEN (((NEW.kind in (1, 6, 7, 16, 30023, 30175)) and (NEW.hidden = false) and (NEW.tags != OLD.tags)) OR (OLD.deleted != NEW.deleted))
 EXECUTE FUNCTION trigger_events_after_update_score_add();
+--------
+CREATE OR REPLACE FUNCTION trigger_events_before_update_remove_old_badges()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- This trigger function identifies specific 'a' and `e` tags that are present
+    -- in OLD.tags but are absent from NEW.tags, and then deletes the
+    -- corresponding proof.
+    -- 8     - KindBadgeAward [system controlled]
+    -- 30008 - KindProfileBadges [user controlled] - Current target of this trigger.
+    -- 30009 - KindBadgeDefinition [system controlled]
+    WITH addresses_to_delete AS (
+        (
+            SELECT value->>1 AS address
+            FROM jsonb_array_elements(COALESCE(OLD.tags, '[]'::jsonb)) AS t(value)
+            WHERE jsonb_typeof(value) = 'array'
+              AND jsonb_array_length(value) > 1
+              AND (
+                  (value->>0 = 'e') OR
+                  (value->>0 = 'a' AND starts_with(value->>1, '30009:') AND value->>1 LIKE '%:username_proof_of_ownership~%')
+              )
+        )
+        EXCEPT
+        (
+            SELECT value->>1 AS address
+            FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS t(value)
+            WHERE jsonb_typeof(value) = 'array'
+              AND jsonb_array_length(value) > 1
+              AND (
+                  (value->>0 = 'e') OR
+                  (value->>0 = 'a' AND starts_with(value->>1, '30009:') AND value->>1 LIKE '%:username_proof_of_ownership~%')
+              )
+        )
+    )
+    -- This code will remove ONLY *username_proof_of_ownership* badges and awards.
+    -- Other badge types (e.g. device verification) are not affected.
+    DELETE FROM events WHERE
+        kind IN (8, 30009)
+        AND address IN (SELECT address FROM addresses_to_delete)
+        AND EXISTS (
+            SELECT
+                1
+            FROM
+                event_tags et
+            WHERE
+                et.event_id = events.id
+                AND et.event_tag_key = 'p'
+                AND et.event_tag_value1 = NEW.master_pubkey -- We use master key here for permission check of username ownership
+                                                            -- but the device badge has pubkey of the device itself.
+        )
+        AND hidden = FALSE;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trigger_events_before_update_remove_old_badges
+BEFORE UPDATE ON events
+FOR EACH ROW
+WHEN ((NEW.kind = 30008) AND (NEW.id != OLD.id) AND (OLD.tags IS DISTINCT FROM NEW.tags))
+EXECUTE FUNCTION trigger_events_before_update_remove_old_badges();
+
