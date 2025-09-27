@@ -559,9 +559,6 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 		return nil
 	}
 
-	// pm.deviceMutex.RLock()
-	// defer pm.deviceMutex.RUnlock()
-
 	for _, deviceInfo := range userDevices {
 		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {
 			devices = append(devices, deviceInfo.Event)
