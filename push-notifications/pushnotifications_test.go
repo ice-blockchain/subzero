@@ -12,6 +12,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -53,9 +54,26 @@ func helperDecompressZlibAndDecodeBase64(t *testing.T, compressed string) string
 	return string(decompressed)
 }
 
+func helperCreateTestCompressorPool() *sync.Pool {
+	return &sync.Pool{
+		New: func() interface{} {
+			buf := &bytes.Buffer{}
+			base64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
+			zlibWriter, _ := zlib.NewWriterLevel(base64Encoder, zlib.BestCompression)
+
+			return &compressorPoolItem{
+				buf:           buf,
+				base64Encoder: base64Encoder,
+				zlibWriter:    zlibWriter,
+			}
+		},
+	}
+}
+
 func TestCreateNotifications(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Empty device list returns nil", func(t *testing.T) {
@@ -174,6 +192,7 @@ func TestCreateNotifications(t *testing.T) {
 func TestCollectUserValidDevices(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
@@ -227,6 +246,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 func TestHandleEventWithPublicKey(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Returns nil when reference pubkey is empty", func(t *testing.T) {
@@ -266,6 +286,7 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
+		compressorPool:         helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Returns nil when no notifications", func(t *testing.T) {
@@ -330,6 +351,7 @@ func TestPushNotificationManager_HandleInvalidDeviceTokens(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
+		compressorPool:         helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Returns nil when no invalid devices", func(t *testing.T) {
@@ -345,6 +367,7 @@ func TestPushNotificationManager_AcceptEvents(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
+		compressorPool:         helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Returns nil when no events", func(t *testing.T) {
@@ -360,6 +383,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
+		compressorPool:         helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Handles TextNote with q tag correctly", func(t *testing.T) {
@@ -466,6 +490,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
+		compressorPool:         helperCreateTestCompressorPool(),
 	}
 
 	t.Run("Returns empty when no events", func(t *testing.T) {
@@ -741,6 +766,7 @@ func TestShouldProcessGenericRepostEvent(t *testing.T) {
 func TestGetTranslationWithRelevantInfo(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 	t.Run("Returns default translation", func(t *testing.T) {
 		translation := pm.getTranslation(NotificationTypeReaction)
@@ -808,6 +834,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 	recipientPubKey := "recipient_master_pubkey"
 	deviceID := "device1"

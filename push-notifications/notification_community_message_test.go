@@ -184,6 +184,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			compressorPool: helperCreateTestCompressorPool(),
 		}
 
 		ownerPubKey := "owner_pubkey1" + uuid.NewString()
@@ -248,6 +249,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			compressorPool: helperCreateTestCompressorPool(),
 		}
 
 		ownerPubKey := "owner_pubkey2" + uuid.NewString()
@@ -284,6 +286,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			compressorPool: helperCreateTestCompressorPool(),
 		}
 
 		ownerPubKey := "owner_pubkey3" + uuid.NewString()
@@ -320,6 +323,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			compressorPool: helperCreateTestCompressorPool(),
 		}
 
 		ownerPubKey := "owner_pubkey4" + uuid.NewString()
@@ -357,6 +361,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			compressorPool: helperCreateTestCompressorPool(),
 		}
 
 		ownerPubKey := "owner_pubkey5" + uuid.NewString()
@@ -395,6 +400,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			compressorPool: helperCreateTestCompressorPool(),
 		}
 
 		communityID := "community_" + testSuffix
@@ -513,6 +519,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	authorPubKey := "author_pubkey_" + uuid.NewString()

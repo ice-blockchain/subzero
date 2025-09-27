@@ -41,7 +41,9 @@ func helperCreateSystemNotificationEvent(t *testing.T, id string, pubKey string,
 func TestHandleSystemEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{}
+	pm := &PushNotificationManager{
+		compressorPool: helperCreateTestCompressorPool(),
+	}
 
 	t.Run("Basic system event", func(t *testing.T) {
 		t.Parallel()
@@ -104,7 +106,9 @@ func TestHandleSystemEvent(t *testing.T) {
 func TestHandleSystemEventDataFormat(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{}
+	pm := &PushNotificationManager{
+		compressorPool: helperCreateTestCompressorPool(),
+	}
 
 	event := &model.Event{
 		Event: nostr.Event{
