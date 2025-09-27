@@ -35,6 +35,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	event1 := helperCreatePostEvent(
@@ -165,6 +166,7 @@ func TestMention(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	nprofileEncoded, err := nip19.EncodeProfile("7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e", []string{"wss://relay.example.com"})
@@ -275,6 +277,7 @@ func TestSelfReplyNotification(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	selfReplyEvent := helperCreatePostEvent(
@@ -318,6 +321,7 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 
 	authorPubKey := "author_pubkey_" + uuid.NewString()
@@ -412,6 +416,7 @@ func TestMentionWithAuthoritativeEvents(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       "wss://test-mention-relay.example.com",
+		compressorPool: helperCreateTestCompressorPool(),
 	}
 	senderMetadataEvent := &model.Event{
 		Event: nostr.Event{

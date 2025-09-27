@@ -79,10 +79,6 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	if _, ok := pm.userDevicesMap[masterPubKey]; !ok {
 		pm.userDevicesMap[masterPubKey] = make(map[DeviceID]DeviceInfo)
 	}
-	var deviceEventIDs []string
-	for _, device := range pm.userDevicesMap[masterPubKey] {
-		deviceEventIDs = append(deviceEventIDs, device.Event.ID)
-	}
 	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
 
 	return nil

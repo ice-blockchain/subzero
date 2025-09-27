@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -34,6 +35,7 @@ type (
 		pushNotificationClient *pn.Client
 		relayURL               string
 		deviceMutex            sync.RWMutex
+		compressorPool         *sync.Pool
 	}
 
 	notificationTranslation struct {
@@ -49,6 +51,12 @@ type (
 		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
 		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
 		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
+	}
+
+	compressorPoolItem struct {
+		buf           *bytes.Buffer
+		base64Encoder io.WriteCloser
+		zlibWriter    *zlib.Writer
 	}
 )
 
@@ -162,20 +170,33 @@ func MustInit(ctx context.Context) {
 	if err != nil {
 		log.Panicf("[push-notifications] failed to create push notification client: %v", err)
 	}
-	mustRunSelfTest(ctx, pnClient, config.PrivateKey)
-
 	globalPushNotificationManager = &PushNotificationManager{
 		userDevicesMap:         userDevicesMap,
 		pushNotificationClient: &pnClient,
 		relayURL:               config.RelayURL,
+		compressorPool: &sync.Pool{
+			New: func() any {
+				buf := &bytes.Buffer{}
+				base64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
+				zlibWriter, _ := zlib.NewWriterLevel(base64Encoder, zlib.BestCompression)
+
+				return &compressorPoolItem{
+					buf:           buf,
+					base64Encoder: base64Encoder,
+					zlibWriter:    zlibWriter,
+				}
+			},
+		},
 	}
+
+	globalPushNotificationManager.mustRunSelfTest(ctx, pnClient, config.PrivateKey)
 
 	if err := globalPushNotificationManager.syncDevices(ctx); err != nil {
 		log.Panicf("[push-notifications] failed to perform full device synchronization at startup: %v", err)
 	}
 }
 
-func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) error {
+func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) error {
 	devicePriv, devicePub := model.GenerateKeyPair()
 	serverPrivX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
 	if err != nil {
@@ -203,11 +224,11 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 	if err := incomingEvent.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		return errors.Wrap(err, "failed to sign event")
 	}
-	compressedEvent, err := compressAndEncodeBase64(incomingEvent.String())
+	compressedEvent, err := pnm.compressAndEncodeBase64(incomingEvent.String())
 	if err != nil {
 		return errors.Wrap(err, "failed to compress event")
 	}
-	compressedRelevantEvents, err := compressAndEncodeBase64("[]")
+	compressedRelevantEvents, err := pnm.compressAndEncodeBase64("[]")
 	if err != nil {
 		return errors.Wrap(err, "failed to compress relevant events")
 	}
@@ -237,8 +258,8 @@ func runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) err
 	return nil
 }
 
-func mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
-	if err := runSelfTest(ctx, pnClient, privateKey); err != nil {
+func (pm *PushNotificationManager) mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
+	if err := pm.runSelfTest(ctx, pnClient, privateKey); err != nil {
 		log.Panicf("[push-notifications] self-test failed: %v", err)
 	}
 }
@@ -482,7 +503,7 @@ func (pm *PushNotificationManager) createNotifications(
 	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
 	defaultTranslation := pm.getTranslation(notificationType)
 
-	compressedEvent, err := compressAndEncodeBase64(incomingEvent.String())
+	compressedEvent, err := pm.compressAndEncodeBase64(incomingEvent.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to compress event data")
 	}
@@ -492,7 +513,7 @@ func (pm *PushNotificationManager) createNotifications(
 		for _, relevantEvent := range relevantEvents {
 			relevantEventsStrings = append(relevantEventsStrings, relevantEvent.Content)
 		}
-		compressedRelevantEvents, err = compressAndEncodeBase64(`[` + strings.Join(relevantEventsStrings, ",") + `]`)
+		compressedRelevantEvents, err = pm.compressAndEncodeBase64(`[` + strings.Join(relevantEventsStrings, ",") + `]`)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compress relevant events data")
 		}
@@ -538,8 +559,8 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 		return nil
 	}
 
-	pm.deviceMutex.RLock()
-	defer pm.deviceMutex.RUnlock()
+	// pm.deviceMutex.RLock()
+	// defer pm.deviceMutex.RUnlock()
 
 	for _, deviceInfo := range userDevices {
 		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {
@@ -598,29 +619,21 @@ func (pm *PushNotificationManager) getTranslation(notificationType NotificationT
 	return translation
 }
 
-func compressAndEncodeBase64(data string) (string, error) {
-	var buf bytes.Buffer
-	base64Encoder := base64.NewEncoder(base64.StdEncoding, &buf)
-	defer base64Encoder.Close()
-	zw, err := zlib.NewWriterLevel(base64Encoder, zlib.BestCompression)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create zlib writer")
-	}
-	defer zw.Close()
-
-	if _, err := zw.Write([]byte(data)); err != nil {
+func (pm *PushNotificationManager) compressAndEncodeBase64(data string) (string, error) {
+	compressor := pm.compressorPool.Get().(*compressorPoolItem)
+	defer pm.compressorPool.Put(compressor)
+	compressor.reset()
+	if _, err := compressor.zlibWriter.Write([]byte(data)); err != nil {
 		return "", errors.Wrap(err, "failed to compress data")
 	}
-
-	if err := zw.Close(); err != nil {
+	if err := compressor.zlibWriter.Close(); err != nil {
 		return "", errors.Wrap(err, "failed to close zlib writer")
 	}
-
-	if err := base64Encoder.Close(); err != nil {
+	if err := compressor.base64Encoder.Close(); err != nil {
 		return "", errors.Wrap(err, "failed to close base64 encoder")
 	}
 
-	return buf.String(), nil
+	return compressor.buf.String(), nil
 }
 
 func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *model.Event) *model.Event {
@@ -672,4 +685,9 @@ func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, e
 	}
 
 	return relayListMetadataEvent != nil, profileMetadataEvent, attestationEvent, nil
+}
+
+func (c *compressorPoolItem) reset() {
+	c.buf.Reset()
+	c.zlibWriter.Reset(c.base64Encoder)
 }
