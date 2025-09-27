@@ -35,8 +35,8 @@ var (
 
 type (
 	connAuthData struct {
-		model.UserDataContext
 		Challenge string
+		model.UserDataContext
 	}
 	subscription struct {
 		Source *model.Subscription

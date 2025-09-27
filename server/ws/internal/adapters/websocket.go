@@ -22,11 +22,20 @@ import (
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 )
 
+const (
+	// Buffer up to 50 messages before WriteMessage calls start to block.
+	WebSocketWriteBufferSize = 50
+	// Compress messages larger than this threshold.
+	WebSocketCompressThresholdBytes = 256
+	// Interval between pings to the client to keep the connection alive.
+	WebSocketPingInterval = time.Minute
+)
+
 func NewWebSocketAdapter(ctx context.Context, conn net.Conn, conf *WebtransportAdapterConfig) (WSWithWriter, context.Context) {
 	wt := &WebsocketAdapter{
 		conn:         conn,
 		closeChannel: make(chan struct{}, 1),
-		out:          make(chan wsWrite, 1000),
+		out:          make(chan wsWrite, WebSocketWriteBufferSize),
 		readTimeout:  conf.ReadTimeout,
 		writeTimeout: conf.WriteTimeout,
 		framer: func(opCode int, data []byte) (ws.Frame, error) {
@@ -40,12 +49,10 @@ func NewWebSocketAdapter(ctx context.Context, conn net.Conn, conf *WebtransportA
 }
 
 func (w *WebsocketAdapter) initCompression() {
-	const compressThresholdBytes = 256
-
 	w.framer = func(opCode int, data []byte) (ws.Frame, error) {
 		frame := ws.NewFrame(ws.OpCode(opCode), true, data)
-		if opCode == int(ws.OpText) || opCode == int(ws.OpBinary) && len(data) > compressThresholdBytes {
-			return wsflate.CompressFrame(frame)
+		if opCode == int(ws.OpText) || opCode == int(ws.OpBinary) && len(data) > WebSocketCompressThresholdBytes {
+			return compressFrame(frame)
 		}
 		return frame, nil
 	}
@@ -131,7 +138,12 @@ func (w *WebsocketAdapter) WriteMessage(ctx context.Context, messageType int, da
 	return nil
 }
 
+// Write listens on the out channel and writes messages to the websocket connection.
+// It's lanched as a separate goroutine from the server's HandleWS method.
 func (w *WebsocketAdapter) Write(ctx context.Context) {
+	pingTicker := time.NewTicker(WebSocketPingInterval)
+	defer pingTicker.Stop()
+
 	for ctx.Err() == nil {
 		select {
 		case <-w.closeChannel:
@@ -139,6 +151,16 @@ func (w *WebsocketAdapter) Write(ctx context.Context) {
 
 		case <-ctx.Done():
 			return
+
+		case <-pingTicker.C:
+			select {
+			case w.out <- wsWrite{
+				opCode: int(ws.OpPing),
+				data:   nil,
+			}:
+			default:
+				// If the out channel is full, we skip sending the ping to avoid blocking.
+			}
 
 		case msg := <-w.out:
 			if isConnClosedErr(w.wrErr) {
@@ -206,7 +228,7 @@ func (w *WebsocketAdapter) ReadMessage() (messageType int, p []byte, err error) 
 		return int(typ), msgBytes, err
 	}
 	if typ == ws.OpPing {
-		err = wsutil.WriteServerMessage(w.conn, ws.OpPong, nil)
+		_, err = w.conn.Write(ws.CompiledPong)
 		if err == nil {
 			return w.ReadMessage()
 		}
@@ -234,7 +256,7 @@ func (w *WebsocketAdapter) Close() error {
 
 	var wErr error
 	if w.wrErr == nil || !isConnClosedErr(w.wrErr) {
-		wErr = wsutil.WriteServerMessage(w.conn, ws.OpClose, ws.NewCloseFrameBody(ws.StatusNormalClosure, ""))
+		_, wErr = w.conn.Write(ws.CompiledCloseNormalClosure)
 		if wErr != nil && isConnClosedErr(wErr) {
 			wErr = nil
 		}
