@@ -22,11 +22,13 @@ import (
 
 func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s := &Srv{cfg: cfg, routesSetup: router}
-	gin.SetMode(gin.ReleaseMode)
-
-	s.router = gin.Default()
 	if cfg.Debug {
+		gin.SetMode(gin.DebugMode)
+		s.router = gin.Default()
 		pprof.Register(s.router, "subzero/pprof")
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+		s.router = gin.New()
 	}
 	s.router.Use(gin.Recovery())
 	s.router.RemoteIPHeaders = []string{"cf-connecting-ip", "X-Real-IP", "X-Forwarded-For"}
