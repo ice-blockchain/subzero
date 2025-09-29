@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/panjf2000/ants/v2"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
@@ -24,7 +25,6 @@ import (
 	"github.com/ice-blockchain/subzero/dvm"
 	followerssender "github.com/ice-blockchain/subzero/followers-sender"
 	hashtagssender "github.com/ice-blockchain/subzero/hashtags-sender"
-	subzeroLog "github.com/ice-blockchain/subzero/log"
 	"github.com/ice-blockchain/subzero/model"
 	nftcontentsender "github.com/ice-blockchain/subzero/nft-content-sender"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
@@ -33,6 +33,37 @@ import (
 	"github.com/ice-blockchain/subzero/storage"
 	"github.com/ice-blockchain/subzero/validation"
 )
+
+type (
+	Config struct {
+		LogLevel string `yaml:"log-level" validate:"omitempty,oneof=trace debug info warn error fatal panic"`
+	}
+)
+
+func logInit() {
+	config, err := cfg.Get[Config]()
+	if config == nil || err != nil {
+		fmt.Println("no log configuration found, using default values", err)
+		config = &Config{}
+	}
+
+	if config.LogLevel == "" {
+		config.LogLevel = "info"
+	}
+
+	level, err := zerolog.ParseLevel(config.LogLevel)
+	if err != nil {
+		panic(fmt.Sprintf("invalid log level: %v", err))
+	}
+
+	zerolog.SetGlobalLevel(level)
+	log.Logger = log.Output(zerolog.ConsoleWriter{
+		Out:          os.Stdout,
+		TimeFormat:   time.RFC3339Nano,
+		TimeLocation: time.UTC,
+		NoColor:      true,
+	})
+}
 
 var (
 	configPath string
@@ -44,7 +75,7 @@ var (
 		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
-			subzeroLog.MustInit()
+			logInit()
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
 			command.MustInit(cmd.Context())
