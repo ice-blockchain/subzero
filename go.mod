@@ -66,7 +66,7 @@ require (
 	github.com/tidwall/wal v1.2.1
 	github.com/tus/tusd/v2 v2.8.0
 	github.com/u2takey/ffmpeg-go v0.5.0
-	github.com/xssnick/tonutils-go v1.15.0
+	github.com/xssnick/tonutils-go v1.15.1
 	github.com/xssnick/tonutils-storage v1.2.2
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/contrib/bridges/otelslog v0.13.0
