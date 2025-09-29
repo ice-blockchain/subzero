@@ -5,7 +5,6 @@ package internal
 import (
 	"context"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
@@ -22,11 +22,13 @@ import (
 
 func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s := &Srv{cfg: cfg, routesSetup: router}
-	gin.SetMode(gin.ReleaseMode)
-
-	s.router = gin.Default()
 	if cfg.Debug {
+		gin.SetMode(gin.DebugMode)
+		s.router = gin.Default()
 		pprof.Register(s.router, "subzero/pprof")
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+		s.router = gin.New()
 	}
 	s.router.Use(gin.Recovery())
 	s.router.RemoteIPHeaders = []string{"cf-connecting-ip", "X-Real-IP", "X-Forwarded-For"}
@@ -67,30 +69,30 @@ func (s *Srv) MustListenAndServe(ctx context.Context) {
 	s.setupRouter(ctx)
 	defer cancel()
 
-	log.Printf("starting servers on port %v...", s.cfg.Port)
+	log.Info().Uint16("port", s.cfg.Port).Msg("starting servers")
 	select {
 	case err := <-s.runServer(ctx, &wg, s.H2Server):
-		log.Panicf("ERROR:%v", errors.Wrap(err, "HTTP2 server start failed"))
+		log.Panic().Str("context", "HTTP2").Err(err).Msg("server start failed")
 
 	case err := <-s.runServer(ctx, &wg, s.H3Server):
-		log.Panicf("ERROR:%v", errors.Wrap(err, "HTTP3 server start failed"))
+		log.Panic().Str("context", "HTTP3").Err(err).Msg("server start failed")
 
 	case <-ctx.Done():
 	}
 
-	log.Println("shutting down servers ...")
+	log.Info().Msg("shutting down servers")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
 	defer shutdownCancel()
 
 	if err := s.H2Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
-		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP2 server shutdown failed"))
+		log.Error().Str("context", "HTTP2").Err(err).Msg("server shutdown failed")
 	}
 	if err := s.H3Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
-		log.Printf("ERROR:%v", errors.Wrap(err, "HTTP3 server shutdown failed"))
+		log.Error().Str("context", "HTTP3").Err(err).Msg("server shutdown failed")
 	}
 
 	wg.Wait()
-	log.Println("servers stopped")
+	log.Info().Msg("servers stopped")
 }
 
 func withServer(ctx context.Context, srv *Srv) context.Context {

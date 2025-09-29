@@ -4,10 +4,10 @@ package http2
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -23,7 +23,7 @@ func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) 
 		session, err = upgrader.UpgradeWebTransport()
 		if err != nil {
 			err = errors.Wrap(err, "upgrading http2/webtransport stream failed")
-			log.Printf("ERROR:%v", err)
+			log.Error().Err(err).Msg("webtransport error")
 			writer.WriteHeader(http.StatusBadRequest)
 
 			return nil, nil, err
@@ -37,7 +37,7 @@ func (s *srv) handleWebTransport(writer http.ResponseWriter, req *http.Request) 
 		return h2wt, ctx, nil
 	}
 	err = errors.Wrap(err, "upgrading webtransport is not implemented for http2")
-	log.Printf("ERROR:%v", err)
+	log.Error().Err(err).Msg("webtransport error")
 
 	return nil, nil, err
 }

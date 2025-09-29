@@ -4,7 +4,6 @@ package fixture
 
 import (
 	"context"
-	"log"
 	"net"
 	"net/url"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/rs/zerolog/log"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -89,7 +89,7 @@ func New(ctx context.Context, opts ...Option) *Container {
 
 	container, err := postgres.Run(ctx, pgImage, customizers...)
 	if err != nil {
-		log.Panicf("failed to start postgres container: %v", err)
+		log.Panic().Err(err).Msg("failed to start postgres container")
 	}
 
 	return &Container{
@@ -101,7 +101,7 @@ func New(ctx context.Context, opts ...Option) *Container {
 func (c *Container) ConnectionString(ctx context.Context, dbName string) string {
 	containerPort, err := c.container.MappedPort(ctx, dbPort)
 	if err != nil {
-		log.Panicf("failed to get mapped port: %v", err)
+		log.Panic().Err(err).Msg("failed to get mapped port")
 	}
 
 	if dbName == "" {
@@ -110,7 +110,7 @@ func (c *Container) ConnectionString(ctx context.Context, dbName string) string 
 
 	host, err := c.container.Host(ctx)
 	if err != nil {
-		log.Panicf("failed to get container host: %v", err)
+		log.Panic().Err(err).Msg("failed to get container host")
 	}
 
 	u := url.URL{

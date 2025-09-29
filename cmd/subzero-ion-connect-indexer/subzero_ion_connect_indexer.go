@@ -4,12 +4,12 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -75,10 +75,10 @@ func newContext() context.Context {
 		force := false
 		for sig := range c {
 			if force {
-				log.Println("force shutdown", "signal", sig.String())
+				log.Warn().Str("context", "MAIN").Str("signal", sig.String()).Msg("force shutdown")
 				os.Exit(2)
 			} else {
-				log.Println("graceful shutdown", "signal", sig.String())
+				log.Info().Str("context", "MAIN").Str("signal", sig.String()).Msg("graceful shutdown")
 				cancel()
 				force = true
 			}
@@ -91,6 +91,6 @@ func newContext() context.Context {
 func main() {
 	err := ionConnectIndexer.ExecuteContext(newContext())
 	if err != nil {
-		log.Panic(err)
+		log.Panic().Str("context", "MAIN").Err(err).Msg("application failed to start")
 	}
 }

@@ -5,12 +5,12 @@ package adapters
 import (
 	"bufio"
 	"context"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/quic-go/webtransport-go"
+	"github.com/rs/zerolog/log"
 )
 
 func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, stream Stream, readTimeout, writeTimeout time.Duration, shutdownChannel <-chan struct{}) (WSWithWriter, context.Context) {
@@ -81,7 +81,7 @@ func (w *WebtransportAdapter) Write(ctx context.Context) {
 			break
 		}
 		if err := w.WriteMessageToStream(ctx, msg); err != nil {
-			log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to webtransport"))
+			log.Error().Err(err).Msg("failed to send message to webtransport")
 		}
 	}
 }

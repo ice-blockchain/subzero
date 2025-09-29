@@ -5,12 +5,12 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command"
@@ -55,7 +55,7 @@ type (
 func extractServerNameFromRelayURL(relayURL string) string {
 	parsed, err := url.Parse(relayURL)
 	if err != nil {
-		log.Panic(err)
+		log.Panic().Str("context", "SERVER").Err(err).Msg("failed to parse relay URL")
 	}
 	return parsed.Hostname()
 }
@@ -63,7 +63,7 @@ func extractServerNameFromRelayURL(relayURL string) string {
 func WithConfig(cfg *Config) Option {
 	return func(s *router) {
 		if cfg == nil {
-			log.Panic("config cannot be nil")
+			log.Fatal().Msg("config cannot be nil")
 		}
 		s.Config = cfg
 	}
@@ -75,31 +75,31 @@ func mustLoadTLSConfig(ctx context.Context, conf *Config) (tls *tls.Config) {
 
 	switch {
 	case (conf.TLSCert == "" && conf.TLSKey == "") || (conf.TLSCert == "-" && conf.TLSKey == "-"):
-		log.Printf("using ACME to obtain TLS certificate for %q", target)
+		log.Trace().Str("target", target).Msg("using ACME to obtain TLS certificate")
 
 		if conf.ACME.APIKey == "" {
-			log.Printf("API key is required for ACME, falling back to self-signed TLS certificate for %q", target)
+			log.Info().Str("target", target).Msg("API key is required for ACME, falling back to self-signed TLS certificate")
 			return cert.MustGenerateTLSConfigSelfSigned(target)
 		}
 
 		var err error
 		if isIP {
-			log.Printf("using HTTP challenge for IP address %q", target)
+			log.Trace().Str("target", target).Msg("using HTTP challenge for IP address")
 			tls, err = cert.LoadTLSConfigFromACMEWithHTTP(ctx, target, conf.ACME.APIKey)
 		} else {
-			log.Printf("using DNS challenge for domain %q", target)
+			log.Trace().Str("target", target).Msg("using DNS challenge for domain")
 			tls, err = cert.LoadTLSConfigFromACMEWithDNS(ctx, target, conf.ACME.APIKey)
 		}
 		if err != nil {
-			log.Panicf("failed to load TLS config from ACME: %v", err)
+			log.Panic().Err(err).Msg("failed to load TLS config from ACME")
 		}
 
 	case conf.TLSCert == "selfsigned" || conf.TLSKey == "selfsigned":
-		log.Printf("using self-signed TLS certificate for %q", target)
+		log.Info().Str("target", target).Msg("using self-signed TLS certificate")
 		tls = cert.MustGenerateTLSConfigSelfSigned(target)
 
 	default:
-		log.Println("using provided TLS certificate and key")
+		log.Info().Msg("using provided TLS certificate and key")
 		tls = wsserver.LoadTLSConfig(conf.TLSCert, conf.TLSKey)
 	}
 
@@ -112,7 +112,7 @@ func New(ctx context.Context, opts ...Option) Server {
 	if cfg, err := cfg.Get[Config](); err == nil {
 		r.Config = cfg
 	} else {
-		log.Printf("[WARN] failed to load config: %v", err)
+		log.Warn().Err(err).Msg("failed to load config")
 	}
 
 	for _, opt := range opts {
@@ -120,16 +120,16 @@ func New(ctx context.Context, opts ...Option) Server {
 	}
 
 	if r.Config == nil {
-		log.Panic("server: config cannot be nil")
+		log.Fatal().Msg("server: config cannot be nil")
 	}
 
 	if r.Config.BroadcastPrivateKey == "" && r.Config.PrivateKey != "" {
-		log.Printf("[WARN] BroadcastPrivateKey is empty, using PrivateKey for broadcasting")
+		log.Warn().Msg("broadcastPrivateKey is empty, using privateKey for broadcasting")
 		r.Config.BroadcastPrivateKey = r.Config.PrivateKey
 	}
 
 	if err := cfg.Validate(r.Config); err != nil {
-		log.Panicf("failed to validate config: %v", err)
+		log.Panic().Err(err).Msg("failed to validate config")
 	}
 
 	r.Broadcaster = broadcaster.New(broadcaster.Config{
@@ -142,7 +142,7 @@ func New(ctx context.Context, opts ...Option) Server {
 	}()
 	public, err := model.GetPublicKey(r.Config.BroadcastPrivateKey)
 	if err != nil {
-		log.Panicf("failed to get public key from private key: %v", err)
+		log.Panic().Err(err).Msg("failed to get public key from private key")
 	}
 	r.Handler = wsserver.NewHandler(r.Config.RelayURL, public)
 	r.Server = wsserver.New(

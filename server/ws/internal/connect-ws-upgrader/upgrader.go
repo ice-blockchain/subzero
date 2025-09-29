@@ -4,7 +4,6 @@ package connectwsupgrader
 
 import (
 	"bufio"
-	"log"
 	"net"
 	"net/http"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsflate"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/rs/zerolog/log"
 )
 
 func New() *Upgrader {
@@ -39,7 +39,7 @@ func (u *Upgrader) Upgrade(req *http.Request, writer http.ResponseWriter) (conn 
 		conn = &http3StreamProxy{stream: httpStreamer.HTTPStream(), connection: w.Connection()}
 	default:
 		err = errors.New("http.ResponseWriter does not support hijack")
-		log.Printf("ERROR:%v", err)
+		log.Error().Err(err).Msg("websocket upgrader error")
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 

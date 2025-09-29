@@ -3,12 +3,12 @@
 package model
 
 import (
-	"log"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 )
 
 type OnBehalfAccessEntry struct {
@@ -67,7 +67,10 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 	for _, tag := range tags {
 		if len(tag) < 4 || tag.Key() != TagAttestationName {
 			// Attetation tags are just a part of the regular tags, and regular tags may contain other tags, so just log and go on.
-			log.Printf("invalid attestation tag: %+v", tag)
+			log.Trace().
+				Str("context", "MODEL").
+				Strs("tag", tag).
+				Msg("invalid attestation tag")
 
 			continue
 		}

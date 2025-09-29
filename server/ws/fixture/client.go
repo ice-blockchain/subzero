@@ -10,7 +10,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,6 +25,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/webtransport-go"
+	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 	"github.com/ice-blockchain/subzero/cfg"
@@ -228,11 +228,13 @@ func ClientTLS() *tls.Config {
 	globalConfig := cfg.MustGet[globalCfg]()
 	cert, err := tls.X509KeyPair([]byte(globalConfig.TLSCert), []byte(globalConfig.TLSKey))
 	if err != nil {
-		log.Panic(errors.Wrapf(err, "failed to load pem from test cert/key"))
+		log.Panic().
+			Err(err).
+			Msg("failed to load pem from test cert/key")
 	}
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM([]byte(globalConfig.TLSCert)); !ok {
-		log.Panic(errors.New("failed to append localhost tls to cert pool"))
+		log.Panic().Err(errors.New("failed to append localhost tls to cert pool"))
 	}
 	return &tls.Config{
 		MinVersion:   tls.VersionTLS13,

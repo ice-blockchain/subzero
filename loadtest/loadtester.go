@@ -4,7 +4,6 @@ package loadtest
 
 import (
 	"context"
-	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/panjf2000/ants/v2"
+	"github.com/rs/zerolog/log"
 )
 
 // NewLoadTester creates a new LoadTester instance
@@ -26,7 +26,10 @@ func NewLoadTester(config *Config) *LoadTester {
 
 // Start initializes and starts all client connections
 func (lt *LoadTester) Start(ctx context.Context) error {
-	log.Printf("Starting load test with %d connections to %s", lt.config.Connections, lt.config.RelayURL)
+	log.Info().Str("context", "LOADTEST").
+		Int("connections", lt.config.Connections).
+		Str("relay_url", lt.config.RelayURL).
+		Msg("starting load test")
 
 	errChan := make(chan error, lt.config.Connections)
 	pool, err := ants.NewPool(1024)
@@ -44,7 +47,7 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 
 			randomDelay := rand.Int63n(lt.config.setupDuration.Milliseconds())
 			time.Sleep(time.Duration(randomDelay) * time.Millisecond)
-			log.Printf("Client %d: Starting setup...", id)
+			log.Info().Str("context", "LOADTEST").Int("client_id", id).Msg("client starting setup")
 
 			client, err := lt.connect(ctx, id)
 			if err != nil {
@@ -55,7 +58,11 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 			lt.mu.Lock()
 			lt.clients = append(lt.clients, client)
 			lt.mu.Unlock()
-			log.Printf("[%d/%d] Client %d: Setup completed successfully", len(lt.clients), lt.config.Connections, id)
+			log.Info().Str("context", "LOADTEST").
+				Int("current_clients", len(lt.clients)).
+				Int("total_connections", lt.config.Connections).
+				Int("client_id", id).
+				Msg("client setup completed successfully")
 		})
 		if err != nil {
 			return errors.Wrap(err, "error submitting setup goroutine")
@@ -74,10 +81,10 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 	case <-setupDone:
 		for err := range errChan {
 			if err != nil {
-				log.Printf("Connection error: %v", err)
+				log.Error().Str("context", "LOADTEST").Err(err).Msg("connection error")
 			}
 		}
-		log.Printf("Setup phase completed")
+		log.Info().Msg("setup phase completed")
 	case <-time.After(maxConnectTime):
 		lt.mu.RLock()
 		currentCount := len(lt.clients)
@@ -95,7 +102,10 @@ func (lt *LoadTester) Start(ctx context.Context) error {
 		return errors.New("no clients connected successfully")
 	}
 
-	log.Printf("Successfully established %d/%d connections", connectedCount, lt.config.Connections)
+	log.Info().Str("context", "LOADTEST").
+		Int("connected_count", connectedCount).
+		Int("total_connections", lt.config.Connections).
+		Msg("successfully established connections")
 
 	return nil
 }
@@ -139,7 +149,11 @@ func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
 			time.Sleep(time.Duration(randomDelay) * time.Millisecond)
 			content := "Test message from client " + strconv.Itoa(i) + " at " + time.Now().Format(time.RFC3339)
 			if err := c.PublishEvent(ctx, kind, content); err != nil {
-				log.Printf("Failed to publish from client %d: %v", i, err)
+				log.Error().
+					Str("context", "LOADTEST").
+					Err(err).
+					Int("client_id", i).
+					Msg("failed to publish from client")
 			} else {
 				successCount.Add(1)
 			}
@@ -147,7 +161,10 @@ func (lt *LoadTester) PublishTestEvents(ctx context.Context) {
 	}
 	wg.Wait()
 
-	log.Printf("Published test events from %d/%d clients", successCount.Load(), len(lt.clients))
+	log.Info().Str("context", "LOADTEST").
+		Int("successful_clients", int(successCount.Load())).
+		Int("total_clients", len(lt.clients)).
+		Msg("published test events")
 }
 
 // GetStats returns aggregated statistics for all clients
@@ -196,10 +213,13 @@ func (lt *LoadTester) PrintLastStats() {
 // Shutdown gracefully closes all client connections
 func (lt *LoadTester) Shutdown() {
 	lt.lastStats = lt.GetStats()
-	log.Println("Shutting down load tester...")
+	log.Info().Msg("shutting down load tester")
 	for _, client := range lt.clients {
-		log.Printf("Client %d: Shutting down", client.id)
+		log.Info().
+			Str("context", "LOADTEST").
+			Int("client_id", client.id).
+			Msg("client shutting down")
 		client.Close()
 	}
-	log.Println("Load tester shutdown complete")
+	log.Info().Msg("load tester shutdown complete")
 }

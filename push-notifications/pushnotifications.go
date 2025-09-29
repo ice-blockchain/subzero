@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip44"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -168,7 +168,7 @@ func MustInit(ctx context.Context) {
 
 	pnClient, err = pn.New(ctx, opts...)
 	if err != nil {
-		log.Panicf("[push-notifications] failed to create push notification client: %v", err)
+		log.Fatal().Err(err).Msg("[push-notifications] failed to create push notification client")
 	}
 	globalPushNotificationManager = &PushNotificationManager{
 		userDevicesMap:         userDevicesMap,
@@ -192,7 +192,7 @@ func MustInit(ctx context.Context) {
 	globalPushNotificationManager.mustRunSelfTest(ctx, pnClient, config.PrivateKey)
 
 	if err := globalPushNotificationManager.syncDevices(ctx); err != nil {
-		log.Panicf("[push-notifications] failed to perform full device synchronization at startup: %v", err)
+		log.Fatal().Err(err).Msg("[push-notifications] failed to perform full device synchronization at startup")
 	}
 }
 
@@ -260,7 +260,7 @@ func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn
 
 func (pm *PushNotificationManager) mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
 	if err := pm.runSelfTest(ctx, pnClient, privateKey); err != nil {
-		log.Panicf("[push-notifications] self-test failed: %v", err)
+		log.Fatal().Err(err).Msg("[push-notifications] self-test failed")
 	}
 }
 

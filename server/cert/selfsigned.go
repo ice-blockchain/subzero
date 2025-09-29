@@ -11,12 +11,12 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"log"
 	"math/big"
 	"net"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -33,7 +33,7 @@ var (
 func MustGenerateTLSConfigSelfSigned(domain string) *tls.Config {
 	tlsConfig, err := generateTLSConfigSelfSigned(domain)
 	if err != nil {
-		log.Panicf("failed to generate self-signed TLS config for %s: %v", domain, err)
+		log.Panic().Err(err).Str("domain", domain).Msg("failed to generate self-signed TLS config")
 	}
 	return tlsConfig
 }

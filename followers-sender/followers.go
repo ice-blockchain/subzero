@@ -5,7 +5,6 @@ package followerssender
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -76,7 +76,10 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return nil
 	}
 	if len(model.GetNewlyFollowedPubkeys(followersEvent, followersEvent.Previous)) == 0 {
-		log.Printf("no new followers in the followers event, skipping: %s", followersEvent.ID)
+		log.Trace().
+			Str("context", "FOLLOWERS-SENDER").
+			Str("followers_event_id", followersEvent.ID).
+			Msg("no new followers in the followers event, skipping")
 
 		return nil
 	}
@@ -85,7 +88,10 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return errors.Wrapf(err, "failed to get required events from storage for followersEvent:%s", followersEvent.ID)
 	}
 	if attestationEvent == nil {
-		log.Printf("required events not found in the database for followersEvent:%s", followersEvent.ID)
+		log.Trace().
+			Str("context", "FOLLOWERS-SENDER").
+			Str("followers_event_id", followersEvent.ID).
+			Msg("required events not found in the database for followersEvent")
 
 		return nil
 	}
@@ -145,9 +151,12 @@ func (p *sender) sendEvents(ctx context.Context, events model.Events) error {
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("failed to send followers data, retrying...: %v", err)
+				log.Error().Str("context", "FOLLOWERS-SENDER").Err(err).Msg("failed to send followers data, retrying")
 			} else {
-				log.Printf("failed to send followers data with status code:%v, retrying...", resp.GetStatusCode())
+				log.Error().
+					Str("context", "FOLLOWERS-SENDER").
+					Int("status_code", resp.GetStatusCode()).
+					Msg("failed to send followers data with status code, retrying")
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {

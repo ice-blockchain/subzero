@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 	"github.com/tus/tusd/v2/pkg/filelocker"
 	"github.com/tus/tusd/v2/pkg/filestore"
 	tusd "github.com/tus/tusd/v2/pkg/handler"
@@ -49,7 +49,7 @@ func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTP
 	}
 	tok, err := s.auth.VerifyToken(uri, hook.HTTPRequest.Method, token, now)
 	if err != nil {
-		log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(err, "endpoint authentification failed"))
+		log.Error().Err(err).Msg("endpoint authentification failed")
 		errResp := tusd.HTTPResponse{
 			StatusCode: http.StatusUnauthorized,
 			Body:       `{"status":"error", "message":"Unauthorized"}`,
@@ -62,7 +62,7 @@ func (s *storageHandler) PreUploadCreateCallback(hook tusd.HookEvent) (tusd.HTTP
 	}
 	attestationValid := tok.ValidateAttestation(hook.Context, nostr.KindFileMetadata, now)
 	if attestationValid != nil {
-		log.Printf("ERROR: on-behalf attestation failed: %v", errors.Wrap(attestationValid, "endpoint authentification failed"))
+		log.Error().Err(attestationValid).Msg("on-behalf attestation failed")
 		errResp := tusd.HTTPResponse{
 			StatusCode: http.StatusUnauthorized,
 			Body:       `{"status":"error", "message":"on-behalf attestation failed"}`,
@@ -128,7 +128,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 	}
 	tok, err := s.auth.VerifyToken(uri, hook.HTTPRequest.Method, token, now)
 	if err != nil {
-		log.Printf("ERROR: endpoint authentification failed: %v", errors.Wrap(err, "endpoint authentification failed"))
+		log.Error().Err(err).Msg("endpoint authentification failed")
 		errResp := tusd.HTTPResponse{
 			StatusCode: http.StatusUnauthorized,
 			Body:       `{"status":"error", "message":"Unauthorized"}`,
@@ -169,7 +169,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 	input.Hash = hash
 	hashHex := hex.EncodeToString(input.Hash)
 	if hashHex != tok.ExpectedHash() || hashHex != hook.Upload.MetaData["expectedHash"] {
-		log.Printf("ERROR: endpoint authentification failed: %v", errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, tok.ExpectedHash()))
+		log.Error().Err(errors.Errorf("payload hash mismatch actual>%v token>%v", hashHex, tok.ExpectedHash())).Msg("endpoint authentification failed")
 		errResp := tusd.HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       `{"status":"error", "message":"Unauthorized"}`,
@@ -185,7 +185,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 	bagID, url, existed, err := s.storageClient.StartUpload(hook.Context, now, tok.PubKey(), tok.MasterPubKey(), input.Filename, hashHex, &input)
 	if err != nil {
 		err = errors.Wrap(err, "failed to upload file to ion storage")
-		log.Printf("ERROR: failed to upload file: %v", err)
+		log.Error().Err(err).Msg("failed to upload file")
 		return tusd.HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       `{"status":"error", "message":"oops, something went wrong"}`,
@@ -195,7 +195,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 	for _, partID := range hook.Upload.PartialUploads {
 		part, err := s.tusStorage.GetUpload(hook.Context, partID)
 		if err != nil {
-			log.Printf("ERROR: failed to get part %v: %v", partID, err)
+			log.Error().Err(err).Str("part_id", partID).Msg("failed to get part")
 			return tusd.HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
 				Body:       `{"status":"error", "message":"oops, something went wrong"}`,
@@ -204,7 +204,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 		}
 		err = s.tusStorage.AsTerminatableUpload(part).Terminate(hook.Context)
 		if err != nil {
-			log.Printf("ERROR: failed to cleanup part %v: %v", partID, err)
+			log.Error().Err(err).Str("part_id", partID).Msg("failed to cleanup part")
 			return tusd.HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
 				Body:       `{"status":"error", "message":"oops, something went wrong"}`,
@@ -237,7 +237,7 @@ func (s *storageHandler) PreFinishResponseCallback(hook tusd.HookEvent) (tusd.HT
 	b, err := json.Marshal(result)
 	if err != nil {
 		err = errors.Wrap(err, "failed to encode json")
-		log.Printf("ERROR: failed to upload file: %v", err)
+		log.Error().Err(err).Msg("failed to upload file")
 		return tusd.HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       `{"status":"error", "message":"oops, something went wrong"}`,
@@ -268,7 +268,7 @@ func mustNewTusHandler(_ context.Context, hooks tusHooks) (*tusd.Handler, interf
 		PreFinishResponseCallback: hooks.PreFinishResponseCallback,
 	})
 	if err != nil {
-		log.Fatalf("unable to create tus handler: %v", err)
+		log.Fatal().Err(err).Msg("unable to create tus handler")
 	}
 	return handler, store
 }

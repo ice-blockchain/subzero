@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	gomime "github.com/cubewise-code/go-mime"
+	"github.com/rs/zerolog/log"
 	"github.com/xssnick/tonutils-go/adnl/dht"
 	"github.com/xssnick/tonutils-go/adnl/keys"
 	"github.com/xssnick/tonutils-go/adnl/overlay"
@@ -31,7 +31,6 @@ import (
 )
 
 func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
-	eStart := time.Now()
 	existingBagForUser, _, err := c.bagByUser(masterPubKey)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to find existing bag for user %s", masterPubKey)
@@ -80,14 +79,12 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 				if existingBagForUser.Header != nil {
 					version = int64(existingBagForUser.Header.FilesCount)
 				}
-				log.Printf("[STORAGE DURATION %v %v] EXISTING VERIF TOOK %v, whole %v", masterPubKey, hash, time.Since(eStart), time.Since(now))
 
 				return bagID + ":" + bootstrap + ":" + strconv.FormatInt(version, 10), url, existed, nil
 			}
 
 		}
 	}
-	log.Printf("[STORAGE DURATION %v %v] EXISTING VERIF TOOK %v, whole %v", masterPubKey, hash, time.Since(eStart), time.Since(now))
 	var bs []*Bootstrap
 	var bag *storage.Torrent
 	bag, bs, err = c.upload(ctx, now, userPubKey, masterPubKey, relativePathToFileForUrl, hash, newFile, &existingHD)
@@ -95,7 +92,14 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 		return "", "", false, errors.Wrapf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
 	bagID = hex.EncodeToString(bag.BagID)
-	log.Printf("[STORAGE] INFO: new upload %v for user %v hash %v resulted in bag %v, total %v", relativePathToFileForUrl, masterPubKey, hash, bagID, bag.Header.FilesCount)
+	log.Info().
+		Str("context", "STORAGE").
+		Str("file_path", relativePathToFileForUrl).
+		Str("user", masterPubKey).
+		Str("hash", hash).
+		Str("bag_id", bagID).
+		Uint32("total_files", bag.Header.FilesCount).
+		Msg("new upload resulted in bag")
 	if newFile != nil && c.config.Debug {
 		uplFile, err := bag.GetFileOffsets(relativePathToFileForUrl)
 		if err != nil {
@@ -157,7 +161,12 @@ func (c *client) upload(ctx context.Context, now time.Time, user, master, relati
 		}
 		refs = append(refs, ref)
 	}
-	log.Printf("[STORAGE DURATION %v %v] BUILDING REFS %v, whole %v", master, hash, time.Since(rTime), time.Since(now))
+	log.Trace().Str("context", "STORAGE").
+		Str("master", master).
+		Str("hash", hash).
+		Dur("duration_since_start", time.Since(rTime)).
+		Dur("total_duration", time.Since(now)).
+		Msg("building refs")
 
 	var headerMDSerialized []byte
 	headerMDSerialized, err = json.Marshal(headerMD)
@@ -186,13 +195,23 @@ func (c *client) upload(ctx context.Context, now time.Time, user, master, relati
 		return nil, nil, errors.Wrap(err, "failed to start bag upload")
 	}
 	wg.Wait()
-	log.Printf("[STORAGE DURATION %v %v] BAG HASHING AND Start TOOK %v, whole %v", master, hash, time.Since(iTime), time.Since(now))
+	log.Trace().Str("context", "STORAGE").
+		Str("master", master).
+		Str("hash", hash).
+		Dur("duration_since_start", time.Since(iTime)).
+		Dur("total_duration", time.Since(now)).
+		Msg("bag hashing and start")
 	sTime := time.Now()
 	err = c.saveUploadTorrent(tr, master, fileMeta == nil)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to save updated bag")
 	}
-	log.Printf("[STORAGE DURATION %v %v] SAVE TOOK %v, whole %v", master, hash, time.Since(sTime), time.Since(now))
+	log.Trace().Str("context", "STORAGE").
+		Str("master", master).
+		Str("hash", hash).
+		Dur("duration_since_start", time.Since(sTime)).
+		Dur("total_duration", time.Since(now)).
+		Msg("save")
 
 	bootstrapNode, err := c.buildBootstrapNodeInfo(tr)
 	if err != nil {
@@ -270,7 +289,6 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 			return "", nil, nil, err
 		}
 		hashCalc := sha256.New()
-		parseStart := time.Now()
 		var fileName, contentType string
 		var fileSize uint64
 		for ctx.Err() == nil {
@@ -293,7 +311,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 				}
 				uploadingFilePath := filepath.Join(storagePath, fileName)
 				if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o744); err != nil {
-					log.Printf("ERROR: failed to open temp file while processing upload %v", err)
+					log.Error().Str("context", "STORAGE").Err(err).Msg("failed to open temp file while processing upload")
 					return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
 				}
 				userDir, err := os.OpenRoot(storagePath)
@@ -310,7 +328,11 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 				}()
 				written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
 				if err != nil {
-					log.Printf("[ERROR] Failed to copy file %v: %v", fileName, err)
+					log.Error().
+						Str("context", "STORAGE").
+						Err(err).
+						Str("filename", fileName).
+						Msg("failed to copy file")
 					return "", nil, nil, errors.Wrapf(err, "failed to copy file %v", fileName)
 				}
 				fileSize += uint64(written)
@@ -319,7 +341,13 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 					defer os.Remove(uploadingFilePath)
 					return "", &FileMetaInput{FileSize: fileSize}, nil, ErrFileTooBig
 				}
-				log.Printf("[STORAGE DURATION %v %v] FILE PROCESSING %v, whole %v, bytes %v", masterPubKey, fileName, time.Since(fStart), time.Since(now), written)
+				log.Trace().Str("context", "STORAGE").
+					Str("master_pubkey", masterPubKey).
+					Str("file_name", fileName).
+					Dur("duration_since_start", time.Since(fStart)).
+					Dur("total_duration", time.Since(now)).
+					Int64("bytes", written).
+					Msg("file processing")
 
 			case "media_type":
 				var mediaType string
@@ -344,17 +372,26 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 			}
 			part.Close()
 		}
-		log.Printf("[STORAGE DURATION %v %v] PARSE STREAMING %v, whole %v", masterPubKey, fileName, time.Since(parseStart), time.Since(now))
 		hStart := time.Now()
 		hash = hashCalc.Sum(nil)
 		input.Hash = hash
 		input.ContentType = contentType
 		input.FileSize = fileSize
-		log.Printf("[STORAGE DURATION %v %v] HASH %v, whole %v", masterPubKey, fileName, time.Since(hStart), time.Since(now))
+		log.Trace().Str("context", "STORAGE").
+			Str("master_pubkey", masterPubKey).
+			Str("file_name", fileName).
+			Dur("duration_since_start", time.Since(hStart)).
+			Dur("total_duration", time.Since(now)).
+			Msg("hash")
 		hexHash := hex.EncodeToString(hash)
 		newName = hexHash + filepath.Ext(fileName)
 		if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); err != nil {
-			log.Printf("[ERROR] Failed to rename file %v to hash %v: %v", fileName, newName, err)
+			log.Error().
+				Str("context", "STORAGE").
+				Err(err).
+				Str("file_name", fileName).
+				Str("new_name", newName).
+				Msg("failed to rename file to hash")
 			return "", nil, nil, errors.Wrapf(err, "failed to rename file %v %v", fileName, newName)
 		}
 	}

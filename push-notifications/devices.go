@@ -6,12 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"slices"
 	"strconv"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -34,7 +34,10 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 		}
 
 		if err := pm.processDeviceRegistrationEvent(event); err != nil {
-			log.Printf("Error processing device registration event %s: %v", event.ID, err)
+			log.Error().Str("context", "PUSH-NOTIFICATIONS").
+				Err(err).
+				Str("event_id", event.ID).
+				Msg("error processing device registration event")
 			continue
 		}
 	}
@@ -43,7 +46,10 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 		totalDevices += len(devices)
 	}
 
-	log.Printf("Device synchronization completed: %d devices", totalDevices)
+	log.Info().
+		Str("context", "PUSH-NOTIFICATIONS").
+		Int("total_devices", totalDevices).
+		Msg("device synchronization completed")
 
 	return nil
 }

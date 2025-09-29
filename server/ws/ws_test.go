@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 
 	for _, wsPort := range []uint16{9988, 9977, 9966, 9955} {
 		const discoveryPortDelta = 10_000
-		log.Printf("Starting server on port %d / %d", wsPort, wsPort+discoveryPortDelta)
+		log.Trace().Uint16("ws_port", wsPort).Uint16("discovery_port", wsPort+discoveryPortDelta).Msg("starting server")
 		server, release := helperCreateWsInstance(ctx, container, wsPort, wsPort+discoveryPortDelta)
 		pubsubServers = append(pubsubServers, server)
 		closeFuncs = append(closeFuncs, release)
@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 	// Used in `TestConsensusEvents`.
 	for _, wsPort := range []uint16{9944} {
 		const discoveryPortDelta = 10_000
-		log.Printf("Starting server on port %d / %d", wsPort, wsPort+discoveryPortDelta)
+		log.Trace().Uint16("ws_port", wsPort).Uint16("discovery_port", wsPort+discoveryPortDelta).Msg("starting server")
 		server, release := helperCreateWsInstance(ctx, container, wsPort, wsPort+discoveryPortDelta)
 		pubsubServersExtra = append(pubsubServersExtra, server)
 		closeFuncs = append(closeFuncs, release)
@@ -95,7 +95,7 @@ func TestMain(m *testing.M) {
 	if code == 0 {
 		time.Sleep(15 * time.Second)
 		if err := goleak.Find(); err != nil {
-			log.Printf("goleak: %v", err)
+			log.Warn().Str("context", "TEST").Err(err).Msg("goleak")
 			code = 1
 		}
 	}
@@ -189,7 +189,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 		},
 		func(ctx context.Context, w Writer, in []byte) {
 			if wErr := w.WriteMessage(ctx, int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
-				log.Panic(wErr)
+				log.Panic().Str("context", "TEST").Err(wErr).Msg("failed to write message")
 			}
 		},
 		nil,
@@ -201,7 +201,7 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 	for i := 0; i < conns; i++ {
 		clientConn, err := client(ctx)
 		if err != nil {
-			log.Panic(err)
+			log.Panic().Str("context", "TEST").Err(err).Msg("test failed")
 		}
 		clients = append(clients, clientConn)
 	}

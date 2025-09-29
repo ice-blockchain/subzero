@@ -5,14 +5,13 @@
 package cfg
 
 import (
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"sync"
 
-	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 )
 
 func init() {
@@ -33,13 +32,13 @@ func findAllApplicationConfigFiles() []string {
 	for _, dir := range hints {
 		pattern := filepath.Join(dir, ".testdata", "application.yaml")
 		if f, err := filepath.Glob(pattern); err != nil {
-			log.Println(errors.Wrapf(err, "glob failed for [%v]", pattern))
+			log.Error().Err(err).Str("pattern", pattern).Msg("glob failed")
 		} else {
 			files = append(files, f...)
 		}
 		pattern = filepath.Join(dir, "application.yaml")
 		if f, err := filepath.Glob(pattern); err != nil {
-			log.Println(errors.Wrapf(err, "glob failed for [%v]", pattern))
+			log.Error().Err(err).Str("pattern", pattern).Msg("glob failed")
 		} else {
 			files = append(files, f...)
 		}
@@ -56,13 +55,13 @@ func relativeFiles() []string {
 	_, callerFile, _, _ := runtime.Caller(0)
 	pattern := filepath.Join(filepath.Dir(callerFile), "..", "application.yaml")
 	if f, err := filepath.Glob(pattern); err != nil {
-		log.Println(errors.Wrapf(err, "glob failed for [%v]", pattern))
+		log.Error().Err(err).Str("pattern", pattern).Msg("glob failed")
 	} else {
 		files = append(files, f...)
 	}
 	pattern = filepath.Join(filepath.Dir(callerFile), "..", "..", "application.yaml")
 	if f, err := filepath.Glob(pattern); err != nil {
-		log.Println(errors.Wrapf(err, "glob failed for [%v]", pattern))
+		log.Error().Err(err).Str("pattern", pattern).Msg("glob failed")
 	} else {
 		files = append(files, f...)
 	}

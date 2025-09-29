@@ -4,7 +4,6 @@ package ionidentitypubkeys
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/goccy/go-json"
 	"github.com/imroc/req/v3"
+	"github.com/rs/zerolog/log"
 )
 
 type (
@@ -30,7 +30,10 @@ type (
 
 func MustNewIONIdentityPublicKeys(ctx context.Context, baseUrl string) IONIdentityKeysProvider {
 	if baseUrl == "" {
-		log.Panic(errors.New("ion identity public keys base url not set"))
+		log.Panic().
+			Str("context", "VALIDATION").
+			Err(errors.New("ion identity public keys base url not set")).
+			Msg("ion identity public keys base url not set")
 	}
 
 	f := &ionIdentityPublicKeysFetcher{
@@ -43,7 +46,7 @@ func MustNewIONIdentityPublicKeys(ctx context.Context, baseUrl string) IONIdenti
 
 	err := f.syncPubKeys(ctx)
 	if err != nil {
-		log.Panicf("failed to sync ion identity public keys during startup: %v", err)
+		log.Panic().Str("context", "VALIDATION").Err(err).Msg("failed to sync ion identity public keys during startup")
 	}
 
 	go f.backgroundSync(ctx)
@@ -70,7 +73,7 @@ func (f *ionIdentityPublicKeysFetcher) backgroundSync(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := f.syncPubKeys(ctx); err != nil {
-				log.Printf("failed to sync ion identity public keys: %v", err)
+				log.Error().Str("context", "VALIDATION").Err(err).Msg("failed to sync ion identity public keys")
 			}
 		}
 	}
@@ -94,7 +97,10 @@ func (f *ionIdentityPublicKeysFetcher) syncPubKeys(ctx context.Context) error {
 	}
 
 	f.Stored.Store(keys)
-	log.Printf("fetched %d ion identity public keys, version: %s", len(keys.Keys), keys.Version)
+	log.Info().Str("context", "VALIDATION").
+		Int("keys_count", len(keys.Keys)).
+		Str("version", keys.Version).
+		Msg("fetched ion identity public keys")
 
 	return nil
 }
@@ -118,14 +124,18 @@ func (f *ionIdentityPublicKeysFetcher) fetchPubKeys(ctx context.Context, version
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("failed to fetch ion identity public keys, retrying...: %v", err)
+				log.Warn().
+					Str("context", "VALIDATION").
+					Err(err).
+					Msg("failed to fetch ion identity public keys, retrying")
 			} else {
-				log.Printf("failed to fetch ion identity public keys with status code: %v, retrying...", resp.GetStatusCode())
+				warn := log.Warn().Int("status_code", resp.GetStatusCode()).Str("context", "VALIDATION")
 				if v, respErr := resp.ToString(); respErr == nil {
-					log.Println("error response", v)
+					warn.Str("response", v)
 				} else {
-					log.Printf("error reading response body: %v", respErr)
+					warn.Err(respErr)
 				}
+				warn.Msg("failed to fetch ion identity public keys, retrying")
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {

@@ -4,11 +4,11 @@ package connector
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 )
 
 func retryStop(err error) error {
@@ -20,7 +20,7 @@ func withRetry[T any](ctx context.Context, op func() (T, error)) (T, error) {
 		ctx,
 		op,
 		backoff.WithNotify(func(err error, d time.Duration) {
-			log.Printf("[DATABASE]: ERROR: call failed: %v (%s). retrying in %v... ", err, errors.FlattenDetails(err), d)
+			log.Error().Str("context", "DATABASE").Err(err).Str("details", errors.FlattenDetails(err)).Dur("retry_delay", d).Msg("call failed, retrying")
 		}),
 		backoff.WithMaxElapsedTime(25*time.Second),
 		backoff.WithBackOff(&backoff.ExponentialBackOff{

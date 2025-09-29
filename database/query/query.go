@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
-	"log"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
@@ -1083,7 +1083,7 @@ func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []
 func (db *dbClient) mustSignDatabaseEvent(event *databaseEvent) {
 	err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
 	if err != nil {
-		log.Panicf("[DB] failed to sign event: %v", err)
+		log.Panic().Str("context", "DB").Err(err).Msg("failed to sign event")
 	}
 }
 
@@ -1168,10 +1168,10 @@ func handleError(err error) error {
 	case errors.Is(err, connector.ErrInvalidData):
 		return ErrInvalidEvent
 	case errors.Is(err, connector.ErrInternal):
-		log.Printf("[DB] error: %v: %s", err, errors.FlattenDetails(err))
+		log.Error().Str("context", "DB").Err(err).Str("details", errors.FlattenDetails(err)).Msg("error")
 		return ErrInvalidRequest
 	case errors.IsAny(err, connector.ErrDuplicate, connector.ErrExclusionViolation):
-		log.Printf("[DB] race error: %v: %s", err, errors.FlattenDetails(err))
+		log.Error().Str("context", "DB").Err(err).Str("details", errors.FlattenDetails(err)).Msg("race error")
 		return ErrRaceCondition
 	}
 
@@ -1296,7 +1296,7 @@ func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Fil
 
 				keys, err := db.fetchAllKeysOf(ctx, parts[1])
 				if err != nil {
-					log.Printf("subkeys fetch failed: %v", err)
+					log.Error().Err(err).Msg("subkeys fetch failed")
 
 					continue
 				}
@@ -1358,7 +1358,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 
 		if notifyExpiredEvents != nil {
 			if notifyErr := notifyExpiredEvents(ctx, events...); notifyErr != nil {
-				log.Printf("failed to process notification of expired events: %v", notifyErr)
+				log.Error().Err(notifyErr).Msg("failed to process notification of expired events")
 				// Continue to delete the events even if notification fails.
 			}
 		}
@@ -1512,11 +1512,11 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 		if err != nil {
 			return errors.Wrap(err, "failed to sign test event")
 		}
-		log.Printf("[DB] self-test: generated test event ID: %s", ev.ID)
+		log.Info().Str("context", "DB").Str("event_id", ev.ID).Msg("self-test: generated test event")
 		writeEvents = append(writeEvents, &ev)
 	}
 
-	log.Printf("[DB] self-test: opening %d write clients", len(writeURLs))
+	log.Info().Str("context", "DB").Int("write_clients", len(writeURLs)).Msg("self-test: opening write clients")
 	var clients []*dbClient
 	for i, writeURL := range writeURLs {
 		client := openDatabase(ctx, []string{writeURL}, []string{}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
@@ -1527,7 +1527,7 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 		clients = append(clients, client)
 	}
 
-	log.Printf("[DB] self-test: opening %d read clients", len(readURLs))
+	log.Info().Str("context", "DB").Int("read_clients", len(readURLs)).Msg("self-test: opening read clients")
 	for _, readURL := range readURLs {
 		client := openDatabase(ctx, []string{}, []string{readURL}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
 		clients = append(clients, client)
@@ -1536,7 +1536,7 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 	defer func() {
 		for _, client := range clients {
 			if err := client.Close(); err != nil {
-				log.Printf("[DB] self-test: failed to close client: %v", err)
+				log.Error().Str("context", "DB").Err(err).Msg("self-test: failed to close client")
 			}
 		}
 	}()
@@ -1585,17 +1585,21 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 				it := client.SelectEvents(selectCtx, model.Filter{IDs: writeEvents.IDs()})
 				for ev, err := range it {
 					if err != nil {
-						log.Printf("[DB] self-test: failed to read test event: %v", err)
+						log.Error().Str("context", "DB").Err(err).Msg("self-test: failed to read test event")
 						continue main
 					}
 					readEvents = append(readEvents, ev)
 				}
 			}
 			if len(readEvents) == len(clients)*len(writeEvents) {
-				log.Printf("[DB] self-test: successfully read test event from all clients")
+				log.Info().Str("context", "DB").Msg("self-test: successfully read test event from all clients")
 				return nil
 			}
-			log.Printf("[DB] self-test: expected %d events, got %d", len(clients)*len(writeEvents), len(readEvents))
+			log.Info().
+				Str("context", "DB").
+				Int("expected_events", len(clients)*len(writeEvents)).
+				Int("got_events", len(readEvents)).
+				Msg("self-test: event count comparison")
 		}
 	}
 	return ctx.Err()

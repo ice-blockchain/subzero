@@ -7,7 +7,6 @@ import (
 	"compress/flate"
 	"context"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsflate"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
 )
@@ -168,7 +168,7 @@ func (w *WebsocketAdapter) Write(ctx context.Context) {
 			}
 
 			if err := w.writeMessageToWebsocket(msg.opCode, msg.data); err != nil {
-				log.Printf("ERROR:%v", errors.Wrap(err, "failed to send message to websocket"))
+				log.Error().Err(err).Msg("failed to send message to websocket")
 			}
 		}
 	}

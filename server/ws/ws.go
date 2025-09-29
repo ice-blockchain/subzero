@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
-	"log"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -90,10 +90,16 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 					closed.Code != ws.StatusGoingAway &&
 					closed.Code != ws.StatusAbnormalClosure &&
 					closed.Code != ws.StatusNoStatusRcvd {
-					log.Printf("WARN: unexpected close error %v: %v", closed.Code, closed.Code)
+					log.Warn().
+						Str("context", "WEBSOCKET").
+						Int("close_code", int(closed.Code)).
+						Msg("unexpected close error")
 				}
 			} else if !errors.Is(err, io.EOF) {
-				log.Printf("WARN: unexpected close error %v: %v", closed.Code, closed.Code)
+				log.Warn().
+					Str("context", "WEBSOCKET").
+					Int("close_code", int(closed.Code)).
+					Msg("unexpected close error")
 			}
 			break
 		}
@@ -111,27 +117,30 @@ func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWri
 	return ctx
 }
 
-func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Duration, msg string, args ...any) {
+func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Duration, msgf string, args ...any) {
 	if duration < operationLogThreshold {
 		return
 	}
 
-	prefix := "[WS]: stats: duration: [" + duration.String() + "]"
+	logger := log.Warn().
+		Str("context", "WEBSOCKET").
+		Dur("duration", duration)
+
 	if v, ok := h.ConnAuth.Load(respWriter); ok && v.Authenticated {
-		prefix += " master: [" + v.MasterPublicKey + "]"
+		logger = logger.Str("master_pubkey", v.MasterPublicKey)
 		if v.UserAgent != "" {
-			prefix += " agent: [" + v.UserAgent + "]"
+			logger = logger.Str("user_agent", v.UserAgent)
 		}
 	}
-	prefix += ": "
-	log.Printf(prefix+msg, args...)
+
+	logger.Msgf(msgf, args...)
 }
 
 func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgBytes []byte) {
 	input, err := nostr.ParseMessage(msgBytes, new(model.BroadcastEnvelope))
 	if err != nil {
 		notice := nostr.NoticeEnvelope(err.Error())
-		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
+		log.Error().Err(errors.Join(err, h.writeResponse(ctx, respWriter, &notice))).Msg("failed to parse message")
 
 		return
 	}
@@ -145,7 +154,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		}
 		err = h.handleEvents(h.populateContext(context.WithoutCancel(ctx), respWriter), respWriter, events)
 		if err != nil {
-			log.Printf("ERROR: cannot process events: %s: %v", model.Events(events).String(), err)
+			log.Error().Err(err).Str("events", model.Events(events).String()).Msg("cannot process events")
 		}
 		h.logOperation(respWriter, time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
 		sendStart := time.Now()
@@ -161,7 +170,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 
 			wErr := h.writeResponse(ctx, respWriter, resp)
 			if wErr != nil {
-				log.Printf("ERROR: write event response %v: %v", i, wErr)
+				log.Error().Err(wErr).Int("event_index", i).Msg("write event response")
 
 				break
 			}
@@ -191,8 +200,9 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			err = h.writeResponse(ctx, respWriter, e)
 		}
 	case *nostr.CloseEnvelope:
-		h.unlinkSubscription(respWriter, (*string)(e))
-		h.logOperation(respWriter, time.Since(start), "req: close: %s", (*string)(e))
+		subscriptionID := (*string)(e)
+		h.unlinkSubscription(respWriter, subscriptionID)
+		h.logOperation(respWriter, time.Since(start), "req: close: %v", subscriptionID)
 	case *model.BroadcastEnvelope:
 		h.handleBroadcast(h.populateContext(ctx, respWriter), e)
 		h.logOperation(respWriter, time.Since(start), "broadcast")
@@ -203,17 +213,20 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 	if err != nil {
 		err = errors.Wrapf(err, "error: failed to handle %v %+v", input.Label(), input)
 		notice := nostr.NoticeEnvelope(err.Error())
-		log.Printf("ERROR:%v", errors.Join(err, h.writeResponse(ctx, respWriter, &notice)))
+		log.Error().Err(errors.Join(err, h.writeResponse(ctx, respWriter, &notice))).Msg("failed to handle message")
 	}
 }
 
 func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelope) {
 	if data := model.GetUserDataFromContext(ctx); !data.Authenticated {
-		log.Printf("WARN: ignoring broadcast from unauthenticated relay %q", e.Relay)
+		log.Warn().Str("relay", e.Relay).Msg("ignoring broadcast from unauthenticated relay")
 		return
 	} else if data.PublicKey != h.BroadcastPublicKey {
-		log.Printf("WARN: ignoring broadcast from relay %q due to public key mismatch: got %s, want %s",
-			e.Relay, data.PublicKey, h.BroadcastPublicKey)
+		log.Warn().
+			Str("relay", e.Relay).
+			Str("got_public_key", data.PublicKey).
+			Str("expected_public_key", h.BroadcastPublicKey).
+			Msg("ignoring broadcast from relay due to public key mismatch")
 		return
 	}
 
@@ -222,7 +235,7 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		validation.RuleWithSkipProfileMetadataProofEventsVerify(),
 		validation.RuleWithSkipRootContentNFTCollectionsValidation(),
 	); err != nil {
-		log.Printf("ERROR: validation failed for broadcast %q: %v", e.Relay, err)
+		log.Error().Err(err).Str("relay", e.Relay).Msg("validation failed for broadcast")
 		return
 	}
 
@@ -245,12 +258,12 @@ func LoadTLSConfig(certOrFileName, keyOrFileName string) *tls.Config {
 	if !strings.Contains(certOrFileName, "-----BEGIN CERTIFICATE-----") {
 		cert, err = tls.LoadX509KeyPair(certOrFileName, keyOrFileName)
 		if err != nil {
-			log.Panic(err)
+			log.Panic().Err(err)
 		}
 	} else {
 		cert, err = tls.X509KeyPair([]byte(certOrFileName), []byte(keyOrFileName))
 		if err != nil {
-			log.Panic(err)
+			log.Panic().Err(err)
 		}
 	}
 

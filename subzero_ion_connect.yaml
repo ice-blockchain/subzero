@@ -1,7 +1,17 @@
 # SPDX-License-Identifier: ice License 1.0
 
-main:
-  shutup: false
+log:
+  # Log level configuration
+  # Available levels: trace, debug, info, warn, error, fatal, panic, disabled
+  # - trace: Most verbose logging (all messages)
+  # - debug: Debug information and above
+  # - info: General information and above (default)
+  # - warn: Warning messages and above
+  # - error: Error messages and above
+  # - fatal: Fatal errors only
+  # - panic: Panic level only
+  # - disabled: No logging output
+  level: info
 
 server:
   relay-url: &self "wss://example.com"

@@ -4,7 +4,6 @@ package hashtagssender
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"regexp"
 	"sync"
@@ -13,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
@@ -143,7 +143,7 @@ func (p *sender) startSender(ctx context.Context) {
 				return
 			}
 			if err := p.sendEvents(ctx, events); err != nil {
-				log.Printf("failed to send events: %v", err)
+				log.Error().Str("context", "HASHTAGS-SENDER").Err(err).Msg("failed to send events")
 			}
 		case <-ctx.Done():
 			return
@@ -174,9 +174,12 @@ func (p *sender) sendEvents(ctx context.Context, events []*model.Event) error {
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("failed to send hashtags data, retrying...: %v", err)
+				log.Error().Str("context", "HASHTAGS-SENDER").Err(err).Msg("failed to send hashtags data, retrying")
 			} else {
-				log.Printf("failed to send hashtags data with status code:%v, retrying...", resp.GetStatusCode())
+				log.Error().
+					Str("context", "HASHTAGS-SENDER").
+					Int("status_code", resp.GetStatusCode()).
+					Msg("failed to send hashtags data with status code, retrying")
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {

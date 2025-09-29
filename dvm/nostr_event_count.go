@@ -5,13 +5,13 @@ package dvm
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -152,7 +152,7 @@ func (n *nostrEventCountJob) doCountRemote(ctx context.Context, filters model.Fi
 
 			eventCh, err := relay.QueryEventsMany(ctx, filters...)
 			if err != nil {
-				log.Printf("cannot get events from relay %v: %v", relay.URL, err)
+				log.Error().Err(err).Str("relay_url", relay.URL).Msg("cannot get events from relay")
 
 				return
 			}
@@ -225,7 +225,7 @@ func (n *nostrEventCountJob) IsBidAmountEnough(amount string) bool {
 		}
 		amount, err := strconv.ParseFloat(amount, 64)
 		if err != nil {
-			log.Printf("DVM: failed to parse payment amount %v: err: %v", amount, err)
+			log.Error().Err(err).Float64("amount", amount).Msg("[DVM] failed to parse payment amount")
 
 			return false
 		}

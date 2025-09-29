@@ -5,12 +5,13 @@ package query
 import (
 	"context"
 	"errors"
-	"log"
 	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/model"
@@ -93,22 +94,22 @@ func mustLoadConfig(opts ...Option) *Config {
 	for i := range conf.WriteURLs {
 		conf.WriteURLs[i], err = createPgURL(conf.Username, conf.Password, conf.WriteURLs[i])
 		if err != nil {
-			log.Panicf("failed to create write URL: %q: %v", conf.WriteURLs[i], err)
+			log.Panic().Err(err).Str("url", conf.WriteURLs[i]).Msg("failed to create write URL")
 		}
 	}
 	for i := range conf.ReadURLs {
 		conf.ReadURLs[i], err = createPgURL(conf.Username, conf.Password, conf.ReadURLs[i])
 		if err != nil {
-			log.Panicf("failed to create read URL: %q: %v", conf.ReadURLs[i], err)
+			log.Panic().Err(err).Str("url", conf.ReadURLs[i]).Msg("failed to create read URL")
 		}
 	}
 
 	if len(conf.WriteURLs) == 0 && len(conf.ReadURLs) == 0 {
-		log.Panic("no database URLs provided, at least one read or write URL is required")
+		log.Fatal().Msg("no database URLs provided, at least one read or write URL is required")
 	}
 
 	if err := cfg.Validate(conf); err != nil {
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	return conf
@@ -123,7 +124,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 
 		if !conf.DisableSelfTest {
 			if err := doSelfTest(ctx, conf.WriteURLs, conf.ReadURLs); err != nil {
-				log.Fatalf("database self-test failed: %v", err)
+				log.Fatal().Err(err).Msg("database self-test failed")
 			}
 		}
 
@@ -144,8 +145,7 @@ func RegisterExpiredEventsProcessor(proc func(ctx context.Context, events ...*mo
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	if globalDB.Client.hasReadURLs {
-		log.Printf("WARN: AcceptEvents called on read-preferred instance: %s: %s",
-			globalDB.Client.relayURL, model.Events(events).String())
+		log.Warn().Str("relay_url", globalDB.Client.relayURL).Str("events", model.Events(events).String()).Msg("acceptEvents called on read-preferred instance")
 	}
 	return globalDB.Client.AcceptEvents(ctx, events...)
 }
@@ -203,11 +203,11 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 		err := db.deleteExpiredEvents(deleteCtx)
 		if err != nil {
 			if errors.Is(err, ErrReadOnly) {
-				log.Printf("INFO: Expired events cleanup skipped because the database is in read-only mode: %v", err)
+				log.Info().Err(err).Msg("expired events cleanup skipped because the database is in read-only mode")
 				cancel()
 				return
 			}
-			log.Printf("failed to delete expired events: %v", err)
+			log.Error().Err(err).Msg("failed to delete expired events")
 		}
 		cancel()
 	}
@@ -237,7 +237,7 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 	for range ticks {
 		queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		if usedDatabaseStorage, err := db.queryDatabaseSize(queryCtx); err != nil {
-			log.Printf("failed to query database size: %v", err)
+			log.Error().Err(err).Msg("failed to query database size")
 		} else {
 			UsedDatabaseStorage.Store(usedDatabaseStorage)
 		}

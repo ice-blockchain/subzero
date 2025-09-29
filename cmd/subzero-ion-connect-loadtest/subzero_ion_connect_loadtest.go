@@ -5,20 +5,20 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/loadtest"
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
 	// Parse command line flags
 	sendDuration := flag.String("send-duration", "", "Loadtest event (text or ephemeral) sending duration (like 5m or 5s), events will be randomly spread over given duration, if not provided, will be defaulted to number of connection seconds")
 	setupDuration := flag.String("setup-duration", "", "Loadtest setup duration (like 5m or 5s), connections will be randomly spread over given duration, if not provided, will be defaulted to number of connection seconds")
@@ -29,6 +29,9 @@ func main() {
 	configFile := flag.String("config", "", "Configuration file path")
 	flag.Parse()
 
+	// Setup console writer for readable logs
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+
 	// Initialize configuration system
 	if *configFile != "" {
 		cfg.MustInit(*configFile)
@@ -37,7 +40,7 @@ func main() {
 	// Load configuration
 	config, err := cfg.Get[loadtest.Config]()
 	if err != nil {
-		log.Printf("Failed to load config from file, using defaults: %v", err)
+		log.Warn().Str("context", "MAIN").Err(err).Msg("failed to load config from file, using defaults")
 		config = &loadtest.Config{} // Use empty config
 	}
 
@@ -85,7 +88,7 @@ func main() {
 
 	// Validate configuration
 	if config.RelayURL == "" {
-		log.Fatal("Relay URL must be provided via -relay flag, NOSTR_RELAY environment variable, or config file")
+		log.Fatal().Msg("relay URL must be provided via -relay flag, NOSTR_RELAY environment variable, or config file")
 	}
 	if config.Connections <= 0 {
 		config.Connections = 1
@@ -95,10 +98,13 @@ func main() {
 
 	err = config.Validate()
 	if err != nil {
-		log.Fatalf("config error: %s", err.Error())
+		log.Fatal().Err(err).Msg("config error")
 	}
 
-	log.Printf("Configuration loaded - Relay: %s, Connections: %d", config.RelayURL, config.Connections)
+	log.Info().Str("context", "MAIN").
+		Str("relay_url", config.RelayURL).
+		Int("connections", config.Connections).
+		Msg("configuration loaded")
 
 	// Create and start load tester
 	tester := loadtest.NewLoadTester(config)
@@ -107,7 +113,7 @@ func main() {
 
 	// Start load test
 	if err := tester.Start(ctx); err != nil {
-		log.Fatal("Failed to start load test: ", err)
+		log.Fatal().Err(err).Msg("failed to start load test")
 	}
 
 	defer tester.PrintLastStats()
@@ -121,7 +127,7 @@ func main() {
 	defer publishTicker.Stop()
 
 	tester.PublishTestEvents(ctx)
-	log.Println("Connections are open. Press Ctrl+C to close connections and shutdown...")
+	log.Info().Msg("connections are open, press Ctrl+C to close connections and shutdown")
 
 	for {
 		select {
@@ -144,10 +150,10 @@ func newContext() context.Context {
 		force := false
 		for sig := range c {
 			if force {
-				log.Println("force shutdown", "signal", sig.String())
+				log.Info().Str("context", "MAIN").Str("signal", sig.String()).Msg("force shutdown")
 				os.Exit(2)
 			} else {
-				log.Println("graceful shutdown", "signal", sig.String())
+				log.Info().Str("context", "MAIN").Str("signal", sig.String()).Msg("graceful shutdown")
 				cancel()
 				force = true
 			}

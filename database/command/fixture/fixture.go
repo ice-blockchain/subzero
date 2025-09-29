@@ -4,9 +4,9 @@ package fixture
 
 import (
 	"context"
-	"log"
 
 	"github.com/cockroachdb/errors"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/cometbft/multiplex/client"
 )
@@ -28,11 +28,11 @@ func (c *callbackClient) BroadcastTxRemoval(ctx context.Context, userAddress str
 }
 
 func (c *callbackClient) GetAcceptor() client.Acceptor {
-	log.Panic(errors.New("should not be called"))
+	log.Panic().Err(errors.New("should not be called"))
 	return nil
 }
 func (e *errClient) GetAcceptor() client.Acceptor {
-	log.Panic(errors.New("should not be called"))
+	log.Panic().Err(errors.New("should not be called"))
 	return nil
 }
 

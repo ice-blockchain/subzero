@@ -5,13 +5,13 @@ package http2
 import (
 	"bytes"
 	"context"
-	"log"
 	"net"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsflate"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	cws "github.com/ice-blockchain/subzero/server/ws/internal/connect-ws-upgrader"
@@ -42,7 +42,7 @@ func (s *srv) handleWebsocket(writer http.ResponseWriter, req *http.Request) (h2
 		}
 		if !hasCompression {
 			conn.Write(ws.CompiledCloseProtocolError)
-			log.Printf("ERROR: websocket connection %v does not support compression, closing", conn.RemoteAddr())
+			log.Error().Str("remote_addr", conn.RemoteAddr().String()).Msg("websocket connection does not support compression, closing")
 			conn.Close()
 			return nil, nil, errNoCompression
 		}

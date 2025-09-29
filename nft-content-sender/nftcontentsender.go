@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/imroc/req/v3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -75,7 +75,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 	}
 	contentEvent := p.findContentEvent(events)
 	if contentEvent == nil {
-		log.Printf("content event not found for events: %v", model.Events(events).IDs())
+		log.Trace().Strs("event_ids", model.Events(events).IDs()).Msg("content event not found for events")
 
 		return nil
 	}
@@ -90,7 +90,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 				return nil
 			}
 		default:
-			log.Printf("content event was already processed previously, skipping: %s", contentEvent.ID)
+			log.Trace().Str("content_event_id", contentEvent.ID).Msg("content event was already processed previously, skipping")
 
 			return nil
 		}
@@ -100,7 +100,7 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 		return errors.Wrapf(err, "failed to get required events from storage for contentEvent:%s", contentEvent.ID)
 	}
 	if attestationEvent == nil || (contentEvent.Kind != nostr.KindProfileMetadata && profileMetadataEvent == nil) {
-		log.Printf("required events not found in the database for contentEvent:%s", contentEvent.ID)
+		log.Trace().Str("content_event_id", contentEvent.ID).Msg("required events not found in the database for contentEvent")
 
 		return nil
 	}
@@ -190,9 +190,9 @@ func (p *sender) sendEvents(ctx context.Context, events model.Events) error {
 		}).
 		SetRetryHook(func(resp *req.Response, err error) {
 			if err != nil {
-				log.Printf("failed to send nft content data, retrying...: %v", err)
+				log.Error().Err(err).Msg("failed to send nft content data, retrying")
 			} else {
-				log.Printf("failed to send nft content data with status code:%v, retrying...", resp.GetStatusCode())
+				log.Error().Int("status_code", resp.GetStatusCode()).Msg("failed to send nft content data with status code, retrying")
 			}
 		}).
 		SetRetryCondition(func(resp *req.Response, err error) bool {
