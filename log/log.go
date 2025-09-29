@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 	"github.com/rs/zerolog"
@@ -30,13 +31,15 @@ func MustInit(opts ...Option) {
 	config, err := cfg.Get[Config]()
 	if config == nil || err != nil {
 		fmt.Println("no log configuration found, using default values", err)
-		config = &Config{
-			Level: zerolog.InfoLevel.String(),
-		}
+		config = &Config{}
 	}
 
 	for _, opt := range opts {
 		opt(config)
+	}
+
+	if config.Level == "" {
+		config.Level = "info"
 	}
 
 	level, err := zerolog.ParseLevel(config.Level)
@@ -47,8 +50,10 @@ func MustInit(opts ...Option) {
 
 	globalInitializer.Do(func() {
 		log.Logger = log.Output(zerolog.ConsoleWriter{
-			Out:     os.Stdout,
-			NoColor: true,
+			Out:          os.Stdout,
+			TimeFormat:   time.RFC3339Nano,
+			TimeLocation: time.UTC,
+			NoColor:      true,
 		})
 	})
 }
