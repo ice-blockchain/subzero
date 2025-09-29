@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 )
 
 var (
