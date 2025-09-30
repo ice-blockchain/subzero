@@ -216,3 +216,20 @@ func TestRejectEphemeralWithAuthoritative(t *testing.T) {
 func emptyIONIdentityKeys() []string {
 	return nil
 }
+
+func TestMaxTagsCount(t *testing.T) {
+	t.Parallel()
+
+	var db fixture.MemDB
+	v := newEventValidator(t.Context(), global.Validator.Config, WithQueryFunc(db.SelectEvents), WithIONIdentityPublicKeys(emptyIONIdentityKeys))
+
+	var ev model.Event
+	ev.Kind = nostr.KindTextNote
+	ev.CreatedAt = nostr.Now()
+	for range maxTagsCount + 1 {
+		ev.Tags = append(ev.Tags, model.Tag{"e", "y"})
+	}
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	err := v.Validate(t.Context(), model.Events{&ev})
+	require.ErrorIs(t, err, ErrWrongEventParams)
+}
