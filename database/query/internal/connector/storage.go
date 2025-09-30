@@ -592,16 +592,14 @@ func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data
 	}
 
 	// Sanitize and add data fields
-	if data != nil {
-		for key, value := range data {
-			switch key {
-			case "host", "database":
-				if str, ok := value.(string); ok {
-					event = event.Str(key, sanitizeDSN(str))
-				}
-			default:
-				event = event.Interface(key, value)
+	for key, value := range data {
+		switch key {
+		case "host", "database":
+			if str, ok := value.(string); ok {
+				event = event.Str(key, sanitizeDSN(str))
 			}
+		default:
+			event = event.Interface(key, value)
 		}
 	}
 
