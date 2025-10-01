@@ -339,12 +339,8 @@ CREATE OR REPLACE FUNCTION trigger_events_before_insert_check_onbehalf_permissio
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.master_pubkey != NEW.pubkey THEN
-        IF NOT subzero_nostr_onbehalf_is_allowed_on_time(
-            COALESCE((
-                SELECT tags
-                FROM events
-                WHERE kind = 10100 AND pubkey = NEW.master_pubkey AND hidden = FALSE
-            ), '[]'::JSONB),
+        IF NOT subzero_nostr_onbehalf_is_allowed_on_time_light(
+            NEW.master_pubkey,
             NEW.pubkey::text,
             NEW.kind,
             get_current_timestamp_nano()
@@ -360,8 +356,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER trigger_events_before_insert_check_onbehalf_permission
-BEFORE INSERT ON events
+DROP TRIGGER IF EXISTS trigger_events_before_insert_check_onbehalf_permission ON events;
+CREATE OR REPLACE TRIGGER trigger_events_after_insert_check_onbehalf_permission
+AFTER INSERT ON events
 FOR EACH ROW
 WHEN (
     NEW.hidden = FALSE

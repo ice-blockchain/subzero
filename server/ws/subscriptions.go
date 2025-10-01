@@ -67,16 +67,21 @@ func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubke
 	}
 
 	// E2E encrypted events cannot be decrypted with master key, so do not forward them.
-	dest := [][]string{
-		{"p", deviceKey},
-		{"p", masterPubkey, "", deviceKey},
-	}
-	for _, pattern := range dest {
-		for range in.Tags.All(pattern) {
-			return true
+	for _, tag := range in.Tags {
+		if tag.Key() != "p" {
+			continue
+		}
+		switch len(tag) {
+		case 2: // Device key only.
+			if tag[1] == deviceKey {
+				return true
+			}
+		case 4: // Master + device key.
+			if tag[1] == masterPubkey && tag[3] == deviceKey {
+				return true
+			}
 		}
 	}
-
 	return false
 }
 

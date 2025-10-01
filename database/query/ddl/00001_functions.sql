@@ -157,6 +157,81 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 --------
+CREATE OR REPLACE FUNCTION subzero_nostr_onbehalf_is_allowed_on_time_light(
+    master_pk text,
+    on_behalf_pubkey text,
+    kind integer,
+    now_ts_nano bigint
+) RETURNS boolean AS $$
+DECLARE
+    latest_attestation_str  TEXT;
+    attestation_action      TEXT;
+    attestation_ts_nano     BIGINT;
+    attestation_kinds       INTEGER[];
+BEGIN
+    IF kind = 10100 THEN
+        RETURN false;
+    END IF;
+
+    SELECT
+        et.event_tag_value3
+    INTO
+        latest_attestation_str
+    FROM
+        events e
+    INNER JOIN
+        event_tags et ON et.event_id = e.id
+    WHERE
+        e.kind = 10100
+        AND e.pubkey = master_pk
+        AND e.hidden = FALSE
+        AND et.event_tag_key = 'p'
+        AND et.event_tag_value1 = on_behalf_pubkey
+    ORDER BY
+        et.id DESC
+    LIMIT 1;
+
+    IF latest_attestation_str IS NULL THEN
+        RETURN false;
+    END IF;
+
+    SELECT
+        a.action,
+        a.ts,
+        a.kinds
+    INTO
+        attestation_action,
+        attestation_ts_nano,
+        attestation_kinds
+    FROM
+        parse_attestation_string_bigint(latest_attestation_str) a;
+
+    IF attestation_action = 'active' THEN
+        -- Check if the current time is after the activation timestamp.
+        IF now_ts_nano <= attestation_ts_nano THEN
+            RETURN false;
+        END IF;
+
+        -- If a specific list of kinds is provided, check against it.
+        -- If `attestation_kinds` is NULL, all kinds (except 10100) are allowed.
+        IF attestation_kinds IS NOT NULL AND array_length(attestation_kinds, 1) > 0 THEN
+            IF NOT (kind = ANY(attestation_kinds)) THEN
+                RETURN false;
+            END IF;
+        END IF;
+
+        -- All checks passed for an 'active' state.
+        RETURN true;
+    END IF;
+
+    -- If the latest action is 'inactive', 'revoked', or anything else, permission is denied.
+    RETURN false;
+
+EXCEPTION WHEN OTHERS THEN
+    RETURN false;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+--------
 CREATE OR REPLACE FUNCTION subzero_nostr_onbehalf_is_allowed_on_time(
     master_tags jsonb,
     on_behalf_pubkey text,
