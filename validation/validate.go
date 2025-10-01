@@ -5,6 +5,7 @@ package validation
 import (
 	"context"
 	"maps"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 const (
 	maxLabelSymbolLength int = 100
+	maxTagsCount         int = 30_000
 
 	tagStateOptional tagState = iota
 	tagStateRequired
@@ -293,8 +295,11 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 			return errors.Wrap(err, "wrong event difficulty")
 		}
 	}
-	if e.Kind < 0 || e.Kind > 65535 {
+	if e.Kind < 0 || e.Kind > math.MaxUint16 {
 		return errors.Wrapf(ErrUnsupportedKind, "kind: %d", e.Kind)
+	}
+	if len(e.Tags) > maxTagsCount {
+		return errors.Wrapf(ErrWrongEventParams, "too many tags: %d", len(e.Tags))
 	}
 	if err := validateEventTags(e, KindSupportedTags); err != nil {
 		return errors.Wrapf(err, "event: %+v", e)

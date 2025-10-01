@@ -4,7 +4,6 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -67,55 +66,53 @@ func ExecNamed[T any](ctx context.Context, db Querier, stmt string, params map[s
 }
 
 func ExecNamedManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf func(err error) bool, stmt string, params map[string]any) ([]*T, error) {
+	const threshold = 150 * time.Millisecond
+
 	query, argList, err := bindNamed(stmt, params)
 	if err != nil {
 		return nil, err
 	}
 
-	now := time.Now()
+	start := time.Now()
 	res, err := ExecManyWithCustomRetry[T](ctx, db, retryIf, query, argList...)
-	duration := time.Since(now)
-	if duration > 150*time.Millisecond {
-		prefix := "[query]: stats: duration: [" + duration.String() + "]"
-		if v := model.GetUserDataFromContext(ctx); v.Authenticated {
-			prefix += " master: [" + v.MasterPublicKey + "]"
-			if v.UserAgent != "" {
-				prefix += " agent: [" + v.UserAgent + "]"
-			}
-		}
-		conn := db.(*DB).writeLB.Active.Load()
-		prefix += ": query saving to host %v, pool stats %v"
-		log.Trace().Str("prefix", prefix).Str("host", conn.Config().ConnConfig.Host).Str("stat", formatStat(conn.Stat())).Msg("database connector stat")
+	duration := time.Since(start)
+	if duration < threshold {
+		return res, err
 	}
+
+	conn := db.(*DB).writeLB.Active.Load()
+	logger := log.Trace().
+		Str("host", conn.Config().ConnConfig.Host).
+		Dur("duration", duration).
+		Str("context", "DATABASE").
+		Str("query", query).
+		Fields(map[string]any{"params": params}).
+		Fields(formatStat(conn.Stat()))
+
+	if v := model.GetUserDataFromContext(ctx); v.Authenticated {
+		logger = logger.Str("master_key", v.MasterPublicKey)
+		if v.UserAgent != "" {
+			logger = logger.Str("user_agent", v.UserAgent)
+		}
+	}
+	logger.Msg("slow query")
+
 	return res, err
 }
 
-func formatStat(stat *pgxpool.Stat) string {
-	return fmt.Sprintf(`pool{
-	aquireCount: %v,
-	aquireDuration: %v,
-    aquiredConns: %v,
-	constructingConns: %v,
-	CanceledAcquireCount: %v,
-	EmptyAcquireCount: %v,
-	EmptyAcquireWaitTime: %v,
-	Idle: %v,
-	MaxIdleDestroyCount: %v,
-	NewConnsCount: %v,
-	Total: %v,
-	MaxLifetimeDestroyCount: %v
-}`,
-		stat.AcquireCount(),
-		stat.AcquireDuration(),
-		stat.AcquiredConns(),
-		stat.ConstructingConns(),
-		stat.CanceledAcquireCount(),
-		stat.EmptyAcquireCount(),
-		stat.EmptyAcquireWaitTime(),
-		stat.IdleConns(),
-		stat.MaxIdleDestroyCount(),
-		stat.NewConnsCount(),
-		stat.TotalConns(),
-		stat.MaxLifetimeDestroyCount(),
-	)
+func formatStat(stat *pgxpool.Stat) map[string]any {
+	return map[string]any{
+		"acquire_count":              stat.AcquireCount(),
+		"acquire_duration":           stat.AcquireDuration().String(),
+		"acquired_conns":             stat.AcquiredConns(),
+		"constructing_conns":         stat.ConstructingConns(),
+		"canceled_acquire_count":     stat.CanceledAcquireCount(),
+		"empty_acquire_count":        stat.EmptyAcquireCount(),
+		"empty_acquire_wait_time":    stat.EmptyAcquireWaitTime().String(),
+		"idle_conns":                 stat.IdleConns(),
+		"max_idle_destroy_count":     stat.MaxIdleDestroyCount(),
+		"new_conns_count":            stat.NewConnsCount(),
+		"total_conns":                stat.TotalConns(),
+		"max_lifetime_destroy_count": stat.MaxLifetimeDestroyCount(),
+	}
 }

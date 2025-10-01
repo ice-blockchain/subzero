@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/tracelog"
 )
 
 type (
@@ -42,7 +43,16 @@ func DoInTransaction(ctx context.Context, db *DB, fn func(conn QueryExecer) erro
 	for ctx.Err() == nil {
 		err := executeTransaction(ctx, db, txOptions, fn)
 		if shouldRetryTransaction(err) {
-			time.Sleep(time.Duration(10+rand.IntN(200)) * time.Millisecond)
+			waitTime := time.Duration(10+rand.IntN(200)) * time.Millisecond
+			db.Log(ctx, tracelog.LogLevelDebug, "transaction retryable error occurred, retrying", map[string]any{
+				"error": err,
+				"wait":  waitTime.String(),
+			})
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(waitTime):
+			}
 			continue
 		}
 		return err
