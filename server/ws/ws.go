@@ -153,7 +153,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 			events = append(events, &model.Event{Event: *e.Events[i]})
 		}
 		err = h.handleEvents(h.populateContext(context.WithoutCancel(ctx), respWriter), respWriter, events)
-		if err != nil {
+		if err != nil && !errors.Is(err, errAuthRequired) {
 			log.Error().Err(err).Str("events", model.Events(events).String()).Msg("cannot process events")
 		}
 		h.logOperation(respWriter, time.Since(start), "events: handle [%d] events: %v", len(events), string(msgBytes))
