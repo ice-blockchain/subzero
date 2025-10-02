@@ -24,6 +24,7 @@ func (ev *eventValidator) validateKindRepostEvent(ctx context.Context, rules *ru
 	if rules != nil {
 		repostRules.SkipKindProfileProofEventsVerify = rules.SkipKindProfileProofEventsVerify
 		repostRules.SkipKindAttestationProofDevicesVerify = rules.SkipKindAttestationProofDevicesVerify
+		repostRules.SkipRootContentReplyValidation = rules.SkipRootContentReplyValidation
 		repostRules.BroadcastMode = rules.BroadcastMode
 	}
 	if err := ev.validate(ctx, repostRules, batch, &repostedEvent); err != nil && !errors.IsAny(err, ErrPollTTLExpired) {

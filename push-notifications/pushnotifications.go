@@ -302,7 +302,9 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 ) {
 	ephemeralByRef, parseErr := model.ParseEphemeralEmbeddingEvents(events...)
 	if parseErr != nil {
-		log.Printf("[push-notifications] failed to parse ephemeral embedding events: %v", parseErr)
+		log.Error().Str("context", "PUSH_NOTIFICATIONS").
+			Err(parseErr).
+			Msg("failed to parse ephemeral embedding events")
 		ephemeralByRef = make(map[string][]*model.EphemeralEmbeddingEvent)
 	}
 	for _, event := range events {
@@ -604,7 +606,9 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 func (pm *PushNotificationManager) getTranslation(notificationType NotificationType) notificationTranslation {
 	translation, ok := DefaultTranslations[notificationType]
 	if !ok {
-		log.Printf("missing translation for notification type: %s", notificationType)
+		log.Error().Str("context", "PUSH_NOTIFICATIONS").
+			Str("notification_type", string(notificationType)).
+			Msg("missing translation for notification type")
 
 		return notificationTranslation{
 			Title:    "Notification",
