@@ -1605,13 +1605,11 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 	return ctx.Err()
 }
 
-func startPeriodicSelfTest(ctx context.Context, writeURLs []string, readURLs []string) {
-	const periodicSelfTestInterval = 1 * time.Minute
-
-	ticker := time.NewTicker(periodicSelfTestInterval)
+func startPeriodicSelfTest(ctx context.Context, writeURLs []string, readURLs []string, interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	log.Info().Str("context", "DB").Dur("interval", periodicSelfTestInterval).Msg("starting periodic self-test")
+	log.Info().Str("context", "DB").Dur("interval", interval).Msg("starting periodic self-test")
 
 	go func() {
 		for {
@@ -1622,7 +1620,7 @@ func startPeriodicSelfTest(ctx context.Context, writeURLs []string, readURLs []s
 			case <-ticker.C:
 				log.Debug().Str("context", "DB").Msg("running periodic self-test")
 				if err := doSelfTest(ctx, writeURLs, readURLs); err != nil {
-					log.Error().Str("context", "DB").Err(err).Msg("periodic self-test failed")
+					log.Fatal().Str("context", "DB").Err(err).Msg("periodic self-test failed")
 				} else {
 					log.Debug().Str("context", "DB").Msg("periodic self-test passed")
 				}
