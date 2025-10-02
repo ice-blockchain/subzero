@@ -126,6 +126,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 			if err := doSelfTest(ctx, conf.WriteURLs, conf.ReadURLs); err != nil {
 				log.Fatal().Err(err).Msg("database self-test failed")
 			}
+			startPeriodicSelfTest(ctx, conf.WriteURLs, conf.ReadURLs)
 		}
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
