@@ -66,8 +66,8 @@ require (
 	github.com/tidwall/wal v1.2.1
 	github.com/tus/tusd/v2 v2.8.0
 	github.com/u2takey/ffmpeg-go v0.5.0
-	github.com/xssnick/tonutils-go v1.15.2
-	github.com/xssnick/tonutils-storage v1.2.2
+	github.com/xssnick/tonutils-go v1.15.3
+	github.com/xssnick/tonutils-storage v1.3.0
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/contrib/bridges/otelslog v0.13.0
 	go.opentelemetry.io/otel v1.38.0
@@ -312,7 +312,7 @@ require (
 	google.golang.org/genproto v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250929231259-57b25ae835d4 // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/gotestsum v1.13.0 // indirect
 )

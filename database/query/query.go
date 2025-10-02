@@ -1604,3 +1604,27 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 	}
 	return ctx.Err()
 }
+
+func startPeriodicSelfTest(ctx context.Context, writeURLs []string, readURLs []string, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	log.Info().Str("context", "DB").Dur("interval", interval).Msg("starting periodic self-test")
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info().Str("context", "DB").Msg("stopping periodic self-test due to context cancellation")
+				return
+			case <-ticker.C:
+				log.Debug().Str("context", "DB").Msg("running periodic self-test")
+				if err := doSelfTest(ctx, writeURLs, readURLs); err != nil {
+					log.Fatal().Str("context", "DB").Err(err).Msg("periodic self-test failed")
+				} else {
+					log.Debug().Str("context", "DB").Msg("periodic self-test passed")
+				}
+			}
+		}
+	}()
+}

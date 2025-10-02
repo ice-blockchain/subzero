@@ -422,6 +422,7 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 			wrappedRules.SkipKindAttestationProofDevicesVerify = rules.SkipKindAttestationProofDevicesVerify
 			wrappedRules.BroadcastMode = rules.BroadcastMode
 			wrappedRules.SkipRootContentNFTCollectionsValidation = rules.SkipRootContentNFTCollectionsValidation
+			wrappedRules.SkipRootContentReplyValidation = rules.SkipRootContentReplyValidation
 		}
 		return ev.validateKindEphemeralEmbeddingEvent(ctx, wrappedRules, batch, e)
 	default:

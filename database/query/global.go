@@ -27,13 +27,14 @@ var (
 
 type (
 	Config struct {
-		Username        string   `yaml:"username,omitempty"`
-		Password        string   `yaml:"password,omitempty"`
-		PrivateKey      string   `yaml:"private-key"          validate:"required"`
-		RelayURL        string   `yaml:"relay-url"            validate:"required,url"`
-		WriteURLs       []string `yaml:"write-urls"`
-		ReadURLs        []string `yaml:"read-urls"`
-		DisableSelfTest bool     `yaml:"disable-self-test"`
+		Username                 string        `yaml:"username,omitempty"`
+		Password                 string        `yaml:"password,omitempty"`
+		PrivateKey               string        `yaml:"private-key"          validate:"required"`
+		RelayURL                 string        `yaml:"relay-url"            validate:"required,url"`
+		WriteURLs                []string      `yaml:"write-urls"`
+		ReadURLs                 []string      `yaml:"read-urls"`
+		DisableSelfTest          bool          `yaml:"disable-self-test"`
+		PeriodicSelfTestInterval time.Duration `yaml:"periodic-self-test-interval"`
 	}
 	Option func(*Config)
 )
@@ -60,6 +61,9 @@ func WithConfig(cfg *Config) Option {
 		}
 		if len(cfg.WriteURLs) > 0 {
 			in.WriteURLs = cfg.WriteURLs
+		}
+		if cfg.PeriodicSelfTestInterval != 0 {
+			in.PeriodicSelfTestInterval = cfg.PeriodicSelfTestInterval
 		}
 	}
 }
@@ -89,6 +93,9 @@ func mustLoadConfig(opts ...Option) *Config {
 
 	for _, opt := range opts {
 		opt(conf)
+	}
+	if conf.PeriodicSelfTestInterval == 0 {
+		conf.PeriodicSelfTestInterval = 1 * time.Minute
 	}
 
 	for i := range conf.WriteURLs {
@@ -125,6 +132,9 @@ func MustInit(ctx context.Context, opts ...Option) {
 		if !conf.DisableSelfTest {
 			if err := doSelfTest(ctx, conf.WriteURLs, conf.ReadURLs); err != nil {
 				log.Fatal().Err(err).Msg("database self-test failed")
+			}
+			if conf.PeriodicSelfTestInterval > 0 {
+				startPeriodicSelfTest(ctx, conf.WriteURLs, conf.ReadURLs, conf.PeriodicSelfTestInterval)
 			}
 		}
 
