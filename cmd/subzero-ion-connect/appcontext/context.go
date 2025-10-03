@@ -18,7 +18,6 @@ type (
 	AppContext interface {
 		context.Context
 		OnShutdown(f func() error)
-		WaitForShutdown()
 	}
 	WaitForShutdown interface {
 		context.Context
