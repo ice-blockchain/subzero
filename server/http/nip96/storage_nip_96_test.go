@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/cert"
@@ -59,7 +60,7 @@ var (
 
 func TestMain(m *testing.M) {
 	serverCtx, serverCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-
+	serverCtx, _ = appcontext.NewAppContext(serverCtx)
 	addr, release := query.NewTestDatabase(serverCtx)
 	query.MustInit(serverCtx, query.WithConfig(&query.Config{
 		WriteURLs:       []string{addr},
@@ -837,6 +838,7 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 func initStorage(ctx context.Context, opts ...storage.Option) {
 	transportOverride := http.DefaultClient.Transport
 	http.DefaultClient.Transport = http.DefaultTransport
+	ctx, _ = appcontext.NewAppContext(ctx)
 	storage.MustInit(ctx, opts...)
 	http.DefaultClient.Transport = transportOverride
 }

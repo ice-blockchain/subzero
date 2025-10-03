@@ -11,11 +11,13 @@ import (
 
 	"go.uber.org/goleak"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 )
 
 func TestMain(m *testing.M) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	ctx, _ = appcontext.NewAppContext(ctx)
 	addr, release := query.NewTestDatabase(ctx)
 	query.MustInit(ctx, query.WithConfig(&query.Config{
 		WriteURLs:       []string{addr},

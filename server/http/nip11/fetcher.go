@@ -14,6 +14,8 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
+
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 )
 
 type (
@@ -33,11 +35,11 @@ func NewFetcher(ctx context.Context) Fetcher {
 		cache: ttlcache.New[string, *RelayInformationDocument](ttlcache.WithTTL[string, *RelayInformationDocument](cacheDuration)),
 	}
 	go f.cache.Start()
-	go func() {
-		<-ctx.Done()
+	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		log.Trace().Msg("NIP11 fetcher: shutting down")
 		f.cache.Stop()
-	}()
+		return nil
+	})
 	return f
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -77,12 +78,12 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 	}
 
 	go server.ResponseCache.Start()
-	go func() {
-		<-ctx.Done()
+	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		log.Trace().Str("context", "DVM").Msg("shutting down")
 		server.WG.Wait()
 		server.ResponseCache.Stop()
-	}()
+		return nil
+	})
 
 	return server
 }

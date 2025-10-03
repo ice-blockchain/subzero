@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
@@ -246,8 +247,8 @@ func init() {
 	})
 }
 
-func newContext() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
+func newContext() appcontext.WaitForShutdown {
+	ctx, cancel := appcontext.NewAppContext(context.Background())
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -276,8 +277,10 @@ func main() {
 	defer pool.Release()
 
 	antsPool = pool
-	err = subzero.ExecuteContext(newContext())
+	appCtx := newContext()
+	err = subzero.ExecuteContext(appCtx)
 	if err != nil {
 		log.Panic().Err(err)
 	}
+	appCtx.WaitForShutdown()
 }
