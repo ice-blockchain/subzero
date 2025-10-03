@@ -130,6 +130,7 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.
 	d.Jobs.Store(event.ID, task)
 
 	d.WG.Add(1)
+
 	go func() {
 		defer appcontext.GetAppContext(ctx).Recover()
 		defer d.Jobs.Delete(event.ID)

@@ -15,7 +15,6 @@ import (
 	"github.com/rcrowley/go-metrics"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
 )
 
@@ -114,7 +113,6 @@ func (s *statistics) Close() error {
 }
 func (s *statistics) ProcessFile(ctx context.Context, filePath, contentType string, size uint64) {
 	go func() {
-		defer appcontext.GetAppContext(ctx).Recover()
 		md, err := s.metaExtractor.Extract(filePath, contentType, size)
 		if err != nil {
 			log.Error().Str("context", "STORAGE").Err(err).Msg("error extracting metadata for file stats")

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -206,7 +207,7 @@ func TestValidateKindRepostEvent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NoError(t, tt.event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			validator := newEventValidator(t.Context(), cfg.MustGet[Config](), WithIONIdentityPublicKeys(emptyIONIdentityKeys), WithQueryFunc(func(ctx context.Context, filters ...model.Filter) query.EventIterator {
+			validator := newEventValidator(appcontext.TContext(t), cfg.MustGet[Config](), WithIONIdentityPublicKeys(emptyIONIdentityKeys), WithQueryFunc(func(ctx context.Context, filters ...model.Filter) query.EventIterator {
 				return func(yield func(*model.Event, error) bool) {
 					for _, filter := range filters {
 						hasProfileKind := false

@@ -129,7 +129,7 @@ func TestNIP96(t *testing.T) {
 	user1, user1PubKey := model.GenerateKeyPair()
 	user2, user2PubKey := model.GenerateKeyPair()
 
-	helperCreateAttestations(t, t.Context(), master, masterPubKey, user1PubKey, user2PubKey)
+	helperCreateAttestations(t, appcontext.TContext(t), master, masterPubKey, user1PubKey, user2PubKey)
 
 	var events model.Events
 	t.Run("Upload files", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestNIP96(t *testing.T) {
 			require.NoError(t, storage.AcceptEvents(t.Context(), cpy))
 		})
 		wg.Go(func() {
-			status := deleteFile(t, t.Context(), user1, fileHash, masterPubKey)
+			status := deleteFile(t, appcontext.TContext(t), user1, fileHash, masterPubKey)
 			require.Equal(t, http.StatusOK, status)
 			require.NoFileExists(t, filepath.Join(testMainStorageRoot, masterPubKey, fileName))
 		})
@@ -327,7 +327,7 @@ func TestNIP96(t *testing.T) {
 				}
 				fileHash := nip94ToBeDeleted.GetTag("ox").Value()
 				require.NotEmptyf(t, fileHash, "ox tag should be present in the event %v", nip94ToBeDeleted.ID)
-				status := deleteFile(t, t.Context(), user1, fileHash, masterPubKey)
+				status := deleteFile(t, appcontext.TContext(t), user1, fileHash, masterPubKey)
 				require.Equal(t, http.StatusOK, status)
 				fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
 
@@ -350,26 +350,26 @@ func TestNIP96(t *testing.T) {
 			}
 			deleteFileAndVerify(func(fileName string) {
 				require.FileExists(t, filepath.Join(testMainStorageRoot, masterPubKey, fileName))
-				status, location := download(t, t.Context(), user1, "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1", masterPubKey)
+				status, location := download(t, appcontext.TContext(t), user1, "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1", masterPubKey)
 				require.Equal(t, http.StatusFound, status)
 				require.Regexp(t, "^http://[0-9a-fA-F]{64}.bag/c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1.txt.+", location)
 			})
 		})
 		t.Run("download endpoint redirects to same download url over ton storage", func(t *testing.T) {
 			expected := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice logo").Nip94Event.Tags})
-			status, location := download(t, t.Context(), user1, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", masterPubKey)
+			status, location := download(t, appcontext.TContext(t), user1, "777d453395088530ce8de776fe54c3e5ace548381007b743e067844858962218", masterPubKey)
 			require.Equal(t, http.StatusFound, status)
 			require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expected.Summary), location)
 
 			expected = nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice profile pic").Nip94Event.Tags})
-			status, location = download(t, t.Context(), user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
+			status, location = download(t, appcontext.TContext(t), user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
 			require.Equal(t, http.StatusFound, status)
 			require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expected.Summary), location)
-			status, _ = download(t, t.Context(), user1, "non_valid_hash")
+			status, _ = download(t, appcontext.TContext(t), user1, "non_valid_hash")
 			require.Equal(t, http.StatusNotFound, status)
 		})
 		t.Run("list files responds with up to all files for the user when total is less than page", func(t *testing.T) {
-			files := list(t, t.Context(), user1, 0, 0, masterPubKey)
+			files := list(t, appcontext.TContext(t), user1, 0, 0, masterPubKey)
 			require.Equal(t, uint32(filesCount-1), files.Total)
 			require.Len(t, files.Files, filesCount-1)
 			for _, f := range files.Files {
@@ -377,7 +377,7 @@ func TestNIP96(t *testing.T) {
 			}
 		})
 		t.Run("list files with pagination", func(t *testing.T) {
-			files := list(t, t.Context(), user1, 0, 1, masterPubKey)
+			files := list(t, appcontext.TContext(t), user1, 0, 1, masterPubKey)
 			require.Equal(t, uint32(filesCount-1), files.Total)
 			require.Len(t, files.Files, 1)
 			uniqFiles := map[string]struct{}{}
@@ -385,7 +385,7 @@ func TestNIP96(t *testing.T) {
 				verifyFile(t, f.Content, f.Tags)
 				uniqFiles[f.Content] = struct{}{}
 			}
-			files = list(t, t.Context(), user1, 1, 1, masterPubKey)
+			files = list(t, appcontext.TContext(t), user1, 1, 1, masterPubKey)
 			require.Equal(t, uint32(filesCount-1), files.Total)
 			require.Len(t, files.Files, 1)
 			for _, f := range files.Files {
@@ -407,7 +407,7 @@ func TestNIP96(t *testing.T) {
 			fileName := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse(nip94ToBeDeleted.Content).Nip94Event.Tags}).Summary
 			var wg sync.WaitGroup
 			wg.Go(func() {
-				status := deleteFile(t, t.Context(), user1, fileHash, masterPubKey)
+				status := deleteFile(t, appcontext.TContext(t), user1, fileHash, masterPubKey)
 				require.Equal(t, http.StatusOK, status)
 				require.NoFileExists(t, filepath.Join(testMainStorageRoot, masterPubKey, fileName))
 			})
@@ -435,7 +435,7 @@ func TestNIP96(t *testing.T) {
 					break
 				}
 			}
-			status := deleteFile(t, t.Context(), user2, "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1", masterPubKey)
+			status := deleteFile(t, appcontext.TContext(t), user2, "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1", masterPubKey)
 			require.Equal(t, http.StatusOK, status)
 			fileName := "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1.txt"
 			require.NoFileExists(t, filepath.Join(testMainStorageRoot, masterPubKey, fileName))
@@ -514,7 +514,7 @@ func TestNIP96(t *testing.T) {
 			require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))
 		})
 		t.Run("delete file owned by master by usr1 (Forbidden)", func(t *testing.T) {
-			status := deleteFile(t, t.Context(), user1, "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9", masterPubKey)
+			status := deleteFile(t, appcontext.TContext(t), user1, "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9", masterPubKey)
 			require.Equal(t, http.StatusForbidden, status)
 			fileName := "fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9.txt"
 			require.FileExists(t, filepath.Join(testMainStorageRoot, masterPubKey, fileName))
@@ -541,7 +541,7 @@ func TestNIP96(t *testing.T) {
 			verifyFile(t, resp.Nip94Event.Content, resp.Nip94Event.Tags)
 
 			expected := nip94.ParseFileMetadata(nostr.Event{Tags: expectedResponse("ice profile pic").Nip94Event.Tags})
-			status, location := download(t, t.Context(), user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
+			status, location := download(t, appcontext.TContext(t), user1, "b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292", masterPubKey)
 			require.Equal(t, http.StatusFound, status)
 			require.Regexp(t, fmt.Sprintf("^http://[0-9a-fA-F]{64}.bag/%v", expected.Summary), location)
 		})

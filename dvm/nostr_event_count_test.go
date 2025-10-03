@@ -514,7 +514,7 @@ func helperExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Even
 
 	req.CreatedAt = nostr.Now()
 	require.NoError(t, req.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
+	ctx, _ = appcontext.NewAppContext(ctx)
 	ch, err := d.AcceptJob(ctx, req)
 	if err != nil {
 		return nil, err
@@ -526,7 +526,7 @@ func helperExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Even
 
 func helperMustExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Event) *model.Event {
 	t.Helper()
-
+	ctx, _ = appcontext.NewAppContext(ctx)
 	result, err := helperExecuteJob(t, ctx, d, req)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -947,11 +947,12 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 			},
 		}.String()
 
-		ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+		ctx, ccancel := appcontext.NewAppContext(model.SetUserDataInContext(t.Context(), model.UserDataContext{
 			PublicKey:       "john",
 			MasterPublicKey: "john",
 			Authenticated:   true,
-		})
+		}))
+		defer ccancel()
 		result := helperMustExecuteJob(t, ctx, d, &ev)
 		require.Equal(t, "2", result.Content, "expected 2 followers") // Anna and Bob.
 	})

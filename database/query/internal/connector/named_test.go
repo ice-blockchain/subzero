@@ -8,16 +8,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 )
 
 func TestNamedSelect(t *testing.T) {
 	t.Parallel()
-
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
 	addr, release := mainTestContainer.MustTempDB(t.Context())
 	defer release()
 
-	conn, err := connector.New(t.Context(),
+	conn, err := connector.New(ctx,
 		connector.WithWriteURLs(addr),
 		connector.WithDDL(`CREATE TABLE IF NOT EXISTS testnamed (id SERIAL PRIMARY KEY, name TEXT)`),
 	)

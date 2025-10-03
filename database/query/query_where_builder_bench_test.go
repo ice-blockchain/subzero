@@ -14,6 +14,7 @@ import (
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -46,7 +47,7 @@ func helperBenchEnsureDatabase(t interface {
 		t.Skip("TESTDB env is not set")
 	}
 
-	db := openDatabase(t.Context(), []string{dbPath + "?_foreign_keys=on"}, []string{}, false)
+	db := openDatabase(appcontext.TContext(t), []string{dbPath + "?_foreign_keys=on"}, []string{}, false)
 	benchData.Do(func() {
 		t.Logf("loading test data from %q", dbPath)
 		benchData.Events = helperPreloadDataForFilter(t, db)
