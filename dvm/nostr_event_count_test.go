@@ -12,6 +12,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -572,8 +573,9 @@ func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 
 func TestEventCountersConsistency(t *testing.T) {
 	t.Parallel()
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 
 	cases := []struct {
 		Name       string
@@ -838,8 +840,9 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 	t.Cleanup(func() {
 		query.DeleteAllEvents(t.Context())
 	})
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 
 	t.Run("Populate", func(t *testing.T) {
 		t.Run("Create metadata", func(t *testing.T) {
@@ -974,8 +977,9 @@ func TestCountUserStories(t *testing.T) {
 
 	const storiesCount = 5
 	pk := model.GeneratePrivateKey()
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 
 	t.Run("Create user stories", func(t *testing.T) {
 		for i := range storiesCount {

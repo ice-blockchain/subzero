@@ -24,13 +24,18 @@ type (
 		context.Context
 		WaitForShutdown()
 	}
+	appContextKey string
+)
+
+const (
+	appContextCtxKey appContextKey = "appContext"
 )
 
 func GetAppContext(ctx context.Context) AppContext {
 	if appCtx, ok := ctx.(AppContext); ok {
 		return appCtx
 	}
-	if cVal := ctx.Value("appContext"); cVal != nil {
+	if cVal := ctx.Value(appContextCtxKey); cVal != nil {
 		return cVal.(AppContext)
 	}
 	log.Panic().Msg("appContext was not initialized")
@@ -44,7 +49,7 @@ func NewAppContext(ctx context.Context) (WaitForShutdown, context.CancelFunc) {
 		wg:     new(sync.WaitGroup),
 		cancel: cancel,
 	}
-	ctx = context.WithValue(ctx, "appContext", c)
+	ctx = context.WithValue(ctx, appContextCtxKey, c)
 	c.Context = ctx
 	return c, cancel
 }
@@ -52,12 +57,10 @@ func (c *appContext) WaitForShutdown() {
 	c.wg.Wait()
 }
 func (c *appContext) OnShutdown(f func() error) {
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		<-c.Done()
 		if err := f(); err != nil {
 			log.Error().Err(err).Msg("failed to shutdown")
 		}
-	}()
+	})
 }
