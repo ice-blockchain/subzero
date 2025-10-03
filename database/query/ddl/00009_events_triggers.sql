@@ -329,11 +329,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER trigger_events_store_replaceable_data_before_update
-    AFTER UPDATE ON events
-    FOR EACH ROW
-    WHEN (((10000 <= old.kind AND old.kind < 20000 ) OR old.kind = 0 OR old.kind = 3 OR (30000 <= old.kind AND old.kind < 40000)) AND old.id != new.id)
-    EXECUTE FUNCTION events_store_replaceable_data_before_update();
+-- CREATE OR REPLACE TRIGGER trigger_events_store_replaceable_data_before_update
+--     AFTER UPDATE ON events
+--     FOR EACH ROW
+--     WHEN (((10000 <= old.kind AND old.kind < 20000 ) OR old.kind = 0 OR old.kind = 3 OR (30000 <= old.kind AND old.kind < 40000)) AND old.id != new.id)
+--     EXECUTE FUNCTION events_store_replaceable_data_before_update();
+
+DROP TRIGGER IF EXISTS trigger_events_store_replaceable_data_before_update ON events;
 --------
 CREATE OR REPLACE FUNCTION trigger_events_before_insert_check_onbehalf_permission()
 RETURNS TRIGGER AS $$
