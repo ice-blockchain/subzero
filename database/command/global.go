@@ -26,10 +26,6 @@ var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay
 
 var disabled = true
 
-func Disabled() bool {
-	return disabled
-}
-
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
 	QueryFunc    func(context.Context, ...model.Filter) query.EventIterator
