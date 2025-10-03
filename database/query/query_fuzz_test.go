@@ -480,7 +480,7 @@ func helperCreatePostsReactions(t *testing.T, db *dbClient, keys []string, posts
 		switch reaction {
 		case reactionLike:
 			ev.Kind = nostr.KindReaction
-			ev.Content = "+"
+			ev.Content = "+" + generateRandomString(rand.IntN(10))
 			ev.Tags = model.Tags{
 				{"p", post.GetMasterPublicKey()},
 				{"k", strconv.Itoa(int(post.Kind))},
@@ -635,6 +635,9 @@ func TestQueryFuzzDependencies(t *testing.T) {
 	defer db.Close()
 
 	keys := helperCreateUsers(t, db, 1_000)
+	posts := helperCreatePosts(t, db, keys, 100_0)
+	helperCreatePostsReactions(t, db, keys, posts, 100_0)
+
 	currentKey := keys[rand.Int64N(int64(len(keys)))]
 
 	for i := range generic {
@@ -665,9 +668,6 @@ func TestQueryFuzzDependencies(t *testing.T) {
 		}
 	}
 
-	posts := helperCreatePosts(t, db, keys, 100_0)
-	helperCreatePostsReactions(t, db, keys, posts, 100_0)
-
 	w := min(runtime.NumCPU()*3, 100)
 
 	t.Run("Fuzz", func(t *testing.T) {
@@ -684,14 +684,14 @@ func TestQueryFuzzDependencies(t *testing.T) {
 					Kinds:  []int{nostr.KindTextNote, nostr.KindRepost},
 					Search: strings.Join(set, " "),
 				}
-				sql, params, err := db.generateSelectEventsSQL(t.Context(), filter)
+				buildResult, err := db.generateSelectEventsSQL(t.Context(), filter)
 				if err != nil {
 					errCh <- testReselt{Err: errors.Errorf("failed to generate select events sql for set #%d (%#v): %w", i, set, err)}
 					return
 				}
 
-				sql = "EXPLAIN (FORMAT JSON, ANALYZE) " + sql
-				result, err := connector.GetNamed[string](t.Context(), db.db, sql, params)
+				sql := "EXPLAIN (FORMAT JSON, ANALYZE) " + buildResult.Statement
+				result, err := connector.GetNamed[string](t.Context(), db.db, sql, buildResult.Params)
 				if err != nil {
 					errCh <- testReselt{Err: errors.Errorf("failed to execute query for set #%d: %w", i, err)}
 					return
