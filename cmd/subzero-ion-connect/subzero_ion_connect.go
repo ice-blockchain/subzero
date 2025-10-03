@@ -225,7 +225,13 @@ func init() {
 		})
 
 		antsPool.Submit(func() { webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...) })
-
+		if command.Disabled() {
+			antsPool.Submit(func() {
+				if err := query.CommitEvents(ctx, events...); err != nil {
+					log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to query.CommitEvents to cleanup replaced data")
+				}
+			})
+		}
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
