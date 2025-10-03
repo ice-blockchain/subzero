@@ -28,6 +28,7 @@ import (
 	"github.com/xssnick/tonutils-storage/db"
 	"github.com/xssnick/tonutils-storage/storage"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
@@ -321,6 +322,7 @@ func (c *client) Close() (err error) {
 }
 
 func (c *client) report(ctx context.Context) {
+	defer appcontext.GetAppContext(ctx).Recover()
 	period := 1 * time.Hour
 	if c.config.Debug {
 		period = 1 * time.Minute

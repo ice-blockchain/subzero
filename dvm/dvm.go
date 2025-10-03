@@ -131,6 +131,7 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.
 
 	d.WG.Add(1)
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		defer d.Jobs.Delete(event.ID)
 		defer cancel()
 
@@ -304,6 +305,7 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 	successfull := atomic.Int32{}
 	for _, relay := range relays {
 		go func() {
+			defer appcontext.GetAppContext(ctx).Recover()
 			defer wg.Done()
 
 			err := relay.Publish(ctx, result.Event)

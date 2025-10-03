@@ -20,6 +20,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
@@ -439,6 +440,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 
 	for _, notification := range singleNotifications {
 		go func(n *pn.Notification[*DeviceRegistrationEvent]) {
+			defer appcontext.GetAppContext(ctx).Recover()
 			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
 			if err != nil && pn.IsInvalidDeviceToken(err) {
 				invalidDevicesMutex.Lock()
@@ -453,6 +455,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 
 	for _, notification := range topicNotifications {
 		go func(n *pn.Notification[pn.SubscriptionTopic]) {
+			defer appcontext.GetAppContext(ctx).Recover()
 			errChan <- (*pm.pushNotificationClient).SendTopic(ctx, n)
 		}(notification)
 	}

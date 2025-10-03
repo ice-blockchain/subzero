@@ -24,6 +24,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -110,6 +111,7 @@ func detectMinLatencyMaster(ctx context.Context, urls []string, logger tracelog.
 	wg.Add(len(urls))
 	for i, connectionString := range urls {
 		go func() {
+			defer appcontext.GetAppContext(ctx).Recover()
 			defer wg.Done()
 			conn, err := poolConnect(ctx, connectionString, logger)
 			if err != nil {
@@ -365,6 +367,7 @@ func (db *DB) Ping(ctx context.Context) (err error) {
 	if instance := db.writeLB.Active.Load(); instance != nil {
 		wg.Add(1)
 		go func() {
+			defer appcontext.GetAppContext(ctx).Recover()
 			defer wg.Done()
 			errChan <- errors.Wrap(instance.Ping(ctx), "ping failed for master")
 		}()

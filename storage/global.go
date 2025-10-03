@@ -393,6 +393,7 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 
 	loadMonitoringCh := make(chan *db.Event, 1000000)
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		for ev := range loadMonitoringCh {
 			if ev.Event == db.EventTorrentLoaded {
 				if ev.Torrent != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
@@ -67,6 +68,7 @@ func (s *srv) HandleWS(wsHandler adapters.WSHandler, handler http.Handler, write
 	}
 	if wsocket != nil {
 		go func() {
+			defer appcontext.GetAppContext(ctx).Recover()
 			defer func() {
 				if clErr := wsocket.Close(); clErr != nil {
 					log.Error().

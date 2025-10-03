@@ -3,6 +3,7 @@
 package statistics
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,13 +15,14 @@ import (
 	"github.com/rcrowley/go-metrics"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/storage/statistics/metadata"
 )
 
 type (
 	Statistics interface {
 		io.Closer
-		ProcessFile(filePath, contentType string, size uint64)
+		ProcessFile(ctx context.Context, filePath, contentType string, size uint64)
 	}
 	statistics struct {
 		metaExtractor  metadata.Extractor
@@ -34,7 +36,7 @@ func (n *noopStats) Close() error {
 	return nil
 }
 
-func (n *noopStats) ProcessFile(filePath, contentType string, size uint64) {
+func (n *noopStats) ProcessFile(ctx context.Context, filePath, contentType string, size uint64) {
 }
 
 const (
@@ -110,8 +112,9 @@ func (s *statistics) Close() error {
 	return nil
 
 }
-func (s *statistics) ProcessFile(filePath, contentType string, size uint64) {
+func (s *statistics) ProcessFile(ctx context.Context, filePath, contentType string, size uint64) {
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		md, err := s.metaExtractor.Extract(filePath, contentType, size)
 		if err != nil {
 			log.Error().Str("context", "STORAGE").Err(err).Msg("error extracting metadata for file stats")

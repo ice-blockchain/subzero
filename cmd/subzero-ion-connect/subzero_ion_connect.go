@@ -249,6 +249,7 @@ func init() {
 
 func newContext() appcontext.WaitForShutdown {
 	ctx, cancel := appcontext.NewAppContext(context.Background())
+	defer appcontext.GetAppContext(ctx).Recover()
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

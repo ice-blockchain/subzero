@@ -4,8 +4,10 @@ package appcontext
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/rs/zerolog/log"
 )
 
@@ -18,6 +20,7 @@ type (
 	AppContext interface {
 		context.Context
 		OnShutdown(f func() error)
+		Recover()
 	}
 	WaitForShutdown interface {
 		context.Context
@@ -62,4 +65,16 @@ func (c *appContext) OnShutdown(f func() error) {
 			log.Error().Err(err).Msg("failed to shutdown")
 		}
 	})
+}
+
+func (c *appContext) Recover() {
+	if pErr := recover(); pErr != nil {
+		if err, isErr := pErr.(error); isErr {
+			log.Error().Str("stack", string(debug.Stack())).Err(err).Msg("panic")
+			c.cancel()
+		} else {
+			log.Error().Str("stack", string(debug.Stack())).Err(errors.Errorf("%v", pErr)).Msg("panic")
+			c.cancel()
+		}
+	}
 }

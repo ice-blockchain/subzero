@@ -199,6 +199,7 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	defer cancel()
 
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		defer close(ticks)
@@ -235,6 +236,7 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
 	ticks <- struct{}{}
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		defer close(ticks)

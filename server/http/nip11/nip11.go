@@ -19,6 +19,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -171,6 +172,7 @@ func (n *nip11handler) startSystemMetricsCollector(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
 	ticks <- struct{}{}
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		defer close(ticks)
