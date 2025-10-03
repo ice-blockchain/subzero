@@ -406,7 +406,7 @@ func shouldProcessGenericRepostEvent(event *model.Event) (bool, error) {
 	if err := json.Unmarshal([]byte(event.Content), &repostedEvent); err != nil {
 		return false, errors.Wrap(err, "failed to unmarshal repost event")
 	}
-	if repostedEvent.Kind != model.CustomIONKindEditableTextNote {
+	if repostedEvent.Kind != model.CustomIONKindEditableTextNote && repostedEvent.Kind != nostr.KindArticle {
 		return false, nil
 	}
 
