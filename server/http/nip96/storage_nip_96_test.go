@@ -232,7 +232,8 @@ func TestNIP96(t *testing.T) {
 			require.NoError(t, query.AcceptEvents(t.Context(), deletedPost))
 			cpy := new(model.Event)
 			*cpy = *deletedPost
-			require.NoError(t, query.CommitEvents(t.Context(), cpy))
+			// TODO: bring back with command
+			//require.NoError(t, query.CommitEvents(t.Context(), cpy))
 			require.NoError(t, storage.AcceptEvents(t.Context(), cpy))
 		})
 		wg.Go(func() {
@@ -503,7 +504,8 @@ func TestNIP96(t *testing.T) {
 			require.NoError(t, query.AcceptEvents(t.Context(), deletedPost))
 			cpy := new(model.Event)
 			*cpy = *deletedPost
-			require.NoError(t, query.CommitEvents(t.Context(), cpy))
+			// TODO: bring back with command
+			//require.NoError(t, query.CommitEvents(t.Context(), cpy))
 			require.NoError(t, storage.AcceptEvents(t.Context(), cpy))
 			fileName := "c7fce3cad585a3110c96b34516df16362c99f6f32359d64ddf1a58c1710247d1.jpg"
 			require.NoFileExists(t, filepath.Join(newStorageRoot, masterPubKey, fileName))

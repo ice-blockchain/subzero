@@ -189,7 +189,7 @@ func TestReplaceableEvents(t *testing.T) {
 		require.Len(t, stored, 2)
 		require.Equal(t, ev3.Event, stored[0].Event, "event 3")
 		require.Equal(t, ev2.Event, stored[1].Event, "event 2")
-		if false { // command.IsEnabled()
+		if false { // TODO: bring back with command
 			// Rollback
 			require.NoError(t, db.RollbackEvents(t.Context(), ev2, ev3))
 			stored = helperSelectEvents(t, db, model.Filter{
