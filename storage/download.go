@@ -21,6 +21,7 @@ import (
 	"github.com/xssnick/tonutils-storage/storage"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
@@ -328,6 +329,7 @@ func (c *client) saveBagPerUser(bagID []byte, ver *int64, userPubKey *string) er
 }
 
 func (c *client) startDownloadsFromQueue(ctx context.Context) {
+	defer appcontext.GetAppContext(ctx).Recover()
 outerLoop:
 	for ctx.Err() == nil {
 		c.activeDownloadsMx.RLock()

@@ -31,6 +31,7 @@ import (
 	"github.com/xssnick/tonutils-storage/storage"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/storage/statistics"
@@ -256,15 +257,15 @@ func MustInit(ctx context.Context, opts ...Option) {
 	globalClient.Once.Do(func() {
 		globalClient.Client = mustInit(ctx, opts...)
 	})
-	go func() {
-		<-ctx.Done()
+	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		if globalClient.Client == nil {
-			return
+			return nil
 		}
-		globalClient.Client.Close()
+		err := globalClient.Client.Close()
 		globalClient.Client = nil
 		globalClient.Once = sync.Once{}
-	}()
+		return err
+	})
 }
 
 func mustInit(ctx context.Context, opts ...Option) *client {
@@ -392,6 +393,7 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 
 	loadMonitoringCh := make(chan *db.Event, 1000000)
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		for ev := range loadMonitoringCh {
 			if ev.Event == db.EventTorrentLoaded {
 				if ev.Torrent != nil {

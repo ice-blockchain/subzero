@@ -13,6 +13,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -148,6 +149,7 @@ func (n *nostrEventCountJob) doCountRemote(ctx context.Context, filters model.Fi
 	}()
 	for _, relay := range queryRelays {
 		go func() {
+			defer appcontext.GetAppContext(ctx).Recover()
 			defer wg.Done()
 
 			eventCh, err := relay.QueryEventsMany(ctx, filters...)

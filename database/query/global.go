@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -148,12 +149,11 @@ func MustInit(ctx context.Context, opts ...Option) {
 
 		go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		go globalDB.Client.StartCollectingUsedDatabaseStorage(ctx)
-
-		go func() {
-			<-ctx.Done()
-			globalDB.Client.Close()
+		appcontext.GetAppContext(ctx).OnShutdown(func() error {
+			err := globalDB.Client.Close()
 			globalDB.Once = sync.Once{}
-		}()
+			return err
+		})
 	})
 }
 
@@ -199,6 +199,7 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 	defer cancel()
 
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		defer close(ticks)
@@ -235,6 +236,7 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 	ticks := make(chan struct{}, 1)
 	ticks <- struct{}{}
 	go func() {
+		defer appcontext.GetAppContext(ctx).Recover()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		defer close(ticks)

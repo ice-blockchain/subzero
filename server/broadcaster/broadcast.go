@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -270,6 +271,7 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 			}
 			wg.Add(1)
 			go func() {
+				defer appcontext.GetAppContext(ctx).Recover()
 				defer wg.Done()
 				start := time.Now()
 				bxErr := b.broadcastTo(ctx, relay, events)

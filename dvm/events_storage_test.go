@@ -13,6 +13,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -21,8 +22,9 @@ func TestDVM_ConcurrentEvents(t *testing.T) {
 
 	const eventsPerThread = 5
 	const threadsCount = 1000
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 	var wg sync.WaitGroup
 	for range threadsCount {
 		wg.Add(1)

@@ -20,6 +20,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 )
 
 const (
@@ -141,6 +142,7 @@ func (w *WebsocketAdapter) WriteMessage(ctx context.Context, messageType int, da
 // Write listens on the out channel and writes messages to the websocket connection.
 // It's lanched as a separate goroutine from the server's HandleWS method.
 func (w *WebsocketAdapter) Write(ctx context.Context) {
+	defer appcontext.GetAppContext(ctx).Recover()
 	pingTicker := time.NewTicker(WebSocketPingInterval)
 	defer pingTicker.Stop()
 

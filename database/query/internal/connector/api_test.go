@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/database/query/internal/postgres/fixture"
 )
@@ -38,7 +39,7 @@ func TestAPI(t *testing.T) {
 	addr, release := mainTestContainer.MustTempDB(t.Context())
 	defer release()
 
-	conn, err := connector.New(t.Context(),
+	conn, err := connector.New(appcontext.TestContext(t),
 		connector.WithWriteURLs(addr),
 		connector.WithDDL(`CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, name TEXT)`),
 	)

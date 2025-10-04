@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/database/query/internal/postgres/fixture"
 )
@@ -23,7 +24,7 @@ func TestStorageMasterSwitch(t *testing.T) {
 	master1Addr, _ := master1.MustTempDB(t.Context(), "master1")
 	master2Addr, _ := master2.MustTempDB(t.Context(), "master2")
 
-	conn, err := connector.New(t.Context(),
+	conn, err := connector.New(appcontext.TestContext(t),
 		connector.WithWriteURLs(master1Addr, master2Addr),
 	)
 	require.NoError(t, err)

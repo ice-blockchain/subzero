@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
@@ -136,10 +137,12 @@ func New(ctx context.Context, opts ...Option) Server {
 		RelayURL:   r.Config.RelayURL,
 		PrivateKey: r.Config.BroadcastPrivateKey,
 	})
-	go func() {
-		<-ctx.Done()
+
+	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		r.Broadcaster.Close()
-	}()
+		return nil
+	})
+
 	public, err := model.GetPublicKey(r.Config.BroadcastPrivateKey)
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to get public key from private key")

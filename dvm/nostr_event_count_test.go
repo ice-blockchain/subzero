@@ -12,6 +12,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -513,7 +514,7 @@ func helperExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Even
 
 	req.CreatedAt = nostr.Now()
 	require.NoError(t, req.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-
+	ctx, _ = appcontext.NewAppContext(ctx)
 	ch, err := d.AcceptJob(ctx, req)
 	if err != nil {
 		return nil, err
@@ -525,7 +526,7 @@ func helperExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Even
 
 func helperMustExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Event) *model.Event {
 	t.Helper()
-
+	ctx, _ = appcontext.NewAppContext(ctx)
 	result, err := helperExecuteJob(t, ctx, d, req)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -572,8 +573,9 @@ func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 
 func TestEventCountersConsistency(t *testing.T) {
 	t.Parallel()
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 
 	cases := []struct {
 		Name       string
@@ -838,8 +840,9 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 	t.Cleanup(func() {
 		query.DeleteAllEvents(t.Context())
 	})
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 
 	t.Run("Populate", func(t *testing.T) {
 		t.Run("Create metadata", func(t *testing.T) {
@@ -944,11 +947,12 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 			},
 		}.String()
 
-		ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
+		ctx, ccancel := appcontext.NewAppContext(model.SetUserDataInContext(t.Context(), model.UserDataContext{
 			PublicKey:       "john",
 			MasterPublicKey: "john",
 			Authenticated:   true,
-		})
+		}))
+		defer ccancel()
 		result := helperMustExecuteJob(t, ctx, d, &ev)
 		require.Equal(t, "2", result.Content, "expected 2 followers") // Anna and Bob.
 	})
@@ -974,8 +978,9 @@ func TestCountUserStories(t *testing.T) {
 
 	const storiesCount = 5
 	pk := model.GeneratePrivateKey()
-
-	d := mustNewDVM(t.Context())
+	ctx, cancel := appcontext.NewAppContext(t.Context())
+	defer cancel()
+	d := mustNewDVM(ctx)
 
 	t.Run("Create user stories", func(t *testing.T) {
 		for i := range storiesCount {

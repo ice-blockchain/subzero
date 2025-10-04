@@ -20,6 +20,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
@@ -50,6 +51,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	ctx, _ = appcontext.NewAppContext(ctx)
 
 	container := query.NewTestContainer(ctx)
 	closeFuncs = append(closeFuncs, func() error {
