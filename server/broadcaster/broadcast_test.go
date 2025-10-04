@@ -142,7 +142,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 		newEvent2.Content = "Hello"
 		newEvent2.Tags = model.Tags{}
 
-		err := broadcaster.Broadcast(appcontext.TContext(t), &newEvent, &newEvent2)
+		err := broadcaster.Broadcast(appcontext.TestContext(t), &newEvent, &newEvent2)
 		require.NoError(t, err)
 
 		for range 2 {
@@ -175,7 +175,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 			},
 		}
 
-		err := broadcaster.Broadcast(appcontext.TContext(t), testEvent)
+		err := broadcaster.Broadcast(appcontext.TestContext(t), testEvent)
 		t.Logf("broadcast error: %v", err)
 		require.ErrorIs(t, err, testErr)
 	})
@@ -206,7 +206,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 			},
 		}
 
-		err := broadcaster.Broadcast(appcontext.TContext(t), testEvent)
+		err := broadcaster.Broadcast(appcontext.TestContext(t), testEvent)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to broadcast")
 	})

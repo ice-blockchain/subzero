@@ -290,7 +290,6 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 	}
 
 	go func() {
-		defer appcontext.GetAppContext(ctx).Recover()
 		wg.Wait()
 		close(errCh)
 	}()

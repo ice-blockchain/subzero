@@ -39,7 +39,7 @@ func TestAPI(t *testing.T) {
 	addr, release := mainTestContainer.MustTempDB(t.Context())
 	defer release()
 
-	conn, err := connector.New(appcontext.TContext(t),
+	conn, err := connector.New(appcontext.TestContext(t),
 		connector.WithWriteURLs(addr),
 		connector.WithDDL(`CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, name TEXT)`),
 	)

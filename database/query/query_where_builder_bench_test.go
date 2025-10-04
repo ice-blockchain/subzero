@@ -47,7 +47,7 @@ func helperBenchEnsureDatabase(t interface {
 		t.Skip("TESTDB env is not set")
 	}
 
-	db := openDatabase(appcontext.TContext(t), []string{dbPath + "?_foreign_keys=on"}, []string{}, false)
+	db := openDatabase(appcontext.TestContext(t), []string{dbPath + "?_foreign_keys=on"}, []string{}, false)
 	benchData.Do(func() {
 		t.Logf("loading test data from %q", dbPath)
 		benchData.Events = helperPreloadDataForFilter(t, db)

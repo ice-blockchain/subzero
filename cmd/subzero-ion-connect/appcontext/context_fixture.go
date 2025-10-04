@@ -8,7 +8,7 @@ import (
 	"context"
 )
 
-func TContext(t interface{ Context() context.Context }) context.Context {
+func TestContext(t interface{ Context() context.Context }) context.Context {
 	ctx, _ := NewAppContext(t.Context())
 	return ctx
 }

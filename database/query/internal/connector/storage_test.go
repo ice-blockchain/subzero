@@ -24,7 +24,7 @@ func TestStorageMasterSwitch(t *testing.T) {
 	master1Addr, _ := master1.MustTempDB(t.Context(), "master1")
 	master2Addr, _ := master2.MustTempDB(t.Context(), "master2")
 
-	conn, err := connector.New(appcontext.TContext(t),
+	conn, err := connector.New(appcontext.TestContext(t),
 		connector.WithWriteURLs(master1Addr, master2Addr),
 	)
 	require.NoError(t, err)

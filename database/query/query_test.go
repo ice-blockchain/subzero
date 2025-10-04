@@ -28,9 +28,9 @@ var (
 func helperNewDatabase(t *testing.T) *dbClient {
 	t.Helper()
 
-	connString, _ := mainTestContainer.MustTempDB(appcontext.TContext(t))
+	connString, _ := mainTestContainer.MustTempDB(appcontext.TestContext(t))
 
-	dbClient := openDatabase(appcontext.TContext(t), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
+	dbClient := openDatabase(appcontext.TestContext(t), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 
@@ -2088,26 +2088,26 @@ func TestSelfTest(t *testing.T) {
 	connString, _ := mainTestContainer.MustTempDB(t.Context())
 	connString2, _ := mainTestContainer.MustTempDB(t.Context())
 
-	dbClient := openDatabase(appcontext.TContext(t), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
+	dbClient := openDatabase(appcontext.TestContext(t), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 	defer dbClient.Close()
 
-	dbClient2 := openDatabase(appcontext.TContext(t), []string{connString2}, []string{connString2}, true, connector.WithLogging(false)).
+	dbClient2 := openDatabase(appcontext.TestContext(t), []string{connString2}, []string{connString2}, true, connector.WithLogging(false)).
 		WithPrivateKey(model.GeneratePrivateKey()).
 		WithRelayURL("wss://localhost")
 	defer dbClient2.Close()
 
 	t.Run("Same connection string", func(t *testing.T) {
-		err := doSelfTest(appcontext.TContext(t), []string{connString}, []string{connString})
+		err := doSelfTest(appcontext.TestContext(t), []string{connString}, []string{connString})
 		require.NoError(t, err, "Self-test should pass without errors")
 	})
 	t.Run("Two masters", func(t *testing.T) {
-		err := doSelfTest(appcontext.TContext(t), []string{connString, connString}, []string{connString})
+		err := doSelfTest(appcontext.TestContext(t), []string{connString, connString}, []string{connString})
 		require.NoError(t, err)
 	})
 	t.Run("Different connection strings", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(appcontext.TContext(t), 2*time.Second)
+		ctx, cancel := context.WithTimeout(appcontext.TestContext(t), 2*time.Second)
 		defer cancel()
 		err := doSelfTest(ctx, []string{connString}, []string{connString, connString2})
 		require.Error(t, err, "Self-test should fail with different connection strings")

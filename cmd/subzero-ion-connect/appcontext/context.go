@@ -7,7 +7,6 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/cockroachdb/errors"
 	"github.com/rs/zerolog/log"
 )
 
@@ -73,7 +72,7 @@ func (c *appContext) Recover() {
 			log.Error().Str("stack", string(debug.Stack())).Err(err).Msg("panic")
 			c.cancel()
 		} else {
-			log.Error().Str("stack", string(debug.Stack())).Err(errors.Errorf("%v", pErr)).Msg("panic")
+			log.Error().Str("stack", string(debug.Stack())).Interface("err", pErr).Msg("panic")
 			c.cancel()
 		}
 	}

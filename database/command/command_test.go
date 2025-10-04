@@ -66,7 +66,7 @@ func TestRollBackOnTxError(t *testing.T) {
 	}}
 	require.NoError(t, relaysList.SignWithAlg(masterPrivKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, originalEvent.SignWithAlg(privKeyOfOriginalNote, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	node, release := newConsensusNode(appcontext.TContext(t), nil, 19999, WithClient(fixture.NewErrornousClient()))
+	node, release := newConsensusNode(appcontext.TestContext(t), nil, 19999, WithClient(fixture.NewErrornousClient()))
 	defer release()
 	err := node.broadcastUserEvents(t.Context(), relaysList, originalEvent)
 	t.Logf("%v", err)
@@ -109,7 +109,7 @@ func TestBroadcastProfileDeletion(t *testing.T) {
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Equal(t, masterPubkey, userAddress)
 	})
-	node, release := newConsensusNode(appcontext.TContext(t), nil, 19999,
+	node, release := newConsensusNode(appcontext.TestContext(t), nil, 19999,
 		WithClient(consensusClient),
 		WithQuery(memdb.SelectEvents),
 	)
@@ -178,7 +178,7 @@ func TestBroadcastLinkedEvent(t *testing.T) {
 	}, func(userAddress string, relays []string, transactions ...client.Transaction) {
 		require.Fail(t, "Rollback should not be called")
 	})
-	node, release := newConsensusNode(appcontext.TContext(t), nil, 19999,
+	node, release := newConsensusNode(appcontext.TestContext(t), nil, 19999,
 		WithClient(consensusClient),
 		WithQuery(memdb.SelectEvents),
 	)
@@ -277,12 +277,12 @@ func TestServerRestart(t *testing.T) {
 	t.Parallel()
 
 	var memdb dbfix.MemDB
-	node, release := newConsensusNode(appcontext.TContext(t), nil, 13999, WithQuery(memdb.SelectEvents))
+	node, release := newConsensusNode(appcontext.TestContext(t), nil, 13999, WithQuery(memdb.SelectEvents))
 	defer release()
 
 	for range 5 {
 		require.NoError(t, node.Stop(t.Context(), time.Second))
-		node.Start(appcontext.TContext(t))
+		node.Start(appcontext.TestContext(t))
 	}
 }
 
@@ -317,7 +317,7 @@ func TestBroadcastUserEvents_BasicFunctionality(t *testing.T) {
 		require.Fail(t, "Rollback should not be called")
 	})
 
-	node, release := newConsensusNode(appcontext.TContext(t), nil, 19999,
+	node, release := newConsensusNode(appcontext.TestContext(t), nil, 19999,
 		WithClient(consensusClient),
 		WithQuery(memdb.SelectEvents),
 	)
@@ -505,7 +505,7 @@ func TestBroadcastUserEvents_BadgeEvents(t *testing.T) {
 		require.Fail(t, "Rollback should not be called")
 	})
 
-	node, release := newConsensusNode(appcontext.TContext(t), nil, 19999,
+	node, release := newConsensusNode(appcontext.TestContext(t), nil, 19999,
 		WithClient(consensusClient),
 		WithQuery(memdb.SelectEvents),
 	)
