@@ -5,6 +5,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"math"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
+	"github.com/jackc/tern/v2/migrate"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -183,7 +185,7 @@ func WithReadURLs(urls ...string) Option {
 	}
 }
 
-func WithDDL(ddl string) Option {
+func WithDDL(ddl fs.FS) Option {
 	return func(_ context.Context, db *DB) error {
 		db.ddl = ddl
 
@@ -217,8 +219,42 @@ func WithFieldNameMapper(mapper NameMapperFunc) Option {
 	}
 }
 
+func runMigrations(ctx context.Context, pool *pgxpool.Pool, ddl fs.FS) error {
+	const schemaTable = "schema_migrations"
+
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return errors.Wrap(err, "cannot acquire connection to run migrations")
+	}
+	defer conn.Release()
+
+	m, err := migrate.NewMigrator(ctx, conn.Conn(), schemaTable)
+	if err != nil {
+		return errors.Wrap(err, "cannot create migrator")
+	}
+
+	err = m.LoadMigrations(ddl)
+	if err != nil {
+		return errors.Wrap(err, "cannot load migrations")
+	}
+
+	if v, err := m.GetCurrentVersion(ctx); err == nil {
+		log.Info().Str("context", "DATABASE").Int32("version", v).Msg("current schema version")
+	}
+
+	m.OnStart = func(sequence int32, name, direction, sql string) {
+		log.Info().
+			Str("context", "DATABASE").
+			Int32("sequence", sequence).
+			Str("name", name).
+			Str("direction", direction).
+			Msg("applying migration")
+	}
+
+	return parseError(m.Migrate(ctx))
+}
+
 func New(ctx context.Context, opts ...Option) (*DB, error) {
-	const ddlLockMagicNumber int64 = 1753772468014996478
 	val, ok := os.LookupEnv(envLoggigEnabled)
 	db := &DB{
 		readLB:  new(readLB),
@@ -242,23 +278,14 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		}
 	}
 
-	if db.ddl != "" && len(db.writeLB.Masters) > 0 {
-		err := DoInTransaction(ctx, db, func(conn QueryExecer) error {
-			val, err := Get[bool](ctx, conn, "SELECT pg_try_advisory_xact_lock($1)", ddlLockMagicNumber)
-			if err != nil {
-				return errors.Wrap(err, "cannot acquire advisory lock for ddl")
-			} else if val != nil && !*val {
-				log.Info().Msg("another instance is running DDL, skipping DDL execution")
-				return nil
-			}
-			for statement := range strings.SplitSeq(db.ddl, "--------") {
-				_, err := conn.Exec(ctx, statement)
-				if err != nil {
-					return errors.Wrapf(err, "statement failed: %s", statement)
-				}
-			}
-			return nil
-		})
+	if db.ddl != nil && len(db.writeLB.Masters) > 0 {
+		log.Info().Str("context", "DATABASE").Msg("running migrations")
+		pool := db.writeLB.Active.Load()
+		if pool == nil {
+			log.Panic().Str("context", "DATABASE").Msg("no active master to run migrations")
+		}
+
+		err := runMigrations(ctx, pool, db.ddl)
 		if err != nil {
 			if errors.Is(err, ErrReadOnly) {
 				log.Info().Err(err).Str("details", errors.FlattenDetails(err)).Msg("DDL failed because the database is in read-only mode")

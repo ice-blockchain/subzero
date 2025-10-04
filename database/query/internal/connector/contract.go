@@ -5,6 +5,7 @@ package connector
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"iter"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,7 @@ type (
 		writeLB *writeLB
 		readLB  *readLB
 		closed  *atomic.Bool
-		ddl     string
+		ddl     fs.FS
 		logging bool
 	}
 	Iterator[T any] = iter.Seq2[T, error]
