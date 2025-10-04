@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/llxisdsh/pb"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -39,7 +39,7 @@ func (d *dvm) searchDVMEvents(ctx context.Context, filters model.Filters) query.
 				continue
 			}
 
-			d.ResponseCache.Range(func(item *ttlcache.Item[string, *xsync.Map[string, *model.Event]]) bool {
+			d.ResponseCache.Range(func(item *ttlcache.Item[string, *eventMap]) bool {
 				item.Value().Range(func(key string, value *model.Event) bool {
 					if model.FiltersMatch(filters, value, "", "") {
 						if !yield(value, nil) {
@@ -84,8 +84,8 @@ func (d *dvm) acceptDVMResponseEvent(event *model.Event) error {
 	}
 
 	key := tagCacheKey("p", pTag)
-	val, _ := d.ResponseCache.GetOrSet(key, xsync.NewMap[string, *model.Event](),
-		ttlcache.WithTTL[string, *xsync.Map[string, *model.Event]](model.DVMJobResultExpiration))
+	val, _ := d.ResponseCache.GetOrSet(key, pb.NewMapOf[string, *model.Event](),
+		ttlcache.WithTTL[string, *eventMap](model.DVMJobResultExpiration))
 	val.Value().LoadAndStore(event.ID, event)
 	d.ResponseCache.Set(key, val.Value(), model.DVMJobResultExpiration)
 

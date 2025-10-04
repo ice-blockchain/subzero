@@ -349,6 +349,15 @@ func (db *DB) Close() error {
 	return nil
 }
 
+func (db *DB) Reset() {
+	for _, replica := range db.readLB.Replicas {
+		replica.Reset()
+	}
+	if instance := db.writeLB.Active.Load(); instance != nil {
+		instance.Reset()
+	}
+}
+
 func (db *DB) Ping(ctx context.Context) (err error) {
 	var wg sync.WaitGroup
 

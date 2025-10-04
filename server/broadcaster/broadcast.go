@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/llxisdsh/pb"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 
@@ -23,7 +23,7 @@ import (
 
 type (
 	Broadcaster struct {
-		relays *xsync.Map[string, *nostr.Relay] // URL -> Relay.
+		relays *pb.MapOf[string, *nostr.Relay] // URL -> Relay.
 		sf     singleflight.Group
 		conf   Config
 		mu     sync.RWMutex
@@ -40,7 +40,7 @@ func New(conf Config) *Broadcaster {
 		conf.QueryFunc = query.GetStoredEvents
 	}
 	return &Broadcaster{
-		relays: xsync.NewMap[string, *nostr.Relay](),
+		relays: pb.NewMapOf[string, *nostr.Relay](),
 		conf:   conf,
 	}
 }
