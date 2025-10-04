@@ -57,7 +57,9 @@ func TestMain(m *testing.M) {
 	})
 	tempDB, tempDBClose := container.MustTempDB(ctx)
 	query.MustInit(ctx, query.WithConfig(&query.Config{
-		WriteURLs: []string{tempDB},
+		WriteURLs:       []string{tempDB},
+		RunDDL:          true,
+		DisableSelfTest: true,
 	}))
 	closeFuncs = append(closeFuncs, func() error {
 		tempDBClose()

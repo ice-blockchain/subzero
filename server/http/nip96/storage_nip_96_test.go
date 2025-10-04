@@ -62,9 +62,11 @@ func TestMain(m *testing.M) {
 
 	addr, release := query.NewTestDatabase(serverCtx)
 	query.MustInit(serverCtx, query.WithConfig(&query.Config{
-		WriteURLs:  []string{addr},
-		PrivateKey: testPrivateKey,
-		RelayURL:   "wss://localhost:9996",
+		WriteURLs:       []string{addr},
+		PrivateKey:      testPrivateKey,
+		RelayURL:        "wss://localhost:9996",
+		RunDDL:          true,
+		DisableSelfTest: true,
 	}))
 
 	var err error
