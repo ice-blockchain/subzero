@@ -794,8 +794,8 @@ github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJu
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=
 github.com/xssnick/raptorq v1.3.0 h1:3GoaySKMg/i8rbjhIuqjxpTTO2l3Gs2/Gh7k3GAjvGo=
 github.com/xssnick/raptorq v1.3.0/go.mod h1:kgEVVsZv2hP+IeV7C7985KIFsDdvYq2ARW234SBA9Q4=
-github.com/xssnick/tonutils-go v1.15.3 h1:9iEHmm87I2IP75nyLiLF9T9xW8Gx+ksgXx43cGaCayg=
-github.com/xssnick/tonutils-go v1.15.3/go.mod h1:3/B8mS5IWLTd1xbGbFbzRem55oz/Q86HG884bVsTqZ8=
+github.com/xssnick/tonutils-go v1.15.4 h1:W8At5J1Z5Mg1Pf/eJDw+takoAHB1U0iKOFK76DzGu3Q=
+github.com/xssnick/tonutils-go v1.15.4/go.mod h1:3/B8mS5IWLTd1xbGbFbzRem55oz/Q86HG884bVsTqZ8=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
