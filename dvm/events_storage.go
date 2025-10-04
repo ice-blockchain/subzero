@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/llxisdsh/pb"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -84,7 +84,7 @@ func (d *dvm) acceptDVMResponseEvent(event *model.Event) error {
 	}
 
 	key := tagCacheKey("p", pTag)
-	val, _ := d.ResponseCache.GetOrSet(key, pb.NewMapOf[string, *model.Event](),
+	val, _ := d.ResponseCache.GetOrSet(key, xsync.NewMap[string, *model.Event](),
 		ttlcache.WithTTL[string, *eventMap](model.DVMJobResultExpiration))
 	val.Value().LoadAndStore(event.ID, event)
 	d.ResponseCache.Set(key, val.Value(), model.DVMJobResultExpiration)

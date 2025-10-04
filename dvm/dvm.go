@@ -13,8 +13,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/llxisdsh/pb"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -41,11 +41,11 @@ type (
 		Cancel context.CancelFunc
 	}
 
-	eventMap = pb.MapOf[string, *model.Event]
+	eventMap = xsync.Map[string, *model.Event]
 
 	dvm struct {
 		WG            *sync.WaitGroup
-		Jobs          *pb.MapOf[string, *jobInfo]
+		Jobs          *xsync.Map[string, *jobInfo]
 		ResponseCache *ttlcache.Cache[string, *eventMap]
 		Config        *Config
 		PublicKey     string
@@ -63,7 +63,7 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 	server := &dvm{
 		WG:            new(sync.WaitGroup),
 		Config:        cfg.MustGet[Config](),
-		Jobs:          pb.NewMapOf[string, *jobInfo](),
+		Jobs:          xsync.NewMap[string, *jobInfo](),
 		ResponseCache: ttlcache.New(ttlcache.WithTTL[string, *eventMap](model.DVMJobResultExpiration)),
 	}
 
