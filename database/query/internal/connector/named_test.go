@@ -5,6 +5,7 @@ package connector_test
 import (
 	"strconv"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 
@@ -17,9 +18,17 @@ func TestNamedSelect(t *testing.T) {
 	addr, release := mainTestContainer.MustTempDB(t.Context())
 	defer release()
 
+	schema := fstest.MapFS{
+		"001_create_table.sql": {
+			Data: []byte(`
+			CREATE TABLE IF NOT EXISTS testnamed (id SERIAL PRIMARY KEY, name TEXT);
+		`),
+		},
+	}
+
 	conn, err := connector.New(t.Context(),
 		connector.WithWriteURLs(addr),
-		connector.WithDDL(`CREATE TABLE IF NOT EXISTS testnamed (id SERIAL PRIMARY KEY, name TEXT)`),
+		connector.WithDDL(&schema),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, conn)

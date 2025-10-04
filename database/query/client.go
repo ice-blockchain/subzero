@@ -5,17 +5,14 @@ package query
 import (
 	"context"
 	"crypto/sha256"
-	"embed"
 	"encoding/hex"
 	"errors"
-	"path"
-	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/llxisdsh/pb"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ice-blockchain/subzero/database/query/ddl"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
@@ -33,9 +30,6 @@ type (
 )
 
 var (
-	//go:embed ddl/*.sql
-	ddl embed.FS
-
 	databaseEventFieldMap = map[string]string{
 		"createdat":               "created_at",
 		"referenceid":             "reference_id",
@@ -54,51 +48,6 @@ var (
 		"hasephemeralattestation": "has_ephemeral_attestation",
 	}
 )
-
-func readDDL() string {
-	var sb strings.Builder
-
-	files, err := ddl.ReadDir("ddl")
-	if err != nil {
-		log.Panic().Err(err).Msg("failed to read DDL directory")
-	}
-
-	var names []string
-	for _, file := range files {
-		names = append(names, file.Name())
-	}
-
-	extractPrefix := func(name string) (value int) {
-		for _, c := range name {
-			if unicode.IsDigit(c) {
-				value = value*10 + int(c-'0')
-			} else {
-				break
-			}
-		}
-		return value
-	}
-
-	// Sort files by their numeric prefix.
-	sort.SliceStable(names, func(i, j int) bool {
-		return extractPrefix(names[i]) < extractPrefix(names[j])
-	})
-
-	for i, fileName := range names {
-		target := path.Join("ddl", fileName)
-		content, err := ddl.ReadFile(target)
-		if err != nil {
-			log.Panic().Err(err).Str("file", target).Msg("failed to read DDL file")
-		}
-		if i > 0 {
-			sb.WriteString("--------")
-		}
-		sb.WriteString(string(content))
-		sb.WriteRune('\n')
-	}
-
-	return sb.String()
-}
 
 func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool, ext ...connector.Option) *dbClient {
 	client := &dbClient{
@@ -121,7 +70,7 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 		options = append(options, connector.WithReadURLs(readURLs...))
 	}
 	if runDDL {
-		options = append(options, connector.WithDDL(readDDL()))
+		options = append(options, connector.WithDDL(&ddl.Files))
 	}
 	options = append(options, ext...)
 

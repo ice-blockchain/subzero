@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -35,12 +36,20 @@ func TestMain(m *testing.M) {
 func TestAPI(t *testing.T) {
 	t.Parallel()
 
+	schema := fstest.MapFS{
+		"001_create_table.sql": {
+			Data: []byte(`
+			CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, name TEXT);
+		`),
+		},
+	}
+
 	addr, release := mainTestContainer.MustTempDB(t.Context())
 	defer release()
 
 	conn, err := connector.New(t.Context(),
 		connector.WithWriteURLs(addr),
-		connector.WithDDL(`CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, name TEXT)`),
+		connector.WithDDL(&schema),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, conn)
