@@ -31,6 +31,7 @@ type (
 		Password                 string        `yaml:"password,omitempty"`
 		PrivateKey               string        `yaml:"private-key"          validate:"required"`
 		RelayURL                 string        `yaml:"relay-url"            validate:"required,url"`
+		RunDDL                   bool          `yaml:"run-ddl"`
 		WriteURLs                []string      `yaml:"write-urls"`
 		ReadURLs                 []string      `yaml:"read-urls"`
 		DisableSelfTest          bool          `yaml:"disable-self-test"`
@@ -65,6 +66,8 @@ func WithConfig(cfg *Config) Option {
 		if cfg.PeriodicSelfTestInterval != 0 {
 			in.PeriodicSelfTestInterval = cfg.PeriodicSelfTestInterval
 		}
+		in.RunDDL = cfg.RunDDL
+		in.DisableSelfTest = cfg.DisableSelfTest
 	}
 }
 
@@ -125,7 +128,12 @@ func mustLoadConfig(opts ...Option) *Config {
 func MustInit(ctx context.Context, opts ...Option) {
 	globalDB.Once.Do(func() {
 		conf := mustLoadConfig(opts...)
-		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, true).
+
+		if !conf.RunDDL {
+			log.Warn().Msg("database DDL execution is disabled")
+		}
+
+		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
 

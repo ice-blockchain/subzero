@@ -21,7 +21,9 @@ func TestMain(m *testing.M) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	addr, release := query.NewTestDatabase(ctx)
 	query.MustInit(ctx, query.WithConfig(&query.Config{
-		WriteURLs: []string{addr},
+		WriteURLs:       []string{addr},
+		RunDDL:          true,
+		DisableSelfTest: true,
 	}))
 	validation.MustInit(ctx, validation.WithIONIdentityPublicKeys(func() []string { return nil }))
 

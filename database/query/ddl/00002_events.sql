@@ -46,14 +46,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_events_address ON events(address);
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
   where kind = 31750;
 --------
-ALTER TABLE events ADD COLUMN IF NOT EXISTS has_ephemeral_attestation BOOLEAN NOT NULL DEFAULT FALSE;
---------
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'events' AND column_name = 'system_id') THEN
-      ALTER TABLE events ADD COLUMN system_id TEXT;
-      UPDATE events SET system_id = id;
-      ALTER TABLE events ALTER COLUMN system_id SET NOT NULL;
-      ALTER TABLE events ADD CONSTRAINT uniq_events_system_id UNIQUE (system_id);
-    END IF;
-END $$;
