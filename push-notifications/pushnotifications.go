@@ -435,10 +435,13 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 	errChan chan error,
 ) []*DeviceRegistrationEvent {
 	var invalidDevicesMutex sync.Mutex
+	var wg sync.WaitGroup
 	invalidDevices := make([]*model.Event, 0)
 
 	for _, notification := range singleNotifications {
+		wg.Add(1)
 		go func(n *pn.Notification[*DeviceRegistrationEvent]) {
+			defer wg.Done()
 			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
 			if err != nil && pn.IsInvalidDeviceToken(err) {
 				invalidDevicesMutex.Lock()
@@ -452,11 +455,14 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 	}
 
 	for _, notification := range topicNotifications {
+		wg.Add(1)
 		go func(n *pn.Notification[pn.SubscriptionTopic]) {
+			defer wg.Done()
 			errChan <- (*pm.pushNotificationClient).SendTopic(ctx, n)
 		}(notification)
 	}
 
+	wg.Wait()
 	return invalidDevices
 }
 
