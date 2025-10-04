@@ -944,9 +944,11 @@ AND `)
 		tag := current.Reduce.Tag // Could be "q" or "e" or "p" or empty.
 		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id and et.deleted = false ")
 		if current.Reduce.Author != "" {
-			b.WriteString(" and :")
+			b.WriteString(" and ((et.pubkey = :")
 			b.WriteValue(filterID, "rauthor", current.Reduce.Author)
-			b.WriteString(" in (et.pubkey, et.master_pubkey)")
+			b.WriteString(" and et.hidden = false) or (et.master_pubkey = :")
+			b.WriteValue(filterID, "rauthor", current.Reduce.Author)
+			b.WriteString(" and et.hidden = false))")
 		}
 		b.WriteString(" where mctx.event_tag_key ")
 		switch tag {
