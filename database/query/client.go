@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/llxisdsh/pb"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
@@ -23,7 +23,7 @@ import (
 type (
 	dbClient struct {
 		db                 *connector.DB
-		rollbackableEvents *pb.MapOf[eventHash, *databaseRollbackRequest]
+		rollbackableEvents *xsync.Map[eventHash, *databaseRollbackRequest]
 		relayPrivateKey    string
 		relayURL           string
 		hasReadURLs        bool
@@ -102,7 +102,7 @@ func readDDL() string {
 
 func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool, ext ...connector.Option) *dbClient {
 	client := &dbClient{
-		rollbackableEvents: pb.NewMapOf[eventHash, *databaseRollbackRequest](),
+		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
 		hasReadURLs:        len(readURLs) > 0,
 	}
 	options := []connector.Option{

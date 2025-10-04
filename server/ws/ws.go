@@ -12,8 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/llxisdsh/pb"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -73,8 +73,8 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 
 func newHandler(relayURL, broadcastPublicKey string) *handler {
 	return &handler{
-		Subscriptions:      pb.NewMapOf[string, subscription](),
-		ConnAuth:           newAuthMap(),
+		Subscriptions:      xsync.NewMap[string, subscription](),
+		ConnAuth:           xsync.NewMap[Writer, connAuthData](),
 		RelayURL:           relayURL,
 		BroadcastPublicKey: broadcastPublicKey,
 	}

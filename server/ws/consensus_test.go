@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/jamiealquiza/tachymeter"
-	"github.com/llxisdsh/pb"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/command"
@@ -73,7 +73,7 @@ func TestConsensusEvents(t *testing.T) {
 	for _, s := range pubsubServers {
 		consensusDone[s.Endpoint()] = make(chan bool, 1000)
 	}
-	accepted := pb.NewMapOf[string, bool]()
+	accepted := xsync.NewMap[string, bool]()
 	normalAccept := func(ctx context.Context, events ...*model.Event) error {
 		if _, ok := accepted.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
 			return nil
@@ -376,7 +376,7 @@ func BenchmarkConcurrentConsensusEvents(b *testing.B) {
 	defer cancel()
 
 	var ev *model.Event
-	users := pb.NewMapOf[string, string]()
+	users := xsync.NewMap[string, string]()
 	b.Run("Save attesttations", func(b *testing.B) {
 		var wg sync.WaitGroup
 		wg.Add(usersCount)
