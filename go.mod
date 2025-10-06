@@ -22,12 +22,13 @@ require (
 	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
 	github.com/docker/go-connections v0.6.0
 	github.com/dundee/gdu/v5 v5.31.0
+	github.com/forPelevin/gomoji v1.4.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/pprof v1.5.3
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-logr/logr v1.4.3
-	github.com/go-playground/validator/v10 v10.27.0
+	github.com/go-playground/validator/v10 v10.28.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
@@ -66,7 +67,7 @@ require (
 	github.com/tidwall/wal v1.2.1
 	github.com/tus/tusd/v2 v2.8.0
 	github.com/u2takey/ffmpeg-go v0.5.0
-	github.com/xssnick/tonutils-go v1.15.4
+	github.com/xssnick/tonutils-go v1.15.5
 	github.com/xssnick/tonutils-storage v1.3.1
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/contrib/bridges/otelslog v0.13.0
@@ -164,7 +165,7 @@ require (
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
-	github.com/go-logfmt/logfmt v0.6.0 // indirect
+	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

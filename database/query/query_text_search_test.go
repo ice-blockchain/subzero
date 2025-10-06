@@ -1157,3 +1157,31 @@ func TestSearchEvents_ComprehensiveMultilingualSearch(t *testing.T) {
 		}
 	})
 }
+
+func TestPrepareSearchContentRemoveEmojis(t *testing.T) {
+	t.Parallel()
+
+	var cases = []struct {
+		Input    string
+		Expected string
+	}{
+		{"Hello, world! 😊", "Hello, world!"},
+		{"Done ✅ ✅ ✅", "Done"},
+		{"🤔", ""},
+		{"No emojis here.", "No emojis here."},
+		{"Mixed 🎉 content 📝 with emojis 🚀 and text.", "Mixed  content  with emojis  and text."},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Input, func(t *testing.T) {
+			ev := &model.Event{
+				Event: nostr.Event{
+					Kind:    nostr.KindTextNote,
+					Content: c.Input,
+				},
+			}
+			result := prepareSearchContent(ev)
+			require.Equal(t, c.Expected, result)
+		})
+	}
+}
