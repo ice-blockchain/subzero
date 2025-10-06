@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/forPelevin/gomoji"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -35,11 +36,14 @@ func prepareSearchContent(ev *model.Event) string {
 		fields = append(fields, extractProfileContentMetadata(ev.Content)...)
 
 	case nostr.KindTextNote, nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
+		var data string
 		if ev.Content != "" {
-			fields = append(fields, ev.Content)
+			data = ev.Content
 		} else if richTextContent := model.ExtractRichTextContent(ev); richTextContent != "" {
-			fields = append(fields, richTextContent)
+			data = richTextContent
 		}
+		data = strings.TrimSpace(gomoji.RemoveEmojis(data))
+		fields = append(fields, data)
 	}
 
 	return strings.Join(fields, " ")
