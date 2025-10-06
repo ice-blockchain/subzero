@@ -178,10 +178,14 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 			if strings.Contains(err.Error(), "message is too big") {
 				return &backoff.PermanentError{Err: ErrMessageTooLarge}
 			}
+			if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
+				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
+			}
 			if isUnregisteredByContent(err) {
 				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
 			}
-			if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
+			// TODO: specify the exact error string.
+			if strings.Contains(strings.ToLower(err.Error()), "400 bad request") {
 				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
 			}
 		}
