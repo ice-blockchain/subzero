@@ -74,6 +74,7 @@ func TestCreateNotifications(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	t.Run("Empty device list returns nil", func(t *testing.T) {
@@ -193,6 +194,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
@@ -247,6 +249,7 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	t.Run("Returns nil when reference pubkey is empty", func(t *testing.T) {
@@ -287,6 +290,7 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
+		stats:                  newPushStats(),
 	}
 
 	t.Run("Returns nil when no notifications", func(t *testing.T) {
@@ -304,14 +308,16 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 					},
 				},
 			},
-			Title: "Test Title",
-			Body:  "Test Body",
+			Title:       "Test Title",
+			Body:        "Test Body",
+			SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 		}
 
 		topicNotification := &pn.Notification[pn.SubscriptionTopic]{
-			Target: "test-topic",
-			Title:  "Topic Title",
-			Body:   "Topic Body",
+			Target:      "test-topic",
+			Title:       "Topic Title",
+			Body:        "Topic Body",
+			SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 		}
 
 		mockClient.On("SendSingle", t.Context(), singleNotification).Return(nil)
@@ -334,6 +340,7 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 					},
 				},
 			},
+			SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 		}
 
 		sendError := errors.New("failed to send notification")
@@ -352,6 +359,7 @@ func TestPushNotificationManager_HandleInvalidDeviceTokens(t *testing.T) {
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
+		stats:                  newPushStats(),
 	}
 
 	t.Run("Returns nil when no invalid devices", func(t *testing.T) {
@@ -368,6 +376,7 @@ func TestPushNotificationManager_AcceptEvents(t *testing.T) {
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
+		stats:                  newPushStats(),
 	}
 
 	t.Run("Returns nil when no events", func(t *testing.T) {
@@ -384,6 +393,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
+		stats:                  newPushStats(),
 	}
 
 	t.Run("Handles TextNote with q tag correctly", func(t *testing.T) {
@@ -491,6 +501,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
+		stats:                  newPushStats(),
 	}
 
 	t.Run("Returns empty when no events", func(t *testing.T) {
@@ -767,6 +778,7 @@ func TestGetTranslationWithRelevantInfo(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 	t.Run("Returns default translation", func(t *testing.T) {
 		translation := pm.getTranslation(NotificationTypeReaction)
@@ -835,6 +847,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 	recipientPubKey := "recipient_master_pubkey"
 	deviceID := "device1"

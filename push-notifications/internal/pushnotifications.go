@@ -13,8 +13,10 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cockroachdb/errors"
+	"github.com/googleapis/gax-go/v2/apierror"
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -42,12 +44,12 @@ type (
 		retry      RetryConfig
 	}
 	Notification[TARGET SubscriptionTopic | *DeviceRegistrationEvent] struct {
-		Data     map[string]interface{} `json:"data,omitempty"`
-		Target   TARGET
-		Title    string `json:"title,omitempty"`
-		Body     string `json:"body,omitempty"`
-		ImageURL string `json:"imageUrl,omitempty"`
-		Kind     int    `json:"kind,omitempty"`
+		Data        map[string]interface{} `json:"data,omitempty"`
+		Target      TARGET
+		Title       string       `json:"title,omitempty"`
+		Body        string       `json:"body,omitempty"`
+		ImageURL    string       `json:"imageUrl,omitempty"`
+		SourceEvent *model.Event `json:"-"`
 	}
 	RetryConfig struct {
 		MaxRetries  int
@@ -67,6 +69,7 @@ type (
 var (
 	ErrInvalidDeviceToken = errors.New("device token is invalid")
 	ErrMessageTooLarge    = errors.New("message is too large")
+	ErrDecryptToken       = errors.New("failed to decrypt token")
 	defaultRetryConfig    = RetryConfig{
 		MaxRetries:  maxRetries,
 		InitialWait: initialBackoffInterval,
@@ -98,31 +101,16 @@ func WithPrivateKey(privateKey string) Option {
 	}
 }
 
-func IsInvalidDeviceToken(err error) bool {
+func IsInvalidDeviceTokenError(err error) bool {
 	return errors.Is(err, ErrInvalidDeviceToken)
 }
 
-func IsMessageTooLarge(err error) bool {
-	return errors.Is(err, ErrMessageTooLarge)
+func IsDecryptTokenError(err error) bool {
+	return errors.Is(err, ErrDecryptToken)
 }
 
-func isUnregisteredByContent(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	unregisteredPatterns := []string{
-		"requested entity was not found",
-		"registration token is not a valid fcm registration token",
-		"unregistered",
-	}
-	for _, pattern := range unregisteredPatterns {
-		if strings.Contains(strings.ToLower(errStr), pattern) {
-			return true
-		}
-	}
-
-	return false
+func IsMessageTooLargeError(err error) bool {
+	return errors.Is(err, ErrMessageTooLarge)
 }
 
 func New(ctx context.Context, opts ...Option) (Client, error) {
@@ -175,32 +163,22 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 		var err error
 		id, err = s.client.Send(ctx, message)
 		if err != nil {
-			if strings.Contains(err.Error(), "message is too big") {
-				return &backoff.PermanentError{Err: ErrMessageTooLarge}
-			}
-			if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
-				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
-			}
-			if isUnregisteredByContent(err) {
-				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
-			}
-			// TODO: specify the exact error string.
-			if strings.Contains(strings.ToLower(err.Error()), "400 bad request") {
-				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
-			}
+			return permanentError(err)
 		}
 
 		return err
 	})
 
 	if err != nil {
-		if IsMessageTooLarge(err) {
-			return "", errors.Wrapf(err, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
+		specificErr := GetSpecificFCMError(err)
+		if errors.Is(specificErr, ErrMessageTooLarge) {
+			return "", errors.Wrapf(specificErr, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
 		}
-		if IsInvalidDeviceToken(err) {
+		if errors.Is(specificErr, ErrInvalidDeviceToken) {
 			return "", ErrInvalidDeviceToken
 		}
-		return "", fmt.Errorf("fcm send failed for %#v: %w", message, err)
+
+		return "", fmt.Errorf("fcm send failed for %#v: %w", message, specificErr)
 	}
 
 	return id, nil
@@ -249,7 +227,7 @@ func (s *notificationClient) SendSingle(ctx context.Context, notification *Notif
 	if message == nil {
 		return nil
 	}
-	_, err = s.sendWithRetry(ctx, message, notification.Kind)
+	_, err = s.sendWithRetry(ctx, message, notification.SourceEvent.Kind)
 	if err != nil {
 		return err
 	}
@@ -283,7 +261,7 @@ func (s *notificationClient) createTopicMessage(notification *Notification[Subsc
 
 func (s *notificationClient) SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error {
 	message := s.createTopicMessage(notification)
-	_, err := s.sendWithRetry(ctx, message, notification.Kind)
+	_, err := s.sendWithRetry(ctx, message, notification.SourceEvent.Kind)
 
 	return errors.Wrap(err, "failed to send topic notification")
 }
@@ -312,15 +290,15 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 	}
 	pubkeyX25519, err := nip44.ConvertEd25519PublicKeyToX25519(ev.PubKey)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to convert pubkey to x25519")
+		return "", errors.Wrapf(ErrDecryptToken, "failed to convert pubkey to x25519: %w", err.Error())
 	}
 	conversationKey, err := nip44.GenerateConversationKeyX25519(privateKey, pubkeyX25519)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to generate conversation key")
+		return "", errors.Wrapf(ErrDecryptToken, "failed to generate conversation key: %w", err.Error())
 	}
 	decryptedToken, err := nip44.DecryptX25519(token.Value(), conversationKey)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to decrypt token for event: %s", ev.ID)
+		return "", errors.Wrapf(ErrDecryptToken, "failed to decrypt token for event: %s: %w", ev.ID, err.Error())
 	}
 
 	return decryptedToken, nil
@@ -335,4 +313,43 @@ func calculateMessageSize(message *messaging.Message) int {
 	}
 
 	return len(data)
+}
+
+func permanentError(err error) error {
+	if gErr, ok := err.(*googleapi.Error); ok {
+		statusCode := gErr.Code
+		if statusCode >= 400 && statusCode < 500 {
+			return &backoff.PermanentError{Err: err}
+		}
+	}
+
+	return err
+}
+
+func GetSpecificFCMError(err error) error {
+	var aErr *apierror.APIError
+	if ok := errors.As(err, &aErr); ok {
+		reason := aErr.Reason()
+		switch reason {
+		case "INVALID_ARGUMENT", "INVALID_REGISTRATION_TOKEN", "REGISTRATION_TOKEN_NOT_REGISTERED",
+			"SENDER_ID_MISMATCH", "UNREGISTERED", "NOT_FOUND":
+			return ErrInvalidDeviceToken
+		case "MESSAGE_TOO_BIG", "PAYLOAD_TOO_LARGE":
+			return ErrMessageTooLarge
+		}
+	}
+
+	return err
+}
+
+func FcmErrorToReason(err error) string {
+	var aErr *apierror.APIError
+	if ok := errors.As(err, &aErr); ok {
+		reason := aErr.Reason()
+		if reason != "" {
+			return strings.ToLower(reason)
+		}
+	}
+
+	return "other_error"
 }

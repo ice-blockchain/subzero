@@ -18,6 +18,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	recipientPubKey := "58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"

@@ -16,6 +16,7 @@ func (pm *PushNotificationManager) handleSystemEvent(event *model.Event) []*pn.N
 			Data: map[string]interface{}{
 				"event": event.String(),
 			},
+			SourceEvent: event,
 		})
 	}
 

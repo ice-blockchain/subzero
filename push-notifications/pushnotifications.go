@@ -36,6 +36,7 @@ type (
 		relayURL               string
 		deviceMutex            sync.RWMutex
 		compressorPool         *sync.Pool
+		stats                  *PushStats
 	}
 
 	notificationTranslation struct {
@@ -174,6 +175,7 @@ func MustInit(ctx context.Context) {
 		userDevicesMap:         userDevicesMap,
 		pushNotificationClient: &pnClient,
 		relayURL:               config.RelayURL,
+		stats:                  newPushStats(),
 		compressorPool: &sync.Pool{
 			New: func() any {
 				buf := &bytes.Buffer{}
@@ -190,6 +192,8 @@ func MustInit(ctx context.Context) {
 	}
 
 	globalPushNotificationManager.mustRunSelfTest(ctx, pnClient, config.PrivateKey)
+
+	globalPushNotificationManager.stats.StartPeriodicLogging(ctx)
 
 	if err := globalPushNotificationManager.syncDevices(ctx); err != nil {
 		log.Fatal().Err(err).Msg("[push-notifications] failed to perform full device synchronization at startup")
@@ -247,11 +251,11 @@ func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn
 			"event":           compressedEvent,
 			"relevant_events": compressedRelevantEvents,
 		},
-		Kind:  model.CustomIONKindEditableTextNote,
-		Title: "self-test",
-		Body:  "self-test",
+		SourceEvent: incomingEvent,
+		Title:       "self-test",
+		Body:        "self-test",
 	}
-	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceToken(err) {
+	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceTokenError(err) {
 		return errors.Wrap(err, "unexpected error")
 	}
 
@@ -443,13 +447,21 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 		go func(n *pn.Notification[*DeviceRegistrationEvent]) {
 			defer wg.Done()
 			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
-			if err != nil && pn.IsInvalidDeviceToken(err) {
-				invalidDevicesMutex.Lock()
-				invalidDevices = append(invalidDevices, n.Target)
-				invalidDevicesMutex.Unlock()
-				errChan <- nil
+
+			if err != nil {
+				pm.stats.RecordError(n.SourceEvent, err)
+
+				if pn.IsInvalidDeviceTokenError(err) {
+					invalidDevicesMutex.Lock()
+					invalidDevices = append(invalidDevices, n.Target)
+					invalidDevicesMutex.Unlock()
+					errChan <- nil
+				} else {
+					errChan <- errors.Wrap(err, "failed to send notification")
+				}
 			} else {
-				errChan <- errors.Wrap(err, "failed to send notification")
+				pm.stats.RecordSuccess(n.SourceEvent)
+				errChan <- nil
 			}
 		}(notification)
 	}
@@ -458,7 +470,13 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 		wg.Add(1)
 		go func(n *pn.Notification[pn.SubscriptionTopic]) {
 			defer wg.Done()
-			errChan <- (*pm.pushNotificationClient).SendTopic(ctx, n)
+			err := (*pm.pushNotificationClient).SendTopic(ctx, n)
+			if err != nil {
+				pm.stats.RecordError(n.SourceEvent, err)
+			} else {
+				pm.stats.RecordSuccess(n.SourceEvent)
+			}
+			errChan <- err
 		}(notification)
 	}
 
@@ -540,18 +558,18 @@ func (pm *PushNotificationManager) createNotifications(
 		switch event.GetTag("t").Value() {
 		case model.DeviceTokenOSAndroid:
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
-				Target: event,
-				Data:   data,
-				Kind:   incomingEvent.Kind,
+				Target:      event,
+				Data:        data,
+				SourceEvent: incomingEvent,
 			})
 		default:
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
-				Target:   event,
-				Title:    defaultTranslation.Title,
-				Body:     defaultTranslation.Body,
-				ImageURL: defaultTranslation.ImageURL,
-				Data:     data,
-				Kind:     incomingEvent.Kind,
+				Target:      event,
+				Title:       defaultTranslation.Title,
+				Body:        defaultTranslation.Body,
+				ImageURL:    defaultTranslation.ImageURL,
+				Data:        data,
+				SourceEvent: incomingEvent,
 			})
 		}
 	}
