@@ -13,3 +13,5 @@ BEGIN
 END $$;
 --------
 CREATE INDEX IF NOT EXISTS idx_replaceable_events_before_update_ ON replaceable_events_before_update(replaced_by_id);
+--------
+ALTER TABLE replaceable_events_before_update ADD COLUMN IF NOT EXISTS verified BOOLEAN;

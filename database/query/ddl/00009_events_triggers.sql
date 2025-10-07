@@ -123,7 +123,7 @@ FOR EACH ROW
 WHEN (NEW.tags != OLD.tags OR NEW.id != OLD.id)
 EXECUTE FUNCTION trigger_events_after_update_generate_tags();
 --------
-CREATE OR REPLACE FUNCTION trigger_events_before_insert_unwind_repost()
+CREATE OR REPLACE FUNCTION trigger_events_before_insert_unwind_repost_and_verify()
 RETURNS TRIGGER AS $$
 DECLARE
     val integer;
@@ -162,7 +162,11 @@ BEGIN
                 ELSE '{}'::JSONB
             END
         ) AS x(kind int, pubkey TEXT, id TEXT, content TEXT, tags JSONB)
-    WHERE NEW.content != '' AND jsonb_valid(NEW.content) AND NEW.content::JSONB ? 'kind'
+    WHERE
+        NEW.kind IN (6, 16)
+        AND NEW.content != ''
+        AND jsonb_valid(NEW.content)
+        AND NEW.content::JSONB ? 'kind'
     ON CONFLICT DO NOTHING;
 
     select
@@ -173,17 +177,37 @@ BEGIN
     where
         jsonb_valid(NEW.content)
         and (x.id = NEW.content::JSONB->>'id' OR x.address = subzero_nostr_get_event_address_json(NEW.content::JSONB))
+        and NEW.kind in (6, 16)
         and x.deleted = true;
+
+    IF NEW.has_ephemeral_attestation = FALSE THEN
+        NEW.verified = EXISTS(
+            select 1
+            from events
+            where
+                kind=0
+                and master_pubkey=NEW.master_pubkey
+                and hidden=false
+                and verified=true
+            limit 1
+        );
+    END IF;
 
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER trigger_events_before_insert_unwind_repost
+DROP TRIGGER IF EXISTS trigger_events_before_insert_unwind_repost ON events;
+
+CREATE OR REPLACE TRIGGER trigger_events_before_insert_unwind_repost_and_verify
 BEFORE INSERT ON events
 FOR EACH ROW
-WHEN (NEW.kind IN (6, 16))
-EXECUTE FUNCTION trigger_events_before_insert_unwind_repost();
+WHEN (
+    (NEW.kind IN (6, 16))
+        OR
+    (NEW.kind IN (30023, 30175) AND NEW.is_reply=false AND NEW.is_quote=false)
+)
+EXECUTE FUNCTION trigger_events_before_insert_unwind_repost_and_verify();
 --------
 CREATE OR REPLACE FUNCTION trigger_events_after_insert_link_repost()
 RETURNS TRIGGER AS $$
@@ -291,6 +315,7 @@ BEGIN
         has_ephemeral_attestation,
         has_references,
         hidden,
+        verified,
         replaced_by_id
     )
     values (
@@ -322,6 +347,7 @@ BEGIN
             old.has_ephemeral_attestation,
             old.has_references,
             old.hidden,
+            old.verified,
             new.id
            )
     ON CONFLICT DO NOTHING;

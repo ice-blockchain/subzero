@@ -46,3 +46,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_events_address ON events(address);
 create unique index if not exists transferable_replaceable_event_uk on events(h_tag)
   where kind = 31750;
 --------
+ALTER TABLE events ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;

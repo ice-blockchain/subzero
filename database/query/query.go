@@ -554,12 +554,33 @@ func (db *dbClient) deleteEvents(ctx context.Context, filters *databaseBatchRequ
 	return err
 }
 
+func getPriorityForKind(kind int) int {
+	switch kind {
+	case nostr.KindBadgeDefinition:
+		return 0 // Highest priority.
+	case nostr.KindBadgeAward:
+		return 1 // Second priority.
+	default:
+		return 2 // Normal priority.
+	}
+}
+
+func databaseEventsReoder(events []databaseEvent) {
+	slices.SortStableFunc(events, func(a, b databaseEvent) int {
+		aPriority := getPriorityForKind(a.Kind)
+		bPriority := getPriorityForKind(b.Kind)
+		return aPriority - bPriority
+	})
+}
+
 func (db *dbClient) saveEvents(
 	ctx context.Context,
 	events []databaseEvent,
 	replaceableEventsToRollback map[string]bool,
 ) (insertedEvents []*databaseEvent, err error) {
 	builder := newQueryBuilder()
+
+	databaseEventsReoder(events)
 
 	replaceableEventsIDs := make([]string, 0, len(replaceableEventsToRollback))
 	for evID := range replaceableEventsToRollback {
