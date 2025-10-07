@@ -1,5 +1,53 @@
 -- SPDX-License-Identifier: ice License 1.0
 
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'trigger_events_set_profile_badges') THEN
+        RETURN;
+    END IF;
+
+    RAISE NOTICE 'Starting migration to set verified status based on profile badges...';
+
+    WITH
+    -- Find all unique users who have the proof of ownership badge.
+    users_to_verify AS (
+        SELECT DISTINCT
+            e.master_pubkey
+        FROM
+            events e
+        JOIN
+            event_tags et ON e.id = et.event_id
+        WHERE
+            e.kind = 30008
+            AND e.hidden = FALSE
+            AND e.d_tag = 'profile_badges'
+            AND et.event_tag_key = 'a'
+            AND et.event_tag_value1 LIKE '%:username_proof_of_ownership~%'
+    ),
+    -- Update their primary events, returning the IDs of the changed rows.
+    updated_events AS (
+        UPDATE
+            events
+        SET
+            verified = TRUE
+        WHERE
+            master_pubkey IN (SELECT master_pubkey FROM users_to_verify)
+            AND kind IN (0, 1, 6, 16, 30008, 30023, 30175)
+            AND hidden = FALSE
+            AND verified = FALSE
+        RETURNING id
+    )
+    -- Update the corresponding ranked_events using the returned IDs.
+    UPDATE
+        ranked_events
+    SET
+        event_verified = TRUE
+    WHERE
+        event_id IN (SELECT id FROM updated_events);
+
+    RAISE NOTICE 'Migration for profile badges finished.';
+END $$;
+--------
 CREATE OR REPLACE FUNCTION trigger_events_set_profile_badges()
 RETURNS TRIGGER AS $$
 DECLARE
