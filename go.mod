@@ -34,6 +34,7 @@ require (
 	github.com/gobwas/ws v1.4.0
 	github.com/goccy/go-json v0.10.5
 	github.com/google/uuid v1.6.0
+	github.com/googleapis/gax-go/v2 v2.15.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250714150930-6fb404dc7d83
@@ -81,9 +82,9 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.14.0
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.uber.org/goleak v1.3.0
-	golang.org/x/net v0.44.0
+	golang.org/x/net v0.45.0
 	golang.org/x/sync v0.17.0
-	google.golang.org/api v0.251.0
+	google.golang.org/api v0.252.0
 	google.golang.org/grpc v1.76.0
 )
 
@@ -187,7 +188,6 @@ require (
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
-	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect

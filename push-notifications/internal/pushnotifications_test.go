@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	testToken = "bogusToken"
 	testTitle = "Push test title"
 	testBody  = "Push test body"
 	testTopic = "testing"
@@ -143,10 +142,11 @@ func TestCreateTopicMessage(t *testing.T) {
 			"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString()),
 			"number":   42,
 		},
-		Target:   SubscriptionTopic(testTopic),
-		Title:    testTitle,
-		Body:     testBody + uuid.NewString(),
-		ImageURL: "https://example.com/image.jpg",
+		Target:      SubscriptionTopic(testTopic),
+		Title:       testTitle,
+		Body:        testBody + uuid.NewString(),
+		ImageURL:    "https://example.com/image.jpg",
+		SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 	}
 
 	message1 := client.createTopicMessage(notification1)
@@ -160,11 +160,12 @@ func TestCreateTopicMessage(t *testing.T) {
 	require.Contains(t, message1.Data["number"], "42")
 
 	notification2 := &Notification[SubscriptionTopic]{
-		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
-		Target:   SubscriptionTopic(""),
-		Title:    testTitle,
-		Body:     testBody + uuid.NewString(),
-		ImageURL: "https://example.com/image.jpg",
+		Data:        map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Target:      SubscriptionTopic(""),
+		Title:       testTitle,
+		Body:        testBody + uuid.NewString(),
+		ImageURL:    "https://example.com/image.jpg",
+		SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 	}
 
 	message2 := client.createTopicMessage(notification2)
@@ -173,8 +174,9 @@ func TestCreateTopicMessage(t *testing.T) {
 	require.Equal(t, testTitle, message2.Notification.Title)
 
 	notification3 := &Notification[SubscriptionTopic]{
-		Data:   map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
-		Target: SubscriptionTopic(testTopic),
+		Data:        map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Target:      SubscriptionTopic(testTopic),
+		SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 	}
 
 	message3 := client.createTopicMessage(notification3)

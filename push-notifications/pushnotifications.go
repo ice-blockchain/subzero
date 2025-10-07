@@ -251,9 +251,9 @@ func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn
 			"event":           compressedEvent,
 			"relevant_events": compressedRelevantEvents,
 		},
-		Kind:  model.CustomIONKindEditableTextNote,
-		Title: "self-test",
-		Body:  "self-test",
+		SourceEvent: incomingEvent,
+		Title:       "self-test",
+		Body:        "self-test",
 	}
 	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceTokenError(err) {
 		return errors.Wrap(err, "unexpected error")
@@ -449,7 +449,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
 
 			if err != nil {
-				pm.stats.RecordError(n.Kind, err)
+				pm.stats.RecordError(n.SourceEvent, err)
 
 				if pn.IsInvalidDeviceTokenError(err) {
 					invalidDevicesMutex.Lock()
@@ -460,7 +460,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 					errChan <- errors.Wrap(err, "failed to send notification")
 				}
 			} else {
-				pm.stats.RecordSuccess(n.Kind)
+				pm.stats.RecordSuccess(n.SourceEvent)
 				errChan <- nil
 			}
 		}(notification)
@@ -472,9 +472,9 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 			defer wg.Done()
 			err := (*pm.pushNotificationClient).SendTopic(ctx, n)
 			if err != nil {
-				pm.stats.RecordError(n.Kind, err)
+				pm.stats.RecordError(n.SourceEvent, err)
 			} else {
-				pm.stats.RecordSuccess(n.Kind)
+				pm.stats.RecordSuccess(n.SourceEvent)
 			}
 			errChan <- err
 		}(notification)
@@ -558,18 +558,18 @@ func (pm *PushNotificationManager) createNotifications(
 		switch event.GetTag("t").Value() {
 		case model.DeviceTokenOSAndroid:
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
-				Target: event,
-				Data:   data,
-				Kind:   incomingEvent.Kind,
+				Target:      event,
+				Data:        data,
+				SourceEvent: incomingEvent,
 			})
 		default:
 			notifications = append(notifications, &pn.Notification[*DeviceRegistrationEvent]{
-				Target:   event,
-				Title:    defaultTranslation.Title,
-				Body:     defaultTranslation.Body,
-				ImageURL: defaultTranslation.ImageURL,
-				Data:     data,
-				Kind:     incomingEvent.Kind,
+				Target:      event,
+				Title:       defaultTranslation.Title,
+				Body:        defaultTranslation.Body,
+				ImageURL:    defaultTranslation.ImageURL,
+				Data:        data,
+				SourceEvent: incomingEvent,
 			})
 		}
 	}

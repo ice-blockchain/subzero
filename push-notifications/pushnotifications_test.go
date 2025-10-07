@@ -308,14 +308,16 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 					},
 				},
 			},
-			Title: "Test Title",
-			Body:  "Test Body",
+			Title:       "Test Title",
+			Body:        "Test Body",
+			SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 		}
 
 		topicNotification := &pn.Notification[pn.SubscriptionTopic]{
-			Target: "test-topic",
-			Title:  "Topic Title",
-			Body:   "Topic Body",
+			Target:      "test-topic",
+			Title:       "Topic Title",
+			Body:        "Topic Body",
+			SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 		}
 
 		mockClient.On("SendSingle", t.Context(), singleNotification).Return(nil)
@@ -338,6 +340,7 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 					},
 				},
 			},
+			SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 		}
 
 		sendError := errors.New("failed to send notification")

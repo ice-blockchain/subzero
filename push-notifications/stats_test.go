@@ -3,31 +3,38 @@
 package pushnotifications
 
 import (
-	"context"
 	"errors"
+	"strconv"
 	"testing"
-	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
+
+func createDummyEvent(kind int) *model.Event {
+	return &model.Event{
+		Event: nostr.Event{
+			Kind: kind,
+		},
+	}
+}
 
 func TestPushStats_RecordSuccess(t *testing.T) {
 	stats := newPushStats()
 
-	// Record some successes
-	stats.RecordSuccess(nostr.KindTextNote)
-	stats.RecordSuccess(nostr.KindTextNote)
-	stats.RecordSuccess(nostr.KindFollowList)
+	stats.RecordSuccess(createDummyEvent(nostr.KindTextNote))
+	stats.RecordSuccess(createDummyEvent(nostr.KindTextNote))
+	stats.RecordSuccess(createDummyEvent(nostr.KindFollowList))
 
 	snapshot := stats.GetStats()
 
 	require.Equal(t, uint64(3), snapshot.TotalSuccess)
 	require.Equal(t, uint64(0), snapshot.TotalErrors)
-	require.Equal(t, uint64(2), snapshot.SuccessByKind[nostr.KindTextNote])
-	require.Equal(t, uint64(1), snapshot.SuccessByKind[nostr.KindFollowList])
+	require.Equal(t, uint64(2), snapshot.SuccessByKind[strconv.Itoa(nostr.KindTextNote)])
+	require.Equal(t, uint64(1), snapshot.SuccessByKind[strconv.Itoa(nostr.KindFollowList)])
 }
 
 func TestPushStats_RecordError(t *testing.T) {
@@ -37,122 +44,132 @@ func TestPushStats_RecordError(t *testing.T) {
 	messageTooLargeErr := pn.ErrMessageTooLarge
 	otherErr := errors.New("some other error")
 
-	stats.RecordError(nostr.KindTextNote, invalidTokenErr)
-	stats.RecordError(nostr.KindTextNote, invalidTokenErr)
-	stats.RecordError(nostr.KindFollowList, messageTooLargeErr)
-	stats.RecordError(nostr.KindReaction, otherErr)
+	stats.RecordError(createDummyEvent(nostr.KindTextNote), invalidTokenErr)
+	stats.RecordError(createDummyEvent(nostr.KindTextNote), invalidTokenErr)
+	stats.RecordError(createDummyEvent(nostr.KindFollowList), messageTooLargeErr)
+	stats.RecordError(createDummyEvent(nostr.KindReaction), otherErr)
 
 	snapshot := stats.GetStats()
 
 	require.Equal(t, uint64(0), snapshot.TotalSuccess)
 	require.Equal(t, uint64(4), snapshot.TotalErrors)
-	require.Equal(t, uint64(2), snapshot.ErrorsByKind[nostr.KindTextNote]["invalid_token"])
-	require.Equal(t, uint64(1), snapshot.ErrorsByKind[nostr.KindFollowList]["message_too_large"])
-	require.Equal(t, uint64(1), snapshot.ErrorsByKind[nostr.KindReaction]["other_error"])
+	require.Equal(t, uint64(2), snapshot.ErrorsByKind[strconv.Itoa(nostr.KindTextNote)]["invalid_token"])
+	require.Equal(t, uint64(1), snapshot.ErrorsByKind[strconv.Itoa(nostr.KindFollowList)]["message_too_large"])
+	require.Equal(t, uint64(1), snapshot.ErrorsByKind[strconv.Itoa(nostr.KindReaction)]["other_error"])
 }
 
 func TestPushStats_MixedStats(t *testing.T) {
 	stats := newPushStats()
 
-	stats.RecordSuccess(nostr.KindTextNote)
-	stats.RecordError(nostr.KindTextNote, pn.ErrInvalidDeviceToken)
-	stats.RecordSuccess(nostr.KindFollowList)
-	stats.RecordError(nostr.KindFollowList, pn.ErrMessageTooLarge)
+	stats.RecordSuccess(createDummyEvent(nostr.KindTextNote))
+	stats.RecordError(createDummyEvent(nostr.KindTextNote), pn.ErrInvalidDeviceToken)
+	stats.RecordSuccess(createDummyEvent(nostr.KindFollowList))
+	stats.RecordError(createDummyEvent(nostr.KindFollowList), pn.ErrMessageTooLarge)
 
 	snapshot := stats.GetStats()
 
 	require.Equal(t, uint64(2), snapshot.TotalSuccess)
 	require.Equal(t, uint64(2), snapshot.TotalErrors)
-	require.Equal(t, uint64(1), snapshot.SuccessByKind[nostr.KindTextNote])
-	require.Equal(t, uint64(1), snapshot.SuccessByKind[nostr.KindFollowList])
-	require.Equal(t, uint64(1), snapshot.ErrorsByKind[nostr.KindTextNote]["invalid_token"])
-	require.Equal(t, uint64(1), snapshot.ErrorsByKind[nostr.KindFollowList]["message_too_large"])
+	require.Equal(t, uint64(1), snapshot.SuccessByKind[strconv.Itoa(nostr.KindTextNote)])
+	require.Equal(t, uint64(1), snapshot.SuccessByKind[strconv.Itoa(nostr.KindFollowList)])
+	require.Equal(t, uint64(1), snapshot.ErrorsByKind[strconv.Itoa(nostr.KindTextNote)]["invalid_token"])
+	require.Equal(t, uint64(1), snapshot.ErrorsByKind[strconv.Itoa(nostr.KindFollowList)]["message_too_large"])
 }
 
-func TestClassifyError(t *testing.T) {
+func TestGetExtendedKind(t *testing.T) {
 	testCases := []struct {
-		name     string
-		err      error
-		expected string
+		name         string
+		event        *model.Event
+		expectedKind string
 	}{
 		{
-			name:     "message too large",
-			err:      pn.ErrMessageTooLarge,
-			expected: "message_too_large",
+			name: "Kind 1059 with k tag",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: nostr.Tags{{"k", "7"}},
+				},
+			},
+			expectedKind: "1059+7",
 		},
 		{
-			name:     "invalid device token",
-			err:      pn.ErrInvalidDeviceToken,
-			expected: "invalid_token",
+			name: "Kind 1059 without k tag",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindGiftWrap,
+					Tags: nostr.Tags{},
+				},
+			},
+			expectedKind: "1059",
 		},
 		{
-			name:     "decrypt token error",
-			err:      pn.ErrDecryptToken,
-			expected: "decrypt_token_error",
+			name: "Kind 16 (repost) with valid content",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind:    nostr.KindGenericRepost,
+					Content: `{"kind":30175,"content":"test"}`,
+				},
+			},
+			expectedKind: "16+30175",
 		},
 		{
-			name:     "unknown error",
-			err:      errors.New("some random error"),
-			expected: "other_error",
+			name: "Kind 16 (repost) with invalid content",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind:    nostr.KindGenericRepost,
+					Content: "invalid json",
+				},
+			},
+			expectedKind: "16",
+		},
+		{
+			name: "Regular kind",
+			event: &model.Event{
+				Event: nostr.Event{
+					Kind: nostr.KindTextNote,
+				},
+			},
+			expectedKind: "1",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := classifyError(tc.err)
-			require.Equal(t, tc.expected, result)
+			result := getExtendedKind(tc.event)
+			require.Equal(t, tc.expectedKind, result)
 		})
 	}
 }
 
-func TestClassifyError_ClassifyError(t *testing.T) {
-	messageTooLargeErr := pn.ErrMessageTooLarge
-	invalidTokenErr := pn.ErrInvalidDeviceToken
-	decryptTokenErr := pn.ErrDecryptToken
-
-	require.Equal(t, "message_too_large", classifyError(messageTooLargeErr))
-	require.Equal(t, "invalid_token", classifyError(invalidTokenErr))
-	require.Equal(t, "decrypt_token_error", classifyError(decryptTokenErr))
-}
-
-func TestPushStats_StartPeriodicLogging(t *testing.T) {
+func TestPushStats_ExtendedKind_Integration(t *testing.T) {
 	stats := newPushStats()
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	stats.StartPeriodicLogging(ctx)
-	stats.RecordSuccess(1)
-	stats.RecordError(nostr.KindFollowList, errors.New("test error"))
-	<-ctx.Done()
+	event1059 := &model.Event{
+		Event: nostr.Event{
+			Kind: nostr.KindGiftWrap,
+			Tags: nostr.Tags{{"k", "7"}},
+		},
+	}
+	stats.RecordSuccess(event1059)
+	event16 := &model.Event{
+		Event: nostr.Event{
+			Kind:    nostr.KindGenericRepost,
+			Content: `{"kind":30175,"content":"test"}`,
+		},
+	}
+	stats.RecordSuccess(event16)
+	eventRegular := &model.Event{
+		Event: nostr.Event{
+			Kind: nostr.KindTextNote,
+		},
+	}
+	stats.RecordSuccess(eventRegular)
 
 	snapshot := stats.GetStats()
-	require.Equal(t, uint64(1), snapshot.TotalSuccess)
-	require.Equal(t, uint64(1), snapshot.TotalErrors)
-}
 
-func TestStatsSnapshot_LogStats(t *testing.T) {
-	snapshot := StatsSnapshot{
-		TotalSuccess:  10,
-		TotalErrors:   5,
-		SuccessByKind: map[int]uint64{nostr.KindTextNote: 8, nostr.KindFollowList: 2},
-		ErrorsByKind: map[int]map[string]uint64{
-			nostr.KindTextNote:   {"invalid_token": 3},
-			nostr.KindFollowList: {"message_too_large": 2},
-		},
-		Duration: 5 * time.Minute,
-	}
-	require.NotPanics(t, func() { logStats(snapshot) })
-}
-
-func TestStatsSnapshot_LogStats_ZeroValues(t *testing.T) {
-	snapshot := StatsSnapshot{
-		TotalSuccess:  0,
-		TotalErrors:   0,
-		SuccessByKind: map[int]uint64{},
-		ErrorsByKind:  map[int]map[string]uint64{},
-		Duration:      0,
-	}
-	require.NotPanics(t, func() { logStats(snapshot) })
+	require.Equal(t, uint64(3), snapshot.TotalSuccess)
+	require.Equal(t, uint64(1), snapshot.SuccessByKind["1059+7"])
+	require.Equal(t, uint64(1), snapshot.SuccessByKind["16+30175"])
+	require.Equal(t, uint64(1), snapshot.SuccessByKind["1"])
 }
 
 func TestPushStats_ConcurrentAccess(t *testing.T) {
@@ -160,13 +177,13 @@ func TestPushStats_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool, 2)
 	go func() {
 		for i := 0; i < 100; i++ {
-			stats.RecordSuccess(nostr.KindReaction)
+			stats.RecordSuccess(createDummyEvent(nostr.KindReaction))
 		}
 		done <- true
 	}()
 	go func() {
 		for i := 0; i < 100; i++ {
-			stats.RecordError(nostr.KindFollowList, errors.New("test error"))
+			stats.RecordError(createDummyEvent(nostr.KindFollowList), errors.New("test error"))
 		}
 		done <- true
 	}()
@@ -176,6 +193,42 @@ func TestPushStats_ConcurrentAccess(t *testing.T) {
 	snapshot := stats.GetStats()
 	require.Equal(t, uint64(100), snapshot.TotalSuccess)
 	require.Equal(t, uint64(100), snapshot.TotalErrors)
-	require.Equal(t, uint64(100), snapshot.SuccessByKind[nostr.KindReaction])
-	require.Equal(t, uint64(100), snapshot.ErrorsByKind[nostr.KindFollowList]["other_error"])
+	require.Equal(t, uint64(100), snapshot.SuccessByKind[strconv.Itoa(nostr.KindReaction)])
+	require.Equal(t, uint64(100), snapshot.ErrorsByKind[strconv.Itoa(nostr.KindFollowList)]["other_error"])
+}
+
+func TestClassifyError_DetailedReasons(t *testing.T) {
+	testCases := []struct {
+		name           string
+		err            error
+		expectedReason string
+	}{
+		{
+			name:           "DecryptToken error",
+			err:            pn.ErrDecryptToken,
+			expectedReason: "decrypt_token_error",
+		},
+		{
+			name:           "MessageTooLarge error",
+			err:            pn.ErrMessageTooLarge,
+			expectedReason: "message_too_large",
+		},
+		{
+			name:           "InvalidDeviceToken error",
+			err:            pn.ErrInvalidDeviceToken,
+			expectedReason: "invalid_token",
+		},
+		{
+			name:           "Generic error",
+			err:            errors.New("network timeout"),
+			expectedReason: "other_error",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			reason := classifyError(tc.err)
+			require.Equal(t, tc.expectedReason, reason)
+		})
+	}
 }

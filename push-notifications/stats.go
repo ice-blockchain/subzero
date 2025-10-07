@@ -4,70 +4,96 @@ package pushnotifications
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 type (
 	PushStats struct {
 		mu            sync.RWMutex
-		successByKind map[int]*uint64
-		errorsByKind  map[int]map[string]*uint64
+		successByKind map[string]*uint64
+		errorsByKind  map[string]map[string]*uint64
 		totalSuccess  *uint64
 		totalErrors   *uint64
 		startTime     time.Time
 	}
 	StatsSnapshot struct {
-		TotalSuccess  uint64                    `json:"total_success"`
-		TotalErrors   uint64                    `json:"total_errors"`
-		SuccessByKind map[int]uint64            `json:"success_by_kind"`
-		ErrorsByKind  map[int]map[string]uint64 `json:"errors_by_kind"`
-		Duration      time.Duration             `json:"duration"`
+		TotalSuccess  uint64                       `json:"total_success"`
+		TotalErrors   uint64                       `json:"total_errors"`
+		SuccessByKind map[string]uint64            `json:"success_by_kind"`
+		ErrorsByKind  map[string]map[string]uint64 `json:"errors_by_kind"`
+		Duration      time.Duration                `json:"duration"`
 	}
 )
 
 func newPushStats() *PushStats {
 	return &PushStats{
-		successByKind: make(map[int]*uint64),
-		errorsByKind:  make(map[int]map[string]*uint64),
+		successByKind: make(map[string]*uint64),
+		errorsByKind:  make(map[string]map[string]*uint64),
 		totalSuccess:  new(uint64),
 		totalErrors:   new(uint64),
 		startTime:     time.Now(),
 	}
 }
 
-func (s *PushStats) RecordSuccess(kind int) {
+func getExtendedKind(event *model.Event) string {
+	switch event.Kind {
+	case nostr.KindGiftWrap:
+		if kTag := event.GetTag("k"); kTag != nil {
+			return strconv.Itoa(event.Kind) + "+" + kTag.Value()
+		}
+	case nostr.KindGenericRepost:
+		if event.Content != "" {
+			var contentEvent model.Event
+			if err := json.Unmarshal([]byte(event.Content), &contentEvent); err == nil {
+				return strconv.Itoa(event.Kind) + "+" + strconv.Itoa(contentEvent.Kind)
+			}
+		}
+	}
+
+	return strconv.Itoa(event.Kind)
+}
+
+func (s *PushStats) RecordSuccess(event *model.Event) {
 	atomic.AddUint64(s.totalSuccess, 1)
 
+	extendedKind := getExtendedKind(event)
 	s.mu.Lock()
-	if s.successByKind[kind] == nil {
-		s.successByKind[kind] = new(uint64)
+	if s.successByKind[extendedKind] == nil {
+		s.successByKind[extendedKind] = new(uint64)
 	}
-	counter := s.successByKind[kind]
+	counter := s.successByKind[extendedKind]
 	s.mu.Unlock()
 
 	atomic.AddUint64(counter, 1)
 }
 
-func (s *PushStats) RecordError(kind int, err error) {
+func (s *PushStats) RecordError(event *model.Event, err error) {
 	if err == nil {
 		return
 	}
 	atomic.AddUint64(s.totalErrors, 1)
 	errorReason := classifyError(err)
+	extendedKind := getExtendedKind(event)
+
 	s.mu.Lock()
-	if s.errorsByKind[kind] == nil {
-		s.errorsByKind[kind] = make(map[string]*uint64)
+	if s.errorsByKind[extendedKind] == nil {
+		s.errorsByKind[extendedKind] = make(map[string]*uint64)
 	}
-	if s.errorsByKind[kind][errorReason] == nil {
-		s.errorsByKind[kind][errorReason] = new(uint64)
+	if s.errorsByKind[extendedKind][errorReason] == nil {
+		s.errorsByKind[extendedKind][errorReason] = new(uint64)
 	}
-	counter := s.errorsByKind[kind][errorReason]
+	counter := s.errorsByKind[extendedKind][errorReason]
 	s.mu.Unlock()
 
 	atomic.AddUint64(counter, 1)
@@ -77,16 +103,16 @@ func (s *PushStats) GetStats() StatsSnapshot {
 	snapshot := StatsSnapshot{
 		TotalSuccess:  atomic.LoadUint64(s.totalSuccess),
 		TotalErrors:   atomic.LoadUint64(s.totalErrors),
-		SuccessByKind: make(map[int]uint64),
-		ErrorsByKind:  make(map[int]map[string]uint64),
+		SuccessByKind: make(map[string]uint64),
+		ErrorsByKind:  make(map[string]map[string]uint64),
 		Duration:      time.Since(s.startTime),
 	}
 	s.mu.RLock()
-	successCounters := make(map[int]*uint64, len(s.successByKind))
+	successCounters := make(map[string]*uint64, len(s.successByKind))
 	for kind, counter := range s.successByKind {
 		successCounters[kind] = counter
 	}
-	errorCounters := make(map[int]map[string]*uint64, len(s.errorsByKind))
+	errorCounters := make(map[string]map[string]*uint64, len(s.errorsByKind))
 	for kind, errorMap := range s.errorsByKind {
 		errorCounters[kind] = make(map[string]*uint64, len(errorMap))
 		for errorReason, counter := range errorMap {
@@ -155,15 +181,14 @@ func logStats(s StatsSnapshot) {
 }
 
 func classifyError(err error) string {
-	if pn.IsMessageTooLargeError(err) {
+	switch {
+	case errors.Is(err, pn.ErrDecryptToken):
+		return "decrypt_token_error"
+	case errors.Is(err, pn.ErrMessageTooLarge):
 		return "message_too_large"
-	}
-	if pn.IsInvalidDeviceTokenError(err) {
+	case errors.Is(err, pn.ErrInvalidDeviceToken):
 		return "invalid_token"
 	}
-	if pn.IsDecryptTokenError(err) {
-		return "decrypt_token_error"
-	}
 
-	return "other_error"
+	return pn.FcmErrorToReason(err)
 }
