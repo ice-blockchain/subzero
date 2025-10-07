@@ -70,6 +70,7 @@ type (
 		IsReply                 bool
 		IsQuote                 bool
 		IsRootReply             bool
+		Verified                bool
 	}
 	databaseRollbackRequest struct {
 		databaseBatchRequest

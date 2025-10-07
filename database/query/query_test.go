@@ -988,30 +988,6 @@ func TestQueryReply(t *testing.T) {
 	})
 }
 
-func TestQueryDiscoverContentCreatorsToFollow(t *testing.T) {
-	t.Parallel()
-
-	db, _ := helperEnsureDatabaseWithData(t, 1000)
-	defer db.Close()
-
-	t.Run("Filter", func(t *testing.T) {
-		const eventCount = 10
-
-		eventsRandom := helperSelectEvents(t, db, model.Filter{
-			Search: "discover content creators to follow",
-			Limit:  eventCount,
-		})
-		require.Len(t, eventsRandom, eventCount)
-
-		eventsNotRandom := helperSelectEvents(t, db, model.Filter{
-			Limit: eventCount,
-		})
-		require.Len(t, eventsNotRandom, eventCount)
-
-		require.NotEqual(t, eventsRandom, eventsNotRandom)
-	})
-}
-
 func TestSelectFilterATagWithAttestation(t *testing.T) {
 	t.Parallel()
 

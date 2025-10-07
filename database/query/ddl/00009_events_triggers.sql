@@ -421,10 +421,11 @@ BEGIN
             and event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply) > 0
             and case when NEW.is_root_reply then je->>3 = 'root' else true end
     )
-    insert into ranked_events(event_id, event_kind, event_created_at, points, score)
+    insert into ranked_events(event_id, event_kind, event_verified, event_created_at, points, score)
     select
         e.id,
         e.kind,
+        e.verified,
         e.created_at,
         event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply),
         event_calculate_score_int(event_calculate_points(NEW.kind, NEW.is_quote, NEW.is_root_reply), e.created_at)

@@ -1313,11 +1313,6 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 	}
 
 	var orderBy string
-	const discoverContentCreatorsToFollow = "discover content creators to follow"
-	if strings.Contains(filter.Filter.Search, discoverContentCreatorsToFollow) {
-		orderBy = "random()"
-	}
-
 	name := filter.ID + "events_cte"
 	fields := b.fieldsNames("e", name)
 	var joinString string
@@ -1325,16 +1320,23 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 	case rankTOP:
 		// All time top.
 		joinString = ` inner join ranked_events r on e.id = r.event_id`
-		orderBy = `score desc`
-		fields = append(fields, "r.score")
+		orderBy = `verified desc, score desc`
+		fields = append(fields, "r.event_verified as verified", "r.score")
 
 	case rankTrending:
 		// 24h trending.
 		dayAgo := time.Now().Add(-24 * time.Hour).UnixNano()
 		joinString = ` inner join ranked_events r on e.id = r.event_id and e.lookup_created_at > :` +
 			b.PushValue(filter.ID, "trending_since", dayAgo)
-		orderBy = `score desc`
-		fields = append(fields, "r.score")
+		orderBy = `verified desc, score desc`
+		fields = append(fields, "r.event_verified as verified", "r.score")
+	}
+
+	if orderBy == "" &&
+		(filter.Tags.HasValues("t") ||
+			(filter.Tags.HasValues("!t") && slices.Compare(filter.Tags.All("!t"), []string{"unclassified"}) == 0)) {
+		fields = append(fields, "verified")
+		orderBy = `verified desc, ` + whereBuilderDefaultOrderBy
 	}
 
 	var sb strings.Builder

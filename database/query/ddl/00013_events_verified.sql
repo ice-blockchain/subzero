@@ -82,14 +82,23 @@ BEGIN
     END IF;
 
     -- Mark all relevant events of the user as verified.
-    UPDATE events
+    with cte as (
+        UPDATE events
+        SET
+            verified = TRUE
+        WHERE
+            master_pubkey = NEW.master_pubkey
+            AND kind in (0, 1, 6, 16, 30008, 30023, 30175)
+            AND hidden = FALSE
+            AND verified = FALSE
+        RETURNING id
+    )
+    UPDATE ranked_events
     SET
-        verified = TRUE
+        event_verified = TRUE
     WHERE
-        master_pubkey = NEW.master_pubkey
-        AND kind in (0, 1, 6, 16, 30008, 30023, 30175)
-        AND hidden = FALSE
-        AND verified = FALSE;
+        event_id IN (SELECT id FROM cte)
+        AND event_verified = FALSE;
 
     RETURN NEW;
 END;
