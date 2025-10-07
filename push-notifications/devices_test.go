@@ -40,6 +40,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		filters := nostr.Filters{
@@ -82,6 +83,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		masterPubKey := "master_pubkey"
@@ -118,6 +120,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		filters := nostr.Filters{
@@ -151,6 +154,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		filters := nostr.Filters{
@@ -191,6 +195,7 @@ func TestShouldProcessDeletionEvent(t *testing.T) {
 	pm := &PushNotificationManager{
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	t.Run("not_a_deletion_event", func(t *testing.T) {
@@ -280,6 +285,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{})
@@ -292,6 +298,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 		filters := nostr.Filters{
 			{
@@ -324,6 +331,7 @@ func TestProcessDeviceRegistrationBatch(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	devices := []struct {

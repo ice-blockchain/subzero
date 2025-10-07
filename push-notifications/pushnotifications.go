@@ -36,6 +36,7 @@ type (
 		relayURL               string
 		deviceMutex            sync.RWMutex
 		compressorPool         *sync.Pool
+		stats                  *PushStats
 	}
 
 	notificationTranslation struct {
@@ -174,6 +175,7 @@ func MustInit(ctx context.Context) {
 		userDevicesMap:         userDevicesMap,
 		pushNotificationClient: &pnClient,
 		relayURL:               config.RelayURL,
+		stats:                  newPushStats(),
 		compressorPool: &sync.Pool{
 			New: func() any {
 				buf := &bytes.Buffer{}
@@ -190,6 +192,8 @@ func MustInit(ctx context.Context) {
 	}
 
 	globalPushNotificationManager.mustRunSelfTest(ctx, pnClient, config.PrivateKey)
+
+	globalPushNotificationManager.stats.StartPeriodicLogging(ctx)
 
 	if err := globalPushNotificationManager.syncDevices(ctx); err != nil {
 		log.Fatal().Err(err).Msg("[push-notifications] failed to perform full device synchronization at startup")
@@ -251,7 +255,7 @@ func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn
 		Title: "self-test",
 		Body:  "self-test",
 	}
-	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceToken(err) {
+	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceTokenError(err) {
 		return errors.Wrap(err, "unexpected error")
 	}
 
@@ -443,13 +447,21 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 		go func(n *pn.Notification[*DeviceRegistrationEvent]) {
 			defer wg.Done()
 			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
-			if err != nil && pn.IsInvalidDeviceToken(err) {
-				invalidDevicesMutex.Lock()
-				invalidDevices = append(invalidDevices, n.Target)
-				invalidDevicesMutex.Unlock()
-				errChan <- nil
+
+			if err != nil {
+				pm.stats.RecordError(n.Kind, err)
+
+				if pn.IsInvalidDeviceTokenError(err) {
+					invalidDevicesMutex.Lock()
+					invalidDevices = append(invalidDevices, n.Target)
+					invalidDevicesMutex.Unlock()
+					errChan <- nil
+				} else {
+					errChan <- errors.Wrap(err, "failed to send notification")
+				}
 			} else {
-				errChan <- errors.Wrap(err, "failed to send notification")
+				pm.stats.RecordSuccess(n.Kind)
+				errChan <- nil
 			}
 		}(notification)
 	}
@@ -458,7 +470,13 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 		wg.Add(1)
 		go func(n *pn.Notification[pn.SubscriptionTopic]) {
 			defer wg.Done()
-			errChan <- (*pm.pushNotificationClient).SendTopic(ctx, n)
+			err := (*pm.pushNotificationClient).SendTopic(ctx, n)
+			if err != nil {
+				pm.stats.RecordError(n.Kind, err)
+			} else {
+				pm.stats.RecordSuccess(n.Kind)
+			}
+			errChan <- err
 		}(notification)
 	}
 

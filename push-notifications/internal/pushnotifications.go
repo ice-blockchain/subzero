@@ -67,6 +67,7 @@ type (
 var (
 	ErrInvalidDeviceToken = errors.New("device token is invalid")
 	ErrMessageTooLarge    = errors.New("message is too large")
+	ErrDecryptToken       = errors.New("failed to decrypt token")
 	defaultRetryConfig    = RetryConfig{
 		MaxRetries:  maxRetries,
 		InitialWait: initialBackoffInterval,
@@ -98,12 +99,12 @@ func WithPrivateKey(privateKey string) Option {
 	}
 }
 
-func IsInvalidDeviceToken(err error) bool {
+func IsInvalidDeviceTokenError(err error) bool {
 	return errors.Is(err, ErrInvalidDeviceToken)
 }
 
-func IsMessageTooLarge(err error) bool {
-	return errors.Is(err, ErrMessageTooLarge)
+func IsDecryptTokenError(err error) bool {
+	return errors.Is(err, ErrDecryptToken)
 }
 
 func isUnregisteredByContent(err error) bool {
@@ -123,6 +124,32 @@ func isUnregisteredByContent(err error) bool {
 	}
 
 	return false
+}
+
+func isMessageTooLargeByContent(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+
+	messageTooLargePatterns := []string{
+		"message is too big",
+		"message is too large",
+		"payload size exceeds",
+		"message size exceeds",
+	}
+
+	for _, pattern := range messageTooLargePatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func IsMessageTooLargeError(err error) bool {
+	return errors.Is(err, ErrMessageTooLarge)
 }
 
 func New(ctx context.Context, opts ...Option) (Client, error) {
@@ -175,17 +202,10 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 		var err error
 		id, err = s.client.Send(ctx, message)
 		if err != nil {
-			if strings.Contains(err.Error(), "message is too big") {
+			if isMessageTooLargeByContent(err) {
 				return &backoff.PermanentError{Err: ErrMessageTooLarge}
 			}
-			if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
-				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
-			}
-			if isUnregisteredByContent(err) {
-				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
-			}
-			// TODO: specify the exact error string.
-			if strings.Contains(strings.ToLower(err.Error()), "400 bad request") {
+			if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) || isUnregisteredByContent(err) {
 				return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
 			}
 		}
@@ -194,10 +214,10 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 	})
 
 	if err != nil {
-		if IsMessageTooLarge(err) {
+		if IsMessageTooLargeError(err) {
 			return "", errors.Wrapf(err, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
 		}
-		if IsInvalidDeviceToken(err) {
+		if IsInvalidDeviceTokenError(err) {
 			return "", ErrInvalidDeviceToken
 		}
 		return "", fmt.Errorf("fcm send failed for %#v: %w", message, err)
@@ -312,15 +332,15 @@ func DecryptToken(ev *model.Event, privateKey string) (string, error) {
 	}
 	pubkeyX25519, err := nip44.ConvertEd25519PublicKeyToX25519(ev.PubKey)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to convert pubkey to x25519")
+		return "", errors.Wrapf(ErrDecryptToken, "failed to convert pubkey to x25519: %w", err.Error())
 	}
 	conversationKey, err := nip44.GenerateConversationKeyX25519(privateKey, pubkeyX25519)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to generate conversation key")
+		return "", errors.Wrapf(ErrDecryptToken, "failed to generate conversation key: %w", err.Error())
 	}
 	decryptedToken, err := nip44.DecryptX25519(token.Value(), conversationKey)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to decrypt token for event: %s", ev.ID)
+		return "", errors.Wrapf(ErrDecryptToken, "failed to decrypt token for event: %s: %w", ev.ID, err.Error())
 	}
 
 	return decryptedToken, nil

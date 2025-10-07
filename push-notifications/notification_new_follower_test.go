@@ -107,6 +107,7 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	followerPubKey := "follower_pubkey_" + testSuffix
@@ -180,6 +181,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	followerPubKey := "follower_pubkey_" + testSuffix
@@ -316,6 +318,7 @@ func TestCreateNewFollowerNotificationNoDevices(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	followerPubKey := "follower_pubkey_" + testSuffix
@@ -347,6 +350,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		followerPubKey := "follower_pubkey_" + testSuffix
@@ -408,6 +412,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		pm := &PushNotificationManager{
 			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
+			stats:          newPushStats(),
 		}
 
 		followerPubKey := "follower_pubkey_" + testSuffix
@@ -478,6 +483,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	followerPubKey := "follower_pubkey_" + testSuffix
@@ -567,6 +573,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	privKey, followListAuthorPubKey := model.GenerateKeyPair()

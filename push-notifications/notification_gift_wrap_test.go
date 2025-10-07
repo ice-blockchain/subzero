@@ -35,6 +35,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	recipientMasterPubKey := "recipient_master_pubkey"
@@ -150,6 +151,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 				relayURL:       testRelayURL,
 				compressorPool: helperCreateTestCompressorPool(),
+				stats:          newPushStats(),
 			}
 
 			filters := nostr.Filters{

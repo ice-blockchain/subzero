@@ -43,6 +43,7 @@ func TestHandleSystemEvent(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	t.Run("Basic system event", func(t *testing.T) {
@@ -108,6 +109,7 @@ func TestHandleSystemEventDataFormat(t *testing.T) {
 
 	pm := &PushNotificationManager{
 		compressorPool: helperCreateTestCompressorPool(),
+		stats:          newPushStats(),
 	}
 
 	event := &model.Event{
