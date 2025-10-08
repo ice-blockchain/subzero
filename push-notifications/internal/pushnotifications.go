@@ -13,7 +13,6 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cockroachdb/errors"
-	"github.com/googleapis/gax-go/v2/apierror"
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/api/googleapi"
@@ -159,7 +158,7 @@ func New(ctx context.Context, opts ...Option) (Client, error) {
 
 func (s *notificationClient) sendWithRetry(ctx context.Context, message *messaging.Message, kind int) (string, error) {
 	var id string
-	err := retry(ctx, func() error {
+	if err := retry(ctx, func() error {
 		var err error
 		id, err = s.client.Send(ctx, message)
 		if err != nil {
@@ -167,10 +166,8 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 		}
 
 		return err
-	})
-
-	if err != nil {
-		specificErr := GetSpecificFCMError(err)
+	}); err != nil {
+		specificErr := getSpecificFCMError(err)
 		if errors.Is(specificErr, ErrMessageTooLarge) {
 			return "", errors.Wrapf(specificErr, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
 		}
@@ -326,29 +323,41 @@ func permanentError(err error) error {
 	return err
 }
 
-func GetSpecificFCMError(err error) error {
-	var aErr *apierror.APIError
-	if ok := errors.As(err, &aErr); ok {
-		reason := aErr.Reason()
-		switch reason {
-		case "INVALID_ARGUMENT", "INVALID_REGISTRATION_TOKEN", "REGISTRATION_TOKEN_NOT_REGISTERED",
-			"SENDER_ID_MISMATCH", "UNREGISTERED", "NOT_FOUND":
-			return ErrInvalidDeviceToken
-		case "MESSAGE_TOO_BIG", "PAYLOAD_TOO_LARGE":
-			return ErrMessageTooLarge
-		}
+func getSpecificFCMError(err error) error {
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "registration token is not a valid fcm registration token") ||
+		strings.Contains(errMsg, "requested entity was not found") ||
+		strings.Contains(errMsg, "unregistered") ||
+		strings.Contains(errMsg, "sender id mismatch") ||
+		strings.Contains(errMsg, "invalid registration token") {
+		return ErrInvalidDeviceToken
+	}
+	if strings.Contains(errMsg, "message too large") ||
+		strings.Contains(errMsg, "payload too large") {
+		return ErrMessageTooLarge
 	}
 
 	return err
 }
 
 func FcmErrorToReason(err error) string {
-	var aErr *apierror.APIError
-	if ok := errors.As(err, &aErr); ok {
-		reason := aErr.Reason()
-		if reason != "" {
-			return strings.ToLower(reason)
-		}
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "registration token is not a valid fcm registration token") ||
+		strings.Contains(errMsg, "invalid registration token") {
+		return "invalid_registration_token"
+	}
+	if strings.Contains(errMsg, "requested entity was not found") {
+		return "not_found"
+	}
+	if strings.Contains(errMsg, "unregistered") {
+		return "unregistered"
+	}
+	if strings.Contains(errMsg, "sender id mismatch") {
+		return "sender_id_mismatch"
+	}
+	if strings.Contains(errMsg, "message too large") ||
+		strings.Contains(errMsg, "payload too large") {
+		return "message_too_large"
 	}
 
 	return "other_error"
