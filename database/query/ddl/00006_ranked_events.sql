@@ -10,4 +10,3 @@ CREATE TABLE IF NOT EXISTS ranked_events
     event_id          text      not null primary key REFERENCES events (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 ) WITH (FILLFACTOR = 70);
 --------
-ALTER TABLE ranked_events ADD COLUMN IF NOT EXISTS event_verified BOOLEAN NOT NULL DEFAULT FALSE;
