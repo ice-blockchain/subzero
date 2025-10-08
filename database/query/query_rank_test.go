@@ -31,6 +31,18 @@ func helperGetEventPointsAndScore(t *testing.T, client *dbClient, eventID string
 	return points, score
 }
 
+func helperSetEventPointsAndScore(t *testing.T, client *dbClient, eventID string, points, score, created_at int, verified bool) {
+	t.Helper()
+
+	const stmt = `
+INSERT INTO ranked_events (event_id, event_kind, event_created_at, points, score, event_verified)
+VALUES ($1, 0, $2, $3, $4, $5)
+ON CONFLICT (event_id) DO UPDATE SET points = EXCLUDED.points, score = EXCLUDED.score, event_verified = EXCLUDED.event_verified;
+`
+	_, err := connector.Exec(t.Context(), client.db, stmt, eventID, created_at, points, score, verified)
+	require.NoError(t, err)
+}
+
 func helperPointsScoreEqual(t *testing.T, db *dbClient, eventID string, points int, score float64) {
 	t.Helper()
 
@@ -231,4 +243,41 @@ func TestEventScore(t *testing.T) {
 			helperPointsScoreEqual(t, db, evNote.ID, 7, 7e4)    // like (1) + root comment (2) + quote(4)
 		})
 	})
+}
+
+func TestEventRankByVerifiedAndScore(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var post1, post2, post3 model.Event
+	post1.ID = "post1"
+	post1.Kind = nostr.KindTextNote
+	post1.PubKey = "post1_pub"
+
+	post2.ID = "post2"
+	post2.Kind = nostr.KindTextNote
+	post2.PubKey = "post2_pub"
+
+	post3.ID = "post3"
+	post3.Kind = nostr.KindTextNote
+	post3.PubKey = "post3_pub"
+
+	require.NoError(t, db.AcceptEvents(t.Context(), &post1, &post2, &post3))
+
+	helperSetEventPointsAndScore(t, db, post1.ID, 10, 10e4, 1, false)
+	helperSetEventPointsAndScore(t, db, post2.ID, 20, 20e4, 2, true)
+	helperSetEventPointsAndScore(t, db, post3.ID, 30, 30e4, 3, false)
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Limit:  10,
+		Search: "top",
+	})
+	require.Len(t, events, 3)
+
+	// Expected: post2 (verified, score 20e4), post3 (not verified, score 30e4), post1 (not verified, score 10e4).
+	require.Equal(t, post2.ID, events[0].ID)
+	require.Equal(t, post3.ID, events[1].ID)
+	require.Equal(t, post1.ID, events[2].ID)
 }

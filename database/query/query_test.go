@@ -988,30 +988,6 @@ func TestQueryReply(t *testing.T) {
 	})
 }
 
-func TestQueryDiscoverContentCreatorsToFollow(t *testing.T) {
-	t.Parallel()
-
-	db, _ := helperEnsureDatabaseWithData(t, 1000)
-	defer db.Close()
-
-	t.Run("Filter", func(t *testing.T) {
-		const eventCount = 10
-
-		eventsRandom := helperSelectEvents(t, db, model.Filter{
-			Search: "discover content creators to follow",
-			Limit:  eventCount,
-		})
-		require.Len(t, eventsRandom, eventCount)
-
-		eventsNotRandom := helperSelectEvents(t, db, model.Filter{
-			Limit: eventCount,
-		})
-		require.Len(t, eventsNotRandom, eventCount)
-
-		require.NotEqual(t, eventsRandom, eventsNotRandom)
-	})
-}
-
 func TestSelectFilterATagWithAttestation(t *testing.T) {
 	t.Parallel()
 
@@ -2593,5 +2569,193 @@ func TestVoteEventWithEphemeralAttestation(t *testing.T) {
 		})
 		require.Len(t, eventsByID, 1) // Must return the soft-deleted text note.
 		require.Equal(t, textNote.ID, eventsByID[0].ID)
+	})
+}
+func TestDatabaseEventsReorder(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Sort by priority", func(t *testing.T) {
+		events := []databaseEvent{
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}}},        // Priority 2.
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeAward}}},      // Priority 1.
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeDefinition}}}, // Priority 0.
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindArticle}}},         // Priority 2.
+		}
+
+		databaseEventsReoder(events)
+
+		// Should be sorted: BadgeDefinition (0), BadgeAward (1), TextNote (2), Article (2).
+		require.Equal(t, nostr.KindBadgeDefinition, events[0].Kind)
+		require.Equal(t, nostr.KindBadgeAward, events[1].Kind)
+		// TextNote and Article both have priority 2, so their relative order should be preserved (stable sort).
+		require.Equal(t, nostr.KindTextNote, events[2].Kind)
+		require.Equal(t, nostr.KindArticle, events[3].Kind)
+	})
+
+	t.Run("Same priority events maintain stable order", func(t *testing.T) {
+		events := []databaseEvent{
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, ID: "first"}}},
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindArticle, ID: "second"}}},
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindFollowList, ID: "third"}}},
+		}
+
+		databaseEventsReoder(events)
+
+		// All have priority 2, so original order should be maintained.
+		require.Equal(t, "first", events[0].ID)
+		require.Equal(t, "second", events[1].ID)
+		require.Equal(t, "third", events[2].ID)
+	})
+
+	t.Run("All priority levels", func(t *testing.T) {
+		events := []databaseEvent{
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindFollowList}}},      // Priority 2.
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeDefinition}}}, // Priority 0.
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeAward}}},      // Priority 1.
+		}
+
+		databaseEventsReoder(events)
+
+		require.Equal(t, nostr.KindBadgeDefinition, events[0].Kind) // Priority 0.
+		require.Equal(t, nostr.KindBadgeAward, events[1].Kind)      // Priority 1.
+		require.Equal(t, nostr.KindFollowList, events[2].Kind)      // Priority 2.
+	})
+
+	t.Run("Multiple events of same high priority kind", func(t *testing.T) {
+		events := []databaseEvent{
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeDefinition, ID: "def1"}}},
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote, ID: "note1"}}},
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeDefinition, ID: "def2"}}},
+			{Event: &model.Event{Event: nostr.Event{Kind: nostr.KindBadgeAward, ID: "award1"}}},
+		}
+
+		databaseEventsReoder(events)
+
+		// Should be: def1, def2 (priority 0), award1 (priority 1), note1 (priority 2).
+		require.Equal(t, "def1", events[0].ID)
+		require.Equal(t, "def2", events[1].ID)
+		require.Equal(t, "award1", events[2].ID)
+		require.Equal(t, "note1", events[3].ID)
+	})
+}
+
+func helperGetEventVerificationStatus(t *testing.T, db *dbClient, address string) bool {
+	t.Helper()
+
+	data, err := connector.Get[bool](t.Context(), db.db, "SELECT verified FROM events WHERE address = $1", address)
+	require.NoError(t, err)
+	require.NotNil(t, data)
+
+	return *data
+}
+
+func TestUserVerificationFlow(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	now := nostr.Now()
+	userPriv, userPub := model.GenerateKeyPair()
+	masterPriv, masterPub := model.GenerateKeyPair()
+	systemPriv := model.GeneratePrivateKey()
+
+	t.Run("Add attestation", func(t *testing.T) {
+		var attestation model.Event
+		attestation.Kind = model.CustomIONKindAttestation
+		attestation.CreatedAt = now
+		attestation.Tags = model.Tags{
+			{model.TagAttestationName, userPub, "", model.CustomIONAttestationKindActive + ":1"},
+		}
+		require.NoError(t, attestation.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &attestation))
+	})
+
+	t.Run("Create profile", func(t *testing.T) {
+		var profile model.Event
+		profile.Kind = nostr.KindProfileMetadata
+		profile.CreatedAt = now + 1
+		profile.Content = model.ProfileMetadataContent{
+			Name:        "testuser",
+			DisplayName: "Test User",
+			About:       "This is a test user",
+			Website:     "https://example.com",
+		}.String()
+		profile.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, profile.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &profile))
+	})
+
+	var textNote model.Event
+	t.Run("Generate text note post", func(t *testing.T) {
+		textNote.Kind = nostr.KindTextNote
+		textNote.CreatedAt = now + 1
+		textNote.Content = "This is a verification test text note"
+		textNote.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, textNote.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &textNote))
+		require.False(t, helperGetEventVerificationStatus(t, db, textNote.Address()), "Text note should not be verified yet")
+	})
+
+	t.Run("Generate badge definition, award and profile badges", func(t *testing.T) {
+		badgeDefinition := &model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindBadgeDefinition,
+				CreatedAt: now + 2,
+				Tags: model.Tags{
+					{"d", "verified"},
+					{"description", "Verified user badge"},
+				},
+			},
+		}
+		require.NoError(t, badgeDefinition.SignWithAlg(systemPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		badgeAward := &model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindBadgeAward,
+				CreatedAt: now + 3,
+				Tags: model.Tags{
+					{"a", badgeDefinition.Address()},
+					{"p", masterPub},
+				},
+			},
+		}
+		require.NoError(t, badgeAward.SignWithAlg(systemPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		profileBadges := &model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindProfileBadges,
+				CreatedAt: now + 4,
+				Tags: model.Tags{
+					{model.CustomIONTagOnBehalfOf, masterPub},
+					{"e", badgeAward.ID},
+					{"a", badgeDefinition.Address()},
+					{"d", "profile_badges"},
+				},
+			},
+		}
+		require.NoError(t, profileBadges.SignWithAlg(masterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, db.AcceptEvents(t.Context(), profileBadges, badgeAward, badgeDefinition))
+	})
+
+	t.Run("Create additional article post", func(t *testing.T) {
+		var article model.Event
+		article.Kind = nostr.KindArticle
+		article.CreatedAt = now + 5
+		article.Content = "This is a verification test article"
+		article.Tags = model.Tags{
+			{"d", "verification-article"},
+			{"title", "Test Article"},
+			{model.CustomIONTagOnBehalfOf, masterPub},
+		}
+		require.NoError(t, article.SignWithAlg(userPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &article))
+		require.True(t, helperGetEventVerificationStatus(t, db, article.Address()), "Article should be verified immediately")
+		require.True(t, helperGetEventVerificationStatus(t, db, textNote.Address()), "Text note should be verified now")
 	})
 }

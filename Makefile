@@ -153,10 +153,8 @@ fix-field-alignment:
 	fieldalignment -fix ./...
 
 format-imports:
-	go install golang.org/x/tools/cmd/goimports@latest
-	go install github.com/daixiang0/gci@latest
-	gci write -s standard -s default -s "prefix(github.com/ice-blockchain)" ./..
-	goimports -w -local github.com/ice-blockchain ./..
+	go tool gci write -s standard -s default -s "prefix(github.com/ice-blockchain)" ./..
+	go tool goimports -w -local github.com/ice-blockchain ./..
 
 buildAllBinaries:
 	set -xe; \
