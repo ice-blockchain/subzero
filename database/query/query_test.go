@@ -2649,7 +2649,7 @@ func helperGetEventVerificationStatus(t *testing.T, db *dbClient, address string
 	return *data
 }
 
-func TestVerificationFlow(t *testing.T) {
+func TestUserVerificationFlow(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -2707,9 +2707,8 @@ func TestVerificationFlow(t *testing.T) {
 				Kind:      nostr.KindBadgeDefinition,
 				CreatedAt: now + 2,
 				Tags: model.Tags{
-					{"d", "username_proof_of_ownership~root"},
+					{"d", "verified"},
 					{"description", "Verified user badge"},
-					{"p", masterPub},
 				},
 			},
 		}
