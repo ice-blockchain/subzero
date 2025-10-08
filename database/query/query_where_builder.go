@@ -5,6 +5,7 @@ package query
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"slices"
 	"strconv"
 	"strings"
@@ -1213,6 +1214,9 @@ func (b *queryBuilder) Build(ctx context.Context, filters ...model.Filter) (*que
 	}
 
 	b.Reset()
+	b.WriteString("--- Filters section begin ---\n--- ")
+	b.WriteString(base64.StdEncoding.EncodeToString([]byte(model.Filters(filters).String())))
+	b.WriteString("\n--- Filters section end ---\n")
 	b.WriteString("WITH ")
 	for i := range ctes {
 		if i > 0 {
