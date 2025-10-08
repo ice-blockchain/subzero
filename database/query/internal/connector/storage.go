@@ -263,7 +263,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, ddl fs.FS) error {
 			Msg("applying migration")
 	}
 
-	return parseError(m.Migrate(ctx))
+	return m.Migrate(ctx)
 }
 
 func New(ctx context.Context, opts ...Option) (*DB, error) {
@@ -297,7 +297,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 			log.Panic().Str("context", "DATABASE").Msg("no active master to run migrations")
 		}
 
-		err := runMigrations(ctx, pool, db.ddl)
+		err := parseError(runMigrations(ctx, pool, db.ddl))
 		if err != nil {
 			if errors.Is(err, ErrReadOnly) {
 				log.Info().Err(err).Str("details", errors.FlattenDetails(err)).Msg("DDL failed because the database is in read-only mode")
