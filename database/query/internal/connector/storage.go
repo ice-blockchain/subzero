@@ -233,6 +233,18 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, ddl fs.FS) error {
 		return errors.Wrap(err, "cannot create migrator")
 	}
 
+	// TODO: remove it later.
+	// Force current version to 12 if it's at version 0 AND there are tables that
+	// should not be there in a new database.
+	forceUpgradeToVersionStmt := `update ` + schemaTable +
+		` set version = 12 where version = 0 AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'trigger_events_after_delete_vote_dec_counter')`
+	r, err := conn.Exec(ctx, forceUpgradeToVersionStmt)
+	if err != nil {
+		return errors.Wrap(err, "cannot force upgrade to version 12")
+	} else if n := r.RowsAffected(); n > 0 {
+		log.Warn().Str("context", "DATABASE").Int64("rows_affected", n).Msg("forced upgrade to version 12")
+	}
+
 	err = m.LoadMigrations(ddl)
 	if err != nil {
 		return errors.Wrap(err, "cannot load migrations")
