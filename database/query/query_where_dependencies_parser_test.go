@@ -1810,3 +1810,69 @@ func TestSelectDependencyStoryCount(t *testing.T) {
 		require.Equal(t, model.CustomIONKindEditableTextNote, reqFilters[0].Kinds[0])
 	}
 }
+
+func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	userPub, _ := model.GenerateKeyPair()
+
+	var meta1, meta2 model.Event
+	t.Run("Create users", func(t *testing.T) {
+		user1Key, user2Key := model.GeneratePrivateKey(), model.GeneratePrivateKey()
+
+		meta1.Kind = nostr.KindProfileMetadata
+		meta1.CreatedAt = 1
+		meta1.Content = model.ProfileMetadataContent{
+			Name:  "User1",
+			About: "About User1",
+		}.String()
+
+		meta2.Kind = nostr.KindProfileMetadata
+		meta2.CreatedAt = 2
+		meta2.Content = model.ProfileMetadataContent{
+			Name:  "User2",
+			About: "About User2",
+		}.String()
+
+		require.NoError(t, meta1.SignWithAlg(user1Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, meta2.SignWithAlg(user2Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &meta1, &meta2))
+
+		var follow1, follow2 model.Event
+		follow1.Kind = nostr.KindFollowList
+		follow1.CreatedAt = 3
+		follow1.Tags = model.Tags{
+			{"p", userPub},
+			{"p", meta2.PubKey},
+		}
+		require.NoError(t, follow1.SignWithAlg(user1Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		follow2.Kind = nostr.KindFollowList
+		follow2.CreatedAt = 4
+		follow2.Tags = model.Tags{
+			{"p", userPub},
+			{"p", meta1.PubKey},
+		}
+		require.NoError(t, follow2.SignWithAlg(user2Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+		require.NoError(t, db.AcceptEvents(t.Context(), &follow1, &follow2))
+	})
+	t.Run("Get metadata via dependencies", func(t *testing.T) {
+		f := model.Filter{
+			Kinds:  []int{nostr.KindFollowList},
+			Search: "include:dependencies:kind3>kind0",
+			Tags:   model.TagMap{}.SetLiterals("p", userPub),
+		}
+		events := helperSelectEvents(t, db, f)
+		require.Len(t, events, 2) // Only metadata.
+		require.EqualValues(t, []*model.Event{&meta2, &meta1}, events)
+
+		f.Kinds = nil
+		events = helperSelectEvents(t, db, f)
+		require.Len(t, events, 4) // 2 metadata, 2 follow lists.
+	})
+}

@@ -1316,6 +1316,17 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 		filter.Limit = whereBuilderDefaultLimit
 	}
 
+	// TODDO: remove this hack later.
+	// Filter out requests like this to avoid heavy queries.
+	// ["REQ","XX",{"kinds":[3],"limit":20,"search":"include:dependencies:kind3>kind0","#p":["XXXX"]}]
+	excludeKind3 := len(filter.Kinds) == 1 &&
+		filter.Kinds[0] == nostr.KindFollowList &&
+		len(filter.Dependencies) == 1 &&
+		filter.Dependencies[0].Start.Kind == nostr.KindFollowList &&
+		len(filter.Dependencies[0].Reduce.Kinds) == 1 &&
+		filter.Dependencies[0].Reduce.Kinds[0] == nostr.KindProfileMetadata &&
+		len(filter.Tags["p"]) == 1
+
 	var orderBy string
 	name := filter.ID + "events_cte"
 	fields := b.fieldsNames("e", name)
@@ -1341,6 +1352,19 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 			(filter.Tags.HasValues("!t") && slices.Compare(filter.Tags.All("!t"), []string{"unclassified"}) == 0)) {
 		fields = append(fields, "verified")
 		orderBy = `verified desc, ` + whereBuilderDefaultOrderBy
+	}
+
+	if excludeKind3 {
+		log.Trace().Msg("excluding kind 3 query")
+		for i := range fields {
+			switch fields[i] {
+			case "e.tags":
+				// Do not load large tags field if we are going to ignore it anyway.
+				fields[i] = `cast('[]' as jsonb) as tags`
+			case "e.sig":
+				fields[i] = `'DROP' as sig`
+			}
+		}
 	}
 
 	var sb strings.Builder
