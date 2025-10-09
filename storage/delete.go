@@ -5,11 +5,13 @@ package storage
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -66,6 +68,12 @@ func (c *client) Delete(ctx context.Context, userPubKey, masterKey, fileHash str
 	if err = os.Remove(filepath.Join(userPath, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
 	}
+	fileName := fmt.Sprintf("%v:%v%v", masterKey, fileHash, filepath.Ext(file))
+	if c.config.Cdn.AccessKey != "" && c.config.Cdn.URLUpload != "" && c.cdn != nil {
+		if err = c.cdn.FileDelete(ctx, fileName); err != nil {
+			return errors.Wrapf(err, "failed to delete file %v from cdn", fileName)
+		}
+	}
 	return nil
 }
 
@@ -74,6 +82,20 @@ func (c *client) DeleteUser(masterKey string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to get serving bag for user %v")
 	}
+	userPath, _ := c.BuildUserPath(masterKey, "")
+	if c.config.Cdn.AccessKey != "" && c.config.Cdn.URLUpload != "" && c.cdn != nil {
+		files, err := os.ReadDir(userPath)
+		if err != nil {
+			log.Error().Err(err).Str("user", masterKey).Msg("failed to list files in user storage")
+		}
+		for _, f := range files {
+			fNameOnCDN := fmt.Sprintf("%v:%v%v", masterKey, f.Name(), filepath.Ext(f.Name()))
+			if err = c.cdn.FileDelete(context.Background(), fNameOnCDN); err != nil {
+				log.Error().Err(err).Str("filename", fNameOnCDN).Msg("failed to delete file from cdn")
+			}
+		}
+	}
+
 	if bag != nil {
 		bag.Stop()
 		if err = c.progressStorage.RemoveTorrent(bag, false); err != nil {
@@ -88,7 +110,7 @@ func (c *client) DeleteUser(masterKey string) error {
 			return errors.Wrapf(err, "failed to remove extra fields for  bag %x (deletion of user %v)", bag.BagID, masterKey)
 		}
 	}
-	userPath, _ := c.BuildUserPath(masterKey, "")
+
 	err = os.RemoveAll(userPath)
 	return errors.Wrapf(err, "failed to clean up user storage %v", masterKey)
 }

@@ -148,6 +148,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			os.Remove(uploadingFilePath)
 			return
 		}
+		ctx = storage.WithSyncCdnUpload(ctx)
 		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), input.Filename, hex.EncodeToString(hash), input)
 
 		if err != nil {

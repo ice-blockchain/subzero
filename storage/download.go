@@ -48,7 +48,8 @@ func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, erro
 		return "", errors.Wrapf(err, "failed to marshal %#v", bs)
 	}
 	bootstrap := base64.StdEncoding.EncodeToString(b)
-	return c.buildUrl(hex.EncodeToString(bag.BagID), file, masterPubkey, fileHash, bootstrap)
+	u, _, err := c.buildUrl(hex.EncodeToString(bag.BagID), file, masterPubkey, fileHash, bootstrap)
+	return u, err
 }
 
 func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx context.Context, fh, master, infohash string) error) error {

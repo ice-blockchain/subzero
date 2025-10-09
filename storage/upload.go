@@ -113,11 +113,27 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 		return "", "", false, errors.Wrapf(err, "failed to marshal %#v", bs)
 	}
 	bootstrap := base64.StdEncoding.EncodeToString(b)
-	url, err = c.buildUrl(bagID, relativePathToFileForUrl, masterPubKey, hash, bootstrap)
+	var fileNameForCdn string
+	url, fileNameForCdn, err = c.buildUrl(bagID, relativePathToFileForUrl, masterPubKey, hash, bootstrap)
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
-
+	if c.config.Cdn.URLUpload != "" && c.config.Cdn.AccessKey != "" && c.cdn != nil && newFile != nil {
+		fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
+		if SyncCdnUpload(ctx) {
+			f, ferr := os.Open(fullFilePath)
+			if ferr != nil {
+				return "", "", false, errors.Wrapf(ferr, "failed to open %v", fullFilePath)
+			}
+			if err = c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); err != nil {
+				return "", "", false, errors.Wrapf(err, "failed to upload file %v to cdn", fileNameForCdn)
+			}
+		} else {
+			if err = c.cdn.FileUploadAsync(ctx, fullFilePath, newFile.ContentType, fileNameForCdn); err != nil {
+				return "", "", false, errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
+			}
+		}
+	}
 	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, err
 }
 
@@ -247,17 +263,19 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 	}, nil
 }
 
-func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bootstrap string) (string, error) {
+func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bootstrap string) (fullUrl string, fileName string, err error) {
+	fName := fmt.Sprintf("%v:%v%v", masterPubkey, fileHash, filepath.Ext(relativePath))
 	if c.config.IONLibertyDisabled {
 		relayUrl, err := url.Parse(c.config.RelayURL)
 		if err != nil {
-			return "", errors.Wrapf(err, "invalid relay-url configured %v", c.config.RelayURL)
+			return "", "", errors.Wrapf(err, "invalid relay-url configured %v", c.config.RelayURL)
 		}
-		return fmt.Sprintf("https://%v:%v/files/%v:%v%v", relayUrl.Hostname(), relayUrl.Port(), masterPubkey, fileHash, filepath.Ext(relativePath)), nil
+
+		return fmt.Sprintf("https://%v:%v/files/%v", relayUrl.Hostname(), relayUrl.Port(), fName), fName, nil
 	}
 	url := fmt.Sprintf("http://%v.bag/%v?bootstrap=%v", bagID, relativePath, bootstrap)
 
-	return url, nil
+	return url, fName, nil
 }
 
 func (c *client) saveUploadTorrent(tr *storage.Torrent, userPubKey string, deletion bool) error {

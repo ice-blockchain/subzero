@@ -13,7 +13,10 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
+	"github.com/riverqueue/river/riverdriver"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
 type (
@@ -266,4 +269,12 @@ func switchMaster(ctx context.Context, db any, reason error) error {
 		return nil
 	}
 	return lb.switchMaster(ctx, reason, nil, nil)
+}
+
+func RiverQueueDriver(db *DB) riverdriver.Driver[pgx.Tx] {
+	primary, ok := db.primary().(*pgxpool.Pool)
+	if !ok {
+		return nil
+	}
+	return riverpgxv5.New(primary)
 }

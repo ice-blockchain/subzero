@@ -103,7 +103,9 @@ storage:
   external-adnl-port: 12345
   ion-liberty-disabled: true
   debug: true
-
+  cdn:
+    url-upload: https://bogus.com/url
+    #access-key: bogus
 dvm:
   tls-cert: *tls-cert
   tls-key: *tls-key

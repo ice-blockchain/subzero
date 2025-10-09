@@ -11,10 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river/riverdriver"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -267,4 +270,8 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 
 func CollectDeviceRegistrationEvents(ctx context.Context) EventIterator {
 	return globalDB.Client.collectDeviceRegistrationEvents(ctx)
+}
+
+func RiverQueueDriver() riverdriver.Driver[pgx.Tx] {
+	return connector.RiverQueueDriver(globalDB.Client.db)
 }

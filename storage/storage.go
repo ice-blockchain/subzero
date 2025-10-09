@@ -29,6 +29,7 @@ import (
 	"github.com/xssnick/tonutils-storage/storage"
 
 	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/storage/internal"
 	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
@@ -85,6 +86,7 @@ type (
 		config            *Config
 		rootStoragePath   string
 		closed            atomic.Bool
+		cdn               internal.CDNClient
 	}
 	queueItem struct {
 		tor       *storage.Torrent
@@ -251,7 +253,7 @@ func (c *client) ListFiles(userPubKey string, page, limit uint32) (total uint32,
 			return 0, nil, errors.Wrapf(err, "failed to marshal %#v", bs)
 		}
 		bootstrap := base64.StdEncoding.EncodeToString(b)
-		url, _ := c.buildUrl(hex.EncodeToString(bag.BagID), f, metadata.Master, hex.EncodeToString(md.Hash), bootstrap)
+		url, _, _ := c.buildUrl(hex.EncodeToString(bag.BagID), f, metadata.Master, hex.EncodeToString(md.Hash), bootstrap)
 		res = append(res, &FileMetadata{
 			FileMetadata: &nip94.FileMetadata{
 				Size:            strconv.FormatUint(uint64(fileInfo.Size), 10),
@@ -318,6 +320,11 @@ func (c *client) Close() (err error) {
 		err = errors.Join(err, errors.Wrapf(dErr, "failed to close db"))
 	}
 	close(c.downloadQueue)
+	if c.cdn != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		err = errors.Join(err, c.cdn.Stop(shutdownCtx))
+	}
 	return err
 }
 

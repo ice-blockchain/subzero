@@ -8,6 +8,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/fsnotify/fsnotify"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -143,4 +146,34 @@ loop:
 
 func Reset() {
 	globalClient.Once = sync.Once{}
+}
+
+func VerifyFileOnCdn(tb *testing.T, ctx context.Context, fileName string) {
+	tb.Helper()
+	url := globalClient.Client.cdn.CdnDownloadURL(fileName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	require.NoError(tb, err)
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	defer func() {
+		require.NoError(tb, resp.Body.Close())
+	}()
+	require.NoError(tb, err)
+	assert.Equal(tb, http.StatusOK, resp.StatusCode, url)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	require.NoError(tb, err)
+	assert.NotEmpty(tb, bodyBytes)
+}
+func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, fileName string) {
+	tb.Helper()
+	url := globalClient.Client.cdn.CdnDownloadURL(fileName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	require.NoError(tb, err)
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	defer func() {
+		require.NoError(tb, resp.Body.Close())
+	}()
+	require.NoError(tb, err)
+	assert.Equal(tb, http.StatusNotFound, resp.StatusCode, url)
 }
