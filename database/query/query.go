@@ -1002,7 +1002,10 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 }
 
 func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
-	if event.Sig != "" {
+	if event.Sig == "DROP" {
+		// TODO: remove this later with kind3 hack.
+		return nil
+	} else if event.Sig != "" {
 		return event
 	}
 
@@ -1162,7 +1165,12 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 
 		data = db.postProcessEvents(result, data)
 		for i := range data {
-			if !yield(db.eventTransform(data[i]).Event, nil) {
+			ev := db.eventTransform(data[i])
+			if ev == nil {
+				// Post processing decided to drop the event.
+				continue
+			}
+			if !yield(ev.Event, nil) {
 				return
 			}
 		}
