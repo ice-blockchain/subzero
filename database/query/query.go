@@ -1219,7 +1219,6 @@ func (db *dbClient) generateEventsCountClause(ctx context.Context, filters ...mo
 		}
 	}
 
-	filters = db.extendWhereFilters(ctx, filters...)
 	where, params, err := newQueryBuilder().BuildSingleWhere(ctx, filters...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to generate events where clause")
@@ -1269,89 +1268,8 @@ func (db *dbClient) CountGroupedEventReactions(ctx context.Context, filters ...m
 }
 
 func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (*queryBuildResult, error) {
-	filters := db.extendWhereFilters(ctx, filter...)
-
-	return newQueryBuilder().Build(ctx, filters...)
-}
-
-func (db *dbClient) fetchAllKeysOf(ctx context.Context, pubkey string) (keys []string, err error) {
-	for ev, err := range db.SelectEvents(ctx,
-		// Attention event of an user itself.
-		model.Filter{
-			Authors: []string{pubkey},
-			Kinds:   []int{model.CustomIONKindAttestation},
-		},
-		// Attention event where user is mentioned.
-		model.Filter{
-			Kinds: []int{model.CustomIONKindAttestation},
-			Tags:  model.TagMap{}.SetLiterals("p", pubkey),
-		},
-	) {
-		if err != nil {
-			return nil, errors.Wrapf(handleError(err), "failed to fetch all keys of %v", pubkey)
-		}
-
-		entries, err := model.ParseAttestationTags(ev.Tags)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse attestation tags")
-		}
-
-		keys = append(keys, ev.PubKey, ev.GetMasterPublicKey())
-		for key := range entries {
-			keys = append(keys, key)
-		}
-	}
-	return keys, nil
-}
-
-func (db *dbClient) extendWhereFilters(ctx context.Context, filters ...model.Filter) model.Filters {
-	var addressableTags = []string{"a", "Q"}
-	for i := range filters {
-		for _, tag := range addressableTags {
-			v, ok := filters[i].Tags[tag]
-			if !ok {
-				continue
-			}
-
-			var subkeyFilters []model.TagValues
-			for _, b := range v {
-				if len(b) == 0 || b[0] == nil || *b[0] == "" {
-					continue
-				}
-
-				// Format: `kind:pubkey:d_tag`.
-				parts := strings.Split(*b[0], ":")
-				if len(parts) != 3 {
-					continue
-				}
-
-				keys, err := db.fetchAllKeysOf(ctx, parts[1])
-				if err != nil {
-					log.Error().Err(err).Msg("subkeys fetch failed")
-
-					continue
-				}
-
-				for _, subkey := range keys {
-					n := slices.Clone(b)
-					address := strings.Join([]string{parts[0], subkey, parts[2]}, ":")
-					n[0] = &address
-					subkeyFilters = append(subkeyFilters, n)
-				}
-			}
-
-			if len(subkeyFilters) == 0 {
-				continue
-			}
-
-			filters[i].Tags.Set(tag)
-			for _, v := range subkeyFilters {
-				filters[i].Tags.Append(tag, v...)
-			}
-		}
-	}
-
-	return filters
+	// TODO: find a proper way to handle a/Q tags with subkeys of all accounts that belong to the same user.
+	return newQueryBuilder().Build(ctx, filter...)
 }
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
