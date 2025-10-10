@@ -1,0 +1,14 @@
+[Unit]
+Description=Zerolytics uWSGI app
+Documentation=man:uwsgi(1) file:/usr/share/doc/uwsgi-core/README.Debian
+
+[Service]
+Environment="CONFIG_FILE_PATH=/etc/subzero-dash/config.yaml"
+ExecStart=/usr/bin/uwsgi --plugin python3 --socket 127.0.0.1:3031 --wsgi-file /usr/local/bin/zerolytics.py --master --processes 4 --threads 2
+User=www-data
+Group=www-data
+DynamicUser=yes
+KillSignal=SIGQUIT
+
+[Install]
+WantedBy=multi-user.target
