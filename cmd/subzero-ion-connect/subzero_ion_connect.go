@@ -235,7 +235,12 @@ func init() {
 			start := time.Now()
 			n := webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
 			end := time.Since(start)
-			log.Info().Int("event_count", len(events)).Strs("event_ids", model.Events(events).IDs()).Dur("duration", end).Int("subscription_count", n).Msg("broadcast events")
+			log.Trace().
+				Int("event_count", len(events)).
+				Strs("event_ids", model.Events(events).IDs()).
+				Dur("duration", end).
+				Int("subscription_count", n).
+				Msg("broadcast events")
 		})
 		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
