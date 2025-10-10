@@ -163,7 +163,7 @@ func RegisterExpiredEventsProcessor(proc func(ctx context.Context, events ...*mo
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	if globalDB.Client.hasReadURLs {
-		log.Warn().Str("relay_url", globalDB.Client.relayURL).Str("events", model.Events(events).String()).Msg("acceptEvents called on read-preferred instance")
+		log.Trace().Str("relay_url", globalDB.Client.relayURL).Str("events", model.Events(events).String()).Msg("acceptEvents called on read-preferred instance")
 	}
 	return globalDB.Client.AcceptEvents(ctx, events...)
 }
