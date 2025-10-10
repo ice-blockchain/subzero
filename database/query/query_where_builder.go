@@ -847,15 +847,15 @@ select
 	cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint) as created_at,
 	to_timestamp_nano(cast (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as lookup_created_at,
 	'' as address,
-	case when f.kind = 3 then '' else f.reference_id end as id,
+	case when counters.kind = 3 then '' else counters.reference_id end as id,
 	coalesce(evr.pubkey, '') as pubkey,
 	coalesce(evr.master_pubkey, '') as master_pubkey,
-	'',
+	'' as sig,
 `)
 		if current.Reduce.Group && len(current.Reduce.Kinds) > 1 && current.Reduce.Kinds[1] == nostr.KindReaction {
-			b.WriteString(`text(jsonb_object_agg(coalesce(nullif(f.reference_type, ''), '+'), f.value)) as content,`)
+			b.WriteString(`text(jsonb_object_agg(coalesce(nullif(counters.reference_type, ''), '+'), counters.value)) as content,`)
 		} else {
-			b.WriteString(`cast(f.value as text) as content,`)
+			b.WriteString(`cast(counters.value as text) as content,`)
 		}
 		b.WriteString(`
 	text(jsonb_build_array(
@@ -869,15 +869,15 @@ select
 						case when :` + (filterID + "ftagname") + ` = 'lookup' then
 							evr.address
 						else
-							f.reference_id
+							counters.reference_id
 						end`)
 		if current.Reduce.Context == "root" || current.Reduce.Context == "reply" {
 			b.WriteString(`, null, text(:` + filterID + "context" + `)`)
 		}
 		b.WriteString(`))))) as d_tag,
-	h_tag,
+	evr.h_tag,
 	case when
-		f.kind = 7 then
+		counters.kind = 7 then
 			jsonb_build_array(
 				jsonb_build_array('output', 'JSON'),
 				jsonb_build_array('param', 'group', text(:` + (filterID + "context") + `)
@@ -887,13 +887,19 @@ select
 		end as tags,
 		'' as origin
 from
-	event_counters f
-inner join ` + cteName + ` evr on evr.kind = :` + (filterID + "kind") + `
-	and (
-		(f.kind = 3 and f.reference_id in (evr.master_pubkey, evr.pubkey))
-		or
-		f.reference_id = evr.address
-	)
+	` + cteName + ` evr
+left join lateral (
+	select ec.kind, ec.value, ec.reference_type, ec.reference_id
+	from event_counters ec
+	where evr.kind = :` + (filterID + "kind") + `
+		and ec.kind = 3
+		and ec.reference_id in (evr.master_pubkey, evr.pubkey)
+	union all
+	select ec.kind, ec.value, ec.reference_type, ec.reference_id
+	from event_counters ec
+	where evr.kind = :` + (filterID + "kind") + `
+	and ec.reference_id = evr.address
+) counters on true
 where
 	exists (select 1 FROM ` + cteName + ` ) AND
 `)
@@ -984,21 +990,21 @@ AND `)
 			kind := b.PushValue(filterID, "start_kind", current.Start.Kind)
 			usersWithBadges := `e.kind = 30008 AND e.d_tag='profile_badges'
 AND (
-	(e.master_pubkey IN (
+	(e.master_pubkey = ANY(ARRAY(
 		select
 			distinct (mk.master_pubkey)
 		from ` + cteName + ` mk
 		where
 			mk.kind =:` + kind + `
-		) and e.hidden=false)
+		)) and e.hidden=false)
 	OR
-	(e.pubkey IN (
+	(e.pubkey = ANY(ARRAY(
 		select
 			distinct (pubkey)
 		from ` + cteName + ` pk
 		where
 			pk.kind =:` + kind + `
-		) and e.hidden=false)
+		)) and e.hidden=false)
 )
 AND e.hidden=false`
 			b.WriteString(usersWithBadges)
@@ -1033,17 +1039,17 @@ where
 		b.WriteString(" UNION ALL ")
 		b.WriteString(`(select ee.id from (select subzero_nostr_tag_a_get_pk(event_tag_value1) as pk, subzero_nostr_tag_a_get_dtag(event_tag_value1) as name from event_tags where event_id in (`)
 		b.WriteString(startFilter)
-		b.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk in (ee.pubkey, ee.master_pubkey) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = false)) AND e.hidden=false")
+		b.WriteString(") and event_tag_key = 'a') badge, events ee where badge.pk = ANY(ARRAY[ee.pubkey, ee.master_pubkey]) and ee.d_tag = badge.name and ee.kind = 30009 and hidden = false)) AND e.hidden=false")
 
 	case nostr.KindMuteList, nostr.KindRelayListMetadata:
 		reduceKindParam := b.PushValue(filterID, "rkind", current.Reduce.Kinds[0])
 		b.WriteString("e.kind = :")
 		b.WriteString(reduceKindParam)
-		b.WriteString(" AND ( master_pubkey IN (")
-		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &current.Start))
-		b.WriteString(") OR pubkey IN (")
-		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
-		b.WriteString(")) AND e.hidden=false")
+		b.WriteString(` AND e.hidden = false AND (e.master_pubkey = ANY(ARRAY(`)
+		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "DISTINCT master_pubkey", &current.Start))
+		b.WriteString(`)) OR e.pubkey = ANY(ARRAY(`)
+		b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "DISTINCT pubkey", &current.Start))
+		b.WriteString(`)))`)
 		b.WriteString(`
 union all
 select
@@ -1078,11 +1084,11 @@ inner join `)
 		b.WriteString(` AND
 not exists (select true from events subev where subev.kind = :` + reduceKindParam + ` and
 (
-	(subev.pubkey = e.pubkey               and subev.hidden = false) or
-	(subev.master_pubkey = e.master_pubkey and subev.hidden = false) or
-	(subev.master_pubkey = e.pubkey        and subev.hidden = false) or
-	(subev.pubkey = e.master_pubkey        and subev.hidden = false)
-)) and e.hidden=false
+	subev.pubkey = ANY(ARRAY[e.master_pubkey, e.pubkey])
+	or
+	subev.master_pubkey = ANY(ARRAY[e.master_pubkey, e.pubkey])
+) and subev.hidden=false)
+and e.hidden=false
 group by e.master_pubkey, e.pubkey`)
 
 	case nostr.KindProfileMetadata, model.CustomIONKindAttestation:
@@ -1090,16 +1096,16 @@ group by e.master_pubkey, e.pubkey`)
 		b.WriteValue(filterID, "rkind", current.Reduce.Kinds[0])
 		b.ApplyTextSearch(filter)
 		if current.Reduce.Author == "" {
-			b.WriteString(" AND ( master_pubkey IN (")
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "master_pubkey", &current.Start))
-			b.WriteString(") OR pubkey IN (")
-			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
-			b.WriteString("))")
+			b.WriteString(` AND (e.master_pubkey = ANY(ARRAY(`)
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "DISTINCT master_pubkey", &current.Start))
+			b.WriteString(`)) OR e.pubkey = ANY(ARRAY(`)
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "DISTINCT pubkey", &current.Start))
+			b.WriteString(`)))`)
 		}
 		b.WriteString(" and e.hidden=false")
 
 	case model.KindDVMCountResponse:
-		b.WriteString("f.kind = :")
+		b.WriteString("counters.kind = :")
 		b.WriteValue(filterID, "rkind", current.Reduce.Kinds[1])
 		b.PushValue(filterID, "ftagname", "lookup")
 		b.PushValue(filterID, "fkind", current.Reduce.Kinds[1])
@@ -1123,10 +1129,10 @@ group by e.master_pubkey, e.pubkey`)
 			refType = "follower"
 		}
 		if refType != "" {
-			b.WriteString(" AND f.reference_type = :")
+			b.WriteString(" AND counters.reference_type = :")
 			b.WriteString(b.PushValue(filterID, "rref", refType))
 		}
-		b.WriteString(" AND f.reference_id IN (")
+		b.WriteString(" AND counters.reference_id IN (")
 		if current.Reduce.Kinds[1] == nostr.KindFollowList {
 			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "pubkey", &current.Start))
 			b.WriteString(" UNION ALL ")
@@ -1136,7 +1142,7 @@ group by e.master_pubkey, e.pubkey`)
 		}
 		b.WriteString(")")
 		if current.Reduce.Group && current.Reduce.Kinds[1] == nostr.KindReaction {
-			b.WriteString(" GROUP BY reference_id, f.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
+			b.WriteString(" GROUP BY reference_id, counters.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
 		}
 	}
 }
