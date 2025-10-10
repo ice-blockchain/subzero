@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/rs/zerolog/log"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -169,7 +168,9 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 	}); err != nil {
 		specificErr := getSpecificFCMError(err)
 		if errors.Is(specificErr, ErrMessageTooLarge) {
-			return "", errors.Wrapf(specificErr, "message is too large, kind: %d, size: %d bytes", kind, calculateMessageSize(message))
+			log.Error().Err(specificErr).Int("kind", kind).Int("size", calculateMessageSize(message)).Msg("message is too large")
+
+			return "", ErrMessageTooLarge
 		}
 		if errors.Is(specificErr, ErrInvalidDeviceToken) {
 			return "", ErrInvalidDeviceToken
@@ -313,11 +314,12 @@ func calculateMessageSize(message *messaging.Message) int {
 }
 
 func permanentError(err error) error {
-	if gErr, ok := err.(*googleapi.Error); ok {
-		statusCode := gErr.Code
-		if statusCode >= 400 && statusCode < 500 {
-			return &backoff.PermanentError{Err: err}
-		}
+	if messaging.IsInvalidArgument(err) || messaging.IsUnregistered(err) || messaging.IsSenderIDMismatch(err) {
+		return &backoff.PermanentError{Err: ErrInvalidDeviceToken}
+	}
+	specificErr := getSpecificFCMError(err)
+	if errors.Is(specificErr, ErrInvalidDeviceToken) || errors.Is(specificErr, ErrMessageTooLarge) {
+		return &backoff.PermanentError{Err: err}
 	}
 
 	return err
