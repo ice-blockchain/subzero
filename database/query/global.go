@@ -22,36 +22,28 @@ import (
 var (
 	globalDB struct {
 		Client *dbClient
+		Conf   *Config
 		Once   sync.Once
 	}
-	UsedDatabaseStorage atomic.Uint64
+	UsedDatabaseStorage      atomic.Uint64
+	WithDDLFunc              = connector.WithDDLFunc
+	WithMasterSwitchCallback = connector.WithMasterSwitchCallback
 )
 
 type (
 	Config struct {
-		Username                 string                   `yaml:"username,omitempty"`
-		Password                 string                   `yaml:"password,omitempty"`
-		PrivateKey               string                   `yaml:"private-key"          validate:"required"`
-		RelayURL                 string                   `yaml:"relay-url"            validate:"required,url"`
-		RunDDL                   bool                     `yaml:"run-ddl"`
-		WriteURLs                []string                 `yaml:"write-urls"`
-		ReadURLs                 []string                 `yaml:"read-urls"`
-		DisableSelfTest          bool                     `yaml:"disable-self-test"`
-		PeriodicSelfTestInterval time.Duration            `yaml:"periodic-self-test-interval"`
-		migrations               map[string]MigrationFunc `yaml:"-"`
+		Username                 string        `yaml:"username,omitempty"`
+		Password                 string        `yaml:"password,omitempty"`
+		PrivateKey               string        `yaml:"private-key"          validate:"required"`
+		RelayURL                 string        `yaml:"relay-url"            validate:"required,url"`
+		RunDDL                   bool          `yaml:"run-ddl"`
+		WriteURLs                []string      `yaml:"write-urls"`
+		ReadURLs                 []string      `yaml:"read-urls"`
+		DisableSelfTest          bool          `yaml:"disable-self-test"`
+		PeriodicSelfTestInterval time.Duration `yaml:"periodic-self-test-interval"`
 	}
-	Option        func(*Config)
-	MigrationFunc = connector.MigrationFunc
+	Option func(*Config)
 )
-
-func WithExtraMigration(key string, migrate MigrationFunc) Option {
-	return func(in *Config) {
-		if in.migrations == nil {
-			in.migrations = make(map[string]MigrationFunc, 1)
-		}
-		in.migrations[key] = migrate
-	}
-}
 
 func WithConfig(cfg *Config) Option {
 	return func(in *Config) {
@@ -145,11 +137,8 @@ func MustInit(ctx context.Context, opts ...Option) {
 		if !conf.RunDDL {
 			log.Warn().Msg("database DDL execution is disabled")
 		}
-		connOpts := []connector.Option{}
-		for migrationKey, migrationFunc := range conf.migrations {
-			connOpts = append(connOpts, connector.WithMigration(migrationKey, migrationFunc))
-		}
-		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL, connOpts...).
+		globalDB.Conf = conf
+		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
 

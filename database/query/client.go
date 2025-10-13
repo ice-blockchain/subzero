@@ -82,6 +82,25 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 
 	return client
 }
+func RequestDatabaseConn(ctx context.Context, ext ...connector.Option) *connector.DB {
+	options := []connector.Option{
+		connector.WithFieldNameMapper(func(in string) string {
+			n := strings.ToLower(in)
+			if mapped, ok := databaseEventFieldMap[n]; ok {
+				return mapped
+			}
+			return n
+		}),
+	}
+	options = append(options, connector.WithWriteURLs(globalDB.Conf.WriteURLs...))
+	options = append(options, ext...)
+	db, err := connector.New(ctx, options...)
+	if err != nil {
+		log.Panic().Err(err).Msg("failed to open database")
+	}
+
+	return db
+}
 
 func (client *dbClient) Close() (err error) {
 	if client.db != nil {
