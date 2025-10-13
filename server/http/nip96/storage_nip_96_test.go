@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 		RelayURL:        "wss://localhost:9996",
 		RunDDL:          true,
 		DisableSelfTest: true,
-	}), query.WithExtraMigration("storage-riverqueue", storage.InitRiverQueueDriver()))
+	}))
 
 	var err error
 	testMainStorageRoot, err = os.MkdirTemp("", "test-nip96-storage-root")
