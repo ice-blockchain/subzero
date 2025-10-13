@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 		RelayURL:        "wss://localhost:9996",
 		RunDDL:          true,
 		DisableSelfTest: true,
-	}))
+	}), query.WithExtraMigration("storage-riverqueue", storage.InitRiverQueueDriver()))
 
 	var err error
 	testMainStorageRoot, err = os.MkdirTemp("", "test-nip96-storage-root")
@@ -384,7 +384,6 @@ func TestNIP96(t *testing.T) {
 			if os.Getenv("STORAGE_CDN_ACCESS_KEY") == "" {
 				t.Skip("STORAGE_CDN_ACCESS_KEY not set")
 			}
-			time.Sleep(5 * time.Second)
 			storage.VerifyFileOnCdn(t, appcontext.TestContext(t), fmt.Sprintf("%v:b2b8cf9202b45dad7e137516bcf44b915ce30b39c3b294629a9b6b8fa1585292.png", masterPubKey))
 		})
 		t.Run("list files responds with up to all files for the user when total is less than page", func(t *testing.T) {

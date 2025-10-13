@@ -153,7 +153,7 @@ func VerifyFileOnCdn(tb *testing.T, ctx context.Context, fileName string) {
 	url := globalClient.Client.cdn.CdnDownloadURL(fileName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	require.NoError(tb, err)
-	httpClient := &http.Client{}
+	httpClient := http.DefaultClient
 	resp, err := httpClient.Do(req)
 	defer func() {
 		require.NoError(tb, resp.Body.Close())
@@ -169,7 +169,7 @@ func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, fileName string)
 	url := globalClient.Client.cdn.CdnDownloadURL(fileName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	require.NoError(tb, err)
-	httpClient := &http.Client{}
+	httpClient := http.DefaultClient
 	resp, err := httpClient.Do(req)
 	defer func() {
 		require.NoError(tb, resp.Body.Close())

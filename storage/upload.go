@@ -125,6 +125,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 			if ferr != nil {
 				return "", "", false, errors.Wrapf(ferr, "failed to open %v", fullFilePath)
 			}
+			defer f.Close()
 			if err = c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); err != nil {
 				return "", "", false, errors.Wrapf(err, "failed to upload file %v to cdn", fileNameForCdn)
 			}

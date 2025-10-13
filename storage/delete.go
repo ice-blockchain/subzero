@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -84,13 +85,15 @@ func (c *client) DeleteUser(masterKey string) error {
 	}
 	userPath, _ := c.BuildUserPath(masterKey, "")
 	if c.config.Cdn.AccessKey != "" && c.config.Cdn.URLUpload != "" && c.cdn != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 		files, err := os.ReadDir(userPath)
 		if err != nil {
 			log.Error().Err(err).Str("user", masterKey).Msg("failed to list files in user storage")
 		}
 		for _, f := range files {
 			fNameOnCDN := fmt.Sprintf("%v:%v%v", masterKey, f.Name(), filepath.Ext(f.Name()))
-			if err = c.cdn.FileDelete(context.Background(), fNameOnCDN); err != nil {
+			if err = c.cdn.FileDelete(ctx, fNameOnCDN); err != nil {
 				log.Error().Err(err).Str("filename", fNameOnCDN).Msg("failed to delete file from cdn")
 			}
 		}

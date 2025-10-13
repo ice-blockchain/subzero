@@ -566,3 +566,7 @@ func (c *client) verifyFileOwnershipAndAttestationForFileReplication(ctx context
 func VerifyFileOwnershipAndAttestationForFileReplication(ctx context.Context, now time.Time, fileHash, masterPubkey, senderUrl string) error {
 	return globalClient.Client.verifyFileOwnershipAndAttestationForFileReplication(ctx, now, fileHash, masterPubkey, senderUrl)
 }
+
+func InitRiverQueueDriver() query.MigrationFunc {
+	return internal.InitRiverQueueDriver
+}

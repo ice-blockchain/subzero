@@ -78,7 +78,7 @@ var (
 			cfg.MustInit(configPath)
 			logInit()
 			validation.MustInit(cmd.Context())
-			query.MustInit(cmd.Context())
+			query.MustInit(cmd.Context(), query.WithExtraMigration("storage-riverqueue", storage.InitRiverQueueDriver()))
 			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())

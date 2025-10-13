@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	stdlibtime "time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
@@ -21,16 +20,17 @@ import (
 
 type (
 	CDNClient interface {
-		FileUpload(ctx context.Context, data io.ReadCloser, contentType, fileName string) error
+		FileUpload(ctx context.Context, data io.Reader, contentType, fileName string) error
 		FileDelete(ctx context.Context, name string) error
 		Stop(ctx context.Context) error
 		FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error
 		CdnDownloadURL(filename string) string
 	}
 	CdnConfig struct {
-		AccessKey   string `yaml:"access-key"`
-		URLUpload   string `yaml:"url-upload"`
-		URLDownload string `yaml:"url-download"`
+		AccessKey       string `yaml:"access-key"`
+		URLUpload       string `yaml:"url-upload"`
+		URLDownload     string `yaml:"url-download"`
+		MaxQueueWorkers int    `yaml:"max-queue-workers"`
 	}
 	client struct {
 		river.WorkerDefaults[*jobParams]
@@ -40,6 +40,9 @@ type (
 )
 
 func NewCDNClient(ctx context.Context, config *CdnConfig) CDNClient {
+	if config.MaxQueueWorkers == 0 {
+		config.MaxQueueWorkers = 100
+	}
 	c := &client{
 		config: config,
 	}
@@ -58,7 +61,7 @@ func NewCDNClient(ctx context.Context, config *CdnConfig) CDNClient {
 			Int("status", resp.GetStatusCode()).
 			Msg("failed to bootstrap cdn")
 	}
-	if err = c.initQueueProcessing(ctx); err != nil {
+	if err = c.initQueueProcessing(ctx, config); err != nil {
 		log.Panic().
 			Str("context", "STORAGE").
 			Err(err).
@@ -85,15 +88,7 @@ func (c *client) CdnDownloadURL(filename string) string {
 	return u
 }
 
-func (c *client) FileUpload(ctx context.Context, data io.ReadCloser, contentType, fileName string) (err error) {
-	defer func() {
-		if err = data.Close(); err != nil {
-			log.Error().Str("context", "STORAGE").Err(err).Str("file", fileName).Msg("error closing file")
-		}
-	}()
-	if err != nil {
-		return errors.Wrapf(err, "error opening file %v", fileName)
-	}
+func (c *client) FileUpload(ctx context.Context, data io.Reader, contentType, fileName string) (err error) {
 	fileData, err := io.ReadAll(data)
 	if err != nil {
 		return errors.Wrapf(err, "error reading file %v", fileName)
@@ -148,7 +143,7 @@ func (c *client) FileDelete(ctx context.Context, name string) error {
 func (c *client) cdnReq(ctx context.Context) *req.Request {
 	return req.
 		SetContext(ctx).
-		SetRetryBackoffInterval(10*stdlibtime.Millisecond, 1*stdlibtime.Second). //nolint:mnd,gomnd // .
+		SetRetryBackoffInterval(10*time.Millisecond, 1*time.Second). //nolint:mnd,gomnd // .
 		SetRetryHook(func(resp *req.Response, err error) {
 			switch { //nolint:revive // .
 			case err != nil:

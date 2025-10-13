@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/riverqueue/river/riverdriver"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -31,18 +29,29 @@ var (
 
 type (
 	Config struct {
-		Username                 string        `yaml:"username,omitempty"`
-		Password                 string        `yaml:"password,omitempty"`
-		PrivateKey               string        `yaml:"private-key"          validate:"required"`
-		RelayURL                 string        `yaml:"relay-url"            validate:"required,url"`
-		RunDDL                   bool          `yaml:"run-ddl"`
-		WriteURLs                []string      `yaml:"write-urls"`
-		ReadURLs                 []string      `yaml:"read-urls"`
-		DisableSelfTest          bool          `yaml:"disable-self-test"`
-		PeriodicSelfTestInterval time.Duration `yaml:"periodic-self-test-interval"`
+		Username                 string                   `yaml:"username,omitempty"`
+		Password                 string                   `yaml:"password,omitempty"`
+		PrivateKey               string                   `yaml:"private-key"          validate:"required"`
+		RelayURL                 string                   `yaml:"relay-url"            validate:"required,url"`
+		RunDDL                   bool                     `yaml:"run-ddl"`
+		WriteURLs                []string                 `yaml:"write-urls"`
+		ReadURLs                 []string                 `yaml:"read-urls"`
+		DisableSelfTest          bool                     `yaml:"disable-self-test"`
+		PeriodicSelfTestInterval time.Duration            `yaml:"periodic-self-test-interval"`
+		migrations               map[string]MigrationFunc `yaml:"-"`
 	}
-	Option func(*Config)
+	Option        func(*Config)
+	MigrationFunc = connector.MigrationFunc
 )
+
+func WithExtraMigration(key string, migrate MigrationFunc) Option {
+	return func(in *Config) {
+		if in.migrations == nil {
+			in.migrations = make(map[string]MigrationFunc, 1)
+		}
+		in.migrations[key] = migrate
+	}
+}
 
 func WithConfig(cfg *Config) Option {
 	return func(in *Config) {
@@ -136,8 +145,11 @@ func MustInit(ctx context.Context, opts ...Option) {
 		if !conf.RunDDL {
 			log.Warn().Msg("database DDL execution is disabled")
 		}
-
-		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL).
+		connOpts := []connector.Option{}
+		for migrationKey, migrationFunc := range conf.migrations {
+			connOpts = append(connOpts, connector.WithMigration(migrationKey, migrationFunc))
+		}
+		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL, connOpts...).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
 
@@ -270,8 +282,4 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 
 func CollectDeviceRegistrationEvents(ctx context.Context) EventIterator {
 	return globalDB.Client.collectDeviceRegistrationEvents(ctx)
-}
-
-func RiverQueueDriver() riverdriver.Driver[pgx.Tx] {
-	return connector.RiverQueueDriver(globalDB.Client.db)
 }

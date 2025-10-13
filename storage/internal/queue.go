@@ -1,15 +1,20 @@
+// SPDX-License-Identifier: ice License 1.0
+
 package internal
 
 import (
 	"context"
 	"os"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
 	"github.com/rs/zerolog/log"
-
-	"github.com/ice-blockchain/subzero/database/query"
 )
 
 type (
@@ -19,6 +24,11 @@ type (
 		FilePath    string `json:"filePath"`
 	}
 )
+
+var driver struct {
+	sync.Once
+	riverdriver.Driver[pgx.Tx]
+}
 
 func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error {
 	if c.river == nil {
@@ -43,26 +53,24 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 func (j *jobParams) Kind() string {
 	return "cdnUpload"
 }
-func (c *client) initQueueProcessing(ctx context.Context) error {
+func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error {
 	workers := river.NewWorkers()
 	if err := river.AddWorkerSafely[*jobParams](workers, c); err != nil {
 		return errors.Wrap(err, "failed to register cdnUpload worker")
 	}
-	if driver := query.RiverQueueDriver(); driver != nil {
-		riverClient, err := river.NewClient[pgx.Tx](driver, &river.Config{
-			Queues: map[string]river.QueueConfig{
-				river.QueueDefault: {MaxWorkers: 1000},
-			},
-			Workers: workers,
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to create river client")
-		}
-		if err = riverClient.Start(ctx); err != nil {
-			return errors.Wrap(err, "failed to start river")
-		}
-		c.river = riverClient
+	riverClient, err := river.NewClient[pgx.Tx](driver.Driver, &river.Config{
+		Queues: map[string]river.QueueConfig{
+			river.QueueDefault: {MaxWorkers: cfg.MaxQueueWorkers},
+		},
+		Workers: workers,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create river client")
 	}
+	if err = riverClient.Start(ctx); err != nil {
+		return errors.Wrap(err, "failed to start river")
+	}
+	c.river = riverClient
 	return nil
 }
 
@@ -88,6 +96,7 @@ func (c *client) Work(ctx context.Context, job *river.Job[*jobParams]) (err erro
 		}
 		return errors.Wrapf(err, "failed to open %v", job.Args.FilePath)
 	}
+	defer f.Close()
 	return errors.Wrapf(c.FileUpload(ctx, f, job.Args.ContentType, job.Args.FileName), "failed to upload file %v", job.Args.FileName)
 }
 
@@ -96,4 +105,17 @@ func (c *client) Stop(ctx context.Context) error {
 		return nil
 	}
 	return errors.Wrap(c.river.Stop(ctx), "error stopping river")
+}
+
+func InitRiverQueueDriver(ctx context.Context, pool *pgxpool.Pool) error {
+	migrator, err := rivermigrate.New(riverpgxv5.New(pool), &rivermigrate.Config{})
+	if err != nil {
+		return errors.Wrap(err, "cannot create river migrator")
+	}
+	_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
+
+	driver.Do(func() {
+		driver.Driver = riverpgxv5.New(pool)
+	})
+	return errors.Wrap(err, "cannot migrate river queue")
 }
