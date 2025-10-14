@@ -332,6 +332,11 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 	for tagName, tagValues := range tags {
 		tagID++
 
+		if tagName == "t" || tagName == "!t" {
+			// Handled in ApplyFilterTtags.
+			continue
+		}
+
 		queryTagName := tagName
 		exclude := false
 		if tagName != "" && tagName[0] == '!' {
@@ -484,12 +489,10 @@ func (b *queryBuilder) applyFilterTtags(filter *databaseFilterSearch, exclude bo
 func (b *queryBuilder) ApplyFilterTtags(filter *databaseFilterSearch) {
 	if values := filter.Tags.All("!t"); len(values) > 0 {
 		b.applyFilterTtags(filter, true, values)
-		delete(filter.Tags, "!t")
 	}
 
 	if values := filter.Tags.All("t"); len(values) > 0 {
 		b.applyFilterTtags(filter, false, values)
-		delete(filter.Tags, "t")
 	}
 }
 
