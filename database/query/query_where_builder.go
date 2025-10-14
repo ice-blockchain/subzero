@@ -332,6 +332,11 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 	for tagName, tagValues := range tags {
 		tagID++
 
+		if tagName == "t" || tagName == "!t" {
+			// Handled in ApplyFilterTtags.
+			continue
+		}
+
 		queryTagName := tagName
 		exclude := false
 		if tagName != "" && tagName[0] == '!' {
@@ -484,12 +489,10 @@ func (b *queryBuilder) applyFilterTtags(filter *databaseFilterSearch, exclude bo
 func (b *queryBuilder) ApplyFilterTtags(filter *databaseFilterSearch) {
 	if values := filter.Tags.All("!t"); len(values) > 0 {
 		b.applyFilterTtags(filter, true, values)
-		delete(filter.Tags, "!t")
 	}
 
 	if values := filter.Tags.All("t"); len(values) > 0 {
 		b.applyFilterTtags(filter, false, values)
-		delete(filter.Tags, "t")
 	}
 }
 
@@ -1311,6 +1314,32 @@ func (b *queryBuilder) fieldsNames(table, origin string) []string {
 	return fields
 }
 
+func shouldApplyVerifiedFirst(filter *databaseFilterSearch) bool {
+	// Has topics.
+	if filter.Tags.HasValues("t") {
+		return true
+	}
+
+	// Is unclassified only.
+	if filter.Tags.HasValues("!t") && slices.Compare(filter.Tags.All("!t"), []string{"unclassified"}) == 0 {
+		return true
+	}
+
+	var hasSpecialKinds bool
+	for _, k := range filter.Kinds {
+		hasSpecialKinds = hasSpecialKinds ||
+			k == model.CustomIONKindRepostOfArticle ||
+			k == model.CustomIONKindRepostOfEditableTextNote
+	}
+
+	// Assume special feed request.
+	if hasSpecialKinds && filter.Limit == 1 && len(filter.Authors) == 0 && len(filter.IDs) == 0 {
+		return true
+	}
+
+	return false
+}
+
 func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE, err error) {
 	whereBuffer := queryBuilder{Params: b.Params}
 	where, _, err := whereBuffer.BuildWhere(filter)
@@ -1353,9 +1382,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 		fields = append(fields, "r.event_verified as verified", "r.score")
 	}
 
-	if orderBy == "" &&
-		(filter.Tags.HasValues("t") ||
-			(filter.Tags.HasValues("!t") && slices.Compare(filter.Tags.All("!t"), []string{"unclassified"}) == 0)) {
+	if orderBy == "" && shouldApplyVerifiedFirst(filter) {
 		fields = append(fields, "verified")
 		orderBy = `verified desc, ` + whereBuilderDefaultOrderBy
 	}
