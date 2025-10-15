@@ -1320,24 +1320,13 @@ func shouldApplyVerifiedFirst(filter *databaseFilterSearch) bool {
 		return true
 	}
 
-	// Is unclassified only.
+	// Unclassified only.
 	if filter.Tags.HasValues("!t") && slices.Compare(filter.Tags.All("!t"), []string{"unclassified"}) == 0 {
 		return true
 	}
 
-	var hasSpecialKinds bool
-	for _, k := range filter.Kinds {
-		hasSpecialKinds = hasSpecialKinds ||
-			k == model.CustomIONKindRepostOfArticle ||
-			k == model.CustomIONKindRepostOfEditableTextNote
-	}
-
-	// Assume special feed request.
-	if hasSpecialKinds && filter.Limit == 1 && len(filter.Authors) == 0 && len(filter.IDs) == 0 {
-		return true
-	}
-
-	return false
+	// For any single event request with some kind filter, apply verified first.
+	return filter.Limit == 1 && len(filter.Kinds) > 0 && len(filter.Authors) == 0 && len(filter.IDs) == 0
 }
 
 func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE, err error) {
