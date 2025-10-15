@@ -44,6 +44,7 @@ import (
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/storage"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
 const (
@@ -93,6 +94,9 @@ func TestMain(m *testing.M) {
 }
 
 func initServer(serverCtx context.Context, port uint16, opts ...storage.Option) *fixture.MockService {
+	validation.MustInit(serverCtx, validation.WithIONIdentityPublicKeys(func() []string {
+		return []string{}
+	}))
 	initStorage(serverCtx, opts...)
 	uploader := NewUploadHandler(serverCtx, false, nip11.NewFetcher(serverCtx))
 	return fixture.NewTestServer(

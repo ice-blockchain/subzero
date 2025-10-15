@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/auth"
 )
 
 func TestValidateOnBehalfAccess(t *testing.T) {
@@ -26,8 +27,8 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 
-		_, err := validateUserAttestation(t.Context(), ev, nil)
-		require.ErrorIs(t, err, errAttestationRecordNotFound)
+		_, err := auth.ValidateUserAttestation(t.Context(), ev, nil)
+		require.ErrorIs(t, err, auth.ErrAttestationRecordNotFound)
 	})
 
 	t.Run("Invalid attestation record", func(t *testing.T) {
@@ -53,7 +54,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
+		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
 		require.Error(t, err)
 	})
 
@@ -78,8 +79,8 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 
-		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, errAttestationRecordNotFound)
+		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
+		require.ErrorIs(t, err, auth.ErrAttestationRecordNotFound)
 	})
 
 	t.Run("Revoked attestation", func(t *testing.T) {
@@ -105,8 +106,8 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, errAttestationRecordRevoked)
+		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
+		require.ErrorIs(t, err, auth.ErrAttestationRecordRevoked)
 	})
 
 	t.Run("Expired attestation", func(t *testing.T) {
@@ -132,8 +133,8 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, errAttestationRecordExpired)
+		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
+		require.ErrorIs(t, err, auth.ErrAttestationRecordExpired)
 	})
 
 	t.Run("Not yet active attestation", func(t *testing.T) {
@@ -159,8 +160,8 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		_, err := validateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, errAttestationRecordIsNotActive)
+		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
+		require.ErrorIs(t, err, auth.ErrAttestationRecordIsNotActive)
 	})
 
 	t.Run("Valid attestation", func(t *testing.T) {
@@ -185,7 +186,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		}
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-		kinds, err := validateUserAttestation(t.Context(), ev, attestationEv)
+		kinds, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
 		require.NoError(t, err)
 		require.Contains(t, kinds, 10)
 		require.Contains(t, kinds, 22)

@@ -12,8 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 
-	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/auth"
 )
 
 type (
@@ -127,22 +127,27 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 	if t.ev.PubKey == t.MasterPubKey() {
 		return nil
 	}
-	attestationEventIt := query.GetStoredEvents(ctx, model.Filter{
-		Kinds: []int{model.CustomIONKindAttestation},
-		Tags:  model.TagMap{}.SetLiterals("p", t.PubKey()),
-	})
-	var allowed bool
-	for attestation, err := range attestationEventIt {
+	relayUrl := ""
+	if urlTag := t.ev.Tags.GetFirst([]string{"u"}); urlTag != nil && len(*urlTag) > 1 {
+		urlValue, err := url.Parse(urlTag.Value())
 		if err != nil {
-			return errors.Wrapf(err, "failed to get attestation event")
+			return errors.Wrapf(ErrTokenInvalid, "failed to parse url tag with %q: %v", urlTag.Value(), err)
 		}
-		allowed, err = model.OnBehalfIsAccessAllowed(attestation.Tags, t.ev.PubKey, kind, model.Timestamp(0).Set(now))
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse attestation event")
+		switch urlValue.Scheme {
+		case "https":
+			urlValue.Scheme = "wss"
+		case "http":
+			urlValue.Scheme = "ws"
+		default:
+			urlValue.Scheme = "wss"
 		}
-		break
+		relayUrl = urlValue.Scheme + "://" + urlValue.Host
 	}
-	if !allowed {
+	kinds, err := auth.ValidateUserAccess(ctx, relayUrl, &t.ev)
+	if err != nil {
+		return errors.Wrapf(err, "failed to validate on-behalf access")
+	}
+	if _, ok := kinds[kind]; len(kinds) != 0 && !ok {
 		return errors.Wrapf(model.ErrOnBehalfAccessDenied, "kind %d", kind)
 	}
 	return nil
