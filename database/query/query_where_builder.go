@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/errors"
+	"github.com/goccy/go-json"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
@@ -314,6 +315,18 @@ func (b *queryBuilder) ApplyFilterTagMarkers(filterID string, markers ...databas
 	}
 }
 
+func (*queryBuilder) isCommonLang(code *string) bool {
+	if code == nil {
+		return false
+	}
+
+	codes := map[string]struct{}{
+		"en": {},
+	}
+	_, ok := codes[*code]
+	return ok
+}
+
 func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 	if len(tags) == 0 {
 		return
@@ -329,12 +342,28 @@ func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 	}
 
 	var tagID, tagValue uint64
+main:
 	for tagName, tagValues := range tags {
 		tagID++
 
-		if tagName == "t" || tagName == "!t" {
+		switch tagName {
+		case "t", "!t":
 			// Handled in ApplyFilterTtags.
-			continue
+			continue main
+		case "l":
+			// Applying language filter here for some common languages is cheaper than using external `event_tags` table with `EXISTS` clause.
+			if len(tagValues) == 1 &&
+				len(tagValues[0]) == 2 && // [ lang, "ISO-639-1" ]
+				b.isCommonLang(tagValues[0][0]) &&
+				tagValues[0][1] != nil && // "ISO-639-1" != nil
+				*tagValues[0][1] == "ISO-639-1" {
+				val, _ := json.Marshal(model.Tags{{tagName, *tagValues[0][0], *tagValues[0][1]}}) // [ [ "l", "en", "ISO-639-1" ] ].
+				b.MaybeAND()
+				b.WriteString(`e.tags @> cast(:`)
+				b.WriteValue(filterID, "langtag"+strconv.FormatUint(tagID, 10), string(val))
+				b.WriteString(` as jsonb)`)
+				continue main
+			}
 		}
 
 		queryTagName := tagName
@@ -636,7 +665,7 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 	}
 
 	if len(repostKinds) > 0 {
-		kinds = append(filter.Kinds, nostr.KindGenericRepost)
+		kinds = append(kinds, nostr.KindGenericRepost)
 		b.MaybeAND()
 		b.WriteString(`(case when e.kind = 16
 		then
