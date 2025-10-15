@@ -19,6 +19,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/auth"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
@@ -35,11 +36,6 @@ var (
 		nostr.KindRepost:                    {},
 		nostr.KindGenericRepost:             {},
 	}
-
-	errAttestationRecordNotFound    = errors.New("attestation record not found")
-	errAttestationRecordExpired     = errors.New("attestation record is expired")
-	errAttestationRecordRevoked     = errors.New("attestation record is revoked")
-	errAttestationRecordIsNotActive = errors.New("attestation record is not active yet")
 )
 
 func generateChallenge(hints ...string) string {
@@ -411,7 +407,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event) error {
 	if err := validation.Validate(ctx, model.Events(events)); err != nil {
 		if errors.Is(err, validation.ErrEphemeralForbidden) {
-			return errRelayAuthoritative
+			return auth.ErrRelayNotAuthoritative
 		}
 		return errors.Wrapf(err, "event validation failed: %s", model.Events(events).String())
 	}

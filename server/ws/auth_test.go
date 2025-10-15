@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/auth"
 )
 
 func TestHandleAuth(t *testing.T) {
@@ -196,7 +197,7 @@ func TestHandleAuth(t *testing.T) {
 
 		resp := h.handleAuth(t.Context(), w, authEvent)
 		require.False(t, resp.OK)
-		require.Equal(t, errRelayNotAuthoritative.Error(), resp.Reason)
+		require.Equal(t, auth.ErrRelayNotAuthoritative.Error(), resp.Reason)
 	})
 }
 

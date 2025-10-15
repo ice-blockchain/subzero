@@ -61,9 +61,7 @@ type (
 )
 
 var (
-	errAuthRequired          = errors.New("auth-required: please authenticate first by sending AUTH message")
-	errRelayReadOnly         = errors.New("relay-is-read-only: read only")
-	errRelayNotAuthoritative = errors.New("relay-is-not-authoritative: relay is not authoritative for the user")
-	errRelayAuthoritative    = errors.New("relay-is-authoritative: relay is authoritative for the user")
-	errDuplicate             = errors.New("duplicate: event with that data already exists")
+	errAuthRequired  = errors.New("auth-required: please authenticate first by sending AUTH message")
+	errRelayReadOnly = errors.New("relay-is-read-only: read only")
+	errDuplicate     = errors.New("duplicate: event with that data already exists")
 )
