@@ -5,6 +5,7 @@ package query
 import (
 	"testing"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -511,5 +512,36 @@ func TestParseNostrFilterText(t *testing.T) {
 		f, err := parseNostrFilter(model.Filter{Search: `some text " include:dependencies:kind1>kind0`})
 		require.NoError(t, err)
 		require.Equal(t, "some text \"", f.Search)
+	})
+}
+
+func TestInlineLangFilter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Common", func(t *testing.T) {
+		f := model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+			Tags:  model.TagMap{}.SetLiterals("l", "en", "ISO-639-1"),
+		}
+
+		q, params, err := helperGenerateSQLQuery(t, f)
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", q, params)
+		require.Len(t, params, 3)
+		helperEnsureParams(t, q, params)
+		require.Contains(t, params, "filter0_langtag1")
+		require.Equal(t, params["filter0_langtag1"], `[["l","en","ISO-639-1"]]`)
+	})
+	t.Run("Uncommon", func(t *testing.T) {
+		f := model.Filter{
+			Kinds: []int{nostr.KindTextNote},
+			Tags:  model.TagMap{}.SetLiterals("l", "xxx", "ISO-639-1"),
+		}
+
+		q, params, err := helperGenerateSQLQuery(t, f)
+		require.NoError(t, err)
+		t.Logf("stmt: %s (%+v)", q, params)
+		require.Len(t, params, 5)
+		require.Contains(t, params, `filter0_tagvalue0`)
 	})
 }
