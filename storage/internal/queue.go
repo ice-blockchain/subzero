@@ -16,8 +16,6 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 	"github.com/rs/zerolog/log"
-
-	"github.com/ice-blockchain/subzero/database/query"
 )
 
 type (
@@ -34,6 +32,9 @@ var driver struct {
 }
 
 func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if c.river == nil {
 		return nil
 	}
@@ -43,6 +44,10 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 		FilePath:    filePath,
 	}, nil)
 	if err != nil {
+		if isDBDead(err) {
+			err = errors.Join(err, c.db.switchMaster(ctx, err))
+			return c.FileUploadAsync(ctx, filePath, contentType, fileName)
+		}
 		return errors.Wrapf(err, "failed to insert job for file %v upload", fileName)
 	}
 	log.Debug().Str("context", "STORAGE").
@@ -61,44 +66,52 @@ func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error 
 	if err := river.AddWorkerSafely[*jobParams](workers, c); err != nil {
 		return errors.Wrap(err, "failed to register cdnUpload worker")
 	}
-	query.RequestDatabaseConn(ctx, query.WithDDLFunc("river", func(ctx context.Context, pool *pgxpool.Pool) error {
-		driver.Do(func() {
-			driver.Driver = riverpgxv5.New(pool)
-		})
-		migrator, err := rivermigrate.New(driver.Driver, &rivermigrate.Config{})
-		if err != nil {
-			return errors.Wrap(err, "cannot create river migrator")
-		}
-		_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
-		return errors.Wrap(err, "failed to migrate river")
-	}), query.WithMasterSwitchCallback(func(ctx context.Context, newMaster *pgxpool.Pool) (err error) {
-		if c.river == nil {
-			return nil
-		}
-		if err = c.river.Stop(ctx); err != nil {
-			return errors.Wrap(err, "failed to stop river for old master")
-		}
-		c.river = nil
-		driver.Driver = nil
-		driver.Once = sync.Once{}
-		driver.Do(func() {
-			driver.Driver = riverpgxv5.New(newMaster)
-		})
-		c.river, err = river.NewClient[pgx.Tx](driver.Driver, &river.Config{
-			Queues: map[string]river.QueueConfig{
-				river.QueueDefault: {MaxWorkers: cfg.MaxQueueWorkers},
-			},
-			Workers:    workers,
-			JobTimeout: 10 * time.Minute,
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to create river client with switched master")
-		}
-		if err = c.river.Start(ctx); err != nil {
-			return errors.Wrap(err, "failed to start river after master switch")
-		}
-		return nil
-	}))
+	var err error
+	c.db, err = NewDBConn(ctx,
+		WithWriteURLs(cfg.DBWriteUrls...),
+		WithMigration("river", func(ctx context.Context, pool *pgxpool.Pool) error {
+			driver.Do(func() {
+				driver.Driver = riverpgxv5.New(pool)
+			})
+			migrator, err := rivermigrate.New(driver.Driver, &rivermigrate.Config{})
+			if err != nil {
+				return errors.Wrap(err, "cannot create river migrator")
+			}
+			_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
+			return errors.Wrap(err, "failed to migrate river")
+		}),
+		//query.WithMasterSwitchCallback(func(ctx context.Context, newMaster *pgxpool.Pool) (err error) {
+		//	if c.river == nil {
+		//		return nil
+		//	}
+		//	if err = c.river.Stop(ctx); err != nil {
+		//		return errors.Wrap(err, "failed to stop river for old master")
+		//	}
+		//	c.river = nil
+		//	driver.Driver = nil
+		//	driver.Once = sync.Once{}
+		//	driver.Do(func() {
+		//		driver.Driver = riverpgxv5.New(newMaster)
+		//	})
+		//	c.river, err = river.NewClient[pgx.Tx](driver.Driver, &river.Config{
+		//		Queues: map[string]river.QueueConfig{
+		//			river.QueueDefault: {MaxWorkers: cfg.MaxQueueWorkers},
+		//		},
+		//		Workers:    workers,
+		//		JobTimeout: 10 * time.Minute,
+		//	})
+		//	if err != nil {
+		//		return errors.Wrap(err, "failed to create river client with switched master")
+		//	}
+		//	if err = c.river.Start(ctx); err != nil {
+		//		return errors.Wrap(err, "failed to start river after master switch")
+		//	}
+		//	return nil
+		//})
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create db connection")
+	}
 
 	riverClient, err := river.NewClient[pgx.Tx](driver.Driver, &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -147,5 +160,8 @@ func (c *client) Stop(ctx context.Context) error {
 	if c.river == nil {
 		return nil
 	}
-	return errors.Wrap(c.river.Stop(ctx), "error stopping river")
+	if err := c.river.Stop(ctx); err != nil {
+		return errors.Wrap(err, "error stopping river")
+	}
+	return errors.Wrap(c.db.Close(), "error closing db")
 }

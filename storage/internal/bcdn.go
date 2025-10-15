@@ -27,15 +27,17 @@ type (
 		CdnDownloadURL(filename string) string
 	}
 	CdnConfig struct {
-		AccessKey       string `yaml:"access-key"`
-		URLUpload       string `yaml:"url-upload"`
-		URLDownload     string `yaml:"url-download"`
-		MaxQueueWorkers int    `yaml:"max-queue-workers"`
+		AccessKey       string   `yaml:"access-key"`
+		URLUpload       string   `yaml:"url-upload"`
+		URLDownload     string   `yaml:"url-download"`
+		MaxQueueWorkers int      `yaml:"max-queue-workers"`
+		DBWriteUrls     []string `yaml:"db-write-urls"`
 	}
 	client struct {
 		river.WorkerDefaults[*jobParams]
 		config *CdnConfig
 		river  *river.Client[pgx.Tx]
+		db     *DB
 	}
 )
 

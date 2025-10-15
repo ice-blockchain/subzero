@@ -15,19 +15,15 @@ import (
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
-	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 var (
 	globalDB struct {
 		Client *dbClient
-		Conf   *Config
 		Once   sync.Once
 	}
-	UsedDatabaseStorage      atomic.Uint64
-	WithDDLFunc              = connector.WithDDLFunc
-	WithMasterSwitchCallback = connector.WithMasterSwitchCallback
+	UsedDatabaseStorage atomic.Uint64
 )
 
 type (
@@ -137,7 +133,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 		if !conf.RunDDL {
 			log.Warn().Msg("database DDL execution is disabled")
 		}
-		globalDB.Conf = conf
+
 		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL).
 			WithPrivateKey(conf.PrivateKey).
 			WithRelayURL(conf.RelayURL)
