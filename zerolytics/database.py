@@ -9,12 +9,11 @@ class DatabaseManager:
     """Database operations and statistics calculation"""
     
     @staticmethod
-    def get_daily_queries(days=7):
-        
+    def get_daily_queries():
         return {
-            "reactions_per_day": f"""
+            "reactions_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 reaction_counts AS (
                     SELECT 
@@ -22,7 +21,7 @@ class DatabaseManager:
                         COUNT(*) AS event_count
                     FROM events
                     WHERE kind = 7 AND NOT has_ephemeral_attestation AND NOT deleted AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -32,9 +31,9 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "messages_per_day": f"""
+            "messages_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 message_counts AS (
                     SELECT 
@@ -42,7 +41,7 @@ class DatabaseManager:
                         COUNT(*) AS event_count
                     FROM events
                     WHERE kind = 1059 AND NOT has_ephemeral_attestation AND NOT deleted AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -52,9 +51,9 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "reposts_per_day": f"""
+            "reposts_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 repost_counts AS (
                     SELECT 
@@ -62,7 +61,7 @@ class DatabaseManager:
                         COUNT(*) AS event_count
                     FROM events
                     WHERE kind IN (6, 16) AND NOT has_ephemeral_attestation AND NOT deleted AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -72,9 +71,9 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "comments_per_day": f"""
+            "comments_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 comment_counts AS (
                     SELECT 
@@ -82,7 +81,7 @@ class DatabaseManager:
                         COUNT(*) AS event_count
                     FROM events
                     WHERE kind IN (1, 30175) AND NOT has_ephemeral_attestation AND is_reply = true AND NOT deleted AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -92,9 +91,9 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "articles_per_day": f"""
+            "articles_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 article_counts AS (
                     SELECT 
@@ -102,7 +101,7 @@ class DatabaseManager:
                         COUNT(*) AS event_count
                     FROM events
                     WHERE kind = 30023 AND NOT has_ephemeral_attestation AND NOT deleted AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -112,7 +111,7 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "stories_per_day": f"""
+            "stories_per_day": """
                 WITH date_series AS (
                     SELECT generate_series(date_trunc('day', NOW() - interval '1 days'), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
@@ -139,9 +138,9 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "profile_updates_per_day": f"""
+            "profile_updates_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 profile_counts AS (
                     SELECT 
@@ -149,7 +148,7 @@ class DatabaseManager:
                         COUNT(*) AS event_count
                     FROM events
                     WHERE kind = 0 AND NOT has_ephemeral_attestation AND NOT deleted AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -159,9 +158,9 @@ class DatabaseManager:
                 ORDER BY ds.day ASC;
             """,
             
-            "posts_per_day": f"""
+            "posts_per_day": """
                 WITH date_series AS (
-                    SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                    SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                 ),
                 post_counts AS (
                     SELECT
@@ -174,7 +173,7 @@ class DatabaseManager:
                         AND expiration IS NULL
                         AND NOT deleted
                         AND NOT hidden
-                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                        AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                     GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                 )
                 SELECT 
@@ -183,9 +182,9 @@ class DatabaseManager:
                 FROM date_series ds LEFT JOIN post_counts pc ON ds.day = pc.day
                 ORDER BY ds.day ASC;
             """,
-                "videos_per_day": f"""
+                "videos_per_day": """
                     WITH date_series AS (
-                        SELECT generate_series(date_trunc('day', NOW() - interval '{days-1} days'), date_trunc('day', NOW()), '1 day')::date AS day
+                        SELECT generate_series(date_trunc('day', NOW() - (%s || ' days')::interval), date_trunc('day', NOW()), '1 day')::date AS day
                     ),
                     video_counts AS (
                         SELECT
@@ -197,7 +196,7 @@ class DatabaseManager:
                             AND NOT e.has_ephemeral_attestation
                             AND NOT e.deleted
                             AND NOT e.hidden
-                            AND lookup_created_at >= EXTRACT(epoch FROM NOW() - interval '{days} days') * 1000000000
+                            AND lookup_created_at >= EXTRACT(epoch FROM NOW() - (%s || ' days')::interval) * 1000000000
                         GROUP BY DATE(to_timestamp(lookup_created_at::double precision / 1000000000))
                     )
                     SELECT 
@@ -304,7 +303,8 @@ class DatabaseManager:
         }
         
         try:
-            daily_queries = cls.get_daily_queries(days)
+            daily_queries = cls.get_daily_queries()
+            days_minus_1 = days - 1
             
             with psycopg.connect(conn_string) as conn:
                 with conn.cursor() as cur:
@@ -322,7 +322,7 @@ class DatabaseManager:
                         {"topic": r[0], "post_count": r[1]} for r in cur.fetchall()
                     ]
                     
-                    cur.execute(daily_queries["posts_per_day"])
+                    cur.execute(daily_queries["posts_per_day"], (days_minus_1, days))
                     results["posts_per_day"] = [
                         {"post_date": str(r[0]), "post_count": r[1]} for r in cur.fetchall()
                     ]
@@ -363,27 +363,26 @@ class DatabaseManager:
                         {"database_name": "Current Database", "profile_count": profile_count}
                     ]
                     
-                    cur.execute(daily_queries["reactions_per_day"])
+                    cur.execute(daily_queries["reactions_per_day"], (days_minus_1, days))
                     results["reactions_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
                     
-                    cur.execute(daily_queries["messages_per_day"])
+                    cur.execute(daily_queries["messages_per_day"], (days_minus_1, days))
                     results["messages_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
                     
-                    cur.execute(daily_queries["reposts_per_day"])
+                    cur.execute(daily_queries["reposts_per_day"], (days_minus_1, days))
                     results["reposts_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
-                    
-                    cur.execute(daily_queries["comments_per_day"])
+                    cur.execute(daily_queries["comments_per_day"], (days_minus_1, days))
                     results["comments_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
                     
-                    cur.execute(daily_queries["articles_per_day"])
+                    cur.execute(daily_queries["articles_per_day"], (days_minus_1, days))
                     results["articles_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
@@ -393,12 +392,12 @@ class DatabaseManager:
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
                     
-                    cur.execute(daily_queries["videos_per_day"])
+                    cur.execute(daily_queries["videos_per_day"], (days_minus_1, days))
                     results["videos_per_day"] = [
                         {"video_date": str(r[0]), "video_count": r[1]} for r in cur.fetchall()
                     ]
                     
-                    cur.execute(daily_queries["profile_updates_per_day"])
+                    cur.execute(daily_queries["profile_updates_per_day"], (days_minus_1, days))
                     results["profile_updates_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
                     ]
