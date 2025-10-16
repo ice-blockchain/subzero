@@ -1411,11 +1411,10 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 			switch fields[i] {
 			case "e.tags":
 				// Do not load large tags field if we are going to ignore it anyway.
-				fields[i] = `cast('[]' as jsonb) as tags`
+				// But keep the master pubkey for the later use.
+				fields[i] = `jsonb_build_array(jsonb_build_array('b', e.master_pubkey)) as tags`
 			case "e.sig":
-				fields[i] = `'DROP' as sig`
-			case "e.pubkey":
-				fields[i] = `e.master_pubkey as pubkey`
+				fields[i] = `'PACK' as sig`
 			}
 		}
 	}
