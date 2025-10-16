@@ -202,7 +202,7 @@ func WithLogging(enabled bool) Option {
 }
 
 func WithFieldNameMapper(mapper NameMapperFunc) Option {
-	return func(context.Context, *DB) error {
+	return func(_ context.Context, db *DB) error {
 		scanApi, err := pgxscan.NewDBScanAPI(dbscan.WithFieldNameMapper(mapper))
 		if err != nil {
 			return errors.Wrap(err, "cannot create db scan api")
@@ -212,8 +212,7 @@ func WithFieldNameMapper(mapper NameMapperFunc) Option {
 			return errors.Wrap(err, "cannot create scan api")
 		}
 
-		// Override the default API with the new one with the custom field name mapper.
-		pgxscan.DefaultAPI = api
+		db.scanner = api
 
 		return nil
 	}
@@ -231,18 +230,6 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, ddl fs.FS) error {
 	m, err := migrate.NewMigrator(ctx, conn.Conn(), schemaTable)
 	if err != nil {
 		return errors.Wrap(err, "cannot create migrator")
-	}
-
-	// TODO: remove it later.
-	// Force current version to 12 if it's at version 0 AND there are tables that
-	// should not be there in a new database.
-	forceUpgradeToVersionStmt := `update ` + schemaTable +
-		` set version = 12 where version = 0 AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'trigger_events_after_delete_vote_dec_counter')`
-	r, err := conn.Exec(ctx, forceUpgradeToVersionStmt)
-	if err != nil {
-		return errors.Wrap(err, "cannot force upgrade to version 12")
-	} else if n := r.RowsAffected(); n > 0 {
-		log.Warn().Str("context", "DATABASE").Int64("rows_affected", n).Msg("forced upgrade to version 12")
 	}
 
 	err = m.LoadMigrations(ddl)
@@ -272,6 +259,7 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 		readLB:  new(readLB),
 		writeLB: new(writeLB),
 		closed:  new(atomic.Bool),
+		scanner: pgxscan.DefaultAPI,
 		logging: false, // TODO: make it true when full sql logging is required.
 	}
 
@@ -518,7 +506,7 @@ func (db *DB) waitPoolFreeToClose(ctx context.Context, oldMaster *pgxpool.Pool) 
 		if stat.TotalConns() == 0 || stat.TotalConns() == stat.IdleConns() {
 			return
 		}
-		if err := SleepContext(ctx, 10*time.Second); err != nil {
+		if err := sleepContext(ctx, 10*time.Second); err != nil {
 			return
 		}
 	}
@@ -534,7 +522,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 				Err(sanitizeErr(err)).
 				Uint64("preferred_index", preferredIdx).
 				Msg("cannot connect to preferred master at index, still down")
-			if err := SleepContext(ctx, 10*time.Second); err != nil {
+			if err := sleepContext(ctx, 10*time.Second); err != nil {
 				return
 			}
 			continue
@@ -560,7 +548,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 				return
 			}
 			conn.Close()
-			if err := SleepContext(ctx, 10*time.Second); err != nil {
+			if err := sleepContext(ctx, 10*time.Second); err != nil {
 				return
 			}
 			continue
@@ -572,7 +560,7 @@ func (db *DB) connectToPreferredMasterOnceAvailable(ctx context.Context, preferr
 			Err(sanitizeErr(err)).
 			Uint64("preferred_index", preferredIdx).
 			Msg("cannot connect to preferred master at index, still down")
-		if err := SleepContext(ctx, 10*time.Second); err != nil {
+		if err := sleepContext(ctx, 10*time.Second); err != nil {
 			return
 		}
 	}
@@ -656,10 +644,18 @@ func (db *DB) Log(ctx context.Context, level tracelog.LogLevel, msg string, data
 
 	event.Msg(msg)
 }
-func SleepContext(ctx context.Context, delay time.Duration) error {
+
+func sleepContext(ctx context.Context, delay time.Duration) error {
 	select {
 	case <-time.After(delay):
 	case <-ctx.Done():
 	}
 	return ctx.Err()
+}
+
+func getScanner(d any) *pgxscan.API {
+	if db, ok := d.(*DB); ok {
+		return db.scanner
+	}
+	return pgxscan.DefaultAPI
 }

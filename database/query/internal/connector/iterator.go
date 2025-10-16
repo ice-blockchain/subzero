@@ -9,7 +9,7 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 )
 
-func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
+func iteratorInternal[T any](ctx context.Context, scanner *pgxscan.API, db Querier, sql string, args ...any) (Iterator[*T], error) {
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, errors.Wrap(parseError(err), "failed to execute query")
@@ -17,11 +17,11 @@ func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args .
 	return func(yield func(*T, error) bool) {
 		defer rows.Close()
 
-		scanner := pgxscan.NewRowScanner(rows)
+		rowScanner := scanner.NewRowScanner(rows)
 		for rows.Next() && ctx.Err() == nil {
 			var data T
 
-			err := scanner.Scan(&data)
+			err := rowScanner.Scan(&data)
 			if !yield(&data, errors.Wrap(parseError(err), "failed to scan row")) {
 				return
 			}
@@ -33,15 +33,17 @@ func iteratorInternal[T any](ctx context.Context, db Querier, sql string, args .
 }
 
 func SelectIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
+	scanner := getScanner(db)
 	if pool, ok := db.(*DB); ok {
 		db = pool.replica()
 	}
-	return iteratorInternal[T](ctx, db, sql, args...)
+	return iteratorInternal[T](ctx, scanner, db, sql, args...)
 }
 
 func ExecIterator[T any](ctx context.Context, db Querier, sql string, args ...any) (Iterator[*T], error) {
+	scanner := getScanner(db)
 	if pool, ok := db.(*DB); ok {
 		db = pool.primary()
 	}
-	return iteratorInternal[T](ctx, db, sql, args...)
+	return iteratorInternal[T](ctx, scanner, db, sql, args...)
 }
