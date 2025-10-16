@@ -1,0 +1,47 @@
+<!--
+ SPDX-License-Identifier: ice License 1.0
+-->
+
+{% extends "base.html" %}
+
+{% block title %}{{ dashboard_name }} | Stats for {{ server_alias }}{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/charts.css') }}">
+{% endblock %}
+
+{% block content %}
+    <div class="header">
+        <h1>Stats for: {{ server_alias }}</h1>
+        <div class="header-controls">
+            <div class="period-selector">
+                <label for="period-select">Timeline Period:</label>
+                <select id="period-select">
+                    <option value="7">Last 7 Days</option>
+                    <option value="30">Last 30 Days</option>
+                </select>
+            </div>
+            <button id="refresh-btn">Refresh</button>
+        </div>
+    </div>
+    <a href="{{ url_for('home') }}" class="back-link">&larr; Back to Server List</a>
+    <div id="content-area">
+        <div class="loading">Loading data...</div>
+    </div>
+    <footer class="footer-note">
+        * Topics with fewer than {{ min_posts }} posts are not shown.
+    </footer>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        const serverAlias = "{{ server_alias }}";
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeStatsPage(serverAlias);
+        });
+    </script>
+{% endblock %}
