@@ -35,9 +35,10 @@ type (
 	}
 	client struct {
 		river.WorkerDefaults[*jobParams]
-		config *CdnConfig
-		river  *river.Client[pgx.Tx]
-		db     *DB
+		workers *river.Workers
+		config  *CdnConfig
+		river   *river.Client[pgx.Tx]
+		db      *DB
 	}
 )
 

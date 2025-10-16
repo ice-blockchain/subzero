@@ -42,10 +42,32 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 		ContentType: contentType,
 		FileName:    fileName,
 		FilePath:    filePath,
-	}, nil)
+	}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true}})
 	if err != nil {
 		if isDBDead(err) {
 			err = errors.Join(err, c.db.switchMaster(ctx, err))
+			if err = c.river.Stop(ctx); err != nil {
+				return errors.Wrap(err, "failed to stop river for old master")
+			}
+			c.river = nil
+			driver.Driver = nil
+			driver.Once = sync.Once{}
+			driver.Do(func() {
+				driver.Driver = riverpgxv5.New(c.db.primary())
+			})
+			c.river, err = river.NewClient[pgx.Tx](driver.Driver, &river.Config{
+				Queues: map[string]river.QueueConfig{
+					river.QueueDefault: {MaxWorkers: c.config.MaxQueueWorkers},
+				},
+				Workers:    c.workers,
+				JobTimeout: 10 * time.Minute,
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to create river client with switched master")
+			}
+			if err = c.river.Start(ctx); err != nil {
+				return errors.Wrap(err, "failed to start river after master switch")
+			}
 			return c.FileUploadAsync(ctx, filePath, contentType, fileName)
 		}
 		return errors.Wrapf(err, "failed to insert job for file %v upload", fileName)
@@ -62,8 +84,8 @@ func (j *jobParams) Kind() string {
 	return "cdnUpload"
 }
 func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error {
-	workers := river.NewWorkers()
-	if err := river.AddWorkerSafely[*jobParams](workers, c); err != nil {
+	c.workers = river.NewWorkers()
+	if err := river.AddWorkerSafely[*jobParams](c.workers, c); err != nil {
 		return errors.Wrap(err, "failed to register cdnUpload worker")
 	}
 	var err error
@@ -80,34 +102,6 @@ func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error 
 			_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
 			return errors.Wrap(err, "failed to migrate river")
 		}),
-		//query.WithMasterSwitchCallback(func(ctx context.Context, newMaster *pgxpool.Pool) (err error) {
-		//	if c.river == nil {
-		//		return nil
-		//	}
-		//	if err = c.river.Stop(ctx); err != nil {
-		//		return errors.Wrap(err, "failed to stop river for old master")
-		//	}
-		//	c.river = nil
-		//	driver.Driver = nil
-		//	driver.Once = sync.Once{}
-		//	driver.Do(func() {
-		//		driver.Driver = riverpgxv5.New(newMaster)
-		//	})
-		//	c.river, err = river.NewClient[pgx.Tx](driver.Driver, &river.Config{
-		//		Queues: map[string]river.QueueConfig{
-		//			river.QueueDefault: {MaxWorkers: cfg.MaxQueueWorkers},
-		//		},
-		//		Workers:    workers,
-		//		JobTimeout: 10 * time.Minute,
-		//	})
-		//	if err != nil {
-		//		return errors.Wrap(err, "failed to create river client with switched master")
-		//	}
-		//	if err = c.river.Start(ctx); err != nil {
-		//		return errors.Wrap(err, "failed to start river after master switch")
-		//	}
-		//	return nil
-		//})
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create db connection")
@@ -117,7 +111,7 @@ func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error 
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: cfg.MaxQueueWorkers},
 		},
-		Workers:    workers,
+		Workers:    c.workers,
 		JobTimeout: 10 * time.Minute,
 	})
 	if err != nil {

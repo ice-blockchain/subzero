@@ -28,6 +28,7 @@ import (
 	"github.com/xssnick/tonutils-go/adnl/overlay"
 	"github.com/xssnick/tonutils-go/tl"
 	"github.com/xssnick/tonutils-storage/storage"
+	"golang.org/x/sync/errgroup"
 )
 
 func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
@@ -438,4 +439,43 @@ func readString(part *multipart.Part, name string) (string, error) {
 		return "", errors.Wrapf(err, "failed to read %v", name)
 	}
 	return string(b[:read]), nil
+}
+
+func (c *client) forceUploadExistingFiles(ctx context.Context) error {
+	rootPath := c.rootStoragePath
+	userDirs, err := os.ReadDir(rootPath)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to list users in storage")
+	}
+	var egroup errgroup.Group
+	for _, userDir := range userDirs {
+		if !userDir.IsDir() || len(userDir.Name()) != ed25519.PublicKeySize*2 {
+			continue
+		}
+		egroup.Go(func() (err error) {
+			masterKey := userDir.Name()
+			userPath, _ := c.BuildUserPath(masterKey, "")
+			userFiles, err := os.ReadDir(userPath)
+			if err != nil {
+				return errors.Wrapf(err, "failed to list files for user %v", masterKey)
+			}
+			for _, uf := range userFiles {
+				fName := fmt.Sprintf("%v:%v%v", masterKey, uf.Name(), filepath.Ext(uf.Name()))
+				contentType := gomime.TypeByExtension(filepath.Ext(uf.Name()))
+				bag, _, berr := c.bagByUser(masterKey)
+				if berr == nil && bag != nil {
+					hData, herr := c.fileMeta(bag)
+					if herr == nil && hData != nil {
+						if meta, hasMeta := hData.FileMetadata[uf.Name()]; hasMeta {
+							contentType = meta.ContentType
+						}
+					}
+				}
+				err = errors.Join(err, errors.Wrapf(c.cdn.FileUploadAsync(ctx, filepath.Join(userPath, uf.Name()), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
+			}
+			return err
+		})
+	}
+
+	return errors.Wrapf(egroup.Wait(), "failed to init upload existing files")
 }
