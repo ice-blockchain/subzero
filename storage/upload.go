@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,10 +129,12 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 			}
 			defer f.Close()
 			if err = c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); err != nil {
-				return "", "", false, errors.Wrapf(err, "failed to upload file %v to cdn", fileNameForCdn)
+				if err = c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
+					return "", "", false, errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
+				}
 			}
 		} else {
-			if err = c.cdn.FileUploadAsync(ctx, fullFilePath, newFile.ContentType, fileNameForCdn); err != nil {
+			if err = c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
 				return "", "", false, errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
 			}
 		}
@@ -460,7 +463,7 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 				return errors.Wrapf(err, "failed to list files for user %v", masterKey)
 			}
 			for _, uf := range userFiles {
-				fName := fmt.Sprintf("%v:%v%v", masterKey, uf.Name(), filepath.Ext(uf.Name()))
+				fName := fmt.Sprintf("%v:%v", masterKey, uf.Name())
 				contentType := gomime.TypeByExtension(filepath.Ext(uf.Name()))
 				bag, _, berr := c.bagByUser(masterKey)
 				if berr == nil && bag != nil {
@@ -471,7 +474,7 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 						}
 					}
 				}
-				err = errors.Join(err, errors.Wrapf(c.cdn.FileUploadAsync(ctx, filepath.Join(userPath, uf.Name()), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
+				err = errors.Join(err, errors.Wrapf(c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(filepath.Join(userPath, uf.Name()), c.rootStoragePath), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
 			}
 			return err
 		})

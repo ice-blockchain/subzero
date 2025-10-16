@@ -449,7 +449,7 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 	close(loadMonitoringCh)
 	go cl.startDownloadsFromQueue(ctx)
 	if cl.config.Cdn.URLUpload != "" && cl.config.Cdn.AccessKey != "" {
-		cl.cdn = internal.NewCDNClient(ctx, &cl.config.Cdn)
+		cl.cdn = internal.NewCDNClient(ctx, &cl.config.Cdn, cl.config.RelayURL, cl.rootStoragePath)
 		if true {
 			if err = cl.forceUploadExistingFiles(ctx); err != nil {
 				log.Error().Err(err).Msg("failed to upload existing files")

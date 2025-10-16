@@ -905,7 +905,7 @@ func BenchmarkUploadFiles(b *testing.B) {
 			resp, err := nip96.Upload(ctx, nip96.UploadRequest{
 				Host:        "https://localhost:9910/files",
 				File:        img,
-				Filename:    uuid.NewString(),
+				Filename:    uuid.NewString() + filepath.Ext(fileName),
 				Caption:     "ice",
 				SK:          sk,
 				SignPayload: true,

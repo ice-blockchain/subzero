@@ -5,6 +5,8 @@ package internal
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +33,12 @@ var driver struct {
 	riverdriver.Driver[pgx.Tx]
 }
 
+func formatQueueName(name string) string {
+	return strings.ReplaceAll(
+		strings.ReplaceAll(strings.ReplaceAll(name, ":", "_"), "/", ""),
+		".", "_")
+}
+
 func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -42,7 +50,10 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 		ContentType: contentType,
 		FileName:    fileName,
 		FilePath:    filePath,
-	}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true}})
+	}, &river.InsertOpts{
+		UniqueOpts: river.UniqueOpts{ByArgs: true, ByQueue: false},
+		Queue:      formatQueueName(c.relayUrl),
+	})
 	if err != nil {
 		if isDBDead(err) {
 			err = errors.Join(err, c.db.switchMaster(ctx, err))
@@ -57,10 +68,11 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 			})
 			c.river, err = river.NewClient[pgx.Tx](driver.Driver, &river.Config{
 				Queues: map[string]river.QueueConfig{
-					river.QueueDefault: {MaxWorkers: c.config.MaxQueueWorkers},
+					formatQueueName(c.relayUrl): {MaxWorkers: c.config.MaxQueueWorkers},
 				},
 				Workers:    c.workers,
 				JobTimeout: 10 * time.Minute,
+				ID:         c.relayUrl,
 			})
 			if err != nil {
 				return errors.Wrap(err, "failed to create river client with switched master")
@@ -109,10 +121,11 @@ func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error 
 
 	riverClient, err := river.NewClient[pgx.Tx](driver.Driver, &river.Config{
 		Queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: cfg.MaxQueueWorkers},
+			formatQueueName(c.relayUrl): {MaxWorkers: cfg.MaxQueueWorkers},
 		},
 		Workers:    c.workers,
 		JobTimeout: 10 * time.Minute,
+		ID:         c.relayUrl,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to create river client")
@@ -139,9 +152,9 @@ func (c *client) Work(ctx context.Context, job *river.Job[*jobParams]) (err erro
 		Str("file", job.Args.FileName).
 		Int64("jobID", job.ID).
 		Msg("starting file upload to cdn")
-	f, err := os.Open(job.Args.FilePath)
+	f, err := os.Open(filepath.Join(c.rootPath, job.Args.FilePath))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) && job.Queue == formatQueueName(c.relayUrl) {
 			err = nil
 		}
 		return errors.Wrapf(err, "failed to open %v", job.Args.FilePath)

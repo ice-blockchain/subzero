@@ -24,7 +24,6 @@ type (
 		FileDelete(ctx context.Context, name string) error
 		Stop(ctx context.Context) error
 		FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error
-		CdnDownloadURL(filename string) string
 	}
 	CdnConfig struct {
 		AccessKey       string   `yaml:"access-key"`
@@ -35,19 +34,23 @@ type (
 	}
 	client struct {
 		river.WorkerDefaults[*jobParams]
-		workers *river.Workers
-		config  *CdnConfig
-		river   *river.Client[pgx.Tx]
-		db      *DB
+		workers  *river.Workers
+		config   *CdnConfig
+		relayUrl string
+		rootPath string
+		river    *river.Client[pgx.Tx]
+		db       *DB
 	}
 )
 
-func NewCDNClient(ctx context.Context, config *CdnConfig) CDNClient {
+func NewCDNClient(ctx context.Context, config *CdnConfig, relayUrl, rootPath string) CDNClient {
 	if config.MaxQueueWorkers == 0 {
-		config.MaxQueueWorkers = 100
+		config.MaxQueueWorkers = 95
 	}
 	c := &client{
-		config: config,
+		config:   config,
+		relayUrl: relayUrl,
+		rootPath: rootPath,
 	}
 	bootstrapCtx, cancelBootstrap := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelBootstrap()
@@ -78,15 +81,6 @@ func (c *client) cdnUploadURL(filename string) string {
 		return filename
 	}
 	u, _ := url.JoinPath(c.config.URLUpload, filename)
-
-	return u
-}
-
-func (c *client) CdnDownloadURL(filename string) string {
-	if strings.HasPrefix(filename, c.config.URLDownload) {
-		return filename
-	}
-	u, _ := url.JoinPath(c.config.URLDownload, filename)
 
 	return u
 }
@@ -125,8 +119,6 @@ func (c *client) FileDelete(ctx context.Context, name string) error {
 	if filename == "" {
 		return nil
 	}
-	downloadURL := c.CdnDownloadURL("*")
-	filename = strings.Replace(filename, downloadURL[:len(downloadURL)-1], "", 1)
 	resp, err := c.cdnReq(ctx).Delete(c.cdnUploadURL(filename))
 	if err == nil && (resp.IsSuccessState() || resp.GetStatusCode() == 404) {
 		return nil

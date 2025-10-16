@@ -8,8 +8,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
-	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -17,8 +15,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/fsnotify/fsnotify"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/storage/internal"
 )
 
 func calcFileHash(t *testing.T, path string) (string, error) {
@@ -149,31 +148,8 @@ func Reset() {
 }
 
 func VerifyFileOnCdn(tb *testing.T, ctx context.Context, fileName string) {
-	tb.Helper()
-	url := globalClient.Client.cdn.CdnDownloadURL(fileName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	require.NoError(tb, err)
-	httpClient := http.DefaultClient
-	resp, err := httpClient.Do(req)
-	defer func() {
-		require.NoError(tb, resp.Body.Close())
-	}()
-	require.NoError(tb, err)
-	assert.Equal(tb, http.StatusOK, resp.StatusCode, url)
-	bodyBytes, err := io.ReadAll(resp.Body)
-	require.NoError(tb, err)
-	assert.NotEmpty(tb, bodyBytes)
+	internal.VerifyFileOnCdn(tb, ctx, globalClient.Client.cdn, fileName)
 }
 func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, fileName string) {
-	tb.Helper()
-	url := globalClient.Client.cdn.CdnDownloadURL(fileName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	require.NoError(tb, err)
-	httpClient := http.DefaultClient
-	resp, err := httpClient.Do(req)
-	defer func() {
-		require.NoError(tb, resp.Body.Close())
-	}()
-	require.NoError(tb, err)
-	assert.Equal(tb, http.StatusNotFound, resp.StatusCode, url)
+	internal.VerifyFileDeletedOnCdn(tb, ctx, globalClient.Client.cdn, fileName)
 }
