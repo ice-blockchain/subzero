@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -30,9 +31,11 @@ func helperNewDatabase(t *testing.T) *dbClient {
 
 	connString, _ := mainTestContainer.MustTempDB(appcontext.TestContext(t))
 
+	priv, pub := model.GenerateKeyPair()
 	dbClient := openDatabase(appcontext.TestContext(t), []string{connString}, []string{connString}, true, connector.WithLogging(false)).
-		WithPrivateKey(model.GeneratePrivateKey()).
+		WithPrivateKey(priv).
 		WithRelayURL("wss://localhost")
+	t.Logf("generated private key: %v (public %v)", priv, pub)
 
 	return dbClient
 }
@@ -2094,37 +2097,86 @@ func TestEventEnricherKind0(t *testing.T) {
 		}
 	})
 	t.Run("Multiple queries", func(t *testing.T) {
-		user1 := model.GeneratePrivateKey()
-		user2 := model.GeneratePrivateKey()
+		bobMasterPriv, bobMasterPub := model.GenerateKeyPair()
+		bobDevicePriv, bobDevicePub := model.GenerateKeyPair()
+
+		aliceMasterPriv, aliceMasterPub := model.GenerateKeyPair()
+		aliceDevicePriv, aliceDevicePub := model.GenerateKeyPair()
+
+		t.Logf("Bob: ")
+		t.Logf("  master: %v", bobMasterPub)
+		t.Logf("  device: %v", bobDevicePub)
+
+		t.Logf("Alice: ")
+		t.Logf("  master: %v", aliceMasterPub)
+		t.Logf("  device: %v", aliceDevicePub)
+
+		t.Run("Attestation", func(t *testing.T) {
+			var aliceAttestation model.Event
+			aliceAttestation.Kind = model.CustomIONKindAttestation
+			aliceAttestation.CreatedAt = nostr.Now()
+			aliceAttestation.Tags = model.Tags{
+				{model.TagAttestationName, aliceDevicePub, "", model.CustomIONAttestationKindActive + ":1"},
+			}
+			require.NoError(t, aliceAttestation.SignWithAlg(aliceMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(t.Context(), &aliceAttestation))
+
+			var bobAttestation model.Event
+			bobAttestation.Kind = model.CustomIONKindAttestation
+			bobAttestation.CreatedAt = nostr.Now()
+			bobAttestation.Tags = model.Tags{
+				{model.TagAttestationName, bobDevicePub, "", model.CustomIONAttestationKindActive + ":1"},
+			}
+			require.NoError(t, bobAttestation.SignWithAlg(bobMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(t.Context(), &bobAttestation))
+		})
 
 		var ev1, ev2, ev3 model.Event
 		ev1.Kind = nostr.KindTextNote
 		ev1.CreatedAt = nostr.Now()
 		ev1.Content = "event 1"
-		require.NoError(t, ev1.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		ev1.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, aliceMasterPub},
+		}
+		require.NoError(t, ev1.SignWithAlg(aliceDevicePriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		ev2.Kind = nostr.KindProfileMetadata
 		ev2.CreatedAt = nostr.Now()
 		ev2.Content = "event 2 kind 0"
-		require.NoError(t, ev2.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		ev2.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, aliceMasterPub},
+		}
+		require.NoError(t, ev2.SignWithAlg(aliceDevicePriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		ev3.Kind = nostr.KindTextNote
 		ev3.CreatedAt = nostr.Now()
 		ev3.Content = "event 3"
-		require.NoError(t, ev3.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		ev3.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, bobMasterPub},
+		}
+		require.NoError(t, ev3.SignWithAlg(bobDevicePriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		require.NoError(t, db.AcceptEvents(t.Context(), &ev1, &ev2, &ev3))
 
+		randKey := testEvent.Random(t).PubKey
+		t.Logf("using random key %v as first filter", randKey)
 		events := helperSelectEvents(t, db,
 			model.Filter{
-				Authors: []string{testEvent.Random(t).PubKey},
+				Authors: []string{randKey},
 			},
 			model.Filter{
-				Kinds:  []int{nostr.KindTextNote},
-				Search: "include:dependencies:kind1>kind0",
+				Kinds:   []int{nostr.KindTextNote},
+				Authors: []string{aliceMasterPub, bobMasterPub},
+				Search:  "include:dependencies:kind1>kind0",
 			})
-		require.GreaterOrEqual(t, len(events), 5) // N original events, 1 auto-generated kind0 event for user2/ev3.
+		require.Len(t, events, 5) // 2 text notes, 1 kind0 for Alice, 1 generated-kind0 for Bob, and one random from the first filter.
 		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[len(events)-1].Kind)
+
+		var bobMetaEvent model.Event
+		require.NoError(t, json.Unmarshal([]byte(events[len(events)-1].Content), &bobMetaEvent))
+		require.Equal(t, nostr.KindProfileMetadata, bobMetaEvent.Kind)
+		keyTag := bobMetaEvent.GetTag("p").Value()
+		require.Equal(t, bobMasterPub, keyTag, "Kind0 event should be for Bob master key")
 	})
 }
 

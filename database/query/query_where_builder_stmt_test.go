@@ -103,8 +103,8 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("WithTimeRange", func(t *testing.T) {
-		ts1 := model.Timestamp(generateCreatedAt())
-		ts2 := model.Timestamp(generateCreatedAt())
+		ts1 := generateCreatedAt()
+		ts2 := generateCreatedAt()
 		filter := model.Filter{
 			Since: &ts1,
 			Until: &ts2,
@@ -117,7 +117,7 @@ func TestWhereBuilderSingleNoTags(t *testing.T) {
 		helperEnsureParams(t, q, params)
 	})
 	t.Run("WithTimestamp", func(t *testing.T) {
-		ts1 := model.Timestamp(generateCreatedAt())
+		ts1 := generateCreatedAt()
 		q, params, err := helperGenerateSQLQuery(t, model.Filter{
 			Since: &ts1,
 			Until: &ts1,
@@ -177,8 +177,8 @@ func TestWhereBuilderSingleWithTags(t *testing.T) {
 func TestWhereBuilderMulti(t *testing.T) {
 	t.Parallel()
 
-	ts1 := model.Timestamp(generateCreatedAt())
-	ts2 := model.Timestamp(generateCreatedAt())
+	ts1 := generateCreatedAt()
+	ts2 := generateCreatedAt()
 	filters := model.Filters{
 		{
 			IDs: []string{"123"},

@@ -163,13 +163,12 @@ func generateRandomString(n int) string {
 	return string(b)
 }
 
-func generateCreatedAt() int64 {
-	const (
-		start = 1645680655
-		end   = 1740375055
-	)
-
-	return rand.Int64N(end-start) + start
+func generateCreatedAt() model.Timestamp {
+	nsecJitter := rand.Int64N(1e9)
+	if rand.Int64N(10)%2 == 0 {
+		nsecJitter = -nsecJitter
+	}
+	return model.Timestamp(time.Now().UnixNano() + nsecJitter)
 }
 
 func helperGenerateEvent(
@@ -185,18 +184,20 @@ func helperGenerateEvent(
 
 	var ev model.Event
 
-	ev.ID = generateHexString()
-	ev.PubKey = generateHexString()
-	ev.CreatedAt = model.Timestamp(generateCreatedAt())
+	priv := model.GeneratePrivateKey()
+	_, pub2 := model.GenerateKeyPair()
+
+	ev.CreatedAt = generateCreatedAt()
 	ev.Kind = generateKind()
 	ev.Content = generateRandomString(rand.IntN(1024))
 
 	if withTags {
 		ev.Tags = []model.Tag{
 			{"o", generateHexString(), generateRandomString(rand.IntN(20)), generateRandomString(rand.IntN(30))},
-			{"p", generateHexString()},
+			{"p", pub2},
 		}
 	}
+	require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	var req databaseBatchRequest
 	require.NoError(t, req.Save(&ev, false))
