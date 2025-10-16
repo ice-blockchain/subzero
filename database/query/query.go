@@ -3,6 +3,7 @@
 package query
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/binary"
@@ -995,17 +996,31 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 		event.Tags = append(event.Tags, model.Tag{model.CustomIONTagOnBehalfOf, pubkey})
 	}
 
-	err := event.SignWithAlg(db.relayPrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519)
-	if err != nil {
-		panic(errors.Wrap(err, "failed to sign event"))
-	}
+	db.mustSignDatabaseEvent(event)
 }
 
 func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
-	if event.Sig == "DROP" {
+	if event.Sig == "PACK" {
 		// TODO: remove this later with kind3 hack.
-		return nil
-	} else if event.Sig != "" {
+		// Pack this event as meta event inside CustomIONKindEphemeralEmbedding.
+		ev := databaseEvent{Event: new(model.Event)}
+
+		// Clear signature to avoid confusion as it will be invalid anyway.
+		event.Sig = ""
+
+		ev.Kind = model.CustomIONKindEphemeralEmbedding
+		ev.CreatedAt = event.CreatedAt
+		ev.Content = event.String()
+		ev.Tags = model.Tags{
+			{"e", event.ID},
+			{"p", cmp.Or(event.MasterPubKey, event.PubKey)},
+		}
+		db.mustSignDatabaseEvent(&ev)
+
+		return &ev
+	}
+
+	if event.Sig != "" {
 		return event
 	}
 
