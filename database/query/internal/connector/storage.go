@@ -23,8 +23,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/jackc/tern/v2/migrate"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
-	"github.com/riverqueue/river/rivermigrate"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -255,16 +253,6 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, ddl fs.FS) error {
 	return m.Migrate(ctx)
 }
 
-func runRiverQueueMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	migrator, err := rivermigrate.New(riverpgxv5.New(pool), &rivermigrate.Config{})
-	if err != nil {
-		return errors.Wrap(err, "cannot create river migrator")
-	}
-	_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
-
-	return errors.Wrap(err, "cannot migrate river queue")
-}
-
 func New(ctx context.Context, opts ...Option) (*DB, error) {
 	val, ok := os.LookupEnv(envLoggigEnabled)
 	db := &DB{
@@ -299,13 +287,6 @@ func New(ctx context.Context, opts ...Option) (*DB, error) {
 
 		err := parseError(runMigrations(ctx, pool, db.ddl))
 		if err != nil {
-			if errors.Is(err, ErrReadOnly) {
-				log.Info().Err(err).Str("details", errors.FlattenDetails(err)).Msg("DDL failed because the database is in read-only mode")
-			} else {
-				return nil, errors.Wrap(err, "ddl failed")
-			}
-		}
-		if err = parseError(runRiverQueueMigrations(ctx, pool)); err != nil {
 			if errors.Is(err, ErrReadOnly) {
 				log.Info().Err(err).Str("details", errors.FlattenDetails(err)).Msg("DDL failed because the database is in read-only mode")
 			} else {
