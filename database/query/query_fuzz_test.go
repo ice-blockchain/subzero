@@ -135,7 +135,7 @@ func helperNewFilterFromElements(t *testing.T, fields []*structElement) model.Fi
 			value.Set(reflect.ValueOf(l))
 
 		case "Until", "Since":
-			ts := model.Timestamp(generateCreatedAt())
+			ts := generateCreatedAt()
 			value.Set(reflect.ValueOf(&ts))
 
 		case "Search":

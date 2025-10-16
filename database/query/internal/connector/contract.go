@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/georgysavva/scany/v2/dbscan"
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -38,6 +39,7 @@ type (
 		writeLB *writeLB
 		readLB  *readLB
 		closed  *atomic.Bool
+		scanner *pgxscan.API
 		ddl     fs.FS
 		logging bool
 	}

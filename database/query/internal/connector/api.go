@@ -102,11 +102,12 @@ func Get[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, e
 }
 
 func get[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, error) {
+	scanner := getScanner(db)
 	if pool, ok := db.(*DB); ok {
 		db = pool.replica()
 	}
 	resp := new(T)
-	if err := pgxscan.Get(ctx, db, resp, sql, args...); err != nil {
+	if err := scanner.Get(ctx, db, resp, sql, args...); err != nil {
 		return nil, parseError(err)
 	}
 
@@ -124,11 +125,12 @@ func Select[T any](ctx context.Context, db Querier, sql string, args ...any) ([]
 }
 
 func selectInternal[T any](ctx context.Context, db Querier, sql string, args ...any) ([]*T, error) {
+	scanner := getScanner(db)
 	if pool, ok := db.(*DB); ok {
 		db = pool.replica()
 	}
 	var resp []*T
-	if err := pgxscan.Select(ctx, db, &resp, sql, args...); err != nil {
+	if err := scanner.Select(ctx, db, &resp, sql, args...); err != nil {
 		return nil, parseError(err)
 	}
 
@@ -172,11 +174,12 @@ func ExecOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*
 }
 
 func execOne[T any](ctx context.Context, db Querier, sql string, args ...any) (*T, error) {
+	scanner := getScanner(db)
 	if pool, ok := db.(*DB); ok {
 		db = pool.primary()
 	}
 	resp := new(T)
-	if err := pgxscan.Get(ctx, db, resp, sql, args...); err != nil {
+	if err := scanner.Get(ctx, db, resp, sql, args...); err != nil {
 		return nil, parseError(err)
 	}
 
@@ -211,11 +214,12 @@ func ExecManyWithCustomRetry[T any](ctx context.Context, db Querier, retryIf fun
 }
 
 func execMany[T any](ctx context.Context, db Querier, sql string, args ...any) ([]*T, error) {
+	scanner := getScanner(db)
 	if pool, ok := db.(*DB); ok {
 		db = pool.primary()
 	}
 	var resp []*T
-	if err := pgxscan.Select(ctx, db, &resp, sql, args...); err != nil {
+	if err := scanner.Select(ctx, db, &resp, sql, args...); err != nil {
 		return nil, parseError(err)
 	}
 

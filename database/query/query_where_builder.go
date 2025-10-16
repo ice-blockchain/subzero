@@ -1414,6 +1414,8 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 				fields[i] = `cast('[]' as jsonb) as tags`
 			case "e.sig":
 				fields[i] = `'DROP' as sig`
+			case "e.pubkey":
+				fields[i] = `e.master_pubkey as pubkey`
 			}
 		}
 	}
