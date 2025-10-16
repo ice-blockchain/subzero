@@ -1819,9 +1819,32 @@ func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
 
 	userPub, _ := model.GenerateKeyPair()
 
+	masterUser1Priv, masterUser1Pub := model.GenerateKeyPair()
+	masterUser2Priv, masterUser2Pub := model.GenerateKeyPair()
+
 	var meta1, meta2 model.Event
 	t.Run("Create users", func(t *testing.T) {
-		user1Key, user2Key := model.GeneratePrivateKey(), model.GeneratePrivateKey()
+		user1KeyPriv, user1KeyPub := model.GenerateKeyPair()
+		user2KeyPriv, user2KeyPub := model.GenerateKeyPair()
+
+		t.Run("Attestation", func(t *testing.T) {
+			var user1Att, user2Att model.Event
+			user1Att.Kind = model.CustomIONKindAttestation
+			user1Att.CreatedAt = 1
+			user1Att.Tags = model.Tags{
+				{model.TagAttestationName, user1KeyPub, "", model.CustomIONAttestationKindActive + ":1"},
+			}
+			require.NoError(t, user1Att.SignWithAlg(masterUser1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			user2Att.Kind = model.CustomIONKindAttestation
+			user2Att.CreatedAt = 2
+			user2Att.Tags = model.Tags{
+				{model.TagAttestationName, user2KeyPub, "", model.CustomIONAttestationKindActive + ":1"},
+			}
+			require.NoError(t, user2Att.SignWithAlg(masterUser2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+			require.NoError(t, db.AcceptEvents(t.Context(), &user1Att, &user2Att))
+		})
 
 		meta1.Kind = nostr.KindProfileMetadata
 		meta1.CreatedAt = 1
@@ -1829,6 +1852,9 @@ func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
 			Name:  "User1",
 			About: "About User1",
 		}.String()
+		meta1.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterUser1Pub},
+		}
 
 		meta2.Kind = nostr.KindProfileMetadata
 		meta2.CreatedAt = 2
@@ -1836,9 +1862,12 @@ func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
 			Name:  "User2",
 			About: "About User2",
 		}.String()
+		meta2.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterUser2Pub},
+		}
 
-		require.NoError(t, meta1.SignWithAlg(user1Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, meta2.SignWithAlg(user2Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, meta1.SignWithAlg(user1KeyPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, meta2.SignWithAlg(user2KeyPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		require.NoError(t, db.AcceptEvents(t.Context(), &meta1, &meta2))
 
@@ -1846,18 +1875,20 @@ func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
 		follow1.Kind = nostr.KindFollowList
 		follow1.CreatedAt = 3
 		follow1.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterUser1Pub},
 			{"p", userPub},
 			{"p", meta2.PubKey},
 		}
-		require.NoError(t, follow1.SignWithAlg(user1Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, follow1.SignWithAlg(user1KeyPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		follow2.Kind = nostr.KindFollowList
 		follow2.CreatedAt = 4
 		follow2.Tags = model.Tags{
+			{model.CustomIONTagOnBehalfOf, masterUser2Pub},
 			{"p", userPub},
 			{"p", meta1.PubKey},
 		}
-		require.NoError(t, follow2.SignWithAlg(user2Key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, follow2.SignWithAlg(user2KeyPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		require.NoError(t, db.AcceptEvents(t.Context(), &follow1, &follow2))
 	})
