@@ -1,6 +1,6 @@
 module github.com/ice-blockchain/subzero
 
-go 1.25.2
+go 1.25.3
 
 replace (
 	github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.0
