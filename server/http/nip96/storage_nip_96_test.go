@@ -57,6 +57,7 @@ var (
 	testdata embed.FS
 
 	testMainStorageRoot string
+	dbConnString        string
 )
 
 func TestMain(m *testing.M) {
@@ -70,7 +71,7 @@ func TestMain(m *testing.M) {
 		RunDDL:          true,
 		DisableSelfTest: true,
 	}))
-
+	dbConnString = addr
 	var err error
 	testMainStorageRoot, err = os.MkdirTemp("", "test-nip96-storage-root")
 	if err != nil {
@@ -87,6 +88,11 @@ func TestMain(m *testing.M) {
 		Cdn: storage.CdnConfig{
 			URLUpload:   "https://storage.bunnycdn.com/ice-staging/profile", // Set STORAGE_CDN_ACCESS_KEY to work.
 			URLDownload: "https://ice-staging.b-cdn.net/profile",
+			DB: struct {
+				WriteUrls []string `yaml:"write-urls"`
+				Username  string   `yaml:"username,omitempty"`
+				Password  string   `yaml:"password,omitempty"`
+			}{WriteUrls: []string{dbConnString}},
 		},
 	}))
 
@@ -288,6 +294,11 @@ func TestNIP96(t *testing.T) {
 			Cdn: storage.CdnConfig{
 				URLUpload:   "https://storage.bunnycdn.com/ice-staging/profile", // Set STORAGE_CDN_ACCESS_KEY to work
 				URLDownload: "https://ice-staging.b-cdn.net/profile",
+				DB: struct {
+					WriteUrls []string `yaml:"write-urls"`
+					Username  string   `yaml:"username,omitempty"`
+					Password  string   `yaml:"password,omitempty"`
+				}{WriteUrls: []string{dbConnString}},
 			},
 		}))
 		t.Logf("new storage root at %v initialized", newStorageRoot)

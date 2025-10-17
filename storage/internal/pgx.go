@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"reflect"
 	"strings"
 	"sync"
@@ -44,13 +45,24 @@ var (
 	ErrReadOnly             = errors.New("read only")
 )
 
-func WithWriteURLs(urls ...string) Option {
+func WithWriteURLs(username, password string, urls ...string) Option {
 	return func(ctx context.Context, db *DB) error {
+		for i := range urls {
+			var err error
+			urls[i], err = createPgURL(username, password, urls[i])
+			if err != nil {
+				log.Panic().Err(err).Str("url", urls[i]).Msg("failed to create write URL")
+			}
+		}
 		db.lb.Masters = urls
 		for i, connectionString := range urls {
 			conn, err := poolConnect(ctx, connectionString)
 			if err != nil {
-				log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", connectionString, err)
+				log.Warn().
+					Str("context", "DATABASE").
+					Err(err).
+					Int("master_index", i).
+					Msg("cannot connect to master at index")
 				continue
 			}
 			db.lb.Active.Store(conn)
@@ -253,10 +265,19 @@ func (db *DB) switchMaster(ctx context.Context, reason error) error {
 	for _, i := range calculateConnectOrder(db.lb.Masters, int(db.lb.CurrentIndex)) {
 		conn, err := poolConnect(ctx, db.lb.Masters[i])
 		if err != nil {
-			log.Printf("[DATABASE]: WARNING: cannot connect to master %s: %v", db.lb.Masters[i], err)
+			log.Warn().
+				Str("context", "DATABASE").
+				Err(err).
+				Int("master_index", i).
+				Msg("cannot connect to master at index")
 			continue
 		}
-		log.Printf("[DATABASE]: INFO: switching master: %d -> %d due to %s", db.lb.CurrentIndex, i, reason)
+		log.Info().
+			Str("context", "DATABASE").
+			Int("from_index", int(db.lb.CurrentIndex)).
+			Int("to_index", i).
+			Err(reason).
+			Msg("switching master")
 		oldMaster = db.lb.Active.Swap(conn)
 		db.lb.CurrentIndex = uint64(i)
 		break
@@ -276,4 +297,25 @@ func calculateConnectOrder(addresses []string, currentIndex int) []int {
 		all[i] = i
 	}
 	return append(all[currentIndex+1:], all[:currentIndex]...)
+}
+
+func createPgURL(username, password, target string) (string, error) {
+	if !strings.HasPrefix(target, "postgres://") && !strings.HasPrefix(target, "postgresql://") {
+		target = "postgres://" + target
+	}
+
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return "", err
+	}
+
+	if parsed.User.Username() == "" {
+		parsed.User = url.UserPassword(username, password)
+	}
+
+	return parsed.String(), nil
+}
+
+func (db *DB) Ping(ctx context.Context) error {
+	return errors.Wrap(db.primary().Ping(ctx), "ping failed for master")
 }

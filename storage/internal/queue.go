@@ -7,16 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
-	"github.com/riverqueue/river/rivermigrate"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,11 +23,6 @@ type (
 	}
 )
 
-var driver struct {
-	sync.Once
-	riverdriver.Driver[pgx.Tx]
-}
-
 func formatQueueName(name string) string {
 	return strings.ReplaceAll(
 		strings.ReplaceAll(strings.ReplaceAll(name, ":", "_"), "/", ""),
@@ -43,10 +33,10 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if c.river == nil {
+	if c.river.Load() == nil {
 		return nil
 	}
-	res, err := c.river.Insert(ctx, &jobParams{
+	res, err := c.river.Load().Insert(ctx, &jobParams{
 		ContentType: contentType,
 		FileName:    fileName,
 		FilePath:    filePath,
@@ -57,28 +47,12 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 	if err != nil {
 		if isDBDead(err) {
 			err = errors.Join(err, c.db.switchMaster(ctx, err))
-			if err = c.river.Stop(ctx); err != nil {
+			if err = c.river.Load().Stop(ctx); err != nil {
 				return errors.Wrap(err, "failed to stop river for old master")
 			}
-			c.river = nil
-			driver.Driver = nil
-			driver.Once = sync.Once{}
-			driver.Do(func() {
-				driver.Driver = riverpgxv5.New(c.db.primary())
-			})
-			c.river, err = river.NewClient[pgx.Tx](driver.Driver, &river.Config{
-				Queues: map[string]river.QueueConfig{
-					formatQueueName(c.relayUrl): {MaxWorkers: c.config.MaxQueueWorkers},
-				},
-				Workers:    c.workers,
-				JobTimeout: 10 * time.Minute,
-				ID:         c.relayUrl,
-			})
-			if err != nil {
-				return errors.Wrap(err, "failed to create river client with switched master")
-			}
-			if err = c.river.Start(ctx); err != nil {
-				return errors.Wrap(err, "failed to start river after master switch")
+			c.river.Store(nil)
+			if err = c.initQueueProcessing(ctx, c.config); err != nil {
+				return errors.Wrap(err, "failed to reinit queue processing dur to master switch")
 			}
 			return c.FileUploadAsync(ctx, filePath, contentType, fileName)
 		}
@@ -96,35 +70,12 @@ func (j *jobParams) Kind() string {
 	return "cdnUpload"
 }
 func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error {
-	c.workers = river.NewWorkers()
-	if err := river.AddWorkerSafely[*jobParams](c.workers, c); err != nil {
-		return errors.Wrap(err, "failed to register cdnUpload worker")
-	}
-	var err error
-	c.db, err = NewDBConn(ctx,
-		WithWriteURLs(cfg.DBWriteUrls...),
-		WithMigration("river", func(ctx context.Context, pool *pgxpool.Pool) error {
-			driver.Do(func() {
-				driver.Driver = riverpgxv5.New(pool)
-			})
-			migrator, err := rivermigrate.New(driver.Driver, &rivermigrate.Config{})
-			if err != nil {
-				return errors.Wrap(err, "cannot create river migrator")
-			}
-			_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
-			return errors.Wrap(err, "failed to migrate river")
-		}),
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to create db connection")
-	}
-
-	riverClient, err := river.NewClient[pgx.Tx](driver.Driver, &river.Config{
+	riverClient, err := river.NewClient[pgx.Tx](riverpgxv5.New(c.db.primary()), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			formatQueueName(c.relayUrl): {MaxWorkers: cfg.MaxQueueWorkers},
 		},
 		Workers:    c.workers,
-		JobTimeout: 10 * time.Minute,
+		JobTimeout: c.config.JobMaxTimeout,
 		ID:         c.relayUrl,
 	})
 	if err != nil {
@@ -133,7 +84,7 @@ func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error 
 	if err = riverClient.Start(ctx); err != nil {
 		return errors.Wrap(err, "failed to start river")
 	}
-	c.river = riverClient
+	c.river.CompareAndSwap(nil, riverClient)
 	return nil
 }
 
@@ -164,10 +115,10 @@ func (c *client) Work(ctx context.Context, job *river.Job[*jobParams]) (err erro
 }
 
 func (c *client) Stop(ctx context.Context) error {
-	if c.river == nil {
+	if c.river.Load() == nil {
 		return nil
 	}
-	if err := c.river.Stop(ctx); err != nil {
+	if err := c.river.Load().Stop(ctx); err != nil {
 		return errors.Wrap(err, "error stopping river")
 	}
 	return errors.Wrap(c.db.Close(), "error closing db")

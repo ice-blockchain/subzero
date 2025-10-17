@@ -34,7 +34,6 @@ require (
 	github.com/gobwas/ws v1.4.0
 	github.com/goccy/go-json v0.10.5
 	github.com/google/uuid v1.6.0
-	github.com/gookit/assert v0.1.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250714150930-6fb404dc7d83
@@ -57,7 +56,6 @@ require (
 	github.com/quic-go/webtransport-go v0.9.0
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/riverqueue/river v0.26.0
-	github.com/riverqueue/river/riverdriver v0.26.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.26.0
 	github.com/rs/zerolog v1.34.0
 	github.com/schollz/progressbar/v3 v3.18.0
@@ -268,6 +266,7 @@ require (
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/refraction-networking/utls v1.8.1 // indirect
+	github.com/riverqueue/river/riverdriver v0.26.0 // indirect
 	github.com/riverqueue/river/rivershared v0.26.0 // indirect
 	github.com/riverqueue/river/rivertype v0.26.0 // indirect
 	github.com/rivo/tview v0.42.0 // indirect

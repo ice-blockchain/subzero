@@ -5,7 +5,6 @@ package storage
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -69,8 +68,8 @@ func (c *client) Delete(ctx context.Context, userPubKey, masterKey, fileHash str
 	if err = os.Remove(filepath.Join(userPath, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to remove file %v (%v)", fileHash, filepath.Join(userPath, file))
 	}
-	fileName := fmt.Sprintf("%v:%v%v", masterKey, fileHash, filepath.Ext(file))
-	if c.config.Cdn.AccessKey != "" && c.config.Cdn.URLUpload != "" && c.cdn != nil {
+	fileName := buildFileName(masterKey, fileHash, file)
+	if c.cdnEnabled() {
 		if err = c.cdn.FileDelete(ctx, fileName); err != nil {
 			return errors.Wrapf(err, "failed to delete file %v from cdn", fileName)
 		}
@@ -84,7 +83,7 @@ func (c *client) DeleteUser(masterKey string) error {
 		return errors.Wrapf(err, "failed to get serving bag for user %v")
 	}
 	userPath, _ := c.BuildUserPath(masterKey, "")
-	if c.config.Cdn.AccessKey != "" && c.config.Cdn.URLUpload != "" && c.cdn != nil {
+	if c.cdnEnabled() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		files, err := os.ReadDir(userPath)
@@ -92,7 +91,7 @@ func (c *client) DeleteUser(masterKey string) error {
 			log.Error().Err(err).Str("user", masterKey).Msg("failed to list files in user storage")
 		}
 		for _, f := range files {
-			fNameOnCDN := fmt.Sprintf("%v:%v%v", masterKey, f.Name(), filepath.Ext(f.Name()))
+			fNameOnCDN := buildFileName(masterKey, f.Name(), f.Name())
 			if err = c.cdn.FileDelete(ctx, fNameOnCDN); err != nil {
 				log.Error().Err(err).Str("filename", fNameOnCDN).Msg("failed to delete file from cdn")
 			}

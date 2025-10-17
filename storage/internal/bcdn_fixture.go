@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gookit/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,10 +35,10 @@ func VerifyFileOnCdn(tb *testing.T, ctx context.Context, cdnClient CDNClient, fi
 		require.NoError(tb, resp.Body.Close())
 	}()
 	require.NoError(tb, err)
-	assert.Equal(tb, http.StatusOK, resp.StatusCode, url)
+	require.Equal(tb, http.StatusOK, resp.StatusCode, url)
 	bodyBytes, err := io.ReadAll(resp.Body)
 	require.NoError(tb, err)
-	assert.NotEmpty(tb, bodyBytes)
+	require.NotEmpty(tb, bodyBytes)
 }
 func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, cdnClient CDNClient, fileName string) {
 	tb.Helper()
@@ -52,5 +51,5 @@ func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, cdnClient CDNCli
 		require.NoError(tb, resp.Body.Close())
 	}()
 	require.NoError(tb, err)
-	assert.Equal(tb, http.StatusNotFound, resp.StatusCode, url)
+	require.Equal(tb, http.StatusNotFound, resp.StatusCode, url)
 }

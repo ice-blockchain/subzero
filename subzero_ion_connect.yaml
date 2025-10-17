@@ -106,8 +106,11 @@ storage:
   cdn:
     url-upload: https://bogus.com/url
     #access-key: bogus
-    db-write-urls:
-      - postgresql://postgres:postgres@localhost:5432/subzero
+    db:
+      write-urls:
+        - postgresql://postgres:postgres@localhost:5432/subzero
+      username: postgres
+      password: postgres
 
 dvm:
   tls-cert: *tls-cert

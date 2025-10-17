@@ -120,26 +120,41 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 	if err != nil {
 		return "", "", false, errors.Wrapf(err, "failed to build url for %v (bag %v)", relativePathToFileForUrl, bagID)
 	}
-	if c.config.Cdn.URLUpload != "" && c.config.Cdn.AccessKey != "" && c.cdn != nil && newFile != nil {
-		fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
-		if SyncCdnUpload(ctx) {
-			f, ferr := os.Open(fullFilePath)
-			if ferr != nil {
-				return "", "", false, errors.Wrapf(ferr, "failed to open %v", fullFilePath)
-			}
-			defer f.Close()
-			if err = c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); err != nil {
-				if err = c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
-					return "", "", false, errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
-				}
-			}
-		} else {
-			if err = c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
-				return "", "", false, errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
-			}
+	if !c.cdnEnabled() || newFile == nil {
+		return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, nil
+	}
+	if err = c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile); err != nil {
+		return "", "", false, errors.Wrapf(c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile), "failed to upload file to cdn")
+	}
+	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, nil
+}
+
+func (c *client) cdnUpload(ctx context.Context, masterPubKey, relativePathToFileForUrl, fileNameForCdn string, newFile *FileMetaInput) error {
+	if err := c.cdn.HealthCheck(ctx); err != nil {
+		return errors.Wrapf(err, "cdn health failed")
+	}
+	fullFilePath := filepath.Join(c.rootStoragePath, masterPubKey, relativePathToFileForUrl)
+	if !SyncCdnUpload(ctx) {
+		if err := c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
+			return errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
+		}
+		return nil
+	}
+	f, ferr := os.Open(fullFilePath)
+	if ferr != nil {
+		return errors.Wrapf(ferr, "failed to open %v", fullFilePath)
+	}
+	defer f.Close()
+	if err := c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); err != nil {
+		if err = c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
+			return errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
 		}
 	}
-	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, err
+	return nil
+}
+
+func (c *client) cdnEnabled() bool {
+	return c.config.Cdn.URLUpload != "" && c.config.Cdn.AccessKey != "" && c.cdn != nil
 }
 
 func (c *client) upload(ctx context.Context, now time.Time, user, master, relativePath, hash string, fileMeta *FileMetaInput, headerMetadata *headerData) (torrent *storage.Torrent, bootstrap []*Bootstrap, err error) {
@@ -268,8 +283,12 @@ func (c *client) buildBootstrapNodeInfo(tr *storage.Torrent) (*Bootstrap, error)
 	}, nil
 }
 
+func buildFileName(masterPubkey, fileHash, fileName string) string {
+	return fmt.Sprintf("%v:%v%v", masterPubkey, fileHash, filepath.Ext(fileName))
+}
+
 func (c *client) buildUrl(bagID, relativePath, masterPubkey, fileHash string, bootstrap string) (fullUrl string, fileName string, err error) {
-	fName := fmt.Sprintf("%v:%v%v", masterPubkey, fileHash, filepath.Ext(relativePath))
+	fName := buildFileName(masterPubkey, fileHash, relativePath)
 	if c.config.IONLibertyDisabled {
 		relayUrl, err := url.Parse(c.config.RelayURL)
 		if err != nil {
@@ -463,17 +482,8 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 				return errors.Wrapf(err, "failed to list files for user %v", masterKey)
 			}
 			for _, uf := range userFiles {
-				fName := fmt.Sprintf("%v:%v", masterKey, uf.Name())
-				contentType := gomime.TypeByExtension(filepath.Ext(uf.Name()))
-				bag, _, berr := c.bagByUser(masterKey)
-				if berr == nil && bag != nil {
-					hData, herr := c.fileMeta(bag)
-					if herr == nil && hData != nil {
-						if meta, hasMeta := hData.FileMetadata[uf.Name()]; hasMeta {
-							contentType = meta.ContentType
-						}
-					}
-				}
+				fName := buildFileName(masterKey, strings.TrimSuffix(uf.Name(), filepath.Ext(uf.Name())), uf.Name())
+				contentType := c.detectContentType(masterKey, uf.Name())
 				err = errors.Join(err, errors.Wrapf(c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(filepath.Join(userPath, uf.Name()), c.rootStoragePath), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
 			}
 			return err
@@ -481,4 +491,18 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 	}
 
 	return errors.Wrapf(egroup.Wait(), "failed to init upload existing files")
+}
+
+func (c *client) detectContentType(masterKey, filename string) string {
+	contentType := gomime.TypeByExtension(filepath.Ext(filename))
+	bag, _, berr := c.bagByUser(masterKey)
+	if berr == nil && bag != nil {
+		hData, herr := c.fileMeta(bag)
+		if herr == nil && hData != nil {
+			if meta, hasMeta := hData.FileMetadata[filename]; hasMeta {
+				contentType = meta.ContentType
+			}
+		}
+	}
+	return contentType
 }
