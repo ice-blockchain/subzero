@@ -1001,6 +1001,9 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 
 func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 	if event.Sig == "PACK" {
+		// Disable this events for now.
+		return nil
+
 		// TODO: remove this later with kind3 hack.
 		// Pack this event as meta event inside CustomIONKindEphemeralEmbedding.
 		ev := databaseEvent{Event: new(model.Event)}

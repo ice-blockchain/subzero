@@ -1899,10 +1899,15 @@ func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
 			Tags:   model.TagMap{}.SetLiterals("p", userPub),
 		}
 		events := helperSelectEvents(t, db, f)
-		require.Len(t, events, 4) // 2 follow lists embedding, 2 metadata.
-		require.EqualValues(t, []*model.Event{&meta2, &meta1}, events[2:])
-		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[0].Kind)
-		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[1].Kind)
+		if false {
+			require.Len(t, events, 4) // 2 follow lists embedding, 2 metadata.
+			require.EqualValues(t, []*model.Event{&meta2, &meta1}, events[2:])
+			require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[0].Kind)
+			require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[1].Kind)
+		} else {
+			t.Logf("kind3 must be excluded")
+			require.EqualValues(t, []*model.Event{&meta2, &meta1}, events)
+		}
 
 		f.Kinds = nil
 		events = helperSelectEvents(t, db, f)

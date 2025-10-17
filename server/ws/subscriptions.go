@@ -407,7 +407,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []*model.Event) error {
 	if err := validation.Validate(ctx, model.Events(events)); err != nil {
 		if errors.Is(err, validation.ErrEphemeralForbidden) {
-			return auth.ErrRelayNotAuthoritative
+			return auth.ErrRelayAuthoritative
 		}
 		return errors.Wrapf(err, "event validation failed: %s", model.Events(events).String())
 	}
