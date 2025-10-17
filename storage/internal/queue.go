@@ -33,10 +33,11 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if c.river.Load() == nil {
+	r := c.river.Load()
+	if r == nil {
 		return nil
 	}
-	res, err := c.river.Load().Insert(ctx, &jobParams{
+	res, err := r.Insert(ctx, &jobParams{
 		ContentType: contentType,
 		FileName:    fileName,
 		FilePath:    filePath,
@@ -47,10 +48,6 @@ func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fil
 	if err != nil {
 		if isDBDead(err) {
 			err = errors.Join(err, c.db.switchMaster(ctx, err))
-			if err = c.river.Load().Stop(ctx); err != nil {
-				return errors.Wrap(err, "failed to stop river for old master")
-			}
-			c.river.Store(nil)
 			if err = c.initQueueProcessing(ctx, c.config); err != nil {
 				return errors.Wrap(err, "failed to reinit queue processing dur to master switch")
 			}
@@ -81,10 +78,14 @@ func (c *client) initQueueProcessing(ctx context.Context, cfg *CdnConfig) error 
 	if err != nil {
 		return errors.Wrap(err, "failed to create river client")
 	}
+	if oldRiver := c.river.Swap(riverClient); oldRiver != nil {
+		if err = oldRiver.Stop(ctx); err != nil {
+			return errors.Wrap(err, "failed to stop river for old master")
+		}
+	}
 	if err = riverClient.Start(ctx); err != nil {
 		return errors.Wrap(err, "failed to start river")
 	}
-	c.river.CompareAndSwap(nil, riverClient)
 	return nil
 }
 
@@ -115,10 +116,11 @@ func (c *client) Work(ctx context.Context, job *river.Job[*jobParams]) (err erro
 }
 
 func (c *client) Stop(ctx context.Context) error {
-	if c.river.Load() == nil {
+	r := c.river.Load()
+	if r == nil {
 		return nil
 	}
-	if err := c.river.Load().Stop(ctx); err != nil {
+	if err := r.Stop(ctx); err != nil {
 		return errors.Wrap(err, "error stopping river")
 	}
 	return errors.Wrap(c.db.Close(), "error closing db")
