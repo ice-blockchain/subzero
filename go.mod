@@ -22,7 +22,7 @@ require (
 	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
 	github.com/docker/go-connections v0.6.0
 	github.com/dundee/gdu/v5 v5.31.0
-	github.com/forPelevin/gomoji v1.4.0
+	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/pprof v1.5.3
