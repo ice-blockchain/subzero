@@ -106,6 +106,8 @@ storage:
   cdn:
     url-upload: https://bogus.com/url
     #access-key: bogus
+    max-job-timeout: 10m
+    max-queue-workers: 95
     db:
       write-urls:
         - postgresql://postgres:postgres@localhost:5432/subzero

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,6 +52,7 @@ type (
 		river               atomic.Pointer[river.Client[pgx.Tx]]
 		db                  *DB
 		healthCheckPassedAt atomic.Int64
+		healthCheckMtx      sync.Mutex
 	}
 )
 
@@ -192,9 +194,15 @@ func (c *client) cdnReq(ctx context.Context) *req.Request {
 }
 
 func (c *client) HealthCheck(ctx context.Context) error {
-	if hPassed := time.Unix(c.healthCheckPassedAt.Load(), 0); time.Now().Sub(hPassed) <= 30*time.Second {
+	locked := c.healthCheckMtx.TryLock()
+	if hPassed := time.Unix(c.healthCheckPassedAt.Load(), 0); !locked || time.Now().Sub(hPassed) <= 30*time.Second {
 		return nil
 	}
+	defer func() {
+		if locked {
+			c.healthCheckMtx.Unlock()
+		}
+	}()
 	bootstrapCtx, cancelBootstrap := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelBootstrap()
 	resp, err := c.cdnReq(bootstrapCtx).Delete(c.cdnUploadURL(uuid.NewString() + ".jpg"))
