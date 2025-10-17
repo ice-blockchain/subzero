@@ -226,7 +226,6 @@ class DatabaseManager:
                 AND NOT e.has_ephemeral_attestation 
                 AND NOT e.deleted 
                 AND NOT e.hidden
-                AND et.event_tag_value1 IN ('1', '4', '7', '9735', '1984', '1985', '9734')  -- Valid wrapped kinds for encrypted messages
             GROUP BY et.event_tag_value1
             ORDER BY message_count DESC;
         """,
