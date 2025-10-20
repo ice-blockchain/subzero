@@ -1012,7 +1012,6 @@ func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
 		ev.CreatedAt = event.CreatedAt
 		ev.Content = event.String()
 		ev.Tags = model.Tags{
-			{"e", event.ID},
 			{"p", cmp.Or(event.MasterPubKey, event.PubKey)},
 		}
 		db.mustSignDatabaseEvent(&ev)
@@ -1113,6 +1112,9 @@ func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []
 		ev.Kind = model.CustomIONKindEphemeralEmbedding
 		ev.CreatedAt = now
 		ev.Content = hint.String()
+		ev.Tags = model.Tags{
+			{"p", key},
+		}
 		e.Signer(&ev)
 
 		result = append(result, &ev)
