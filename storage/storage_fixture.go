@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/storage/internal"
 )
 
 func calcFileHash(t *testing.T, path string) (string, error) {
@@ -143,4 +145,11 @@ loop:
 
 func Reset() {
 	globalClient.Once = sync.Once{}
+}
+
+func VerifyFileOnCdn(tb *testing.T, ctx context.Context, fileName string) {
+	internal.VerifyFileOnCdn(tb, ctx, globalClient.Client.cdn, fileName)
+}
+func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, fileName string) {
+	internal.VerifyFileDeletedOnCdn(tb, ctx, globalClient.Client.cdn, fileName)
 }

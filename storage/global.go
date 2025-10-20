@@ -34,6 +34,7 @@ import (
 	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/storage/internal"
 	"github.com/ice-blockchain/subzero/storage/statistics"
 )
 
@@ -45,15 +46,17 @@ var (
 )
 
 type (
-	Config struct {
-		PrivateKey              string `yaml:"private-key"`
-		IONStorageConfigURL     string `yaml:"ion-storage-config-url"`
-		AbsoluteRootStoragePath string `yaml:"absolute-root-storage-path"`
-		ExternalADNLAddress     string `yaml:"external-adnl-address"`
-		RelayURL                string `yaml:"relay-url"`
-		ExternalADNLPort        int    `yaml:"external-adnl-port"`
-		Debug                   bool   `yaml:"debug"`
-		IONLibertyDisabled      bool   `yaml:"ion-liberty-disabled"`
+	CdnConfig = internal.CdnConfig
+	Config    struct {
+		PrivateKey              string    `yaml:"private-key"`
+		IONStorageConfigURL     string    `yaml:"ion-storage-config-url"`
+		AbsoluteRootStoragePath string    `yaml:"absolute-root-storage-path"`
+		ExternalADNLAddress     string    `yaml:"external-adnl-address"`
+		RelayURL                string    `yaml:"relay-url"`
+		ExternalADNLPort        int       `yaml:"external-adnl-port"`
+		Debug                   bool      `yaml:"debug"`
+		IONLibertyDisabled      bool      `yaml:"ion-liberty-disabled"`
+		Cdn                     CdnConfig `yaml:"cdn" mapstructure:"cdn"` //nolint:tagliatelle // Nope.
 	}
 	Option     func(*client)
 	acceptorFn func(ctx context.Context, fh, master, infohash string) error
@@ -230,6 +233,7 @@ func processEventDeletion(ctx context.Context, fileHash, masterPubkey, pubkey, e
 	if err := os.Remove(filepath.Join(userRoot, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to delete file %v", file)
 	}
+
 	bagID, _, _, err := globalClient.Client.StartUpload(ctx, time.Now(), pubkey, masterPubkey, file, fileHash, nil)
 	if err != nil {
 		return errors.Wrapf(err, "failed to rebuild bag with deleted file")
@@ -288,7 +292,9 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 			log.Panic().Str("context", "STORAGE").Err(err).Msg("failed to validate config")
 		}
 	}
-
+	if cl.config.Cdn.AccessKey == "" {
+		cl.config.Cdn.AccessKey = os.Getenv("STORAGE_CDN_ACCESS_KEY")
+	}
 	storage.Logger = func(a ...any) {
 		if cl.config.Debug {
 			log.Debug().Str("context", "STORAGE").Any("log", a).Msg("storage")
@@ -442,6 +448,14 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 	cl.progressStorage.SetNotifier(nil)
 	close(loadMonitoringCh)
 	go cl.startDownloadsFromQueue(ctx)
+	if cl.config.Cdn.URLUpload != "" && cl.config.Cdn.AccessKey != "" {
+		cl.cdn = internal.NewCDNClient(ctx, &cl.config.Cdn, cl.config.RelayURL, cl.rootStoragePath)
+		if true {
+			if err = cl.forceUploadExistingFiles(ctx); err != nil {
+				log.Error().Err(err).Msg("failed to upload existing files")
+			}
+		}
+	}
 	return cl
 }
 
