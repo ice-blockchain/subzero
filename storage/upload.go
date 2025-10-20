@@ -29,7 +29,6 @@ import (
 	"github.com/xssnick/tonutils-go/adnl/overlay"
 	"github.com/xssnick/tonutils-go/tl"
 	"github.com/xssnick/tonutils-storage/storage"
-	"golang.org/x/sync/errgroup"
 )
 
 func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
@@ -469,28 +468,31 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 	if err != nil {
 		log.Error().Err(err).Msg("failed to list users in storage")
 	}
-	var egroup errgroup.Group
 	for _, userDir := range userDirs {
 		if !userDir.IsDir() || len(userDir.Name()) != ed25519.PublicKeySize*2 {
 			continue
 		}
-		egroup.Go(func() (err error) {
+		go func() {
+			var uploadErr error
 			masterKey := userDir.Name()
 			userPath, _ := c.BuildUserPath(masterKey, "")
-			userFiles, err := os.ReadDir(userPath)
+			userFiles, uploadErr := os.ReadDir(userPath)
 			if err != nil {
-				return errors.Wrapf(err, "failed to list files for user %v", masterKey)
+				log.Error().Err(uploadErr).Str("user", masterKey).Msg("failed to list files in user folder")
+				return
 			}
 			for _, uf := range userFiles {
 				fName := buildFileName(masterKey, strings.TrimSuffix(uf.Name(), filepath.Ext(uf.Name())), uf.Name())
 				contentType := c.detectContentType(masterKey, uf.Name())
-				err = errors.Join(err, errors.Wrapf(c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(filepath.Join(userPath, uf.Name()), c.rootStoragePath), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
+				uploadErr = errors.Join(uploadErr, errors.Wrapf(c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(filepath.Join(userPath, uf.Name()), c.rootStoragePath), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
 			}
-			return err
-		})
+			if err != nil {
+				log.Error().Err(err).Str("user", masterKey).Msg("failed to upload files for user")
+			}
+		}()
 	}
 
-	return errors.Wrapf(egroup.Wait(), "failed to init upload existing files")
+	return nil
 }
 
 func (c *client) detectContentType(masterKey, filename string) string {
