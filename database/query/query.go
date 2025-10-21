@@ -1113,6 +1113,9 @@ func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []
 		ev.Kind = model.CustomIONKindEphemeralEmbedding
 		ev.CreatedAt = now
 		ev.Content = hint.String()
+		ev.Tags = model.Tags{
+			{"p", key},
+		}
 		e.Signer(&ev)
 
 		result = append(result, &ev)
