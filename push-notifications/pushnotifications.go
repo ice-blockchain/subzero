@@ -361,6 +361,13 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 				return nil, fmt.Errorf("empty profile metadata or attestation event for event %s", event.ID)
 			}
 			relevantEvents = append(relevantEvents, pm.createEphemeralEmbeddingEvent(profileMetadataEvent), pm.createEphemeralEmbeddingEvent(attestationEvent))
+		} else {
+			log.Info().
+				Str("context", "PUSH_NOTIFICATIONS").
+				Str("event_id", event.ID).
+				Int("event_kind", int(event.Kind)).
+				Str("master_pubkey", event.GetMasterPublicKey()).
+				Msg("non-authoritative event processed without relevant events")
 		}
 	}
 
