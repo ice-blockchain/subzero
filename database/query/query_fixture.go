@@ -35,6 +35,10 @@ func GenerateSelectEventsSQL(ctx context.Context, filter ...model.Filter) (sql s
 	return r.Statement, r.Params, nil
 }
 
+func Database() *connector.DB {
+	return globalDB.Client.db
+}
+
 func DeleteAllEvents(ctx context.Context) error {
 	const stmt = `DELETE FROM events`
 
