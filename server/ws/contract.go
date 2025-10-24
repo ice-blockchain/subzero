@@ -37,8 +37,10 @@ type (
 		model.UserDataContext
 	}
 	subscription struct {
-		Source *model.Subscription
-		Writer Writer
+		Source     *model.Subscription
+		Writer     Writer
+		MasterKeys []string
+		Kinds      []model.Kind
 	}
 	syncMap[K comparable, V any] interface {
 		Store(key K, data V)
@@ -49,6 +51,8 @@ type (
 		LoadAndDelete(key K) (V, bool)
 
 		Delete(key K)
+
+		Size() int
 
 		Range(f func(key K, value V) bool)
 	}
