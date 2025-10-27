@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -75,6 +76,7 @@ func TestCreateNotifications(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
+		antsPool:       helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Empty device list returns nil", func(t *testing.T) {
@@ -195,6 +197,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
+		antsPool:       helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
@@ -250,6 +253,7 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
+		antsPool:       helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Returns nil when reference pubkey is empty", func(t *testing.T) {
@@ -291,6 +295,7 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),
+		antsPool:               helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Returns nil when no notifications", func(t *testing.T) {
@@ -360,6 +365,7 @@ func TestPushNotificationManager_HandleInvalidDeviceTokens(t *testing.T) {
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),
+		antsPool:               helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Returns nil when no invalid devices", func(t *testing.T) {
@@ -377,6 +383,7 @@ func TestPushNotificationManager_AcceptEvents(t *testing.T) {
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),
+		antsPool:               helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Returns nil when no events", func(t *testing.T) {
@@ -394,6 +401,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),
+		antsPool:               helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Handles TextNote with q tag correctly", func(t *testing.T) {
@@ -502,6 +510,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		pushNotificationClient: &client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),
+		antsPool:               helperCreateTestAntsPool(t),
 	}
 
 	t.Run("Returns empty when no events", func(t *testing.T) {
@@ -779,6 +788,7 @@ func TestGetTranslationWithRelevantInfo(t *testing.T) {
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
+		antsPool:       helperCreateTestAntsPool(t),
 	}
 	t.Run("Returns default translation", func(t *testing.T) {
 		translation := pm.getTranslation(NotificationTypeReaction)
@@ -848,6 +858,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
+		antsPool:       helperCreateTestAntsPool(t),
 	}
 	recipientPubKey := "recipient_master_pubkey"
 	deviceID := "device1"
@@ -938,4 +949,10 @@ func TestProcessEventWithReaction(t *testing.T) {
 	decompressedEvent = helperDecompressZlibAndDecodeBase64(t, compressedEvent)
 	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
 	require.Equal(t, CompressionMethodZlib, notificationFromProcessEvent.Data["compression"], "Compression method should be zlib")
+}
+
+func helperCreateTestAntsPool(t *testing.T) *ants.Pool {
+	t.Helper()
+
+	return globalTestAntsPool
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip44"
+	"github.com/panjf2000/ants/v2"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
@@ -37,6 +38,7 @@ type (
 		deviceMutex            sync.RWMutex
 		compressorPool         *sync.Pool
 		stats                  *PushStats
+		antsPool               *ants.Pool
 	}
 
 	notificationTranslation struct {
@@ -141,7 +143,7 @@ var (
 	}
 )
 
-func MustInit(ctx context.Context) {
+func MustInit(ctx context.Context, antsPool *ants.Pool) {
 	userDevicesMap := make(map[PublicKey]map[DeviceID]DeviceInfo)
 
 	var pnClient pn.Client
@@ -176,6 +178,7 @@ func MustInit(ctx context.Context) {
 		pushNotificationClient: &pnClient,
 		relayURL:               config.RelayURL,
 		stats:                  newPushStats(),
+		antsPool:               antsPool,
 		compressorPool: &sync.Pool{
 			New: func() any {
 				buf := &bytes.Buffer{}
@@ -451,40 +454,46 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 
 	for _, notification := range singleNotifications {
 		wg.Add(1)
-		go func(n *pn.Notification[*DeviceRegistrationEvent]) {
+		if err := pm.antsPool.Submit(func() {
 			defer wg.Done()
-			err := (*pm.pushNotificationClient).SendSingle(ctx, n)
+			err := (*pm.pushNotificationClient).SendSingle(ctx, notification)
 
 			if err != nil {
-				pm.stats.RecordError(n.SourceEvent, err)
+				pm.stats.RecordError(notification.SourceEvent, err)
 
 				if pn.IsInvalidDeviceTokenError(err) {
 					invalidDevicesMutex.Lock()
-					invalidDevices = append(invalidDevices, n.Target)
+					invalidDevices = append(invalidDevices, notification.Target)
 					invalidDevicesMutex.Unlock()
 					errChan <- nil
 				} else {
 					errChan <- errors.Wrap(err, "failed to send notification")
 				}
 			} else {
-				pm.stats.RecordSuccess(n.SourceEvent)
+				pm.stats.RecordSuccess(notification.SourceEvent)
 				errChan <- nil
 			}
-		}(notification)
+		}); err != nil {
+			wg.Done()
+			errChan <- errors.Wrap(err, "failed to submit notification task to pool")
+		}
 	}
 
 	for _, notification := range topicNotifications {
 		wg.Add(1)
-		go func(n *pn.Notification[pn.SubscriptionTopic]) {
+		if err := pm.antsPool.Submit(func() {
 			defer wg.Done()
-			err := (*pm.pushNotificationClient).SendTopic(ctx, n)
+			err := (*pm.pushNotificationClient).SendTopic(ctx, notification)
 			if err != nil {
-				pm.stats.RecordError(n.SourceEvent, err)
+				pm.stats.RecordError(notification.SourceEvent, err)
 			} else {
-				pm.stats.RecordSuccess(n.SourceEvent)
+				pm.stats.RecordSuccess(notification.SourceEvent)
 			}
 			errChan <- err
-		}(notification)
+		}); err != nil {
+			wg.Done()
+			errChan <- errors.Wrap(err, "failed to submit topic notification task to pool")
+		}
 	}
 
 	wg.Wait()

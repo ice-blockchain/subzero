@@ -8,9 +8,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
+	"github.com/panjf2000/ants/v2"
 	"go.uber.org/goleak"
 
 	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
@@ -18,7 +20,23 @@ import (
 	"github.com/ice-blockchain/subzero/validation"
 )
 
+var (
+	globalTestAntsPool *ants.Pool
+)
+
 func TestMain(m *testing.M) {
+	pool, err := ants.NewPool(10 * runtime.NumCPU())
+	if err != nil {
+		panic(fmt.Sprintf("failed to create test ants pool: %v", err))
+	}
+	globalTestAntsPool = pool
+	defer func() {
+		globalTestAntsPool.Release()
+		if err := goleak.Find(); err != nil {
+			panic(fmt.Sprintf("goleak found issues: %v\n", err))
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	ctx, _ = appcontext.NewAppContext(ctx)
 	addr, release := query.NewTestDatabase(ctx)
@@ -32,11 +50,5 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	cancel()
 	release()
-	if code == 0 {
-		if err := goleak.Find(); err != nil {
-			fmt.Printf("goleak found issues: %v\n", err)
-			code = 1
-		}
-	}
 	os.Exit(code)
 }
