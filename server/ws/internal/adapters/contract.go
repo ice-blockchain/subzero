@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"iter"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -21,12 +22,21 @@ type (
 		Read(ctx context.Context, reader WS)
 	}
 	WSReader interface {
+		Metadata() WSMetaData
 		ReadMessage() (messageType int, p []byte, err error)
 		io.Closer
 	}
 	WSWriter interface {
+		Metadata() WSMetaData
 		WriteMessage(ctx context.Context, messageType int, data []byte) error
 		io.Closer
+	}
+	WSMetaData interface {
+		Set(key string, value any)
+		Get(key string) (value any, exists bool)
+		Range() iter.Seq2[string, any]
+		Delete(key string) (oldValue any, loaded bool)
+		Clear()
 	}
 	WS interface {
 		WSWriter
@@ -52,6 +62,7 @@ type (
 		reader       *bufio.Reader
 		closeChannel chan struct{}
 		out          chan []byte
+		MetadataHander
 		writeTimeout time.Duration
 		readTimeout  time.Duration
 		wrErrMx      sync.Mutex
@@ -64,6 +75,7 @@ type (
 		out          chan wsWrite
 		closeChannel chan struct{}
 		framer       func(int, []byte) (ws.Frame, error)
+		MetadataHander
 		writeTimeout time.Duration
 		readTimeout  time.Duration
 		wrErrMx      sync.Mutex
@@ -97,5 +109,8 @@ type (
 	wsWrite struct {
 		data   []byte
 		opCode int
+	}
+	MetadataHander struct {
+		m sync.Map
 	}
 )

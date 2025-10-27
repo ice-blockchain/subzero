@@ -112,6 +112,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.54.0 // indirect
+	github.com/KimMachineGun/automemlimit v0.7.5 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
@@ -122,7 +123,7 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitfield/gotestdox v0.2.2 // indirect
-	github.com/bits-and-blooms/bitset v1.24.1 // indirect
+	github.com/bits-and-blooms/bitset v1.24.2 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.0.2 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
@@ -159,6 +160,7 @@ require (
 	github.com/dgraph-io/ristretto v1.0.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.3.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
+	github.com/dkorunic/betteralign v0.8.0 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
 	github.com/docker/docker v28.5.1+incompatible // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -194,6 +196,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/orderedcode v0.0.1 // indirect
+	github.com/google/renameio/v2 v2.0.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
@@ -280,6 +283,7 @@ require (
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.6 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/sirkon/dst v0.26.4 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
@@ -312,6 +316,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
+	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
@@ -341,6 +346,7 @@ require (
 
 tool (
 	github.com/daixiang0/gci
+	github.com/dkorunic/betteralign/cmd/betteralign
 	github.com/google/addlicense
 	golang.org/x/tools/cmd/goimports
 	gotest.tools/gotestsum

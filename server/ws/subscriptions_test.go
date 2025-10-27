@@ -12,11 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
-	"github.com/rs/zerolog/log"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 
@@ -33,12 +31,14 @@ type nostrRelay struct {
 func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), testDeadline)
 	defer cancel()
+
 	privkey := model.GeneratePrivateKey()
 	storedEvents := []*model.Event{{Event: nostr.Event{
 		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindTextNote,
 		Content:   "db event",
 	}}}
+
 	RegisterWSSubscriptionListener(func(context.Context, ...model.Filter) EventIterator {
 		return helperNewIterator(t, storedEvents)
 	})
@@ -50,30 +50,30 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 		return nil
 	})
 	pubsubServers[0].Reset()
-	connsCount := 10
-	subsPerConnectionCount := 10
+	const (
+		connsCount             = 10
+		subsPerConnectionCount = 10
+	)
 	subs := make(map[*nostr.Relay]map[*nostr.Subscription]struct{}, 0)
 	subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer subCancel()
-	filters := []nostr.Filter{{
+	filters := []model.Filter{{
 		Kinds: []int{nostr.KindTextNote},
 		Limit: 1,
 	}}
-	for connIdx := 0; connIdx < connsCount; connIdx++ {
+	for range connsCount {
 		relay, err := fixture.NewRelayClient(ctx, pubsubServers[0].Endpoint())
-		if err != nil {
-			log.Panic().Err(err)
-		}
+		require.NoError(t, err)
+
 		subsForConn, ok := subs[relay]
 		if !ok {
 			subsForConn = make(map[*nostr.Subscription]struct{})
 			subs[relay] = subsForConn
 		}
-		for subIdx := 0; subIdx < subsPerConnectionCount; subIdx++ {
+
+		for range subsPerConnectionCount {
 			sub, err := relay.Subscribe(subCtx, filters)
-			if err != nil {
-				log.Panic().Err(err)
-			}
+			require.NoError(t, err)
 			subsForConn[sub] = struct{}{}
 		}
 	}
@@ -83,59 +83,42 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			Content: "new realtime event",
 		},
 	}
-	require.NoError(t, newRealtimeEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	tag, err := nip13.DoWork(ctx, newRealtimeEvent.Event, NIP13MinLeadingZeroBits)
-	require.NoError(t, err)
-	newRealtimeEvent.Tags = append(newRealtimeEvent.Tags, tag)
-	require.NoError(t, newRealtimeEvent.SignWithAlg(privkey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	helperSignWithMinLeadingZeroBits(t, &newRealtimeEvent, privkey)
+
 	var wg sync.WaitGroup
-	eosCh := make(chan struct{})
+	eosCh := make(chan struct{}, len(subs)*subsPerConnectionCount)
 	for _, subsForConn := range subs {
-		for s := range subsForConn {
-			wg.Add(1)
-			go func(sub *nostr.Subscription) {
-				defer wg.Done()
+		for sub := range subsForConn {
+			wg.Go(func() {
 				var ev *nostr.Event
 				select {
 				case ev = <-sub.Events:
 				case <-ctx.Done():
-					log.Panic().Err(errors.New("timeout waiting for the event"))
+					t.Fatal(t, "timeout waiting for the event")
 				}
-				require.Equal(t, storedEvents[0].ID, ev.ID)
-				require.Equal(t, storedEvents[0].Tags, ev.Tags)
-				require.Equal(t, storedEvents[0].CreatedAt, ev.CreatedAt)
-				require.Equal(t, storedEvents[0].Sig, ev.Sig)
-				require.Equal(t, storedEvents[0].Kind, ev.Kind)
-				require.Equal(t, storedEvents[0].PubKey, ev.PubKey)
-				require.Equal(t, storedEvents[0].Content, ev.Content)
+				require.EqualValues(t, storedEvents[0].Event, *ev)
 				select {
 				case <-eosCh:
 				case <-ctx.Done():
-					log.Panic().Err(errors.New("timeout waiting for EOS"))
+					t.Fatal("timeout waiting for EOS")
 				}
+				t.Logf("subscription %s received EOS, waiting for realtime event", sub.GetID())
 				select {
-				case ev = <-sub.Events:
+				case msg := <-sub.ClosedReason:
+					t.Fatalf("subscription %s closed unexpectedly: %s", sub.GetID(), msg)
+				case <-sub.Context.Done():
+					t.Fatalf("subscription %s context done unexpectedly", sub.GetID())
 				case <-ctx.Done():
-					log.Panic().Err(errors.New("timeout waiting for the event"))
+					t.Fatalf("subscription %s timeout waiting for realtime event", sub.GetID())
+				case ev = <-sub.Events:
 				}
 				require.NotNil(t, ev)
-				require.Equal(t, storedEvents[1].ID, ev.ID)
-				require.Equal(t, storedEvents[1].Tags, ev.Tags)
-				require.Equal(t, storedEvents[1].CreatedAt, ev.CreatedAt)
-				require.Equal(t, storedEvents[1].Sig, ev.Sig)
-				require.Equal(t, storedEvents[1].Kind, ev.Kind)
-				require.Equal(t, storedEvents[1].PubKey, ev.PubKey)
-				require.Equal(t, storedEvents[1].Content, ev.Content)
-
-				require.Equal(t, newRealtimeEvent.ID, ev.ID)
-				require.Equal(t, newRealtimeEvent.Tags, ev.Tags)
-				require.Equal(t, newRealtimeEvent.CreatedAt, ev.CreatedAt)
-				require.Equal(t, newRealtimeEvent.Sig, ev.Sig)
-				require.Equal(t, newRealtimeEvent.Kind, ev.Kind)
-				require.Equal(t, newRealtimeEvent.PubKey, ev.PubKey)
-				require.Equal(t, newRealtimeEvent.Content, ev.Content)
+				require.EqualValues(t, storedEvents[1].Event, *ev)
+				require.EqualValues(t, newRealtimeEvent.Event, *ev)
 				sub.Close()
-			}(s)
+				t.Logf("subscription %s received realtime event and closed", sub.GetID())
+			})
 		}
 	}
 	var randomRelay *nostr.Relay
@@ -145,7 +128,7 @@ func TestRelayEventsBroadcastMultipleSubs(t *testing.T) {
 			select {
 			case <-s.EndOfStoredEvents:
 			case <-ctx.Done():
-				log.Panic().Err(errors.New("timeout waiting for EOS"))
+				t.Fatal("timeout waiting for EOS")
 			}
 		}
 	}

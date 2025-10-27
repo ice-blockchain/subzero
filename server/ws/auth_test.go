@@ -12,6 +12,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/auth"
+	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 )
 
 func TestHandleAuth(t *testing.T) {
@@ -219,7 +220,9 @@ func createValidAuthEvent(t *testing.T, priv string, challenge, relayURL string)
 	return authEvent
 }
 
-type mockWriter struct{}
+type mockWriter struct {
+	adapters.MetadataHander
+}
 
 func (*mockWriter) WriteMessage(context.Context, int, []byte) error { return nil }
 func (*mockWriter) Close() error                                    { return nil }

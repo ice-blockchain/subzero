@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
-	"github.com/zeebo/xxh3"
 )
 
 type (
@@ -85,8 +84,4 @@ func (s *Subscription) GetPending() Events {
 	s.mu.Unlock()
 
 	return events
-}
-
-func (s *Subscription) Hash() uint32 {
-	return uint32((xxh3.HashString(s.ID) & 0xFFFFFFFF))
 }

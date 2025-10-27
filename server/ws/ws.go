@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"runtime"
 	"strings"
 	"time"
 
@@ -72,8 +73,10 @@ func New(cfg *Config, routes internal.RegisterRoutes) Server {
 }
 
 func newHandler(relayURL, broadcastPublicKey string) *handler {
+	numShards := uint32(runtime.NumCPU() * 2)
+
 	return &handler{
-		Subscriptions:      xsync.NewMap[string, subscription](),
+		Subscriptions:      newIndexStorage(numShards),
 		ConnAuth:           xsync.NewMap[Writer, connAuthData](),
 		RelayURL:           relayURL,
 		BroadcastPublicKey: broadcastPublicKey,

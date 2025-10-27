@@ -3,7 +3,6 @@
 package ws
 
 import (
-	"context"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -46,11 +45,6 @@ func BenchmarkCanForwardEvent(b *testing.B) {
 	})
 }
 
-type dummyWriter struct{}
-
-func (*dummyWriter) WriteMessage(context.Context, int, []byte) error { return nil }
-func (*dummyWriter) Close() error                                    { return nil }
-
 func BenchmarkAuthLoadAndBroadcast(b *testing.B) {
 	const subscriptionCount = 500_000
 
@@ -60,7 +54,7 @@ func BenchmarkAuthLoadAndBroadcast(b *testing.B) {
 	writers := make([]Writer, subscriptionCount)
 	spareWriters := make([]Writer, subscriptionCount)
 	for idx := range subscriptionCount {
-		w := new(dummyWriter)
+		w := new(mockWriter)
 		h.linkSubscription(w, &model.Subscription{
 			ID: strconv.Itoa(idx),
 			Filters: model.Filters{
@@ -72,7 +66,7 @@ func BenchmarkAuthLoadAndBroadcast(b *testing.B) {
 		})
 		h.ConnAuth.Store(w, connAuthData{Challenge: "challenge-" + strconv.Itoa(idx)})
 		writers[idx] = w
-		spareWriters[idx] = new(dummyWriter)
+		spareWriters[idx] = new(mockWriter)
 	}
 
 	var ev model.Event

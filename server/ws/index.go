@@ -8,6 +8,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
+	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal/pool"
@@ -32,7 +33,7 @@ type (
 	// indexShard represents a shard of the index storage.
 	indexShard struct {
 		Mu            *xsync.RBMutex
-		Subscriptions syncMap[uint32, subscription]         // Subscription hash -> subscription.
+		Subscriptions *xsync.Map[uint32, subscription]      // Subscription hash -> subscription.
 		Generic       indexBitmap                           // Subscription bitmap for those without kind/p/Q tags.
 		ByKind        map[model.Kind]indexBitmap            // Kind -> subscription bitmap, for those without p/Q tags.
 		ByAuthor      map[string]indexBitmap                // Master pubkey from Q or p tag -> subscription bitmap, for those without kinds.
@@ -98,6 +99,10 @@ func NewIndexShard() *indexShard {
 	}
 }
 
+func hashSubscriptionID(ID string) uint32 {
+	return uint32((xxh3.HashString(ID) & 0xFFFFFFFF))
+}
+
 func (*indexShard) ParseFilters(filters model.Filters) (parsedFilters []indexFilter) {
 	for i := range filters {
 		parsed := indexFilter{
@@ -154,7 +159,7 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) {
 		return
 	}
 
-	hash := sub.Hash()
+	hash := hashSubscriptionID(sub.ID)
 	filters := s.ParseFilters(sub.Filters)
 
 	s.Mu.Lock()
@@ -204,7 +209,7 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) {
 			masterKeys = append(masterKeys, filters[i].MasterKeys...)
 
 		default:
-			log.Warn().Str("context", "WEBSOCKET").
+			log.Warn().Str("context", "index").
 				Str("filter", sub.Filters[i].String()).
 				Msg("unhandled filter indexing case")
 			s.Generic.Add(hash)
@@ -223,12 +228,27 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) {
 	}
 }
 
-func (s *indexShard) Remove(sub *model.Subscription) bool {
-	hash := sub.Hash()
+func (s *indexShard) Size() int {
+	return s.Subscriptions.Size()
+}
 
-	entry, deleted := s.Subscriptions.LoadAndDelete(hash)
-	if !deleted {
-		return false
+func (s *indexShard) Remove(conn Writer, subID string) (*model.Subscription, bool) {
+	hash := hashSubscriptionID(subID)
+
+	entry, stillExist := s.Subscriptions.Compute(hash, func(value subscription, loaded bool) (subscription, xsync.ComputeOp) {
+		if !loaded {
+			return value, xsync.CancelOp
+		}
+
+		if value.Writer != nil && value.Writer != conn {
+			// Different writer, do not delete.
+			return value, xsync.CancelOp
+		}
+		return value, xsync.DeleteOp
+	})
+	if stillExist || entry.Source == nil {
+		// Either caller's writer did not match, or subscription did not exist.
+		return nil, false
 	}
 
 	s.Mu.Lock()
@@ -266,7 +286,7 @@ func (s *indexShard) Remove(sub *model.Subscription) bool {
 
 	s.Generic.Remove(hash)
 
-	return true
+	return entry.Source, true
 }
 
 func (s *indexShard) Get(ev *model.Event) (data []subscription) {
@@ -277,6 +297,10 @@ func (s *indexShard) Get(ev *model.Event) (data []subscription) {
 	return data
 }
 
+// Lookup finds all subscriptions matching the given event and calls the provided
+// callback function for each matching subscription.
+// The callback function should return true to continue iterating over subscriptions
+// or false to stop the iteration.
 func (s *indexShard) Lookup(ev *model.Event, cb func(subscription) bool) {
 	result := s.RoaringPool.Get()
 	defer s.RoaringPool.Put(result)
@@ -351,25 +375,35 @@ func newIndexStorage(numShards uint32) *indexStorage {
 }
 
 func (is *indexStorage) Index(conn Writer, sub *model.Subscription) {
-	shard := is.Shards[sub.Hash()%is.NumShards]
+	hash := hashSubscriptionID(sub.ID)
+	shard := is.Shards[hash%is.NumShards]
 	shard.Index(conn, sub)
 }
 
-func (is *indexStorage) Remove(sub *model.Subscription) {
-	shard := is.Shards[sub.Hash()%is.NumShards]
-	shard.Remove(sub)
+func (is *indexStorage) Remove(conn Writer, subID string) (*model.Subscription, bool) {
+	hash := hashSubscriptionID(subID)
+	shard := is.Shards[hash%is.NumShards]
+	return shard.Remove(conn, subID)
+}
+
+func (is *indexStorage) Size() (size int) {
+	for i := range is.Shards {
+		size += is.Shards[i].Size()
+	}
+	return size
 }
 
 func (is *indexStorage) Lookup(ev *model.Event) iter.Seq2[Writer, *model.Subscription] {
 	return func(yield func(Writer, *model.Subscription) bool) {
 		for i := range is.Shards {
-			var shouldStop bool
+			// Initialize it with true, so if current shard has no matches, we continue to the next shard.
+			shouldContinue := true
 			is.Shards[i].Lookup(ev, func(sub subscription) bool {
-				shouldStop = !yield(sub.Writer, sub.Source)
-				return shouldStop
+				shouldContinue = yield(sub.Writer, sub.Source)
+				return shouldContinue
 			})
 			// Stop early if requested.
-			if shouldStop {
+			if !shouldContinue {
 				return
 			}
 		}

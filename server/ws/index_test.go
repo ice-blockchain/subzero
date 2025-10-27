@@ -13,6 +13,15 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+func helperMustSubscriptionRemove(t *testing.T, shard *indexShard, writer Writer, ID string) {
+	t.Helper()
+
+	require.NotNil(t, shard)
+
+	_, ok := shard.Remove(writer, ID)
+	require.Truef(t, ok, "failed to remove subscription with ID %s", ID)
+}
+
 func TestIndexInsertAndGet(t *testing.T) {
 	t.Parallel()
 
@@ -31,7 +40,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data := shard.Get(new(model.Event))
 		require.Len(t, data, 1)
 		require.Equal(t, sub, data[0].Source)
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("Generic", func(t *testing.T) {
 		sub := model.NewSubscription("sub-empty-filter", model.Filters{{Authors: []string{"root"}}})
@@ -43,7 +52,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data := shard.Get(new(model.Event))
 		require.Len(t, data, 1)
 		require.Equal(t, sub, data[0].Source)
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By kind", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-only", model.Filters{{Kinds: []int{1, 2, 3}}})
@@ -67,7 +76,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data = shard.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By p tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-p-tag-only", model.Filters{{Tags: model.TagMap{}.SetLiterals("p", "root")}})
@@ -86,7 +95,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data = shard.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By Q tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-Q-tag-only", model.Filters{{Tags: model.TagMap{}.Set("Q", nil, nil, model.PointerOf("relay.example.com"))}})
@@ -110,7 +119,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data = shard.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By kind and p tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-and-p-tag", model.Filters{{Kinds: []int{10, 11}, Tags: model.TagMap{}.SetLiterals("p", "root")}})
@@ -142,7 +151,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data = shard.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By kind and Q tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-and-Q-tag", model.Filters{
@@ -178,7 +187,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data = shard.Get(&ev)
 		require.Empty(t, data) // No match, Q tag does not match.
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By p and Q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-p-and-Q-tags", model.Filters{
@@ -212,7 +221,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		require.Len(t, data, 1) // Match by p and Q tags.
 		require.Equal(t, sub, data[0].Source)
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("By kind p and Q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-p-and-Q-tags", model.Filters{
@@ -255,7 +264,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		require.Len(t, data, 1) // Match by kind and tags.
 		require.Equal(t, sub, data[0].Source)
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("Kind-only sub with tagged ev", func(t *testing.T) {
 		sub := model.NewSubscription("kind-only", model.Filters{{Kinds: []int{1}}})
@@ -268,7 +277,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		data := shard.Get(&ev)
 		require.Len(t, data, 1) // Should match.
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("Multi-filter OR", func(t *testing.T) {
 		sub := model.NewSubscription("sub-mixed-or-kind-p-tag",
@@ -306,7 +315,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 		require.Len(t, data4, 1) // Matches both filters.
 		require.Equal(t, sub, data4[0].Source)
 
-		require.True(t, shard.Remove(sub))
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
 	})
 	t.Run("Multi keys OR", func(t *testing.T) {
 		sub := model.NewSubscription("sub-mixed-or-kind-p-tag",
@@ -370,13 +379,93 @@ func TestIndexInsertAndGet(t *testing.T) {
 		ev.Tags = model.Tags{{"x", "root"}}
 		data = shard.Get(&ev)
 		require.Empty(t, data) // No match.
+
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
+	})
+	t.Run("Remove non-ownned", func(t *testing.T) {
+		sub := model.NewSubscription("sub-to-not-remove", model.Filters{{Kinds: []int{1, 2, 3}}})
+
+		shard.Index(writer, sub)
+		require.EqualValues(t, 1, shard.Subscriptions.Size())
+
+		_, removed := shard.Remove(new(mockWriter), sub.ID)
+		require.False(t, removed, "should not remove subscription owned by different writer")
+
+		helperMustSubscriptionRemove(t, shard, writer, sub.ID)
+	})
+}
+
+func TestIndexStorageIterators(t *testing.T) {
+	t.Parallel()
+
+	const subCount = 1000
+
+	var subs []*model.Subscription
+	for i := range subCount {
+		subs = append(subs, model.NewSubscription("sub-"+strconv.Itoa(i), model.Filters{
+			{Kinds: []int{1}},
+		}))
+	}
+
+	t.Run("Shard iterator", func(t *testing.T) {
+		shard := NewIndexShard()
+		for _, sub := range subs {
+			shard.Index(new(mockWriter), sub)
+		}
+		require.EqualValues(t, subCount, shard.Subscriptions.Size())
+		var ev model.Event
+		ev.Kind = 1
+		t.Run("Full", func(t *testing.T) {
+			var found int
+			shard.Lookup(&ev, func(s subscription) bool {
+				found++
+				return true
+			})
+			require.EqualValues(t, subCount, found)
+		})
+		t.Run("Partial", func(t *testing.T) {
+			var found int
+			shard.Lookup(&ev, func(s subscription) bool {
+				found++
+				return found < subCount/2
+			})
+			require.EqualValues(t, subCount/2, found)
+		})
+	})
+	t.Run("Storage iterator", func(t *testing.T) {
+		const shardCount = 42
+
+		storage := newIndexStorage(shardCount)
+		for _, sub := range subs {
+			storage.Index(new(mockWriter), sub)
+		}
+		require.EqualValues(t, subCount, storage.Size())
+		var ev model.Event
+		ev.Kind = 1
+		t.Run("Full", func(t *testing.T) {
+			var found int
+			for range storage.Lookup(&ev) {
+				found++
+			}
+			require.EqualValues(t, subCount, found)
+		})
+		t.Run("Partial", func(t *testing.T) {
+			left := subCount / 2
+			for range storage.Lookup(&ev) {
+				left--
+				if left == 0 {
+					break
+				}
+			}
+			require.Zero(t, left)
+		})
 	})
 }
 
 func BenchmarkIndexStorageInsert(b *testing.B) {
 	const (
 		numberOfShards        = 16
-		numberOfSubscriptions = 50_000
+		numberOfSubscriptions = 500_000
 	)
 
 	storage := newIndexStorage(numberOfShards)
@@ -418,4 +507,7 @@ func BenchmarkIndexStorageInsert(b *testing.B) {
 			storage.Index(writer, subs[int(idx)])
 		}
 	})
+	for i, shard := range storage.Shards {
+		b.ReportMetric(float64(shard.Subscriptions.Size()), "subs count/shard_"+strconv.Itoa(i))
+	}
 }
