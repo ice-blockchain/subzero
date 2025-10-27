@@ -121,8 +121,9 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
-	h.Subscriptions.Index(respWriter, sub)
-	respWriter.Metadata().Set(sub.ID, sub)
+	if h.Subscriptions.Index(respWriter, sub) {
+		respWriter.Metadata().Set(sub.ID, sub)
+	}
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
@@ -136,7 +137,9 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	}
 
 	_, ok := h.Subscriptions.Remove(respWriter, *ID)
-	respWriter.Metadata().Delete(*ID)
+	if ok {
+		respWriter.Metadata().Delete(*ID)
+	}
 
 	return ok
 }

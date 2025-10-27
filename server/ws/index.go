@@ -150,13 +150,13 @@ func (*indexShard) ParseFilters(filters model.Filters) (parsedFilters []indexFil
 	return parsedFilters
 }
 
-func (s *indexShard) Index(conn Writer, sub *model.Subscription) {
+func (s *indexShard) Index(conn Writer, sub *model.Subscription) bool {
 	var masterKeys []string
 	var kinds []model.Kind
 
 	if sub.OneShot {
 		// OneShot subscriptions are not stored, they are processed immediately.
-		return
+		return false
 	}
 
 	hash := hashSubscriptionID(sub.ID)
@@ -226,6 +226,8 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) {
 	if loaded {
 		log.Warn().Str("context", "index").Str("subscription_id", sub.ID).Msg("subscription already exists, overwriting it")
 	}
+
+	return true
 }
 
 func (s *indexShard) Size() int {
@@ -374,10 +376,10 @@ func newIndexStorage(numShards uint32) *indexStorage {
 	return is
 }
 
-func (is *indexStorage) Index(conn Writer, sub *model.Subscription) {
+func (is *indexStorage) Index(conn Writer, sub *model.Subscription) bool {
 	hash := hashSubscriptionID(sub.ID)
 	shard := is.Shards[hash%is.NumShards]
-	shard.Index(conn, sub)
+	return shard.Index(conn, sub)
 }
 
 func (is *indexStorage) Remove(conn Writer, subID string) (*model.Subscription, bool) {
