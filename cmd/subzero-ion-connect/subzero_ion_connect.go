@@ -82,7 +82,7 @@ var (
 			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
-			pushnotifications.MustInit(cmd.Context())
+			pushnotifications.MustInit(cmd.Context(), antsPool)
 			hashtagssender.MustInit(cmd.Context())
 			nftcontentsender.MustInit(cmd.Context())
 			followerssender.MustInit(cmd.Context())
@@ -284,8 +284,7 @@ func main() {
 	defer pool.Release()
 
 	antsPool = pool
-	err = subzero.ExecuteContext(appCtx)
-	if err != nil {
+	if err := subzero.ExecuteContext(appCtx); err != nil {
 		log.Panic().Err(err)
 	}
 	appCtx.WaitForShutdown()
