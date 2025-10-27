@@ -17,7 +17,7 @@ func (m *MetadataHander) Get(key string) (any, bool) {
 func (m *MetadataHander) Range() iter.Seq2[string, any] {
 	return func(yield func(string, any) bool) {
 		m.m.Range(func(key, value any) bool {
-			return !yield(key.(string), value)
+			return yield(key.(string), value)
 		})
 	}
 }
