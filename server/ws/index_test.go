@@ -465,7 +465,7 @@ func TestIndexStorageIterators(t *testing.T) {
 func BenchmarkIndexStorageInsert(b *testing.B) {
 	const (
 		numberOfShards        = 16
-		numberOfSubscriptions = 500_000
+		numberOfSubscriptions = 50_000
 	)
 
 	storage := newIndexStorage(numberOfShards)
@@ -508,6 +508,6 @@ func BenchmarkIndexStorageInsert(b *testing.B) {
 		}
 	})
 	for i, shard := range storage.Shards {
-		b.ReportMetric(float64(shard.Subscriptions.Size()), "subs count/shard_"+strconv.Itoa(i))
+		b.ReportMetric(float64(shard.Subscriptions.Size()), "subs_count/shard_"+strconv.Itoa(i))
 	}
 }
