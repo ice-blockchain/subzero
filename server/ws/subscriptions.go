@@ -131,9 +131,12 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 		for id := range respWriter.Metadata().Range() {
 			h.Subscriptions.Remove(respWriter, id)
 		}
+		respWriter.Metadata().Clear()
+		return true
 	}
 
 	_, ok := h.Subscriptions.Remove(respWriter, *ID)
+	respWriter.Metadata().Delete(*ID)
 
 	return ok
 }
