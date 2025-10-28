@@ -30,7 +30,8 @@ type (
 		MasterKeysByKind map[model.Kind][]string // Extracted p/Q tag values per kind.
 		MasterKeys       []string                // All p/Q tag values from the filter.
 	}
-	eventMatcher struct {
+	parsedFilters []parsedFilter
+	eventMatcher  struct {
 		Mu                *xsync.RBMutex
 		Subscriptions     *xsync.Map[uint64, subscription]        // Subscription hash -> subscription.
 		Generic           matcherBitmap                           // Subscription bitmap for those without kind/p/Q tags.
@@ -101,7 +102,7 @@ func hashSubscriptionID(ID string) uint64 {
 	return xxh3.HashString(ID)
 }
 
-func (*eventMatcher) ParseFilters(filters model.Filters) (parsedFilters []parsedFilter) {
+func (*eventMatcher) ParseFilters(filters model.Filters) (parsedFilters parsedFilters) {
 	for i := range filters {
 		parsed := parsedFilter{
 			Filter:           &filters[i],
@@ -148,10 +149,20 @@ func (*eventMatcher) ParseFilters(filters model.Filters) (parsedFilters []parsed
 	return parsedFilters
 }
 
-func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
-	var masterKeys []string
-	var kinds []model.Kind
+func (p parsedFilters) Meta() (keys []string, kinds []model.Kind) {
+	for i := range p {
+		if len(p[i].Kinds) > 0 {
+			kinds = append(kinds, p[i].Kinds...)
+		}
+		if len(p[i].MasterKeys) > 0 {
+			keys = append(keys, p[i].MasterKeys...)
+		}
+	}
 
+	return model.DeduplicateStringSlice(keys), model.DeduplicateIntSlice(kinds)
+}
+
+func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 	if sub.OneShot {
 		// OneShot subscriptions are not stored, they are processed immediately.
 		return false
@@ -159,6 +170,28 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 
 	hash := hashSubscriptionID(sub.ID)
 	filters := s.ParseFilters(sub.Filters)
+	keys, kinds := filters.Meta()
+	newSub := subscription{
+		Source:     sub,
+		Writer:     conn,
+		MasterKeys: keys,
+		Kinds:      kinds,
+	}
+
+	value, exist := s.Subscriptions.Compute(hash, func(oldValue subscription, loaded bool) (subscription, xsync.ComputeOp) {
+		if !loaded || oldValue.Writer == conn {
+			return newSub, xsync.UpdateOp
+		}
+		return oldValue, xsync.CancelOp
+	})
+	if !exist || value.Writer != conn {
+		// This subscription belongs to a different connection, do not index it.
+		log.Warn().
+			Str("context", "index").
+			Str("subscription_id", sub.ID).
+			Msg("subscription exists with different writer, not updating")
+		return false
+	}
 
 	s.Mu.Lock()
 	if len(filters) == 0 {
@@ -185,8 +218,6 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 					bmByDestination[masterKey] = v
 				}
 			}
-			kinds = append(kinds, filters[i].Kinds...)
-			masterKeys = append(masterKeys, filters[i].MasterKeys...)
 
 		// If there are only kinds, add to ByKind.
 		case len(filters[i].Kinds) > 0 && len(filters[i].MasterKeys) == 0:
@@ -195,7 +226,6 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 				v.Add(hash)
 				s.ByKind[kind] = v
 			}
-			kinds = append(kinds, filters[i].Kinds...)
 
 		// If there are only p/Q tags, add to ByDestination.
 		case len(filters[i].Kinds) == 0 && len(filters[i].MasterKeys) > 0:
@@ -204,7 +234,6 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 				v.Add(hash)
 				s.ByDestination[masterKey] = v
 			}
-			masterKeys = append(masterKeys, filters[i].MasterKeys...)
 
 		default:
 			log.Warn().Str("context", "index").
@@ -214,16 +243,6 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 		}
 	}
 	s.Mu.Unlock()
-
-	_, loaded := s.Subscriptions.LoadAndStore(hash, subscription{
-		Source:     sub,
-		Writer:     conn,
-		MasterKeys: model.DeduplicateStringSlice(masterKeys),
-		Kinds:      model.DeduplicateIntSlice(kinds),
-	})
-	if loaded {
-		log.Warn().Str("context", "index").Str("subscription_id", sub.ID).Msg("subscription already exists, overwriting it")
-	}
 
 	return true
 }
