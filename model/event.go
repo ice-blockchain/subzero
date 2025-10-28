@@ -265,6 +265,18 @@ func DeduplicateSlice[T any, H comparable](s []T, key func(elem T) H) []T {
 	return s[:j]
 }
 
+func DeduplicateStringSlice(s []string) []string {
+	return DeduplicateSlice(s, func(elem string) string {
+		return elem
+	})
+}
+
+func DeduplicateIntSlice(s []int) []int {
+	return DeduplicateSlice(s, func(elem int) int {
+		return elem
+	})
+}
+
 func SplitBatch[T any](slice []T, batchSize int) (batches [][]T) {
 	for batchSize < len(slice) {
 		slice, batches = slice[batchSize:], append(batches, slice[0:batchSize:batchSize])

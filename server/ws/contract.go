@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/puzpuzpuz/xsync/v4"
+
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -37,24 +39,14 @@ type (
 		model.UserDataContext
 	}
 	subscription struct {
-		Source *model.Subscription
-		Writer Writer
-	}
-	syncMap[K comparable, V any] interface {
-		Store(key K, data V)
-
-		Load(key K) (V, bool)
-		LoadOrCompute(key K, f func() (V, bool)) (V, bool)
-		LoadAndStore(key K, value V) (V, bool)
-		LoadAndDelete(key K) (V, bool)
-
-		Delete(key K)
-
-		Range(f func(key K, value V) bool)
+		Source     *model.Subscription
+		Writer     Writer
+		MasterKeys []string
+		Kinds      []model.Kind
 	}
 	handler struct {
-		Subscriptions      syncMap[string, subscription] // Subscriptions ID -> subscription.
-		ConnAuth           syncMap[Writer, connAuthData]
+		Subscriptions      *eventMatcherStorage
+		ConnAuth           *xsync.Map[Writer, connAuthData]
 		RelayURL           string
 		BroadcastPublicKey string
 	}

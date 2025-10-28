@@ -121,33 +121,25 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
-	if sub.OneShot {
-		// OneShot subscriptions are not stored, they are processed immediately.
-		return
-	}
-
-	_, loaded := h.Subscriptions.LoadAndStore(sub.ID, subscription{
-		Source: sub,
-		Writer: respWriter,
-	})
-	if loaded {
-		log.Warn().Str("context", "WEBSOCKET").Str("subscription_id", sub.ID).Msg("subscription already exists, overwriting it")
+	if h.Subscriptions.Index(respWriter, sub) {
+		respWriter.Metadata().Set(sub.ID, sub)
 	}
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	if ID == nil {
 		// Connection is closing, remove all subscriptions.
-		h.Subscriptions.Range(func(_ string, sub subscription) bool {
-			if sub.Writer == respWriter {
-				h.Subscriptions.Delete(sub.Source.ID)
-			}
-			return true
-		})
-		return false
+		for id := range respWriter.Metadata().Range() {
+			h.Subscriptions.Remove(respWriter, id)
+		}
+		respWriter.Metadata().Clear()
+		return true
 	}
 
-	_, ok := h.Subscriptions.LoadAndDelete(*ID)
+	_, ok := h.Subscriptions.Remove(respWriter, *ID)
+	if ok {
+		respWriter.Metadata().Delete(*ID)
+	}
 
 	return ok
 }
@@ -456,32 +448,31 @@ func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.E
 }
 
 func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) (numberOfSubscriptions int) {
-	h.Subscriptions.Range(func(_ string, sub subscription) bool {
-		authData, _ := h.ConnAuth.Load(sub.Writer)
-		for _, event := range events {
-			if !canForwardLiveEvent(ctx, sub.Source.Filters, event, &authData.UserDataContext) {
+	for _, event := range events {
+		for w, sub := range h.Subscriptions.Lookup(event) {
+			authData, _ := h.ConnAuth.Load(w)
+			if !canForwardLiveEvent(ctx, sub.Filters, event, &authData.UserDataContext) {
 				continue
 			}
 
-			if sub.Source.IsLive() {
-				err := h.writeResponse(ctx, sub.Writer, &nostr.EventEnvelope{
+			if sub.IsLive() {
+				err := h.writeResponse(ctx, w, &nostr.EventEnvelope{
 					Events:         []*nostr.Event{&event.Event},
-					SubscriptionID: &sub.Source.ID,
+					SubscriptionID: &sub.ID,
 				})
 				if err != nil {
 					log.Warn().Str("context", "WEBSOCKET").
 						Err(err).
 						Str("event_id", event.ID).
-						Str("subscription_id", sub.Source.ID).
+						Str("subscription_id", sub.ID).
 						Msg("failed to write event to subscription")
 				}
 			} else {
-				sub.Source.Push(event)
+				sub.Push(event)
 			}
 			numberOfSubscriptions++
 		}
-		return true
-	})
+	}
 	return numberOfSubscriptions
 }
 

@@ -15,8 +15,8 @@ import (
 )
 
 type compressor struct {
-	Buf    bytes.Buffer
 	Writer *wsflate.Writer
+	Buf    bytes.Buffer
 }
 
 const (

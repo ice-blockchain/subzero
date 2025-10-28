@@ -70,12 +70,14 @@ type (
 		writeTimeout  stdlibtime.Duration
 		readTimeout   stdlibtime.Duration
 		inputMessages chan []byte
+		adapters.MetadataHander
 	}
 	wtransportClient struct {
 		wt            *adapters.WebtransportAdapter
 		inputMessages chan []byte
 		closed        bool
 		closedMx      sync.Mutex
+		adapters.MetadataHander
 	}
 	http2ClientStream struct {
 		w    *io.PipeWriter
