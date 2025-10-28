@@ -171,18 +171,18 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 		case len(filters[i].Kinds) == 0 && len(filters[i].MasterKeys) == 0:
 			s.Generic.Add(hash)
 
-		// If there are kinds AND p/Q tags, add to ByKindAuthor.
+		// If there are kinds AND p/Q tags, add to ByKindDestination.
 		case len(filters[i].Kinds) > 0 && len(filters[i].MasterKeysByKind) > 0:
 			for _, kind := range filters[i].Kinds {
-				bmByAuthor, exists := s.ByKindDestination[kind]
+				bmByDestination, exists := s.ByKindDestination[kind]
 				if !exists {
-					bmByAuthor = make(map[string]matcherBitmap, indexMapDefaultCapacity)
-					s.ByKindDestination[kind] = bmByAuthor
+					bmByDestination = make(map[string]matcherBitmap, indexMapDefaultCapacity)
+					s.ByKindDestination[kind] = bmByDestination
 				}
 				for _, masterKey := range filters[i].MasterKeysByKind[kind] {
-					v := bmByAuthor[masterKey]
+					v := bmByDestination[masterKey]
 					v.Add(hash)
-					bmByAuthor[masterKey] = v
+					bmByDestination[masterKey] = v
 				}
 			}
 			kinds = append(kinds, filters[i].Kinds...)
@@ -197,7 +197,7 @@ func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 			}
 			kinds = append(kinds, filters[i].Kinds...)
 
-		// If there are only p/Q tags, add to ByAuthor.
+		// If there are only p/Q tags, add to ByDestination.
 		case len(filters[i].Kinds) == 0 && len(filters[i].MasterKeys) > 0:
 			for _, masterKey := range filters[i].MasterKeys {
 				v := s.ByDestination[masterKey]
@@ -260,17 +260,17 @@ func (s *eventMatcher) Remove(conn Writer, subID string) (*model.Subscription, b
 			// We do not delete empty bitmaps from ByKind to avoid additional reallocations later.
 		}
 
-		if bmByAuthor, exists := s.ByKindDestination[kind]; exists {
+		if bmByDestination, exists := s.ByKindDestination[kind]; exists {
 			for _, masterKey := range entry.MasterKeys {
-				bm, exists := bmByAuthor[masterKey]
+				bm, exists := bmByDestination[masterKey]
 				if !exists {
 					continue
 				}
 				if bm.Remove(hash).IsEmpty() {
-					delete(bmByAuthor, masterKey)
+					delete(bmByDestination, masterKey)
 				}
 			}
-			// Keep `kind` in ByKindAuthor even if empty to avoid reallocations.
+			// Keep `kind` in ByKindDestination even if empty to avoid reallocations.
 		}
 	}
 
