@@ -76,7 +76,7 @@ func newHandler(relayURL, broadcastPublicKey string) *handler {
 	numShards := uint32(runtime.NumCPU() * 2)
 
 	return &handler{
-		Subscriptions:      newIndexStorage(numShards),
+		Subscriptions:      newEventMatcherStorage(numShards),
 		ConnAuth:           xsync.NewMap[Writer, connAuthData](),
 		RelayURL:           relayURL,
 		BroadcastPublicKey: broadcastPublicKey,

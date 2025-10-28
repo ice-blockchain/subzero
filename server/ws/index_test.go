@@ -13,7 +13,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperMustSubscriptionRemove(t *testing.T, shard *indexShard, writer Writer, ID string) {
+func helperMustSubscriptionRemove(t *testing.T, shard *eventMatcher, writer Writer, ID string) {
 	t.Helper()
 
 	require.NotNil(t, shard)
@@ -27,7 +27,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 
 	writer := new(mockWriter)
 
-	shard := NewIndexShard()
+	shard := newEventMatcher()
 	require.NotNil(t, shard)
 
 	t.Run("Empty", func(t *testing.T) {
@@ -83,7 +83,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 
 		shard.Index(writer, sub)
 		require.EqualValues(t, 1, shard.Subscriptions.Size())
-		require.Len(t, shard.ByAuthor, 1)
+		require.Len(t, shard.ByDestination, 1)
 
 		var ev model.Event
 		ev.Tags = model.Tags{{"p", "root"}}
@@ -102,7 +102,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 
 		shard.Index(writer, sub)
 		require.EqualValues(t, 1, shard.Subscriptions.Size())
-		require.Len(t, shard.ByAuthor, 1)
+		require.Len(t, shard.ByDestination, 1)
 
 		var ev model.Event
 		ev.Tags = model.Tags{{"Q", "", "", "relay.example.com"}}
@@ -126,7 +126,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 
 		shard.Index(writer, sub)
 		require.EqualValues(t, 1, shard.Subscriptions.Size())
-		require.Len(t, shard.ByKindAuthor, 2)
+		require.Len(t, shard.ByKindDestination, 2)
 
 		var ev model.Event
 		ev.Kind = 10
@@ -288,7 +288,7 @@ func TestIndexInsertAndGet(t *testing.T) {
 
 		shard.Index(writer, sub)
 		require.EqualValues(t, 1, shard.Subscriptions.Size())
-		require.Len(t, shard.ByAuthor, 1)
+		require.Len(t, shard.ByDestination, 1)
 
 		var ev1 model.Event
 		ev1.Kind = 1
@@ -408,7 +408,7 @@ func TestIndexStorageIterators(t *testing.T) {
 	}
 
 	t.Run("Shard iterator", func(t *testing.T) {
-		shard := NewIndexShard()
+		shard := newEventMatcher()
 		for _, sub := range subs {
 			shard.Index(new(mockWriter), sub)
 		}
@@ -435,7 +435,7 @@ func TestIndexStorageIterators(t *testing.T) {
 	t.Run("Storage iterator", func(t *testing.T) {
 		const shardCount = 42
 
-		storage := newIndexStorage(shardCount)
+		storage := newEventMatcherStorage(shardCount)
 		for _, sub := range subs {
 			storage.Index(new(mockWriter), sub)
 		}
@@ -468,7 +468,7 @@ func BenchmarkIndexStorageInsert(b *testing.B) {
 		numberOfSubscriptions = 50_000
 	)
 
-	storage := newIndexStorage(numberOfShards)
+	storage := newEventMatcherStorage(numberOfShards)
 	writer := new(mockWriter)
 
 	var subs []*model.Subscription

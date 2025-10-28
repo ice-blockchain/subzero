@@ -45,7 +45,7 @@ type (
 		Kinds      []model.Kind
 	}
 	handler struct {
-		Subscriptions      *indexStorage
+		Subscriptions      *eventMatcherStorage
 		ConnAuth           *xsync.Map[Writer, connAuthData]
 		RelayURL           string
 		BroadcastPublicKey string

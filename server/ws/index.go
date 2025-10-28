@@ -5,7 +5,7 @@ package ws
 import (
 	"iter"
 
-	"github.com/RoaringBitmap/roaring/v2"
+	"github.com/RoaringBitmap/roaring/v2/roaring64"
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 	"github.com/zeebo/xxh3"
@@ -20,78 +20,76 @@ const (
 )
 
 type (
-	// indexBitmap wraps a roaring.Bitmap with lazy initialization.
-	indexBitmap struct {
-		*roaring.Bitmap
+	// matcherBitmap wraps a roaring.Bitmap with lazy initialization.
+	matcherBitmap struct {
+		*roaring64.Bitmap
 	}
-	// indexFilter represents a parsed filter with extracted tag values.
-	indexFilter struct {
+	// parsedFilter represents a parsed filter with extracted tag values.
+	parsedFilter struct {
 		*model.Filter                            // Embedded filter.
 		MasterKeysByKind map[model.Kind][]string // Extracted p/Q tag values per kind.
 		MasterKeys       []string                // All p/Q tag values from the filter.
 	}
-	// indexShard represents a shard of the index storage.
-	indexShard struct {
-		Mu            *xsync.RBMutex
-		Subscriptions *xsync.Map[uint32, subscription]      // Subscription hash -> subscription.
-		Generic       indexBitmap                           // Subscription bitmap for those without kind/p/Q tags.
-		ByKind        map[model.Kind]indexBitmap            // Kind -> subscription bitmap, for those without p/Q tags.
-		ByAuthor      map[string]indexBitmap                // Master pubkey from Q or p tag -> subscription bitmap, for those without kinds.
-		ByKindAuthor  map[model.Kind]map[string]indexBitmap // Kind -> Master pubkey from Q or p tag -> subscription bitmap.
-		RoaringPool   *pool.Pool[*roaring.Bitmap]           // Pool of bitmaps for lookups.
+	eventMatcher struct {
+		Mu                *xsync.RBMutex
+		Subscriptions     *xsync.Map[uint64, subscription]        // Subscription hash -> subscription.
+		Generic           matcherBitmap                           // Subscription bitmap for those without kind/p/Q tags.
+		ByKind            map[model.Kind]matcherBitmap            // Kind -> subscription bitmap, for those without p/Q tags.
+		ByDestination     map[string]matcherBitmap                // Master pubkey from Q or p tag -> subscription bitmap, for those without kinds.
+		ByKindDestination map[model.Kind]map[string]matcherBitmap // Kind -> Master pubkey from Q or p tag -> subscription bitmap.
+		RoaringPool       *pool.Pool[*roaring64.Bitmap]           // Pool of bitmaps for lookups.
 	}
-	// indexStorage is the main index storage structure.
-	indexStorage struct {
-		Shards    []*indexShard
-		NumShards uint32
+	// eventMatcherStorage is the main index storage structure.
+	eventMatcherStorage struct {
+		Shards []*eventMatcher
 	}
 )
 
-func (bm *indexBitmap) IsEmpty() bool {
+func (bm *matcherBitmap) IsEmpty() bool {
 	return bm.Bitmap == nil || bm.Bitmap.IsEmpty()
 }
 
-func (bm *indexBitmap) GetCardinality() uint64 {
+func (bm *matcherBitmap) GetCardinality() uint64 {
 	if bm.Bitmap == nil {
 		return 0
 	}
 	return bm.Bitmap.GetCardinality()
 }
 
-func (bm *indexBitmap) Add(x uint32) *indexBitmap {
+func (bm *matcherBitmap) Add(x uint64) *matcherBitmap {
 	if bm.Bitmap == nil {
-		bm.Bitmap = roaring.New()
+		bm.Bitmap = roaring64.New()
 	}
 	bm.Bitmap.Add(x)
 	return bm
 }
 
-func (bm *indexBitmap) Remove(x uint32) *indexBitmap {
+func (bm *matcherBitmap) Remove(x uint64) *matcherBitmap {
 	if bm.Bitmap != nil {
 		bm.Bitmap.Remove(x)
 	}
 	return bm
 }
 
-func (bm indexBitmap) String() string {
+func (bm matcherBitmap) String() string {
 	if bm.Bitmap == nil {
 		return "{nil}"
 	}
 	return bm.Bitmap.String()
 }
 
-func NewIndexShard() *indexShard {
-	return &indexShard{
-		Mu:            xsync.NewRBMutex(),
-		Subscriptions: xsync.NewMap[uint32, subscription](),
-		ByAuthor:      make(map[string]indexBitmap, indexMapDefaultCapacity),
-		ByKind:        make(map[model.Kind]indexBitmap, indexMapDefaultCapacity),
-		ByKindAuthor:  make(map[model.Kind]map[string]indexBitmap, indexMapDefaultCapacity),
+func newEventMatcher() *eventMatcher {
+	return &eventMatcher{
+		Mu:                xsync.NewRBMutex(),
+		Subscriptions:     xsync.NewMap[uint64, subscription](),
+		ByDestination:     make(map[string]matcherBitmap, indexMapDefaultCapacity),
+		ByKind:            make(map[model.Kind]matcherBitmap, indexMapDefaultCapacity),
+		ByKindDestination: make(map[model.Kind]map[string]matcherBitmap, indexMapDefaultCapacity),
 		RoaringPool: pool.New(
-			roaring.New,
-			pool.WithDesiredNumberOfItems[*roaring.Bitmap](indexPoolBitmapCapacity),
-			pool.WithPreFill[*roaring.Bitmap](true),
-			pool.WithBeforeGet(func(bm *roaring.Bitmap) *roaring.Bitmap {
+			roaring64.New,
+			pool.WithDesiredNumberOfItems[*roaring64.Bitmap](indexPoolBitmapCapacity),
+			pool.WithPreFill[*roaring64.Bitmap](true),
+			pool.WithBeforeGet(func(bm *roaring64.Bitmap) *roaring64.Bitmap {
 				bm.Clear()
 				return bm
 			}),
@@ -99,13 +97,13 @@ func NewIndexShard() *indexShard {
 	}
 }
 
-func hashSubscriptionID(ID string) uint32 {
-	return uint32((xxh3.HashString(ID) & 0xFFFFFFFF))
+func hashSubscriptionID(ID string) uint64 {
+	return xxh3.HashString(ID)
 }
 
-func (*indexShard) ParseFilters(filters model.Filters) (parsedFilters []indexFilter) {
+func (*eventMatcher) ParseFilters(filters model.Filters) (parsedFilters []parsedFilter) {
 	for i := range filters {
-		parsed := indexFilter{
+		parsed := parsedFilter{
 			Filter:           &filters[i],
 			MasterKeysByKind: make(map[model.Kind][]string),
 		}
@@ -150,7 +148,7 @@ func (*indexShard) ParseFilters(filters model.Filters) (parsedFilters []indexFil
 	return parsedFilters
 }
 
-func (s *indexShard) Index(conn Writer, sub *model.Subscription) bool {
+func (s *eventMatcher) Index(conn Writer, sub *model.Subscription) bool {
 	var masterKeys []string
 	var kinds []model.Kind
 
@@ -176,10 +174,10 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) bool {
 		// If there are kinds AND p/Q tags, add to ByKindAuthor.
 		case len(filters[i].Kinds) > 0 && len(filters[i].MasterKeysByKind) > 0:
 			for _, kind := range filters[i].Kinds {
-				bmByAuthor, exists := s.ByKindAuthor[kind]
+				bmByAuthor, exists := s.ByKindDestination[kind]
 				if !exists {
-					bmByAuthor = make(map[string]indexBitmap, indexMapDefaultCapacity)
-					s.ByKindAuthor[kind] = bmByAuthor
+					bmByAuthor = make(map[string]matcherBitmap, indexMapDefaultCapacity)
+					s.ByKindDestination[kind] = bmByAuthor
 				}
 				for _, masterKey := range filters[i].MasterKeysByKind[kind] {
 					v := bmByAuthor[masterKey]
@@ -202,9 +200,9 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) bool {
 		// If there are only p/Q tags, add to ByAuthor.
 		case len(filters[i].Kinds) == 0 && len(filters[i].MasterKeys) > 0:
 			for _, masterKey := range filters[i].MasterKeys {
-				v := s.ByAuthor[masterKey]
+				v := s.ByDestination[masterKey]
 				v.Add(hash)
-				s.ByAuthor[masterKey] = v
+				s.ByDestination[masterKey] = v
 			}
 			masterKeys = append(masterKeys, filters[i].MasterKeys...)
 
@@ -230,11 +228,11 @@ func (s *indexShard) Index(conn Writer, sub *model.Subscription) bool {
 	return true
 }
 
-func (s *indexShard) Size() int {
+func (s *eventMatcher) Size() int {
 	return s.Subscriptions.Size()
 }
 
-func (s *indexShard) Remove(conn Writer, subID string) (*model.Subscription, bool) {
+func (s *eventMatcher) Remove(conn Writer, subID string) (*model.Subscription, bool) {
 	hash := hashSubscriptionID(subID)
 
 	entry, stillExist := s.Subscriptions.Compute(hash, func(value subscription, loaded bool) (subscription, xsync.ComputeOp) {
@@ -262,7 +260,7 @@ func (s *indexShard) Remove(conn Writer, subID string) (*model.Subscription, boo
 			// We do not delete empty bitmaps from ByKind to avoid additional reallocations later.
 		}
 
-		if bmByAuthor, exists := s.ByKindAuthor[kind]; exists {
+		if bmByAuthor, exists := s.ByKindDestination[kind]; exists {
 			for _, masterKey := range entry.MasterKeys {
 				bm, exists := bmByAuthor[masterKey]
 				if !exists {
@@ -277,12 +275,12 @@ func (s *indexShard) Remove(conn Writer, subID string) (*model.Subscription, boo
 	}
 
 	for _, masterKey := range entry.MasterKeys {
-		bm, exists := s.ByAuthor[masterKey]
+		bm, exists := s.ByDestination[masterKey]
 		if !exists {
 			continue
 		}
 		if bm.Remove(hash).IsEmpty() {
-			delete(s.ByAuthor, masterKey)
+			delete(s.ByDestination, masterKey)
 		}
 	}
 
@@ -291,7 +289,7 @@ func (s *indexShard) Remove(conn Writer, subID string) (*model.Subscription, boo
 	return entry.Source, true
 }
 
-func (s *indexShard) Get(ev *model.Event) (data []subscription) {
+func (s *eventMatcher) Get(ev *model.Event) (data []subscription) {
 	s.Lookup(ev, func(sub subscription) bool {
 		data = append(data, sub)
 		return true
@@ -303,7 +301,7 @@ func (s *indexShard) Get(ev *model.Event) (data []subscription) {
 // callback function for each matching subscription.
 // The callback function should return true to continue iterating over subscriptions
 // or false to stop the iteration.
-func (s *indexShard) Lookup(ev *model.Event, cb func(subscription) bool) {
+func (s *eventMatcher) Lookup(ev *model.Event, cb func(subscription) bool) {
 	result := s.RoaringPool.Get()
 	defer s.RoaringPool.Put(result)
 
@@ -338,13 +336,13 @@ func (s *indexShard) Lookup(ev *model.Event, cb func(subscription) bool) {
 		}
 
 		// By general author (p/Q) subscriptions.
-		bm, exists := s.ByAuthor[targetKey]
+		bm, exists := s.ByDestination[targetKey]
 		if exists && !bm.IsEmpty() {
 			result.Or(bm.Bitmap)
 		}
 
 		// By kind+author (p/Q) subscriptions.
-		m, exists := s.ByKindAuthor[ev.Kind]
+		m, exists := s.ByKindDestination[ev.Kind]
 		if exists {
 			bm, exists := m[targetKey]
 			if exists && !bm.IsEmpty() {
@@ -354,48 +352,52 @@ func (s *indexShard) Lookup(ev *model.Event, cb func(subscription) bool) {
 	}
 	s.Mu.RUnlock(token)
 
-	result.Iterate(func(x uint32) bool {
+	it := result.Iterator()
+	for it.HasNext() {
+		x := it.Next()
 		sub, loaded := s.Subscriptions.Load(x)
 		if !loaded {
 			// Nothing we can do here, just skip.
-			return true
+			continue
 		}
-		return cb(sub)
-	})
+		if !cb(sub) {
+			break
+		}
+	}
 }
 
-func newIndexStorage(numShards uint32) *indexStorage {
-	is := &indexStorage{
-		NumShards: numShards,
-	}
+func newEventMatcherStorage(numShards uint32) *eventMatcherStorage {
+	var is eventMatcherStorage
 
 	for range numShards {
-		is.Shards = append(is.Shards, NewIndexShard())
+		is.Shards = append(is.Shards, newEventMatcher())
 	}
 
-	return is
+	return &is
 }
 
-func (is *indexStorage) Index(conn Writer, sub *model.Subscription) bool {
-	hash := hashSubscriptionID(sub.ID)
-	shard := is.Shards[hash%is.NumShards]
-	return shard.Index(conn, sub)
-}
-
-func (is *indexStorage) Remove(conn Writer, subID string) (*model.Subscription, bool) {
+func (is *eventMatcherStorage) getMatcherFor(subID string) *eventMatcher {
 	hash := hashSubscriptionID(subID)
-	shard := is.Shards[hash%is.NumShards]
-	return shard.Remove(conn, subID)
+
+	return is.Shards[hash%uint64(len(is.Shards))]
 }
 
-func (is *indexStorage) Size() (size int) {
+func (is *eventMatcherStorage) Index(conn Writer, sub *model.Subscription) bool {
+	return is.getMatcherFor(sub.ID).Index(conn, sub)
+}
+
+func (is *eventMatcherStorage) Remove(conn Writer, subID string) (*model.Subscription, bool) {
+	return is.getMatcherFor(subID).Remove(conn, subID)
+}
+
+func (is *eventMatcherStorage) Size() (size int) {
 	for i := range is.Shards {
 		size += is.Shards[i].Size()
 	}
 	return size
 }
 
-func (is *indexStorage) Lookup(ev *model.Event) iter.Seq2[Writer, *model.Subscription] {
+func (is *eventMatcherStorage) Lookup(ev *model.Event) iter.Seq2[Writer, *model.Subscription] {
 	return func(yield func(Writer, *model.Subscription) bool) {
 		for i := range is.Shards {
 			// Initialize it with true, so if current shard has no matches, we continue to the next shard.
