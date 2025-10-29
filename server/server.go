@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/cfg"
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"

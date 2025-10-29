@@ -21,7 +21,7 @@ import (
 	"github.com/xssnick/tonutils-storage/storage"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/http/nip98"

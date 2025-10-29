@@ -15,7 +15,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"go.uber.org/goleak"
 
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/validation"
 )

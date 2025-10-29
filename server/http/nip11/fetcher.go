@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/appcontext"
 )
 
 type (

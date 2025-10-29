@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 )
 

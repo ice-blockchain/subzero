@@ -20,7 +20,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	h2ec "github.com/ice-blockchain/go/src/net/http"
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/appcontext"
 )
 
 const (

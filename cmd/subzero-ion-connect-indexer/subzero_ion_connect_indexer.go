@@ -4,70 +4,215 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"syscall"
+	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/panjf2000/ants/v2"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/command"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
+	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
+	"github.com/ice-blockchain/subzero/validation"
 )
 
+type (
+	Config struct {
+		LogLevel string `yaml:"log-level" validate:"omitempty,oneof=trace debug info warn error fatal panic"`
+	}
+)
+
+func logInit() {
+	config, err := cfg.Get[Config]()
+	if config == nil || err != nil {
+		fmt.Println("no log configuration found, using default values", err)
+		config = &Config{}
+	}
+
+	if config.LogLevel == "" {
+		config.LogLevel = "info"
+	}
+
+	level, err := zerolog.ParseLevel(config.LogLevel)
+	if err != nil {
+		panic(fmt.Sprintf("invalid log level: %v", err))
+	}
+
+	zerolog.SetGlobalLevel(level)
+	log.Logger = log.Output(zerolog.ConsoleWriter{
+		Out:          os.Stdout,
+		TimeFormat:   time.RFC3339Nano,
+		TimeLocation: time.UTC,
+		NoColor:      true,
+	})
+}
+
 var (
-	configPath        string
-	ionConnectIndexer = &cobra.Command{
-		Use:   "subzero-ion-connect-indexer",
-		Short: "subzero-ion-connect-indexer",
+	configPath     string
+	antsPool       *ants.Pool
+	webserver      server.Server
+	subzeroIndexer = &cobra.Command{
+		Use:     "subzero-indexer",
+		Short:   "subzero-indexer",
+		Version: getVersion(),
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg.MustInit(configPath)
+			logInit()
+			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
+			command.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
-			server.New(cmd.Context()).MustListenAndServe(cmd.Context())
+			pushnotifications.MustInit(cmd.Context(), antsPool)
+			webserver = server.New(cmd.Context())
+			webserver.MustListenAndServe(cmd.Context())
 		},
 	}
 	initFlags = func() {
-		ionConnectIndexer.Flags().StringVar(&configPath, "config", cfg.DefaultYAMLConfigurationFilePath, "absolute path to the service config yaml file")
+		subzeroIndexer.Flags().StringVar(&configPath, "config", cfg.DefaultYAMLConfigurationFilePath, "absolute path to the service config yaml file")
+	}
+
+	// Do not require authentication for these kinds of events (publishing).
+	eventKindsNoAuth = map[int]struct{}{
+		nostr.KindGiftWrap:     {},
+		nostr.KindFileMetadata: {},
 	}
 )
 
+func getVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+
+	var revision, commitDate string
+	for _, v := range info.Settings {
+		switch v.Key {
+		case "vcs.revision":
+			revision = v.Value
+		case "vcs.time":
+			commitDate = v.Value
+		}
+	}
+
+	return fmt.Sprintf("%s: %v (%s / %s)", info.Main.Path, info.Main.Version, revision, commitDate)
+}
+
 func init() {
 	initFlags()
-	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
-		authRequired = sub != nil
-
-		return authRequired
-	})
-	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, _ ...*model.Event) (authRequired bool) {
-		authRequired = true
-
-		return authRequired
-	})
-	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
-		if err := command.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to command.AcceptEvent(%#v)", events)
-		}
+	command.RegisterRollbackListener(query.RollbackEvents)
+	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
 		if err := query.AcceptEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", events)
+			return errors.Wrapf(err, "failed to query.AcceptEvent(%#v)", model.Events(events).String())
 		}
-		if _, err := dvm.AcceptJob(ctx, events[0]); err != nil {
-			return errors.Wrapf(err, "failed to dvm.AcceptEvent(%#v)", events[0])
+		return nil
+	})
+	command.RegisterCommitListener(func(ctx context.Context, events ...*model.Event) error {
+		if err := query.CommitEvents(ctx, events...); err != nil {
+			return errors.Wrapf(err, "failed to delete outdated replaced events")
 		}
+
+		antsPool.Submit(func() { webserver.BroadcastNewEvents(ctx, events...) })
 
 		return nil
 	})
-	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents)
+	wsserver.RegisterReqMustAuthenticate(func(_ context.Context, sub *model.Subscription) (authRequired bool) {
+		// Require authentication for all types/kinds of subscriptions.
+		return true
+	})
+	wsserver.RegisterEventMustAuthenticate(func(_ context.Context, events ...*model.Event) (authRequired bool) {
+		for _, e := range events {
+			if _, exists := eventKindsNoAuth[e.Kind]; !exists {
+				return true
+			}
+		}
+		return false
+	})
+	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
+		for _, event := range events {
+			if event.Kind == nostr.KindGiftWrap {
+				if model.GetUserDataFromContext(ctx).Authenticated {
+					return fmt.Errorf("%v: authenticated user is not allowed to send gift wrap events", event.ID)
+				}
+			}
+		}
+		if err := query.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrap(err, "query.AcceptEvent failed")
+		}
+
+		antsPool.Submit(func() {
+			if err := webserver.BroadcastUserEvents(context.WithoutCancel(ctx), events...); err != nil {
+				log.Error().Str("context", "MAIN").
+					Err(err).
+					Str("events", model.Events(events).String()).
+					Msg("failed to webserver.BroadcastUserEvents")
+			}
+		})
+
+		if ch, err := dvm.AcceptJob(ctx, events[0]); err == nil && ch != nil {
+			antsPool.Submit(func() {
+				result := <-ch
+				if result != nil {
+					webserver.BroadcastNewEvents(context.WithoutCancel(ctx), result)
+				}
+			})
+		} else if err != nil {
+			log.Error().Str("context", "MAIN").Err(err).Str("event_id", events[0].ID).Msg("dvm failed to accept job for event")
+		}
+
+		if err := command.AcceptEvents(ctx, events...); err != nil {
+			return errors.Wrap(err, "command.AcceptEvent failed")
+		}
+
+		antsPool.Submit(func() {
+			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents")
+			}
+		})
+
+		antsPool.Submit(func() { webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...) })
+
+		return nil
+	})
+	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
+	wsserver.RegisterWSBroadcastEventListener(func(ctx context.Context, events ...*model.Event) error {
+		antsPool.Submit(func() {
+			start := time.Now()
+			n := webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+			end := time.Since(start)
+			log.Trace().
+				Int("event_count", len(events)).
+				Strs("event_ids", model.Events(events).IDs()).
+				Dur("duration", end).
+				Int("subscription_count", n).
+				Msg("broadcast events")
+		})
+		antsPool.Submit(func() {
+			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents")
+			}
+		})
+
+		return nil
+	})
 }
 
-func newContext() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
+func newContext() appcontext.WaitForShutdown {
+	ctx, cancel := appcontext.NewAppContext(context.Background())
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -75,10 +220,10 @@ func newContext() context.Context {
 		force := false
 		for sig := range c {
 			if force {
-				log.Warn().Str("context", "MAIN").Str("signal", sig.String()).Msg("force shutdown")
+				log.Warn().Str("signal", sig.String()).Msg("force shutdown")
 				os.Exit(2)
 			} else {
-				log.Info().Str("context", "MAIN").Str("signal", sig.String()).Msg("graceful shutdown")
+				log.Info().Str("signal", sig.String()).Msg("graceful shutdown")
 				cancel()
 				force = true
 			}
@@ -89,8 +234,17 @@ func newContext() context.Context {
 }
 
 func main() {
-	err := ionConnectIndexer.ExecuteContext(newContext())
+	appCtx := newContext()
+	defer appcontext.GetAppContext(appCtx).Recover()
+	pool, err := ants.NewPool(10_000 * runtime.NumCPU())
 	if err != nil {
-		log.Panic().Str("context", "MAIN").Err(err).Msg("application failed to start")
+		log.Panic().Err(err).Msg("failed to create ants pool")
 	}
+	defer pool.Release()
+
+	antsPool = pool
+	if err := subzeroIndexer.ExecuteContext(appCtx); err != nil {
+		log.Panic().Err(err)
+	}
+	appCtx.WaitForShutdown()
 }

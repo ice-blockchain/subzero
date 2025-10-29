@@ -13,7 +13,7 @@ import (
 	"github.com/quic-go/webtransport-go"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ice-blockchain/subzero/cmd/subzero-ion-connect/appcontext"
+	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
