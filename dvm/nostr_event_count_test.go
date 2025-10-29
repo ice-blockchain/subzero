@@ -944,6 +944,7 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 			{
 				Search: model.ExtensionTextMRF,
 				Tags:   model.TagMap{}.SetLiterals("p", "alice"),
+				Limit:  10,
 			},
 		}.String()
 
@@ -963,6 +964,7 @@ func TestCountMostRelevantFollowers(t *testing.T) {
 			{
 				Search: model.ExtensionTextMRF,
 				Tags:   model.TagMap{}.SetLiterals("p", "alice"),
+				Limit:  10,
 			},
 		}.String()
 

@@ -86,7 +86,7 @@ func (n *nostrEventCountJob) doCountMRF(ctx context.Context, filter model.Filter
 		Kinds:   []int{nostr.KindFollowList},
 		Authors: []string{data.PublicKey, data.MasterPublicKey},
 		Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(filter.Tags.All("p"), ",") + "|",
-		Limit:   1,
+		Limit:   filter.Limit,
 	}) {
 		if err != nil {
 			return "", errors.Wrap(err, "failed to get events")
