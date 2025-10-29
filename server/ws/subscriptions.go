@@ -162,7 +162,7 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 			Kinds:   []int{nostr.KindFollowList},
 			Authors: []string{data.MasterPublicKey, data.PublicKey},
 			Search:  "include:dependencies:kind3>kind0+p+|" + strings.Join(sub.Filters[i].Tags.All("p"), ",") + "|",
-			Limit:   1,
+			Limit:   sub.Filters[i].Limit,
 		}
 		sub.WithReduce(func(e *model.Event) bool {
 			return e.Kind != nostr.KindProfileMetadata && e.Kind != model.CustomIONKindEphemeralEmbedding
