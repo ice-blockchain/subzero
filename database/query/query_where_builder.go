@@ -861,6 +861,10 @@ from (
 }
 
 func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	limit := filter.Limit
+	if limit <= 0 || limit > whereBuilderDefaultLimit {
+		limit = whereBuilderDefaultLimit
+	}
 	b.WriteString(`
 	union all
 	select
@@ -904,6 +908,8 @@ func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, f
 			)
 			AND `)
 	buildFromSliceNegative(b, sqlOpCodeNONE, filterID, authors, "e_inner.master_pubkey", "mrf")
+	b.WriteString(` limit :`)
+	b.WriteValue(filterID, "mrf_limit", limit)
 	b.WriteString(`) AS t LEFT JOIN events e ON t.master_pubkey = e.master_pubkey AND e.kind = 0 AND e.hidden = FALSE`)
 }
 

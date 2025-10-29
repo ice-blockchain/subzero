@@ -1521,7 +1521,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 			Kinds:   []int{nostr.KindFollowList},
 			Authors: []string{"john"},
 			Search:  "include:dependencies:kind3>kind0+p+|alien|",
-			Limit:   1,
+			Limit:   10,
 		}
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 1) // 1 main event (follow list).
@@ -1531,7 +1531,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 			Kinds:   []int{nostr.KindFollowList},
 			Authors: []string{"john"},
 			Search:  "include:dependencies:kind3>kind0+p+|bob|",
-			Limit:   1,
+			Limit:   10,
 		}
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 3) // 1 main event (follow list), 1 kind 0 of relevant followers (alice), 1 ephemeral event with joanna.
@@ -1544,11 +1544,21 @@ func TestMostRelevantFollowers(t *testing.T) {
 			Kinds:   []int{nostr.KindFollowList},
 			Authors: []string{"john"},
 			Search:  "include:dependencies:kind3>kind0+p+|alice|",
-			Limit:   1,
+			Limit:   10,
 		}
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 3) // 1 main event (follow list), 2 kind 0 of relevant followers.
 		require.ElementsMatch(t, []string{"anna", "bob"}, []string{events[2].PubKey, events[1].PubKey})
+		t.Run("Limited", func(t *testing.T) {
+			f := model.Filter{
+				Kinds:   []int{nostr.KindFollowList},
+				Authors: []string{"john"},
+				Search:  "include:dependencies:kind3>kind0+p+|alice|",
+				Limit:   1,
+			}
+			events = helperSelectEvents(t, db, f)
+			require.Len(t, events, 2) // 1 main event (follow list), 1 kind 0 of relevant followers.
+		})
 	})
 }
 
