@@ -860,6 +860,53 @@ from (
 	b.WriteString(` ) t`)
 }
 
+func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	b.WriteString(`
+	union all
+	select
+		coalesce(e.kind, 0) as kind,
+		coalesce(e.created_at, cast(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) as bigint)) as created_at,
+		coalesce(e.lookup_created_at, 0) as lookup_created_at,
+		coalesce(e.address, '') as address,
+		coalesce(e.id, '') as id,
+		coalesce(e.pubkey, t.master_pubkey) as pubkey,
+		coalesce(e.master_pubkey, t.master_pubkey) as master_pubkey,
+		coalesce(e.sig, 'PACK') as sig,
+		coalesce(e.content, '') as content,
+		coalesce(e.d_tag, '') as d_tag,
+		coalesce(e.h_tag, '') as h_tag,
+		coalesce(e.tags, jsonb_build_array()) as tags,
+		:`)
+	b.WriteValue(filterID, "profile_origin", filterID)
+	b.WriteString(` as origin`)
+	authors := strings.Split(current.Reduce.Author, ",")
+	b.WriteString(` FROM
+	(
+		SELECT DISTINCT e_inner.master_pubkey
+		FROM events e_inner
+		WHERE e_inner.kind = 3
+			AND e_inner.hidden = FALSE
+			AND EXISTS (
+				SELECT 1
+				FROM event_tags et
+				WHERE et.event_id = e_inner.id
+					AND et.event_tag_key = 'p'
+					AND `)
+	buildFromSlice(b, sqlOpCodeNONE, filterID, authors, "et.event_tag_value1", "mrf")
+	b.WriteString(`
+			)
+			AND EXISTS (
+				SELECT 1
+				FROM event_tags et
+				INNER JOIN filter0_events_cte em ON et.event_id = em.id
+				WHERE et.event_tag_key = 'p'
+					AND et.event_tag_value1 = e_inner.master_pubkey
+			)
+			AND `)
+	buildFromSliceNegative(b, sqlOpCodeNONE, filterID, authors, "e_inner.master_pubkey", "mrf")
+	b.WriteString(`) AS t LEFT JOIN events e ON t.master_pubkey = e.master_pubkey AND e.kind = 0 AND e.hidden = FALSE`)
+}
+
 func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
 	if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.KindDVMCountResponse {
 		if len(current.Reduce.Kinds) > 1 {
@@ -935,6 +982,9 @@ left join lateral (
 where
 	exists (select 1 FROM ` + cteName + ` ) AND
 `)
+	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == nostr.KindProfileMetadata && current.Reduce.Author != "" {
+		b.BuildForMostRelevantFollowers(filterID, cteName, filter, current)
+		return
 	} else {
 		b.WriteString(` union all select `)
 		for i, f := range b.fieldsNames("e", filterID) {
@@ -944,33 +994,6 @@ where
 			b.WriteString(f)
 		}
 		b.WriteString(` from events e`)
-		if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == nostr.KindProfileMetadata && current.Reduce.Author != "" {
-			authors := strings.Split(current.Reduce.Author, ",")
-			// Most relevant follwers.
-			b.WriteString(`
-INNER JOIN (
-SELECT e.master_pubkey
-FROM events e
-WHERE e.kind = 3
-AND EXISTS (
-SELECT 1
-FROM event_tags et
-WHERE et.event_id = e.id
-	AND et.event_tag_key = 'p'
-	AND `)
-			buildFromSlice(b, sqlOpCodeNONE, filterID, authors, "et.event_tag_value1", "mrf")
-			b.WriteString(`)
-AND EXISTS (
-SELECT 1
-FROM event_tags et
-JOIN ` + cteName + ` em ON et.event_id = em.id
-WHERE et.event_tag_key = 'p'
-	AND et.event_tag_value1 = e.master_pubkey
-)
-AND `)
-			buildFromSliceNegative(b, sqlOpCodeNONE, filterID, authors, "e.master_pubkey", "mrf")
-			b.WriteString(` AND e.hidden = false) t ON e.master_pubkey = t.master_pubkey`)
-		}
 		b.WriteString(` where exists (select 1 FROM ` + cteName + ` ) AND e.id not in (select `)
 		b.WriteString(cteName)
 		b.WriteString(`.id from `)

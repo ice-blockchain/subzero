@@ -1432,7 +1432,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		require.NoError(t, db.AcceptEvents(t.Context(), &bobMeta, &aliceMeta, &alexMeta, &annaMeta, &johnMeta, &martinMeta))
 	})
 	t.Run("Create follow lists", func(t *testing.T) {
-		var johnList, bobList, aliceList, alexList, annaList, martinList model.Event
+		var johnList, bobList, aliceList, alexList, annaList, martinList, joannaList model.Event
 		bobList.Kind = nostr.KindFollowList
 		bobList.PubKey = "bob"
 		bobList.ID = "bob_id"
@@ -1441,6 +1441,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 			{"p", "john"},
 			{"p", "alice"},
 			{"p", "anna"},
+			{"p", "joanna"},
 		}
 
 		aliceList.Kind = nostr.KindFollowList
@@ -1451,6 +1452,14 @@ func TestMostRelevantFollowers(t *testing.T) {
 			{"p", "john"},
 			{"p", "bob"},
 			{"p", "alex"},
+		}
+
+		joannaList.Kind = nostr.KindFollowList
+		joannaList.PubKey = "joanna"
+		joannaList.ID = "joanna_id"
+		joannaList.CreatedAt = 10
+		joannaList.Tags = model.Tags{
+			{"p", "bob"},
 		}
 
 		alexList.Kind = nostr.KindFollowList
@@ -1489,9 +1498,18 @@ func TestMostRelevantFollowers(t *testing.T) {
 			{"p", "anna"},
 			{"p", "bob"},
 			{"p", "alice"},
+			{"p", "joanna"},
 		}
 
-		require.NoError(t, db.AcceptEvents(t.Context(), &johnList, &bobList, &aliceList, &alexList, &annaList, &martinList))
+		require.NoError(t, db.AcceptEvents(t.Context(),
+			&johnList,
+			&bobList,
+			&aliceList,
+			&alexList,
+			&annaList,
+			&martinList,
+			&joannaList,
+		))
 	})
 
 	// It's intersection between user's (Authors) follow list and users who follow X (include:dependencies:kind3>kind0+p+|X|).
@@ -1516,8 +1534,10 @@ func TestMostRelevantFollowers(t *testing.T) {
 			Limit:   1,
 		}
 		events := helperSelectEvents(t, db, f)
-		require.Len(t, events, 2) // 1 main event (follow list), 1 kind 0 of relevant followers.
+		require.Len(t, events, 3) // 1 main event (follow list), 1 kind 0 of relevant followers (alice), 1 ephemeral event with joanna.
 		require.Equal(t, "alice", events[1].PubKey)
+		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[2].Kind)
+		require.Equal(t, "joanna", events[2].GetTag("p").Value())
 	})
 	t.Run("Find most relevant followers of john with alice", func(t *testing.T) {
 		f := model.Filter{
@@ -1528,8 +1548,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		}
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 3) // 1 main event (follow list), 2 kind 0 of relevant followers.
-		require.Equal(t, "anna", events[1].PubKey)
-		require.Equal(t, "bob", events[2].PubKey)
+		require.ElementsMatch(t, []string{"anna", "bob"}, []string{events[2].PubKey, events[1].PubKey})
 	})
 }
 

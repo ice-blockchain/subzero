@@ -165,7 +165,7 @@ func (h *handler) prepareSubscription(ctx context.Context, sub *model.Subscripti
 			Limit:   1,
 		}
 		sub.WithReduce(func(e *model.Event) bool {
-			return e.Kind != nostr.KindProfileMetadata
+			return e.Kind != nostr.KindProfileMetadata && e.Kind != model.CustomIONKindEphemeralEmbedding
 		})
 	}
 	return sub
