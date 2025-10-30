@@ -104,6 +104,8 @@ const (
 
 	QuillDeltaProtocol string = "quill_delta"
 
+	LangISO = `ISO-639-1`
+
 	KindJobTextExtraction            = 5000
 	KindJobSummarization             = 5001
 	KindJobTranslation               = 5002

@@ -13,7 +13,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/errors"
-	"github.com/goccy/go-json"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
@@ -315,18 +314,6 @@ func (b *queryBuilder) ApplyFilterTagMarkers(filterID string, markers ...databas
 	}
 }
 
-func (*queryBuilder) isCommonLang(code *string) bool {
-	if code == nil {
-		return false
-	}
-
-	codes := map[string]struct{}{
-		"en": {},
-	}
-	_, ok := codes[*code]
-	return ok
-}
-
 func (b *queryBuilder) ApplyFilterTags(filterID string, tags model.TagMap) {
 	if len(tags) == 0 {
 		return
@@ -350,20 +337,6 @@ main:
 		case "t", "!t":
 			// Handled in ApplyFilterTtags.
 			continue main
-		case "l":
-			// Applying language filter here for some common languages is cheaper than using external `event_tags` table with `EXISTS` clause.
-			if len(tagValues) == 1 &&
-				len(tagValues[0]) == 2 && // [ lang, "ISO-639-1" ]
-				b.isCommonLang(tagValues[0][0]) &&
-				tagValues[0][1] != nil && // "ISO-639-1" != nil
-				*tagValues[0][1] == "ISO-639-1" {
-				val, _ := json.Marshal(model.Tags{{tagName, *tagValues[0][0], *tagValues[0][1]}}) // [ [ "l", "en", "ISO-639-1" ] ].
-				b.MaybeAND()
-				b.WriteString(`e.tags @> cast(:`)
-				b.WriteValue(filterID, "langtag"+strconv.FormatUint(tagID, 10), string(val))
-				b.WriteString(` as jsonb)`)
-				continue main
-			}
 		}
 
 		queryTagName := tagName
@@ -389,9 +362,19 @@ main:
 		}
 
 		b.WriteRune('(')
+		beforeTagLoopBufLen := b.Len()
+	valuesLoop:
 		for _, values := range tagValues {
 			if values.Empty() {
 				continue
+			}
+
+			switch tagName {
+			case "l": // Either language filter OR color filter.
+				if len(values) == 2 && values[0] != nil && values[1] != nil && strings.EqualFold(*values[1], model.LangISO) {
+					// Language filter, handled by ApplyFilterLang.
+					continue valuesLoop
+				}
 			}
 
 			if len(values) > maxTagValues {
@@ -437,6 +420,10 @@ main:
 				tagValue++
 			}
 			b.WriteRune(')')
+		}
+		if b.Len() == beforeTagLoopBufLen {
+			// No valid values were found for this tag, add dummy condition.
+			b.WriteString("1=1")
 		}
 		b.WriteRune(')')
 	}
@@ -491,6 +478,28 @@ func (b *queryBuilder) ApplyTimeRange(filterID string, since, until *model.Times
 	}
 
 	return nil
+}
+
+func (b *queryBuilder) ApplyFilterLang(filter *databaseFilterSearch) {
+	values, ok := filter.Tags["l"]
+	if !ok {
+		return
+	}
+
+	var langs []string
+	for _, v := range values {
+		// Expecting two values: [language, "ISO-639-1"].
+		if len(v) != 2 || v[0] == nil || v[1] == nil || !strings.EqualFold(*v[1], model.LangISO) {
+			continue
+		}
+		langs = append(langs, *v[0])
+	}
+
+	if len(langs) == 0 {
+		return
+	}
+
+	buildFromSlice(b, sqlOpCodeAND, filter.ID, langs, "e.lang", "langs")
 }
 
 func (b *queryBuilder) applyFilterTtags(filter *databaseFilterSearch, exclude bool, values []string) {
@@ -710,6 +719,7 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	b.ApplyKinds(filter, b.ApplySpecialKinds(filter))
 	b.ApplyFilterForExtensions(filter)
 	b.ApplyFilterTtags(filter)
+	b.ApplyFilterLang(filter)
 	if len(filter.Authors) > 0 {
 		b.MaybeAND()
 		b.WriteRune('(')
