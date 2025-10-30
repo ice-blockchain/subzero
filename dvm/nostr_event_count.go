@@ -90,7 +90,7 @@ func (n *nostrEventCountJob) doCountMRF(ctx context.Context, filter model.Filter
 	}) {
 		if err != nil {
 			return "", errors.Wrap(err, "failed to get events")
-		} else if ev.Kind != nostr.KindProfileMetadata {
+		} else if ev.Kind != nostr.KindProfileMetadata && ev.Kind != model.CustomIONKindEphemeralEmbedding {
 			continue
 		}
 		total++

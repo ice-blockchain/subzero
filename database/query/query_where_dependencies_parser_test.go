@@ -1536,6 +1536,7 @@ func TestMostRelevantFollowers(t *testing.T) {
 		events := helperSelectEvents(t, db, f)
 		require.Len(t, events, 3) // 1 main event (follow list), 1 kind 0 of relevant followers (alice), 1 ephemeral event with joanna.
 		require.Equal(t, "alice", events[1].PubKey)
+		require.Equal(t, "id4", events[1].ID)
 		require.Equal(t, model.CustomIONKindEphemeralEmbedding, events[2].Kind)
 		require.Equal(t, "joanna", events[2].GetTag("p").Value())
 	})
