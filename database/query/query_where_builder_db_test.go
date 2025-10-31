@@ -1043,6 +1043,8 @@ func TestBuilderLookupByAddress(t *testing.T) {
 }
 
 func TestBuilderMultiKindWithDependencies(t *testing.T) {
+	t.Parallel()
+
 	db := helperNewDatabase(t)
 	defer db.Close()
 
@@ -1062,4 +1064,80 @@ func TestBuilderMultiKindWithDependencies(t *testing.T) {
 	for _, err := range db.SelectEvents(t.Context(), filters...) {
 		require.NoError(t, err)
 	}
+}
+
+func TestBuilderTagMapAllLang(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	filters := model.Filters{
+		{
+			Kinds:   []int{nostr.KindProfileMetadata},
+			Authors: []string{"pubkey1"},
+			Tags:    model.TagMap{}.SetLiterals("l", "en", model.LangISO),
+		},
+		{
+			Tags: model.TagMap{}.SetLiterals("l", "red", "color"),
+		},
+	}
+
+	for _, err := range db.SelectEvents(t.Context(), filters...) {
+		require.NoError(t, err)
+	}
+
+}
+
+func TestLookupByLanuage(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	var eventEn, eventFr, eventNoLang model.Event
+	eventEn.Kind = nostr.KindTextNote
+	eventEn.ID = "1"
+	eventEn.PubKey = "1"
+	eventEn.CreatedAt = 1
+	eventEn.Content = "foo"
+	eventEn.Tags = model.Tags{{"l", "en", model.LangISO}}
+
+	eventFr.Kind = nostr.KindTextNote
+	eventFr.ID = "2"
+	eventFr.PubKey = "2"
+	eventFr.CreatedAt = 2
+	eventFr.Content = "bar"
+	eventFr.Tags = model.Tags{{"l", "fr", model.LangISO}}
+
+	eventNoLang.Kind = nostr.KindTextNote
+	eventNoLang.ID = "3"
+	eventNoLang.PubKey = "3"
+	eventNoLang.CreatedAt = 3
+	eventNoLang.Content = "baz"
+	eventNoLang.Tags = model.Tags{}
+
+	err := db.AcceptEvents(t.Context(), &eventEn, &eventFr, &eventNoLang)
+	require.NoError(t, err)
+
+	filters := model.Filters{
+		{
+			Tags: model.TagMap{}.
+				Set("l", model.PointerOf("en"), model.PointerOf(model.LangISO)).
+				Append("l", model.PointerOf("fr"), model.PointerOf(model.LangISO)),
+		},
+	}
+	t.Logf("filters: %s", filters.String())
+	t.Run("Check query", func(t *testing.T) {
+		result, err := newQueryBuilder().Build(t.Context(), filters...)
+		require.NoError(t, err)
+		require.Contains(t, result.Statement, "e.lang")
+		require.Contains(t, result.Params, "filter0_langs")
+		require.ElementsMatch(t, []string{"en", "fr"}, result.Params["filter0_langs"])
+	})
+	t.Run("Select", func(t *testing.T) {
+		events := helperSelectEvents(t, db, filters...)
+		require.Len(t, events, 2)
+		require.ElementsMatch(t, []*model.Event{&eventEn, &eventFr}, events)
+	})
 }

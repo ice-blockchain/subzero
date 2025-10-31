@@ -57,6 +57,7 @@ type (
 		SaveMergeAction         string
 		Origin                  string
 		SystemID                string
+		Lang                    string
 		ReferenceID             sql.NullString
 		GiftReceiver            sql.NullString
 		Ttags                   []string
@@ -151,7 +152,11 @@ func (d *databaseEvent) FromTags(tags model.Tags) {
 					rootOf = tag.Value()
 				}
 			}
-		case "q", "Q":
+		case "l":
+			if len(tag) > 2 && tag.Value() != "" && tag[2] == model.LangISO {
+				d.Lang = tag.Value()
+			}
+		case "q", model.CustomIONTagAddressableQ:
 			d.IsQuote = true
 		}
 	}
@@ -608,6 +613,7 @@ func (db *dbClient) saveEvents(
 		"sig_alg",
 		"key_alg",
 		"content",
+		"lang",
 		"tags",
 		"t_tags",
 		"d_tag",
@@ -694,6 +700,10 @@ WITH replaced AS (
 			{
 				Name:  "content",
 				Value: events[i].Content,
+			},
+			{
+				Name:  "lang",
+				Value: events[i].Lang,
 			},
 			{
 				Name:   "tags",
@@ -788,7 +798,7 @@ update_data AS (
 		pubkey, master_pubkey,
 		gift_receiver_pubkey,
 		sig, sig_alg, key_alg,
-		content,
+		content, lang,
 		tags, t_tags,
 		d_tag, h_tag,
 		deleted,
@@ -805,7 +815,7 @@ update_data AS (
 		sd.pubkey, sd.master_pubkey,
 		sd.gift_receiver_pubkey,
 		sd.sig, sd.sig_alg, sd.key_alg,
-		sd.content,
+		sd.content, sd.lang,
 		sd.tags, sd.t_tags,
 		sd.d_tag, sd.h_tag,
 		sd.deleted,
@@ -829,6 +839,7 @@ update_data AS (
 		sig_alg = EXCLUDED.sig_alg,
 		key_alg = EXCLUDED.key_alg,
 		content = EXCLUDED.content,
+		lang = EXCLUDED.lang,
 		tags = EXCLUDED.tags,
 		t_tags = EXCLUDED.t_tags,
 		d_tag = EXCLUDED.d_tag,
