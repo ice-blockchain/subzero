@@ -32,6 +32,9 @@ import (
 
 const (
 	envLoggigEnabled = "SUBZERO_PGX_LOGGING_DEFAULT_VALUE"
+
+	stmtTimeoutRegular   = "30s"
+	stmtTimeoutMigration = "0"
 )
 
 func WithWriteURLs(urls ...string) Option {
@@ -241,6 +244,19 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, ddl fs.FS) error {
 		log.Info().Str("context", "DATABASE").Int32("version", v).Msg("current schema version")
 	}
 
+	if err := connSetSessionParameters(ctx, conn.Conn(), stmtTimeoutMigration); err != nil {
+		return errors.Wrap(err, "cannot set session parameters for migration")
+	}
+
+	defer func() {
+		if derr := connSetSessionParameters(ctx, conn.Conn(), stmtTimeoutRegular); derr != nil {
+			log.Error().
+				Str("context", "DATABASE").
+				Err(sanitizeErr(derr)).
+				Msg("cannot reset session parameters after migration")
+		}
+	}()
+
 	m.OnStart = func(sequence int32, name, direction, sql string) {
 		log.Info().
 			Str("context", "DATABASE").
@@ -316,7 +332,9 @@ func poolConnect(ctx context.Context, connectionString string, log tracelog.Logg
 
 	conf.MaxConnLifetimeJitter = 10 * time.Minute
 	conf.MaxConnLifetime = 24 * time.Hour
-	conf.AfterConnect = poolDoAfterConnect
+	conf.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+		return connSetSessionParameters(ctx, c, stmtTimeoutRegular)
+	}
 	if !strings.Contains(strings.ToLower(connectionString), "pool_min_conns") {
 		conf.MinConns = 1
 	}
@@ -324,14 +342,12 @@ func poolConnect(ctx context.Context, connectionString string, log tracelog.Logg
 	return pgxpool.NewWithConfig(ctx, conf)
 }
 
-func poolDoAfterConnect(ctx context.Context, conn *pgx.Conn) error {
-	const actualTimeout = "30s"
-
+func connSetSessionParameters(ctx context.Context, conn *pgx.Conn, timeout string) error {
 	customConnectionParameters := map[string]string{
-		"statement_timeout":                   actualTimeout,
-		"idle_in_transaction_session_timeout": actualTimeout,
-		"lock_timeout":                        actualTimeout,
-		// "tcp_user_timeout":                 actualTimeout,.
+		"statement_timeout":                   timeout,
+		"idle_in_transaction_session_timeout": timeout,
+		"lock_timeout":                        timeout,
+		// "tcp_user_timeout":                 timeout,.
 		"enable_partitionwise_join":      "on",
 		"enable_partitionwise_aggregate": "on",
 	}
