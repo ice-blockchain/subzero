@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/goccy/go-json"
+	"github.com/google/uuid"
 	otellog "go.opentelemetry.io/otel/log"
 )
 
@@ -22,7 +24,17 @@ type (
 	}
 )
 
-var globalLogger = new(Logger)
+var (
+	reUser        = regexp.MustCompile("user=[^\\s`]+")
+	reDatabase    = regexp.MustCompile("database=[^\\s`]+")
+	reDbname      = regexp.MustCompile("dbname=[^\\s`]+")
+	rePassword    = regexp.MustCompile("password=[^\\s`]+")
+	reURIUserInfo = regexp.MustCompile(`://[^/]+@`) // postgres://user:pass@host
+)
+
+var globalLogger = globalTelemetry.NewLogger("subzero")
+
+const defaultExportTimeout = 60 * time.Second
 
 func DefaultLogger() *Logger { return globalLogger }
 
@@ -76,20 +88,18 @@ func (l *Logger) log(ctx context.Context, severity otellog.Severity, msg string,
 
 	l.drainWALLogRecords(ctx)
 
-	//TODO add sanitize logic for hiding sensitive data
-
 	var record otellog.Record
 	record.SetTimestamp(time.Now())
-	record.SetBody(otellog.StringValue(msg))
+	record.SetBody(otellog.StringValue(sanitize(msg)))
 	record.SetSeverity(severity)
 	record.SetSeverityText(severity.String())
-
+	uniq, _ := uuid.NewV7()
+	record.AddAttributes(otellog.KeyValue{logRecordID, otellog.StringValue(uniq.String())})
 	for i := 0; i < len(keysAndValues)-1; i += 2 {
 		key := keysAndValues[i].(string)
 		value := keysAndValues[i+1]
 		record.AddAttributes(extractKeyValue(key, value))
 	}
-
 	go l.otelLogger.Emit(ctx, record)
 }
 
@@ -112,11 +122,11 @@ func (l *Logger) drainWALLogRecords(ctx context.Context) {
 		globalLogger.Error(ctx, errors.Wrap(err, "failed to fetch last log wal backup index"))
 		return
 	}
-	if firstIndex == 0 || lastIndex == 0 {
+	if firstIndex == 0 && lastIndex == 0 {
 		return
 	}
-	if lastIndex > 100 {
-		lastIndex = 100
+	if lastIndex > firstIndex+100 {
+		lastIndex = firstIndex + 100
 	}
 
 	for i := firstIndex; i <= lastIndex; i++ {
@@ -135,7 +145,7 @@ func (l *Logger) drainWALLogRecords(ctx context.Context) {
 		record.SetBody(otellog.StringValue(logRecord.Body))
 		record.SetSeverity(logRecord.Severity)
 		record.SetSeverityText(logRecord.SeverityText)
-
+		record.AddAttributes(otellog.KeyValue{logRecordID, otellog.StringValue(logRecord.LogRecordID)})
 		for key, value := range logRecord.Attributes {
 			//TODO value is deserialized; so its not exactly like the original one, so it needs adaption
 			record.AddAttributes(extractKeyValue(key, value))
@@ -144,7 +154,7 @@ func (l *Logger) drainWALLogRecords(ctx context.Context) {
 		go l.otelLogger.Emit(ctx, record)
 	}
 
-	if err = l.redundantLogExporter.logWALBackup.TruncateFront(lastIndex + 1); err != nil {
+	if err = l.redundantLogExporter.logWALBackup.TruncateFront(lastIndex); err != nil {
 		globalLogger.Error(ctx, errors.Wrapf(err, "failed to logWALBackup.TruncateFront index %v ", lastIndex+1))
 		return
 	}
@@ -153,7 +163,7 @@ func (l *Logger) drainWALLogRecords(ctx context.Context) {
 		globalLogger.Error(ctx, errors.Wrap(err, "failed to get logWALBackup.FirstIndex"))
 		return
 	}
-	if firstIndex == 0 {
+	if firstIndex == 0 || firstIndex == lastIndex {
 		l.redundantLogExporter.logWALBackupEmpty = true
 	}
 }
@@ -310,4 +320,17 @@ func extractKeyValue(key string, val any) otellog.KeyValue {
 
 		return otellog.String(key, fmt.Sprintf("%+v", v))
 	}
+}
+
+func sanitize(s string) string {
+	if s == "" {
+		return s
+	}
+	s = reUser.ReplaceAllString(s, "user=***")
+	s = reDatabase.ReplaceAllString(s, "database=***")
+	s = reDbname.ReplaceAllString(s, "dbname=***")
+	s = rePassword.ReplaceAllString(s, "password=***")
+	s = reURIUserInfo.ReplaceAllString(s, "://***@")
+
+	return s
 }

@@ -4,6 +4,7 @@ package log
 
 import (
 	"context"
+	"time"
 
 	opentelemetry "github.com/ice-blockchain/subzero/open-telemetry"
 )
@@ -32,6 +33,11 @@ func Fatal(ctx context.Context, err error, keysAndValues ...any) {
 	opentelemetry.DefaultLogger().Fatal(ctx, err, keysAndValues...)
 }
 
-func Panic(ctx context.Context, err error, keysAndValues ...any) {
+func PanicCtx(ctx context.Context, err error, keysAndValues ...any) {
+	opentelemetry.DefaultLogger().Panic(ctx, err, keysAndValues...)
+}
+func Panic(err error, keysAndValues ...any) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	opentelemetry.DefaultLogger().Panic(ctx, err, keysAndValues...)
 }
