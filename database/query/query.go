@@ -999,31 +999,51 @@ func (db *dbClient) MustSignEvent(event *databaseEvent) {
 	db.mustSignDatabaseEvent(event)
 }
 
-func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
-	if event.Sig == "PACK" {
-		// TODO: remove this later with kind3 hack.
-		// Pack this event as meta event inside CustomIONKindEphemeralEmbedding.
-		ev := databaseEvent{Event: new(model.Event)}
+func newEphemeralEmbeddingEvent(kind model.Kind, masterKey, id string, now nostr.Timestamp, signer func(event *databaseEvent)) *databaseEvent {
+	var ev, hint databaseEvent
 
-		// Clear signature to avoid confusion as it will be invalid anyway.
-		event.Sig = ""
-
-		ev.Kind = model.CustomIONKindEphemeralEmbedding
-		ev.CreatedAt = event.CreatedAt
-		ev.Content = event.String()
-		ev.Tags = model.Tags{
-			{"p", cmp.Or(event.MasterPubKey, event.PubKey)},
-		}
-		if event.ID != "" {
-			ev.Tags = append(ev.Tags, model.Tag{"e", event.ID})
-		}
-		db.mustSignDatabaseEvent(&ev)
-
-		return &ev
+	if now == 0 {
+		now = nostr.Now()
 	}
 
-	if event.Sig != "" {
-		return event
+	hint.Event = new(model.Event)
+	hint.Kind = kind
+	hint.CreatedAt = now
+	hint.Tags = model.Tags{
+		{"p", masterKey},
+	}
+	signer(&hint)
+
+	ev.Event = new(model.Event)
+	ev.Kind = model.CustomIONKindEphemeralEmbedding
+	ev.CreatedAt = now
+	ev.Content = hint.String()
+	ev.Tags = model.Tags{
+		{"p", masterKey},
+	}
+	if id != "" {
+		ev.Tags = append(ev.Tags, model.Tag{"e", id})
+	}
+	signer(&ev)
+
+	return &ev
+}
+
+func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
+	switch event.Sig {
+	case "PACK":
+		// TODO: remove this later with kind3 hack.
+		// Pack this event as meta event inside CustomIONKindEphemeralEmbedding.
+		return newEphemeralEmbeddingEvent(event.Kind, cmp.Or(event.MasterPubKey, event.PubKey), event.ID, event.CreatedAt, db.mustSignDatabaseEvent)
+
+	case "ENRICH":
+		// Used by most relevant followers where relay does not have the event.
+		return newEphemeralEmbeddingEvent(event.Kind, cmp.Or(event.MasterPubKey, event.PubKey), "", event.CreatedAt, db.mustSignDatabaseEvent)
+
+	default:
+		if event.Sig != "" {
+			return event
+		}
 	}
 
 	switch event.Kind {
@@ -1101,26 +1121,8 @@ func (e *byAuthorEventEnricher) EnrichEvents(events []*databaseEvent) (result []
 
 	now := nostr.Now()
 	for key := range unknownKeys {
-		var ev, hint databaseEvent
-
-		hint.Event = new(model.Event)
-		hint.Kind = e.Kind
-		hint.CreatedAt = now
-		hint.Tags = model.Tags{
-			{"p", key},
-		}
-		e.Signer(&hint)
-
-		ev.Event = new(model.Event)
-		ev.Kind = model.CustomIONKindEphemeralEmbedding
-		ev.CreatedAt = now
-		ev.Content = hint.String()
-		ev.Tags = model.Tags{
-			{"p", key},
-		}
-		e.Signer(&ev)
-
-		result = append(result, &ev)
+		ev := newEphemeralEmbeddingEvent(e.Kind, key, "", now, e.Signer)
+		result = append(result, ev)
 	}
 
 	return result

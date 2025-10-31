@@ -875,7 +875,7 @@ func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, f
 		coalesce(e.address, '') as address,
 		coalesce(e.pubkey, t.master_pubkey) as pubkey,
 		coalesce(e.master_pubkey, t.master_pubkey) as master_pubkey,
-		coalesce(e.sig, 'PACK') as sig,
+		coalesce(e.sig, 'ENRICH') as sig,
 		coalesce(e.content, '') as content,
 		coalesce(e.d_tag, '') as d_tag,
 		coalesce(e.h_tag, '') as h_tag,
