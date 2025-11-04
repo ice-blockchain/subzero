@@ -118,6 +118,21 @@ func parseNostrFilterDependencies(f *databaseFilterSearch) (*databaseFilterSearc
 }
 
 func parseNostrFilterText(f *databaseFilterSearch) *databaseFilterSearch {
+	if strings.Contains(f.Search, "FollowedBy") {
+		f.FollowedBy = true
+		f.Search = strings.ReplaceAll(f.Search, "FollowedBy", "")
+	} else if strings.Contains(f.Search, "FollowerOf") {
+		f.FollowerOf = true
+		f.Search = strings.ReplaceAll(f.Search, "FollowerOf", "")
+	}
+	if strings.Contains(f.Search, "startsWith") {
+		f.SearchType = "startsWith"
+		f.Search = strings.ReplaceAll(f.Search, "startsWith", "")
+	} else if strings.Contains(f.Search, "contains") {
+		f.SearchType = "contains"
+		f.Search = strings.ReplaceAll(f.Search, "contains", "")
+	}
+
 	quoteStart := strings.Index(f.Search, "\"")
 	quoteEnd := strings.LastIndex(f.Search, "\"")
 
