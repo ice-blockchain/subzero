@@ -1023,6 +1023,10 @@ func newEphemeralEmbeddingEvent(kind model.Kind, masterKey, id string, now nostr
 	hint.Tags = model.Tags{
 		{"p", masterKey},
 	}
+	// TODO: remove later.
+	if kind == nostr.KindFollowList {
+		hint.Tags = append(hint.Tags, model.Tag{"b", masterKey})
+	}
 	signer(&hint)
 
 	ev.Event = new(model.Event)
