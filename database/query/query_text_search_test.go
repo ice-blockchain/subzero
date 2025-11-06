@@ -1200,8 +1200,14 @@ func TestSearchExtensions_StartsWithAndContains(t *testing.T) {
 		{"alice", "Alice Smith", "", ""},
 		{"alison", "Alison Cooper", "", ""},
 		{"alexander", "Alexander Great", "", ""},
+		{"lexandra", "Lexandra Wilson", "", ""},
+		{"lexander", "Lexander Brown", "", ""},
+		{"allison", "Allison Taylor", "", ""},
 		{"bob", "Bob Jones", "", ""},
+		{"bobby", "Bobby Wilson", "", ""},
 		{"charlie", "Charlie Brown", "", ""},
+		{"madison", "Madison Lee", "", ""},
+		{"ellison", "Ellison Ford", "", ""},
 	}
 
 	for i := range profiles {
@@ -1222,7 +1228,7 @@ func TestSearchExtensions_StartsWithAndContains(t *testing.T) {
 	t.Run("StartsWith search - find alice, alison, alexander", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},
-			Search: `startsWith "ali"`,
+			Search: `"ali" keyword_lookup_strategy:prefix`,
 		})
 		require.Equal(t, len(stored), 2)
 		names := make(map[string]bool)
@@ -1235,32 +1241,30 @@ func TestSearchExtensions_StartsWithAndContains(t *testing.T) {
 		}
 		require.True(t, names["alice"] || names["alison"], "Should find alice/alison")
 	})
-	t.Run("StartsWith search - find only bob", func(t *testing.T) {
+	t.Run("StartsWith search - find bob and bobby", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},
-			Search: `startsWith "bob"`,
+			Search: `"bob" keyword_lookup_strategy:prefix`,
 		})
-		require.Equal(t, len(stored), 1)
-		foundBob := false
+		require.Equal(t, 2, len(stored), "Should find 2 results starting with 'bob'")
+		foundNames := make(map[string]bool)
 		for _, ev := range stored {
 			var content struct {
 				Name string `json:"name"`
 			}
 			require.NoError(t, json.Unmarshal([]byte(ev.Content), &content))
-			if content.Name == "bob" {
-				foundBob = true
-				break
-			}
+			foundNames[content.Name] = true
 		}
-		require.True(t, foundBob, "Should find bob in search results")
+		require.True(t, foundNames["bob"], "Should find bob")
+		require.True(t, foundNames["bobby"], "Should find bobby")
 	})
 
-	t.Run("Contains search - find 'ali' anywhere", func(t *testing.T) {
+	t.Run("Contains search - find 'lexand' inside multiple names", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},
-			Search: `contains "ali"`,
+			Search: `"lexand" keyword_lookup_strategy:infix`,
 		})
-		require.Equal(t, len(stored), 2)
+		require.Equal(t, 3, len(stored), "Should find exactly 3 results with 'lexand' inside")
 		foundNames := make(map[string]bool)
 		for _, ev := range stored {
 			var content struct {
@@ -1269,15 +1273,28 @@ func TestSearchExtensions_StartsWithAndContains(t *testing.T) {
 			json.Unmarshal([]byte(ev.Content), &content)
 			foundNames[content.Name] = true
 		}
-		require.True(t, foundNames["alice"] || foundNames["alison"], "Should find at least one of alice/alison")
+		require.True(t, foundNames["alexander"], "Should find alexander (contains 'lexand')")
+		require.True(t, foundNames["lexandra"], "Should find lexandra (contains 'lexand')")
+		require.True(t, foundNames["lexander"], "Should find lexander (contains 'lexand')")
 	})
 
-	t.Run("Default search (contains) - case insensitive", func(t *testing.T) {
+	t.Run("Contains search - find 'lison' inside multiple names", func(t *testing.T) {
 		stored := helperSelectEvents(t, db, model.Filter{
 			Kinds:  []int{nostr.KindProfileMetadata},
-			Search: `"ALICE"`,
+			Search: `"lison" keyword_lookup_strategy:infix`,
 		})
-		require.Equal(t, len(stored), 1)
+		require.Equal(t, 3, len(stored), "Should find exactly 3 results with 'lison'")
+		foundNames := make(map[string]bool)
+		for _, ev := range stored {
+			var content struct {
+				Name string `json:"name"`
+			}
+			json.Unmarshal([]byte(ev.Content), &content)
+			foundNames[content.Name] = true
+		}
+		require.True(t, foundNames["alison"], "Should find alison (contains 'lison')")
+		require.True(t, foundNames["allison"], "Should find allison (contains 'lison')")
+		require.True(t, foundNames["ellison"], "Should find ellison (contains 'lison')")
 	})
 }
 
@@ -1438,9 +1455,8 @@ func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
 	t.Run("FollowedBy - search 'bob' - multiple results (bob, bobby)", func(t *testing.T) {
 		// Alice follows: bob, bobby, robert. Expected: 2 results - bob (verified), bobby (non-verified)
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata},
-			Authors: []string{users[0].masterKey}, // alice's pubkey
-			Search:  `FollowedBy "bob"`,
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"bob" followed_by:` + users[0].masterKey,
 		})
 		require.Equal(t, 2, len(stored), "Should find bob and bobby")
 		require.Equal(t, users[1].masterKey, stored[0].GetMasterPublicKey(), "Position 0 should be bob (verified)")
@@ -1451,9 +1467,8 @@ func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
 		// Alice follows: bob, bobby, robert, charlie
 		// Charlie follows: bob, bobby, robert, alice, alicia, alison, carol, chris
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata},
-			Authors: []string{users[0].masterKey, users[2].masterKey}, // alice AND charlie
-			Search:  `FollowedBy "bob"`,
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"bob" followed_by:` + users[0].masterKey + `,` + users[2].masterKey,
 		})
 		require.Equal(t, 4, len(stored), "Should find 4 results matching 'bob'")
 		require.Equal(t, users[1].masterKey, stored[0].GetMasterPublicKey(), "Position 0 should be bob (verified, exact match)")
@@ -1468,9 +1483,8 @@ func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
 		// Alice follows: alicia, alison
 		// Search for profiles containing "ali" among alice's followings
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata},
-			Authors: []string{users[0].masterKey}, // alice's pubkey
-			Search:  `FollowedBy contains "ali"`,
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"ali" keyword_lookup_strategy:infix followed_by:` + users[0].masterKey,
 		})
 		require.Equal(t, 2, len(stored), "Should find alicia and alison")
 		found := make(map[string]bool)
@@ -1486,9 +1500,8 @@ func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
 		// Bob follows: alicia, alice, david, eve, frank, catherine, diana, ethan, fiona
 		// Charlie follows: alicia, alison, bob, bobby, robert, carol, chris, alice
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata},
-			Authors: []string{users[0].masterKey, users[1].masterKey, users[2].masterKey}, // alice, bob, charlie
-			Search:  `FollowedBy contains "ali"`,
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"ali" keyword_lookup_strategy:infix followed_by:` + users[0].masterKey + `,` + users[1].masterKey + `,` + users[2].masterKey,
 		})
 		require.Equal(t, 7, len(stored), "Should find 7 results matching 'ali'")
 		found := make(map[string]bool)
@@ -1504,9 +1517,8 @@ func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
 		// Charlie is followed by: nobody with name starting with "d"
 		// David follows: charlie.
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata},
-			Authors: []string{users[2].masterKey}, // charlie's pubkey
-			Search:  `FollowerOf startsWith "d"`,
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"d" keyword_lookup_strategy:prefix follower_of:` + users[2].masterKey,
 		})
 		for _, ev := range stored {
 			require.NotEqual(t, users[3].masterKey, ev.GetMasterPublicKey(),
@@ -1518,9 +1530,8 @@ func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
 		// Alice follows: emily
 		// Eve follows: emily, ethan, alicia, alexander
 		stored := helperSelectEvents(t, db, model.Filter{
-			Kinds:   []int{nostr.KindProfileMetadata},
-			Authors: []string{users[0].masterKey, users[4].masterKey}, // alice, eve
-			Search:  `FollowedBy contains "em"`,
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"em" keyword_lookup_strategy:infix followed_by:` + users[0].masterKey + `,` + users[4].masterKey,
 		})
 
 		require.Equal(t, 2, len(stored), "Should find 2 results with 'em'")

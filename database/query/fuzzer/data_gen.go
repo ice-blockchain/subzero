@@ -121,6 +121,37 @@ func createPosts(ctx context.Context, keys []string, n int) []*model.Event {
 	return posts
 }
 
+func createFollowLists(ctx context.Context, keys []string) {
+	bar := progressbar.Default(int64(len(keys)), "creating follows lists")
+	defer bar.Finish()
+
+	for _, key := range keys {
+		bar.Add(1)
+		numFollowers := rand.IntN(20) + 5
+		var ev model.Event
+		ev.Kind = nostr.KindFollowList
+		ev.CreatedAt = model.Timestamp(time.Now().UnixNano())
+		ev.Content = ""
+		selectedKeys := make(map[int]bool)
+		for range numFollowers {
+			idx := rand.IntN(len(keys))
+			if selectedKeys[idx] {
+				continue
+			}
+			selectedKeys[idx] = true
+
+			followerKey := keys[idx]
+			pubkey, err := model.GetPublicKey(followerKey)
+			if err != nil {
+				continue
+			}
+			ev.Tags = append(ev.Tags, model.Tag{"p", pubkey})
+		}
+		panicOnErr(ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		panicOnErr(query.AcceptEvents(ctx, &ev))
+	}
+}
+
 func createPostsReactions(ctx context.Context, keys []string, posts []*model.Event, n int) {
 	const (
 		reactionLike = iota

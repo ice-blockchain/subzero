@@ -69,18 +69,19 @@ type (
 		Leafs map[string]*filterDependency // Origin/dependency name -> dependency.
 	}
 	databaseFilterSearch struct {
-		Expiration        *bool
-		Videos            *bool
-		Images            *bool
-		Media             *bool
-		Quotes            *bool
-		References        *bool
-		CurrentUserPubkey *string
-		ID                string
-		SearchText        string
-		SearchType        string
-		FollowedBy        bool
-		FollowerOf        bool
+		Expiration          *bool
+		Videos              *bool
+		Images              *bool
+		Media               *bool
+		Quotes              *bool
+		References          *bool
+		CurrentUserPubkey   *string
+		ID                  string
+		SearchText          string
+		SearchType          string
+		FollowedBy          bool
+		FollowerOf          bool
+		SocialFilterPubkeys []string
 		model.Filter
 		TagMarkers   []databaseFilterMarker
 		Dependencies []*filterDependency
@@ -628,13 +629,7 @@ func replaceSpecialChars(input string) string {
 }
 
 func isKindProfileMetadataOnly(filter *databaseFilterSearch) bool {
-	if len(filter.Kinds) == 0 {
-		return false
-	}
-
-	return !slices.ContainsFunc(filter.Kinds, func(k int) bool {
-		return k != nostr.KindProfileMetadata
-	})
+	return len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindProfileMetadata
 }
 
 func (b *queryBuilder) ApplyTextSearch(filter *databaseFilterSearch) {
@@ -1442,26 +1437,26 @@ func (b *queryBuilder) buildFollowedByFollowerOfJoins(filter *databaseFilterSear
 		return ""
 	}
 
-	var sb strings.Builder
+	tempBuilder := queryBuilder{Params: b.Params}
 	if filter.FollowedBy {
-		sb.WriteString(`
+		tempBuilder.WriteString(`
 		INNER JOIN event_tags et ON et.event_tag_key = 'p' AND et.event_tag_value1 = e.master_pubkey
 		INNER JOIN events e_follow ON e_follow.id = et.event_id 
 			AND e_follow.kind = 3 
-			AND e_follow.master_pubkey = ANY(:`)
-		sb.WriteString(b.PushValue(filter.ID, "followed_by", filter.Authors))
-		sb.WriteString(")")
+			AND e_follow.hidden = false
+			AND `)
+		buildFromSlice(&tempBuilder, sqlOpCodeNONE, filter.ID, filter.SocialFilterPubkeys, "e_follow.master_pubkey", "followed_by")
 	} else if filter.FollowerOf {
-		sb.WriteString(`
+		tempBuilder.WriteString(`
 		INNER JOIN events e_follow ON e_follow.master_pubkey = e.master_pubkey 
 			AND e_follow.kind = 3
+			AND e_follow.hidden = false
 		INNER JOIN event_tags et ON et.event_id = e_follow.id 
 			AND et.event_tag_key = 'p' 
-			AND et.event_tag_value1 = ANY(:`)
-		sb.WriteString(b.PushValue(filter.ID, "follower_of", filter.Authors))
-		sb.WriteString(")")
+			AND `)
+		buildFromSlice(&tempBuilder, sqlOpCodeNONE, filter.ID, filter.SocialFilterPubkeys, "et.event_tag_value1", "follower_of")
 	}
-	return sb.String()
+	return tempBuilder.String()
 }
 
 func (b *queryBuilder) BuildCTEWithGiSTKNN(filter *databaseFilterSearch) (*databaseCTE, error) {
@@ -1470,17 +1465,7 @@ func (b *queryBuilder) BuildCTEWithGiSTKNN(filter *databaseFilterSearch) (*datab
 	}
 
 	whereBuffer := queryBuilder{Params: b.Params}
-	filterCopy := *filter
-	filterCopy.SearchText = ""
-	filterCopy.SearchType = ""
-	filterCopy.FollowedBy = false
-	filterCopy.FollowerOf = false
-
-	if filter.FollowedBy || filter.FollowerOf {
-		filterCopy.Authors = nil
-	}
-
-	where, _, err := whereBuffer.BuildWhere(&filterCopy)
+	where, _, err := whereBuffer.BuildWhere(filter)
 	if err != nil {
 		return nil, err
 	}
@@ -1507,7 +1492,7 @@ func (b *queryBuilder) BuildCTEWithGiSTKNN(filter *databaseFilterSearch) (*datab
 	sb.WriteString(where)
 	sb.WriteString(` AND e.lookup LIKE :`)
 
-	if filter.SearchType == "startsWith" {
+	if filter.SearchType == keywordLookupStrategyPrefix {
 		sb.WriteString(b.PushValue(filter.ID, "search_lookup_like", text+"%"))
 	} else {
 		sb.WriteString(b.PushValue(filter.ID, "search_lookup_like", "%"+text+"%"))
