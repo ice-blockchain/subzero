@@ -15,6 +15,7 @@
 | ICIP-5000                    | Addition              | [148](https://github.com/nostr-protocol/nips/pull/148)                 |                                                                                    |
 | ICIP-6000                    | Addition              |                                                                        |                                                                                    |
 | ICIP-7000                    | Addition              |                                                                        |                                                                                    |
+| ICIP-7001                    | Addition              |                                                                        |                                                                                    |
 | ICIP-8000                    | Addition              | Inspired from [1528](https://github.com/nostr-protocol/nips/pull/1528) | Inspired from [NIP-97](https://github.com/nostr-protocol/nips/blob/master/97.md)   |
 | ICIP-9000                    | Addition              |                                                                        |                                                                                    |
 | ICIP-10000                   | Addition              |                                                                        |                                                                                    |
