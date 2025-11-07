@@ -146,3 +146,12 @@ Relays MUST detect the precision automatically from the number of digits in the 
 If relays cannot support the specific precision the client sends, they MUST return a specific error:
 
 `["OK", <event_id>, false, "unsupported_created_at_precision:<detailed message>"]`
+
+### Publishing multiple events at once
+
+We extend the original EVENT envelop of the NOSTR protocol to allow for a vararg of event JSONs:
+```json
+["EVENT", <event1 JSON as defined above>, <event2 JSON as defined above>,... <eventN JSON as defined above>]
+```
+
+Client and Relays MUST treat them as an atomic operation: either are accepted or none are.

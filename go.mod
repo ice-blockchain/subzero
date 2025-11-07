@@ -10,7 +10,7 @@ replace (
 
 require (
 	firebase.google.com/go/v4 v4.18.0
-	github.com/RoaringBitmap/roaring/v2 v2.13.0
+	github.com/RoaringBitmap/roaring/v2 v2.14.0
 	github.com/alitto/pond/v2 v2.5.0
 	github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936
 	github.com/bzick/tokenizer v1.4.10
@@ -50,7 +50,7 @@ require (
 	github.com/mailru/easyjson v0.9.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mxschmitt/golang-combinations v1.2.0
-	github.com/nbd-wtf/go-nostr v0.52.1
+	github.com/nbd-wtf/go-nostr v0.52.2
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/puzpuzpuz/xsync/v4 v4.2.0
 	github.com/quic-go/quic-go v0.55.0
@@ -65,8 +65,8 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d
-	github.com/testcontainers/testcontainers-go v0.39.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.39.0
+	github.com/testcontainers/testcontainers-go v0.40.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/wal v1.2.1
 	github.com/tus/tusd/v2 v2.8.0
@@ -199,7 +199,7 @@ require (
 	github.com/google/renameio/v2 v2.0.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
