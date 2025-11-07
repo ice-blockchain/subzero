@@ -13,19 +13,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/ice-blockchain/cometbft/multiplex/types"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
-	"github.com/ice-blockchain/cometbft/multiplex/server"
 	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
 	consensus struct {
-		Server       server.Server
+		Server       types.Backend
 		Client       client.Client
 		Logger       cmtlog.Logger
 		ServerConfig *config.Config

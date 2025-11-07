@@ -24,7 +24,7 @@ import (
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
-var disabled = true
+var disabled = false
 
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
