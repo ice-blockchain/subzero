@@ -10,6 +10,7 @@
 |------------------------------|-----------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------------|
 | ICIP-1000                    | Addition              | [1522](https://github.com/nostr-protocol/nips/pull/1522)               |                                                                                    |
 | ICIP-2000                    | Addition              | [1482](https://github.com/nostr-protocol/nips/pull/1482)               |                                                                                    |
+| ICIP-2001                    | Addition              |                                                                        |                                                                                    |
 | ICIP-3000                    | Addition              |                                                                        | an extension of [NIP-72](https://github.com/nostr-protocol/nips/blob/master/72.md) |
 | ICIP-4000                    | Addition              |                                                                        |                                                                                    |
 | ICIP-5000                    | Addition              | [148](https://github.com/nostr-protocol/nips/pull/148)                 |                                                                                    |
