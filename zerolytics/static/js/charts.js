@@ -2,6 +2,17 @@
  * SPDX-License-Identifier: ice License 1.0
  */
 
+function formatDuration(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+}
+
 
 class ChartManager {
     constructor() {
@@ -23,7 +34,7 @@ class ChartManager {
     createDailyChart(container, dailyData) {
         const wrapper = document.createElement('div');
         wrapper.className = 'chart-wrapper';
-        
+
         const canvas = document.createElement('canvas');
         canvas.id = 'postsPerDayChart';
         wrapper.appendChild(canvas);
@@ -49,7 +60,7 @@ class ChartManager {
                     intersect: false
                 },
                 scales: {
-                    y: { 
+                    y: {
                         beginAtZero: true,
                         grid: {
                             display: true
@@ -80,7 +91,7 @@ class ChartManager {
         const wrapper = document.createElement('div');
         wrapper.className = 'chart-wrapper';
         wrapper.style.height = `${Math.max(400, topicData.length * 40 + 100)}px`;
-        
+
         const canvas = document.createElement('canvas');
         canvas.id = 'topicsChart';
         wrapper.appendChild(canvas);
@@ -176,6 +187,11 @@ class ChartManager {
                 <h3>🎥 Videos</h3>
                 <div class="value">${data.videos.toLocaleString()}</div>
             </div>
+            <div class="stat-card videos">
+                <h3>🎬 Videos length</h3>
+                <div class="value">${formatDuration(data.videos_length)}</div>
+                <div class="note">hh:mm:ss</div>
+            </div>
             <div class="stat-card following">
                 <h3>👥 Following Actions</h3>
                 <div class="value">${data.following_actions.toLocaleString()}</div>
@@ -228,7 +244,7 @@ class ChartManager {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'chart-wrapper';
-        
+
         const canvas = document.createElement('canvas');
         wrapper.appendChild(canvas);
         container.appendChild(wrapper);
@@ -253,7 +269,7 @@ class ChartManager {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { 
+                    legend: {
                         position: 'bottom',
                         labels: {
                             boxWidth: 12,
@@ -282,7 +298,7 @@ class ChartManager {
 
         const table = document.createElement('table');
         table.className = 'distribution-table';
-        
+
         const thead = document.createElement('thead');
         thead.innerHTML = `
             <tr>
@@ -292,9 +308,9 @@ class ChartManager {
             </tr>
         `;
         table.appendChild(thead);
-        
+
         const total = data.reduce((sum, item) => sum + item.profile_count, 0);
-        
+
         const tbody = document.createElement('tbody');
         data.forEach(item => {
             const percentage = total > 0 ? ((item.profile_count / total) * 100).toFixed(1) : 0;
@@ -306,7 +322,7 @@ class ChartManager {
             `;
             tbody.appendChild(row);
         });
-        
+
         const totalRow = document.createElement('tr');
         totalRow.className = 'total-row';
         totalRow.innerHTML = `
@@ -315,15 +331,15 @@ class ChartManager {
             <td class="percentage"><strong>100.0%</strong></td>
         `;
         tbody.appendChild(totalRow);
-        
+
         table.appendChild(tbody);
         container.appendChild(table);
     }
 
     renderSingleServerUserCount(data) {
-        const userCount = data.profile_updates_by_database ? 
+        const userCount = data.profile_updates_by_database ?
             data.profile_updates_by_database.reduce((sum, item) => sum + item.profile_count, 0) : 0;
-        
+
         const userCountCard = document.createElement('div');
         userCountCard.className = 'stat-card users-count';
         userCountCard.innerHTML = `
