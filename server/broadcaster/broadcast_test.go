@@ -342,24 +342,33 @@ func TestBroadcaster_collectTargets(t *testing.T) {
 		defer broadcaster.Close()
 
 		var relayEvent model.Event
-		relayEvent.PubKey = "badge-receiver1"
+		relayEvent.PubKey = "user1"
 		relayEvent.Kind = nostr.KindRelayListMetadata
 		relayEvent.Tags = model.Tags{
-			{"r", "wss://badge-receiver-relay.com", "read"},
+			{"r", "wss://user-relay.com", "read"},
 		}
 		require.NoError(t, memdb.AcceptEvents(t.Context(), &relayEvent))
 
 		var badgeAwardEvent model.Event
 		badgeAwardEvent.Kind = nostr.KindBadgeAward
 		badgeAwardEvent.Tags = model.Tags{
-			{"p", "badge-receiver1"},
+			{"p", "user1"},
 		}
 
-		targets, err := broadcaster.collectTargets(t.Context(), []*model.Event{&badgeAwardEvent})
-		require.NoError(t, err)
+		var badgeDefinitionEvent model.Event
+		badgeDefinitionEvent.PubKey = "user1"
+		badgeDefinitionEvent.Kind = nostr.KindBadgeDefinition
+		badgeDefinitionEvent.Tags = model.Tags{
+			{"d", "verified"},
+			{"name", "Verified Badge"},
+			{"description", "Verification badge"},
+		}
 
-		require.Contains(t, targets, "badge-receiver1")
-		require.Equal(t, []string{"wss://badge-receiver-relay.com"}, targets["badge-receiver1"])
+		targets, err := broadcaster.collectTargets(t.Context(), []*model.Event{&badgeAwardEvent, &badgeDefinitionEvent})
+		require.NoError(t, err)
+		require.Len(t, targets, 1)
+		require.Contains(t, targets, "user1")
+		require.Equal(t, []string{"wss://user-relay.com"}, targets["user1"])
 	})
 
 	t.Run("mixed event types", func(t *testing.T) {
