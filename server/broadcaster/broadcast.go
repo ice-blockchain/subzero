@@ -129,12 +129,12 @@ func (b *Broadcaster) collectTargets(ctx context.Context, events model.Events) (
 	authors := make([]string, 0, len(events))
 	targets := make(map[string][]string, len(authors)) // Master public key -> relay URLs.
 	addresses := make([]string, 0, len(events))
-	wrapReceivers := make([]string, 0, len(events))
+	receivers := make([]string, 0, len(events))
 	for _, event := range events {
 		switch event.Kind {
-		case nostr.KindGiftWrap:
+		case nostr.KindGiftWrap, nostr.KindBadgeAward:
 			if v := event.GetTag("p").Value(); v != "" {
-				wrapReceivers = append(wrapReceivers, v)
+				receivers = append(receivers, v)
 			}
 		case model.CustomIONKindEphemeralEmbedding:
 			authoritative = false
@@ -161,11 +161,11 @@ func (b *Broadcaster) collectTargets(ctx context.Context, events model.Events) (
 	}
 
 	var filters model.Filters
-	if len(wrapReceivers) > 0 {
+	if len(receivers) > 0 {
 		filters = append(filters, model.Filter{
-			Authors: wrapReceivers,
+			Authors: receivers,
 			Kinds:   []model.Kind{nostr.KindRelayListMetadata},
-			Limit:   len(wrapReceivers),
+			Limit:   len(receivers),
 		})
 	}
 

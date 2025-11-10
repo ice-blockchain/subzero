@@ -331,6 +331,37 @@ func TestBroadcaster_collectTargets(t *testing.T) {
 		require.Equal(t, []string{"wss://receiver-relay.com"}, targets["receiver1"])
 	})
 
+	t.Run("badge award events", func(t *testing.T) {
+		var memdb fixture.MemDB
+		config := Config{
+			RelayURL:   "ws://test.localhost",
+			PrivateKey: testPrivateKey,
+			QueryFunc:  memdb.SelectEvents,
+		}
+		broadcaster := New(config)
+		defer broadcaster.Close()
+
+		var relayEvent model.Event
+		relayEvent.PubKey = "badge-receiver1"
+		relayEvent.Kind = nostr.KindRelayListMetadata
+		relayEvent.Tags = model.Tags{
+			{"r", "wss://badge-receiver-relay.com", "read"},
+		}
+		require.NoError(t, memdb.AcceptEvents(t.Context(), &relayEvent))
+
+		var badgeAwardEvent model.Event
+		badgeAwardEvent.Kind = nostr.KindBadgeAward
+		badgeAwardEvent.Tags = model.Tags{
+			{"p", "badge-receiver1"},
+		}
+
+		targets, err := broadcaster.collectTargets(t.Context(), []*model.Event{&badgeAwardEvent})
+		require.NoError(t, err)
+
+		require.Contains(t, targets, "badge-receiver1")
+		require.Equal(t, []string{"wss://badge-receiver-relay.com"}, targets["badge-receiver1"])
+	})
+
 	t.Run("mixed event types", func(t *testing.T) {
 		var memdb fixture.MemDB
 		config := Config{
