@@ -10,7 +10,7 @@ replace (
 
 require (
 	firebase.google.com/go/v4 v4.18.0
-	github.com/RoaringBitmap/roaring/v2 v2.14.2
+	github.com/RoaringBitmap/roaring/v2 v2.14.3
 	github.com/alitto/pond/v2 v2.5.0
 	github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936
 	github.com/bzick/tokenizer v1.4.10
