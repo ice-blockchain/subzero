@@ -78,7 +78,7 @@ var (
 
 	KindSupportedTags = map[model.Kind]kindValidator{
 		nostr.KindProfileMetadata: tagsTable("e", "p", "a", "alt"),
-		nostr.KindTextNote:        tagsTable("e", "p", "q", model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
+		nostr.KindTextNote:        tagsTable("e", "p", "q", model.CustomIONTagPMO, model.CustomIONTagPoll, model.CustomIONTagCommunity, model.CustomIONTagRichText),
 		nostr.KindDirectMessage:   tagsTable(model.CustomIONTagPoll, model.CustomIONTagRichText),
 		nostr.KindFollowList:      tagsTable("p"),
 		nostr.KindDeletion:        newKindValidatorBuilderEmpty().Optional("e", "p", "a", "k", "nonce", model.CustomIONTagOnBehalfOf).Build(),
@@ -135,8 +135,8 @@ var (
 		nostr.KindRelayListMetadata:     tagsTable("r"),
 		nostr.KindProfileBadges:         tagsTable("d", "a", "e"),
 		nostr.KindBadgeDefinition:       newKindValidatorBuilder().Optional("d", "p", "name", "image", "description", "thumb").RequireIONIdentitySignature().Build(),
-		nostr.KindArticle:               tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
-		nostr.KindDraftArticle:          tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindArticle:               tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagPMO, model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
+		nostr.KindDraftArticle:          tagsTable("p", "a", "d", "e", "t", "title", "image", "summary", "editing_ended_at", "published_at", model.CustomIONTagPMO, model.CustomIONTagRichText, model.CustomIONTagAddressableQ, model.CustomIONTagPoll, model.CustomIONTagCommunity),
 
 		// --- Jobs
 		model.KindJobTextExtraction:            tagsTable("i", "output", "param", "bid", "relays", "p"),
