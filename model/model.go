@@ -63,6 +63,7 @@ const (
 	CustomIONTagAddressableQ = "Q"
 	CustomIONTagCommunity    = "h"
 	CustomIONTagRichText     = "rich_text"
+	CustomIONTagPMO          = "pmo" // Positional markdown override.
 )
 
 const (
