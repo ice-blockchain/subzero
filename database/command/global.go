@@ -16,6 +16,7 @@ import (
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/runtime"
 	"github.com/ice-blockchain/cometbft/p2p"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -159,7 +160,13 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
-	cometbftServer, err := multiplex.NewServer(ctx, c, serverCfg, c.Logger)
+	cometbftServer, err := multiplex.NewServer(ctx, c, serverCfg, c.Logger,
+		multiplex.WithRuntimeManagerOptions(
+			runtime.RegistryWithConsensusOptions(
+				runtime.ConsensusPoolWithAcceptor(c),
+			),
+		),
+	)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}

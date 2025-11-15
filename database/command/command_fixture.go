@@ -18,6 +18,7 @@ import (
 	"github.com/ice-blockchain/cometbft/config"
 	"github.com/ice-blockchain/cometbft/crypto/ed25519"
 	"github.com/ice-blockchain/cometbft/multiplex"
+	"github.com/ice-blockchain/cometbft/multiplex/runtime"
 	"github.com/ice-blockchain/cometbft/p2p"
 )
 
@@ -37,7 +38,13 @@ func (c *consensus) Start(ctx context.Context) {
 		panic("the server is already running")
 	}
 	c.ServerConfig.Instrumentation.Namespace = uuid.NewString()
-	server, err := multiplex.NewServer(ctx, c, c.ServerConfig, c.Logger)
+	server, err := multiplex.NewServer(ctx, c, c.ServerConfig, c.Logger,
+		multiplex.WithRuntimeManagerOptions(
+			runtime.RegistryWithConsensusOptions(
+				runtime.ConsensusPoolWithAcceptor(c),
+			),
+		),
+	)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}
