@@ -130,12 +130,6 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 
 	serverCfg.SetRoot(c.Config.AbsoluteRootPath)
 	serverCfg.NodeKey = c.Config.AbsoluteNodePrivateKeyPath
-	serverCfg.MultiplexConfig = config.MultiplexBaseConfig(
-		map[string]string{},
-		map[string][]string{},
-	).MultiplexConfig
-	serverCfg.P2P.MaxPacketMsgPayloadSize = 1 * 1024 * 1024
-	serverCfg.DBBackend = "goleveldb"
 	serverCfg.DiscoveryPort = c.Config.DiscoveryPort
 	if c.Config.ExternalAddress != "" {
 		serverCfg.P2P.ExternalAddress = c.Config.ExternalAddress
