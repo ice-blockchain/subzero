@@ -169,6 +169,7 @@ var (
 		model.CustomIONKindEditableTextNote: newKindValidatorBuilder().
 			Optional("a", "e", "d", "p", "q", "p",
 				"editing_ended_at",
+				model.CustomIONTagPMO,
 				model.CustomIONTagPoll,
 				model.CustomIONTagCommunity,
 				model.CustomIONTagAddressableQ,
