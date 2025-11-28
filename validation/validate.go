@@ -226,7 +226,7 @@ var (
 			Required(
 				"network",
 				"bonding_curve_address",
-				"token_addressc",
+				"token_address",
 				"tx_address",
 				"tx_type",
 				"tx_amount",
