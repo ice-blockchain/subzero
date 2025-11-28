@@ -442,7 +442,7 @@ func mapEventKindToChainFingerprint(event *model.Event) (fingerprint string, err
 				return "", errors.Wrapf(err, "malformed k tag:%v", kTagValue)
 			}
 			switch kTagValue {
-			case nostr.KindDirectMessage, model.CustomIONDirectMessage, nostr.KindReaction, nostr.KindDeletion:
+			case nostr.KindDirectMessage, model.CustomIONKindDirectMessage, nostr.KindReaction, nostr.KindDeletion:
 				return client.GetFingerprint("tmp"), nil
 			default:
 				return client.GetFingerprint(fmt.Sprintf("%v%v", event.Kind, kTagValue)), nil

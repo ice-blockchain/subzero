@@ -16,7 +16,7 @@ import (
 var (
 	mapGiftWrapToNotificationType = map[int]NotificationType{
 		nostr.KindDirectMessage:           NotificationTypeDirectMessage,
-		model.CustomIONDirectMessage:      NotificationTypeDirectMessage,
+		model.CustomIONKindDirectMessage:  NotificationTypeDirectMessage,
 		model.CustomIONKindFundReceive:    NotificationTypePaymentReceived,
 		model.CustomIONKindFundSendNotify: NotificationTypePaymentRequest,
 		nostr.KindReaction:                NotificationTypeReaction,
