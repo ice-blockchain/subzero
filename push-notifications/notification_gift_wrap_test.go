@@ -44,7 +44,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 
 	filters := nostr.Filters{
 		{
-			Kinds: []int{nostr.KindDirectMessage, model.CustomIONDirectMessage, model.CustomIONKindFundReceive,
+			Kinds: []int{nostr.KindDirectMessage, model.CustomIONKindDirectMessage, model.CustomIONKindFundReceive,
 				model.CustomIONKindFundSendNotify, nostr.KindReaction},
 		},
 	}
@@ -136,7 +136,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 		description string
 	}{
 		{"DirectMessage", nostr.KindDirectMessage, NotificationTypeDirectMessage, "standard direct message"},
-		{"IONDirectMessage", model.CustomIONDirectMessage, NotificationTypeDirectMessage, "ION direct message"},
+		{"IONDirectMessage", model.CustomIONKindDirectMessage, NotificationTypeDirectMessage, "ION direct message"},
 		{"FundReceive", model.CustomIONKindFundReceive, NotificationTypePaymentReceived, "fund receive"},
 		{"FundSendNotify", model.CustomIONKindFundSendNotify, NotificationTypePaymentRequest, "fund send notify"},
 		{"Reaction", nostr.KindReaction, NotificationTypeReaction, "reaction"},

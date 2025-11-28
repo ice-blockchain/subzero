@@ -30,6 +30,7 @@ const (
 
 	kindValidatorFlagContentRequired                 uint = 1 << 0
 	kindValidatorFlagIONIdentityKeySignatureRequired uint = 1 << 1
+	kindValidatorFlagContentEmpty                    uint = 1 << 2
 )
 
 type (
@@ -60,6 +61,7 @@ var (
 	ErrEphemeralForbidden             = errors.New("ephemeral events are forbidden")
 	ErrNotFound                       = errors.New("not found")
 	ErrContentEmpty                   = errors.New("content is empty")
+	ErrContentNotEmpty                = errors.New("content must be empty")
 	ErrEventInvalidID                 = errors.New("event id is invalid")
 	ErrEventInvalidSign               = errors.New("event signature is invalid")
 	ErrSignatureByIONIdentityRequired = errors.New("event requires signature by ion identity")
@@ -210,6 +212,28 @@ var (
 		model.CustomIONKindAttestation: newKindValidatorBuilderEmpty().
 			Required(model.TagAttestationName).
 			Optional("nonce").
+			Build(),
+
+		model.CustomIONKindTokenizedCommunityDefination: newKindValidatorBuilder().
+			OneOfSingle("e", "a").
+			Required("k").
+			Forbidden("expiration").
+			ContentEmpty().
+			Build(),
+
+		model.CustomIONKindTokenizedCommunityAction: newKindValidatorBuilder().
+			OneOfSingle("e", "a").
+			Required(
+				"network",
+				"bonding_curve_address",
+				"token_address",
+				"tx_address",
+				"tx_type",
+				"tx_amount",
+				"tx_amount_price_usd",
+			).
+			Forbidden("expiration").
+			ContentEmpty().
 			Build(),
 	}
 
@@ -477,6 +501,14 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 			if err := validateSettingsTag(e, tag); err != nil {
 				return errors.Join(ErrUnsupportedTag, err)
 			}
+		case "k":
+			kTag := tag.Value()
+			kValue, err := strconv.Atoi(kTag)
+			if err != nil {
+				return errors.Wrapf(ErrWrongEventParams, "tag %s: value should be an integer", tag.Key())
+			} else if kValue < 0 || kValue > math.MaxUint16 {
+				return errors.Wrapf(ErrWrongEventParams, "tag %s: value should be between 0 and %d", tag.Key(), math.MaxUint16)
+			}
 		case model.CustomIONTagOnBehalfOf:
 			if bTag != "" {
 				return errors.Wrapf(ErrWrongEventParams, "tag %q: cannot be used more than once", tag.Key())
@@ -588,6 +620,11 @@ func (t *kindValidatorBuilder) ContentNotEmpty() *kindValidatorBuilder {
 	return t
 }
 
+func (t *kindValidatorBuilder) ContentEmpty() *kindValidatorBuilder {
+	t.Validator.Flags |= kindValidatorFlagContentEmpty
+	return t
+}
+
 func (t *kindValidatorBuilder) RequireIONIdentitySignature() *kindValidatorBuilder {
 	t.Validator.Flags |= kindValidatorFlagIONIdentityKeySignatureRequired
 	return t
@@ -649,6 +686,9 @@ func (t *kindValidatorBuilder) Build() kindValidator {
 func (v *kindValidator) Execute(ev *eventValidator, e *model.Event) (err error) {
 	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
 		err = errors.Join(err, ErrContentEmpty)
+	}
+	if v.Flags&kindValidatorFlagContentEmpty != 0 && e.Content != "" {
+		err = errors.Join(err, ErrContentNotEmpty)
 	}
 	if v.Flags&kindValidatorFlagIONIdentityKeySignatureRequired != 0 && !slices.Contains(ev.IONIdentityPublicKeys(), e.PubKey) {
 		err = errors.Join(err, ErrSignatureByIONIdentityRequired)
