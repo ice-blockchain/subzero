@@ -69,15 +69,19 @@ type (
 		Leafs map[string]*filterDependency // Origin/dependency name -> dependency.
 	}
 	databaseFilterSearch struct {
-		Expiration        *bool
-		Videos            *bool
-		Images            *bool
-		Media             *bool
-		Quotes            *bool
-		References        *bool
-		CurrentUserPubkey *string
-		ID                string
-		SearchText        string
+		Expiration          *bool
+		Videos              *bool
+		Images              *bool
+		Media               *bool
+		Quotes              *bool
+		References          *bool
+		CurrentUserPubkey   *string
+		ID                  string
+		SearchText          string
+		SearchType          string
+		FollowedBy          bool
+		FollowerOf          bool
+		SocialFilterPubkeys []string
 		model.Filter
 		TagMarkers   []databaseFilterMarker
 		Dependencies []*filterDependency
@@ -624,7 +628,15 @@ func replaceSpecialChars(input string) string {
 	}, input)
 }
 
+func isKindProfileMetadataOnly(filter *databaseFilterSearch) bool {
+	return len(filter.Kinds) == 1 && filter.Kinds[0] == nostr.KindProfileMetadata
+}
+
 func (b *queryBuilder) ApplyTextSearch(filter *databaseFilterSearch) {
+	if isKindProfileMetadataOnly(filter) {
+		return
+	}
+
 	if filter.SearchText == "" {
 		return
 	}
@@ -1397,7 +1409,132 @@ func shouldApplyVerifiedFirst(filter *databaseFilterSearch) bool {
 	return filter.Limit == 1 && len(filter.Kinds) > 0 && len(filter.Authors) == 0 && len(filter.IDs) == 0
 }
 
+func (b *queryBuilder) buildSimilaritySQL(sourceAlias string, filter *databaseFilterSearch, text string) string {
+	var sb strings.Builder
+	sb.WriteString(`GREATEST(similarity(`)
+	sb.WriteString(sourceAlias)
+	sb.WriteString(`.lookup, :`)
+	sb.WriteString(b.PushValue(filter.ID, "search_text", text))
+	sb.WriteString(`), word_similarity(:`)
+	sb.WriteString(b.PushValue(filter.ID, "search_text_word", text))
+	sb.WriteString(`, `)
+	sb.WriteString(sourceAlias)
+	sb.WriteString(`.lookup)) + (CASE WHEN `)
+	sb.WriteString(sourceAlias)
+	sb.WriteString(`.lookup LIKE :`)
+	sb.WriteString(b.PushValue(filter.ID, "search_prefix_word", text+" %"))
+	sb.WriteString(` THEN 1.0 WHEN `)
+	sb.WriteString(sourceAlias)
+	sb.WriteString(`.lookup LIKE :`)
+	sb.WriteString(b.PushValue(filter.ID, "search_prefix", text+"%"))
+	sb.WriteString(` THEN 0.5 ELSE 0.0 END)`)
+
+	return sb.String()
+}
+
+func (b *queryBuilder) buildFollowedByFollowerOfJoins(filter *databaseFilterSearch) string {
+	if !filter.FollowedBy && !filter.FollowerOf {
+		return ""
+	}
+
+	tempBuilder := queryBuilder{Params: b.Params}
+	if filter.FollowedBy {
+		tempBuilder.WriteString(`
+		INNER JOIN event_tags et ON et.event_tag_key = 'p' AND et.event_tag_value1 = e.master_pubkey
+		INNER JOIN events e_follow ON e_follow.id = et.event_id 
+			AND e_follow.kind = 3 
+			AND e_follow.hidden = false
+			AND `)
+		buildFromSlice(&tempBuilder, sqlOpCodeNONE, filter.ID, filter.SocialFilterPubkeys, "e_follow.master_pubkey", "followed_by")
+	} else if filter.FollowerOf {
+		tempBuilder.WriteString(`
+		INNER JOIN events e_follow ON e_follow.master_pubkey = e.master_pubkey 
+			AND e_follow.kind = 3
+			AND e_follow.hidden = false
+		INNER JOIN event_tags et ON et.event_id = e_follow.id 
+			AND et.event_tag_key = 'p' 
+			AND `)
+		buildFromSlice(&tempBuilder, sqlOpCodeNONE, filter.ID, filter.SocialFilterPubkeys, "et.event_tag_value1", "follower_of")
+	}
+	return tempBuilder.String()
+}
+
+func (b *queryBuilder) BuildCTEWithGiSTKNN(filter *databaseFilterSearch) (*databaseCTE, error) {
+	if filter.Limit == 0 {
+		filter.Limit = whereBuilderDefaultLimit
+	}
+
+	whereBuffer := queryBuilder{Params: b.Params}
+	where, _, err := whereBuffer.BuildWhere(filter)
+	if err != nil {
+		return nil, err
+	}
+
+	text := strings.ToLower(replaceSpecialChars(filter.SearchText))
+	name := filter.ID + "events_cte"
+	fields := b.fieldsNames("c", name)
+	fields = append(fields, "c.sim", "c.verified")
+
+	orderBy := `verified desc, sim desc, ` + whereBuilderDefaultOrderBy
+
+	var sb strings.Builder
+
+	sb.WriteString(`(WITH candidates AS (
+		SELECT e.*, `)
+	sb.WriteString(b.buildSimilaritySQL("e", filter, text))
+	sb.WriteString(` AS sim
+		FROM events e`)
+
+	sb.WriteString(b.buildFollowedByFollowerOfJoins(filter))
+
+	sb.WriteString(`
+		WHERE `)
+	sb.WriteString(where)
+	sb.WriteString(` AND e.lookup LIKE :`)
+
+	if filter.SearchType == keywordLookupStrategyPrefix {
+		sb.WriteString(b.PushValue(filter.ID, "search_lookup_like", text+"%"))
+	} else {
+		sb.WriteString(b.PushValue(filter.ID, "search_lookup_like", "%"+text+"%"))
+	}
+
+	sb.WriteString(` AND similarity(e.lookup, :`)
+	sb.WriteString(b.PushValue(filter.ID, "search_similarity_check", text))
+	sb.WriteString(`) >= 0.2
+		ORDER BY e.lookup <-> :`)
+	sb.WriteString(b.PushValue(filter.ID, "search_knn", text))
+	sb.WriteString(`
+		LIMIT 250
+	)
+	SELECT `)
+
+	for i, f := range fields {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(f)
+	}
+	sb.WriteString(` FROM candidates c
+	ORDER BY `)
+	sb.WriteString(orderBy)
+	sb.WriteString(`
+	LIMIT :`)
+	sb.WriteString(b.PushValue(filter.ID, "limit", filter.Limit))
+	sb.WriteString(`)`)
+
+	return &databaseCTE{
+		Name:    name,
+		Body:    sb.String(),
+		OrderBy: orderBy,
+		Filter:  filter,
+	}, nil
+}
+
 func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE, err error) {
+	if isKindProfileMetadataOnly(filter) && (filter.SearchText != "" || filter.FollowedBy || filter.FollowerOf) {
+		return b.BuildCTEWithGiSTKNN(filter)
+	}
+
 	whereBuffer := queryBuilder{Params: b.Params}
 	where, _, err := whereBuffer.BuildWhere(filter)
 	if err != nil {

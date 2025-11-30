@@ -100,7 +100,13 @@ var (
 		"kind0>kind6400+kind3+group+p",
 		"kind0>kind6400+kind30175+expiration",
 	}
-	allSearchExtensions = []string{
+
+	kind0SearchExtensions = []string{
+		"keyword_lookup_strategy:prefix", "keyword_lookup_strategy:infix",
+		"followed_by:{{.Pubkey}}", "follower_of:{{.Pubkey}}",
+	}
+
+	otherKindsSearchExtensions = []string{
 		"media:true", "media:false",
 		"quotes:true", "quotes:false",
 		"references:true", "references:false",
@@ -108,7 +114,7 @@ var (
 		"images:true", "images:false",
 		"expiration:true", "expiration:false",
 	}
-	// allSearchExtensions + allSearchDependencies = 95,550,759 combinations.
+	// allSearchExtensions + allSearchDependencies = = 96,075,043 combinations.
 )
 
 func newContext() context.Context {
@@ -256,6 +262,7 @@ func main() {
 			Int("reactions", *reactionsCount).
 			Msg("creating dummy data ...")
 		keys := createUsers(ctx, *usersCount)
+		createFollowLists(ctx, keys)
 		posts := createPosts(ctx, keys, *postsCount)
 		createPostsReactions(ctx, keys, posts, *reactionsCount)
 		log.Info().Msg("dummy data created")
@@ -287,19 +294,31 @@ func main() {
 	}
 
 	log.Info().Msg("preparing combinations ...")
+	templateData := map[string]string{
+		"Pubkey": currentPublicKey,
+	}
+
 	for i := range allSearchDependencies {
 		var buf bytes.Buffer
 
 		buf.WriteString(`include:dependencies:`)
 		tpl := template.Must(template.New(strconv.Itoa(i)).Parse(allSearchDependencies[i]))
-		tpl.Execute(&buf, map[string]string{
-			"Pubkey": currentPublicKey,
-		})
+		tpl.Execute(&buf, templateData)
 		allSearchDependencies[i] = buf.String()
 		log.Info().Msgf("search dependency %d: %s", i, allSearchDependencies[i])
 	}
 
-	iterator, err := NewSearchCombinationsIterator(allSearchDependencies, allSearchExtensions, *positionToUse)
+	allExts := append(append([]string{}, otherKindsSearchExtensions...), kind0SearchExtensions...)
+	for i := range allExts {
+		if strings.Contains(allExts[i], "{{") {
+			var buf bytes.Buffer
+			tpl := template.Must(template.New("ext_" + strconv.Itoa(i)).Parse(allExts[i]))
+			tpl.Execute(&buf, templateData)
+			allExts[i] = buf.String()
+		}
+	}
+
+	iterator, err := NewSearchCombinationsIterator(allSearchDependencies, allExts, *positionToUse)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create combinations iterator")
 	}
@@ -345,12 +364,30 @@ func main() {
 
 		i := iterator.Position() - 1
 
+		hasTextSearch := false
+		for _, ext := range combination {
+			if strings.Contains(ext, "keyword_lookup_strategy") ||
+				strings.Contains(ext, "followed_by") ||
+				strings.Contains(ext, "follower_of") {
+				hasTextSearch = true
+
+				break
+			}
+		}
+
+		var kinds []int
+		if hasTextSearch {
+			kinds = []int{nostr.KindProfileMetadata}
+		} else {
+			kinds = []int{model.CustomIONKindEditableTextNote, nostr.KindArticle, nostr.KindGenericRepost}
+		}
+
 		for ctx.Err() == nil {
 			err = pool.Submit(func() {
 				defer bar.Add(1)
 
 				filter := model.Filter{
-					Kinds:  []int{model.CustomIONKindEditableTextNote, nostr.KindArticle, nostr.KindGenericRepost},
+					Kinds:  kinds,
 					Search: strings.Join(combination, " "),
 				}
 

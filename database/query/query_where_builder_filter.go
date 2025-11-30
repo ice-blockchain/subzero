@@ -9,6 +9,13 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
+const (
+	keywordLookupStrategyPrefix = "prefix"
+	keywordLookupStrategyInfix  = "infix"
+	searchExtensionFollowedBy   = "followed_by"
+	searchExtensionFollowerOf   = "follower_of"
+)
+
 func parseNostrFilterFlags(f *databaseFilterSearch) *databaseFilterSearch {
 	flags := []struct {
 		Name string
@@ -118,6 +125,51 @@ func parseNostrFilterDependencies(f *databaseFilterSearch) (*databaseFilterSearc
 }
 
 func parseNostrFilterText(f *databaseFilterSearch) *databaseFilterSearch {
+	if idx := strings.Index(f.Search, "keyword_lookup_strategy:"); idx != -1 {
+		start := idx + len("keyword_lookup_strategy:")
+		end := strings.Index(f.Search[start:], " ")
+		if end == -1 {
+			end = len(f.Search) - start
+		}
+		strategy := strings.TrimSpace(f.Search[start : start+end])
+		if strategy == keywordLookupStrategyPrefix || strategy == keywordLookupStrategyInfix {
+			f.SearchType = strategy
+		}
+		f.Search = strings.TrimSpace(f.Search[:idx] + f.Search[start+end:])
+	}
+
+	if idx := strings.Index(f.Search, searchExtensionFollowedBy+":"); idx != -1 {
+		f.FollowedBy = true
+		start := idx + len(searchExtensionFollowedBy) + 1
+		end := strings.Index(f.Search[start:], " ")
+		if end == -1 {
+			end = len(f.Search) - start
+		}
+		pubkeys := strings.TrimSpace(f.Search[start : start+end])
+		for _, pk := range strings.Split(pubkeys, ",") {
+			if pk = strings.TrimSpace(pk); pk != "" {
+				f.SocialFilterPubkeys = append(f.SocialFilterPubkeys, pk)
+			}
+		}
+		f.Search = strings.TrimSpace(f.Search[:idx] + f.Search[start+end:])
+	}
+
+	if idx := strings.Index(f.Search, searchExtensionFollowerOf+":"); idx != -1 {
+		f.FollowerOf = true
+		start := idx + len(searchExtensionFollowerOf) + 1
+		end := strings.Index(f.Search[start:], " ")
+		if end == -1 {
+			end = len(f.Search) - start
+		}
+		pubkeys := strings.TrimSpace(f.Search[start : start+end])
+		for _, pk := range strings.Split(pubkeys, ",") {
+			if pk = strings.TrimSpace(pk); pk != "" {
+				f.SocialFilterPubkeys = append(f.SocialFilterPubkeys, pk)
+			}
+		}
+		f.Search = strings.TrimSpace(f.Search[:idx] + f.Search[start+end:])
+	}
+
 	quoteStart := strings.Index(f.Search, "\"")
 	quoteEnd := strings.LastIndex(f.Search, "\"")
 

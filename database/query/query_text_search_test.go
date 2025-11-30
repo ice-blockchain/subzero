@@ -13,6 +13,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/database/query/internal/connector"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -1184,4 +1185,360 @@ func TestPrepareSearchContentRemoveEmojis(t *testing.T) {
 			require.Equal(t, c.Expected, result)
 		})
 	}
+}
+
+func TestSearchExtensions_StartsWithAndContains(t *testing.T) {
+	t.Parallel()
+	db := helperNewDatabase(t)
+	defer db.Close()
+	profiles := []struct {
+		name        string
+		displayName string
+		masterKey   string
+		privateKey  string
+	}{
+		{"alice", "Alice Smith", "", ""},
+		{"alison", "Alison Cooper", "", ""},
+		{"alexander", "Alexander Great", "", ""},
+		{"lexandra", "Lexandra Wilson", "", ""},
+		{"lexander", "Lexander Brown", "", ""},
+		{"allison", "Allison Taylor", "", ""},
+		{"bob", "Bob Jones", "", ""},
+		{"bobby", "Bobby Wilson", "", ""},
+		{"charlie", "Charlie Brown", "", ""},
+		{"madison", "Madison Lee", "", ""},
+		{"ellison", "Ellison Ford", "", ""},
+	}
+
+	for i := range profiles {
+		profiles[i].privateKey, profiles[i].masterKey = model.GenerateKeyPair()
+
+		content := `{"name":"` + profiles[i].name + `","display_name":"` + profiles[i].displayName + `"}`
+		profileEvent := &model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindProfileMetadata,
+				CreatedAt: nostr.Now(),
+				Content:   content,
+			},
+		}
+		require.NoError(t, profileEvent.SignWithAlg(profiles[i].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), profileEvent))
+	}
+
+	t.Run("StartsWith search - find alice, alison, alexander", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"ali" keyword_lookup_strategy:prefix`,
+		})
+		require.Equal(t, len(stored), 2)
+		names := make(map[string]bool)
+		for _, ev := range stored {
+			var content struct {
+				Name string `json:"name"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(ev.Content), &content))
+			names[content.Name] = true
+		}
+		require.True(t, names["alice"] || names["alison"], "Should find alice/alison")
+	})
+	t.Run("StartsWith search - find bob and bobby", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"bob" keyword_lookup_strategy:prefix`,
+		})
+		require.Equal(t, 2, len(stored), "Should find 2 results starting with 'bob'")
+		foundNames := make(map[string]bool)
+		for _, ev := range stored {
+			var content struct {
+				Name string `json:"name"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(ev.Content), &content))
+			foundNames[content.Name] = true
+		}
+		require.True(t, foundNames["bob"], "Should find bob")
+		require.True(t, foundNames["bobby"], "Should find bobby")
+	})
+
+	t.Run("Contains search - find 'lexand' inside multiple names", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"lexand" keyword_lookup_strategy:infix`,
+		})
+		require.Equal(t, 3, len(stored), "Should find exactly 3 results with 'lexand' inside")
+		foundNames := make(map[string]bool)
+		for _, ev := range stored {
+			var content struct {
+				Name string `json:"name"`
+			}
+			json.Unmarshal([]byte(ev.Content), &content)
+			foundNames[content.Name] = true
+		}
+		require.True(t, foundNames["alexander"], "Should find alexander (contains 'lexand')")
+		require.True(t, foundNames["lexandra"], "Should find lexandra (contains 'lexand')")
+		require.True(t, foundNames["lexander"], "Should find lexander (contains 'lexand')")
+	})
+
+	t.Run("Contains search - find 'lison' inside multiple names", func(t *testing.T) {
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"lison" keyword_lookup_strategy:infix`,
+		})
+		require.Equal(t, 3, len(stored), "Should find exactly 3 results with 'lison'")
+		foundNames := make(map[string]bool)
+		for _, ev := range stored {
+			var content struct {
+				Name string `json:"name"`
+			}
+			json.Unmarshal([]byte(ev.Content), &content)
+			foundNames[content.Name] = true
+		}
+		require.True(t, foundNames["alison"], "Should find alison (contains 'lison')")
+		require.True(t, foundNames["allison"], "Should find allison (contains 'lison')")
+		require.True(t, foundNames["ellison"], "Should find ellison (contains 'lison')")
+	})
+}
+
+func TestSearchExtensions_FollowedByAndFollowerOf(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	users := []struct {
+		name       string
+		masterKey  string
+		privateKey string
+		verified   bool
+	}{
+		{"alice", "", "", false},
+		{"bob", "", "", true},
+		{"charlie", "", "", false},
+		{"david", "", "", false},
+		{"eve", "", "", true},
+		{"frank", "", "", false},
+		{"bobby", "", "", false},
+		{"robert", "", "", true},
+		{"alicia", "", "", false},
+		{"alison", "", "", false},
+		{"alexander", "", "", true},
+		{"carol", "", "", false},
+		{"catherine", "", "", false},
+		{"chris", "", "", true},
+		{"dan", "", "", false},
+		{"diana", "", "", false},
+		{"emily", "", "", true},
+		{"ethan", "", "", false},
+		{"fiona", "", "", false},
+		{"fred", "", "", false},
+	}
+
+	for i := range users {
+		users[i].privateKey, users[i].masterKey = model.GenerateKeyPair()
+		content := `{"name":"` + users[i].name + `","display_name":"` + users[i].name + `"}`
+		profileEvent := &model.Event{
+			Event: nostr.Event{
+				Kind:      nostr.KindProfileMetadata,
+				CreatedAt: nostr.Now(),
+				Content:   content,
+			},
+		}
+		if users[i].verified {
+			profileEvent.Event.Tags = model.Tags{{"verified", "true"}}
+		}
+		require.NoError(t, profileEvent.SignWithAlg(users[i].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), profileEvent))
+
+		if users[i].verified {
+			_, err := connector.Exec(t.Context(), db.db, `UPDATE events SET verified = true WHERE master_pubkey = $1 AND kind = 0`, users[i].masterKey)
+			require.NoError(t, err)
+		}
+	}
+
+	// Alice follows: bob, charlie, bobby, robert, alicia, alison, alexander, carol, chris, dan, emily
+	aliceFollowList := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindFollowList,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", users[1].masterKey},  // bob (verified)
+				{"p", users[2].masterKey},  // charlie
+				{"p", users[6].masterKey},  // bobby
+				{"p", users[7].masterKey},  // robert (verified)
+				{"p", users[8].masterKey},  // alicia
+				{"p", users[9].masterKey},  // alison
+				{"p", users[10].masterKey}, // alexander (verified)
+				{"p", users[11].masterKey}, // carol
+				{"p", users[13].masterKey}, // chris (verified)
+				{"p", users[14].masterKey}, // dan
+				{"p", users[16].masterKey}, // emily (verified)
+			},
+		},
+	}
+	require.NoError(t, aliceFollowList.SignWithAlg(users[0].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), aliceFollowList))
+
+	// Bob (verified) follows: alice, david, eve, frank, alicia, catherine, diana, ethan, fiona
+	bobFollowList := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindFollowList,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", users[0].masterKey},  // alice
+				{"p", users[3].masterKey},  // david
+				{"p", users[4].masterKey},  // eve (verified)
+				{"p", users[5].masterKey},  // frank
+				{"p", users[8].masterKey},  // alicia
+				{"p", users[12].masterKey}, // catherine
+				{"p", users[15].masterKey}, // diana
+				{"p", users[17].masterKey}, // ethan
+				{"p", users[18].masterKey}, // fiona
+			},
+		},
+	}
+	require.NoError(t, bobFollowList.SignWithAlg(users[1].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), bobFollowList))
+
+	// Charlie follows: alice, bob, bobby, robert, alicia, alison, chris, carol
+	charlieFollowList := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindFollowList,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", users[0].masterKey},  // alice
+				{"p", users[1].masterKey},  // bob (verified)
+				{"p", users[6].masterKey},  // bobby
+				{"p", users[7].masterKey},  // robert (verified)
+				{"p", users[8].masterKey},  // alicia
+				{"p", users[9].masterKey},  // alison
+				{"p", users[11].masterKey}, // carol
+				{"p", users[13].masterKey}, // chris (verified)
+			},
+		},
+	}
+	require.NoError(t, charlieFollowList.SignWithAlg(users[2].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), charlieFollowList))
+
+	// David follows: charlie, catherine, carol, chris, dan, diana
+	davidFollowList := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindFollowList,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", users[2].masterKey},  // charlie
+				{"p", users[11].masterKey}, // carol
+				{"p", users[12].masterKey}, // catherine
+				{"p", users[13].masterKey}, // chris (verified)
+				{"p", users[14].masterKey}, // dan
+				{"p", users[15].masterKey}, // diana
+			},
+		},
+	}
+	require.NoError(t, davidFollowList.SignWithAlg(users[3].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), davidFollowList))
+
+	// Eve (verified) follows: emily, ethan, eve (self-follow for testing), alexander, alicia
+	eveFollowList := &model.Event{
+		Event: nostr.Event{
+			Kind:      nostr.KindFollowList,
+			CreatedAt: nostr.Now(),
+			Tags: model.Tags{
+				{"p", users[8].masterKey},  // alicia
+				{"p", users[10].masterKey}, // alexander (verified)
+				{"p", users[16].masterKey}, // emily (verified)
+				{"p", users[17].masterKey}, // ethan
+			},
+		},
+	}
+	require.NoError(t, eveFollowList.SignWithAlg(users[4].privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), eveFollowList))
+
+	t.Run("FollowedBy - search 'bob' - multiple results (bob, bobby)", func(t *testing.T) {
+		// Alice follows: bob, bobby, robert. Expected: 2 results - bob (verified), bobby (non-verified)
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"bob" followed_by:` + users[0].masterKey,
+		})
+		require.Equal(t, 2, len(stored), "Should find bob and bobby")
+		require.Equal(t, users[1].masterKey, stored[0].GetMasterPublicKey(), "Position 0 should be bob (verified)")
+		require.Equal(t, users[6].masterKey, stored[1].GetMasterPublicKey(), "Position 1 should be bobby (non-verified)")
+	})
+
+	t.Run("FollowedBy - multiple authors [alice, charlie] search 'bob' - UNION", func(t *testing.T) {
+		// Alice follows: bob, bobby, robert, charlie
+		// Charlie follows: bob, bobby, robert, alice, alicia, alison, carol, chris
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"bob" followed_by:` + users[0].masterKey + `,` + users[2].masterKey,
+		})
+		require.Equal(t, 4, len(stored), "Should find 4 results matching 'bob'")
+		require.Equal(t, users[1].masterKey, stored[0].GetMasterPublicKey(), "Position 0 should be bob (verified, exact match)")
+		found := make(map[string]bool)
+		for _, ev := range stored {
+			found[ev.GetMasterPublicKey()] = true
+		}
+		require.True(t, found[users[6].masterKey], "Should find bobby")
+	})
+
+	t.Run("FollowedBy - search 'ali' contains - multiple results", func(t *testing.T) {
+		// Alice follows: alicia, alison
+		// Search for profiles containing "ali" among alice's followings
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"ali" keyword_lookup_strategy:infix followed_by:` + users[0].masterKey,
+		})
+		require.Equal(t, 2, len(stored), "Should find alicia and alison")
+		found := make(map[string]bool)
+		for _, ev := range stored {
+			found[ev.GetMasterPublicKey()] = true
+		}
+		require.True(t, found[users[8].masterKey], "Should find alicia")
+		require.True(t, found[users[9].masterKey], "Should find alison")
+	})
+
+	t.Run("FollowedBy - multiple authors [alice, bob, charlie] search 'ali' - UNION", func(t *testing.T) {
+		// Alice follows: alicia, alison, alexander
+		// Bob follows: alicia, alice, david, eve, frank, catherine, diana, ethan, fiona
+		// Charlie follows: alicia, alison, bob, bobby, robert, carol, chris, alice
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"ali" keyword_lookup_strategy:infix followed_by:` + users[0].masterKey + `,` + users[1].masterKey + `,` + users[2].masterKey,
+		})
+		require.Equal(t, 7, len(stored), "Should find 7 results matching 'ali'")
+		found := make(map[string]bool)
+		for _, ev := range stored {
+			found[ev.GetMasterPublicKey()] = true
+		}
+		require.True(t, found[users[0].masterKey], "Should find alice")
+		require.True(t, found[users[8].masterKey], "Should find alicia")
+		require.True(t, found[users[9].masterKey], "Should find alison")
+	})
+
+	t.Run("FollowerOf - search 'd' with startsWith - david follows charlie", func(t *testing.T) {
+		// Charlie is followed by: nobody with name starting with "d"
+		// David follows: charlie.
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"d" keyword_lookup_strategy:prefix follower_of:` + users[2].masterKey,
+		})
+		for _, ev := range stored {
+			require.NotEqual(t, users[3].masterKey, ev.GetMasterPublicKey(),
+				"Should NOT find david (david doesn't follow charlie)")
+		}
+	})
+
+	t.Run("FollowedBy - multiple authors [alice, eve] search 'em'", func(t *testing.T) {
+		// Alice follows: emily
+		// Eve follows: emily, ethan, alicia, alexander
+		stored := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: `"em" keyword_lookup_strategy:infix followed_by:` + users[0].masterKey + `,` + users[4].masterKey,
+		})
+
+		require.Equal(t, 2, len(stored), "Should find 2 results with 'em'")
+		found := make(map[string]bool)
+		for _, ev := range stored {
+			found[ev.GetMasterPublicKey()] = true
+		}
+		require.True(t, found[users[16].masterKey], "Should find emily (verified)")
+	})
 }
