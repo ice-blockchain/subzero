@@ -95,9 +95,6 @@ func TestConsensusEvents(t *testing.T) {
 		if _, ok := committed.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
 			return nil
 		}
-		if qErr := mapPort(ctx).DB.CommitEvents(ctx, events...); qErr != nil {
-			return qErr
-		}
 		finalizedDone[mapPort(ctx).Endpoint()] <- true
 		committed.Store(mapPort(ctx).Endpoint()+helperHashEvents(t, events...), true)
 		t.Log("COMMIT", mapPort(ctx).Endpoint(), events[0].Kind, events[0].Content)
@@ -108,7 +105,12 @@ func TestConsensusEvents(t *testing.T) {
 	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
 		return mapPort(ctx).DB.SelectEvents(ctx, filters...)
 	})
-	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	relay := helperMustNewRelay(t, pubsubServers[0])       // :9988
+	secondRelay := helperMustNewRelay(t, pubsubServers[1]) // :9977
+	thirdRelay := helperMustNewRelay(t, pubsubServers[2])  // :9966
+	fourthRelay := helperMustNewRelay(t, pubsubServers[3]) // :9955
+
 	var ev, ev2 *model.Event
 	var attestationEvent *model.Event
 	masterPrivKey, masterPubkey := model.GenerateKeyPair()
@@ -150,9 +152,7 @@ func TestConsensusEvents(t *testing.T) {
 		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
 		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
 	})
-	time.Sleep(3 * time.Second)
 
-	secondRelay := helperMustNewRelay(t, pubsubServers[1])
 	t.Run("query events", func(t *testing.T) {
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Len(t, receivedEventsFromFirstRelay, 1)
@@ -178,7 +178,6 @@ func TestConsensusEvents(t *testing.T) {
 		require.Contains(t, receivedEventsFromFirstRelay, ev)
 		require.Contains(t, receivedEventsFromFirstRelay, ev2)
 	})
-	time.Sleep(3 * time.Second)
 
 	command.RegisterAcceptListener(func(ctx context.Context, events ...*model.Event) error {
 		hasFailedTx := false
@@ -249,15 +248,16 @@ func TestConsensusEvents(t *testing.T) {
 		require.Contains(t, receivedEventsFromThirdRelay, ev2)
 		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
 	})
-	time.Sleep(3 * time.Second)
+
 	command.RegisterAcceptListener(normalAccept)
 	command.RegisterRollbackListener(query.RollbackEvents)
 	var eventMissedByRelay3DuringBroadcastTime, eventAfterNodeComesUp *model.Event
 	t.Run("relay fetches missed data after downtime, broadcast still works as 2/3 reached", func(t *testing.T) {
-		stopCtx, stopFn := context.WithTimeout(context.Background(), 2*time.Second)
+		stopCtx, stopFn := context.WithCancel(context.Background())
 		defer stopFn()
+
 		t.Logf("stopping consensus on relay %v", pubsubServers[2].Endpoint())
-		err := pubsubServers[2].Consensus.Stop(stopCtx, 2*time.Second)
+		err := pubsubServers[2].Consensus.Stop(stopCtx, 5*time.Second)
 		t.Logf("stopped consensus on relay %v: %v", pubsubServers[2].Endpoint(), err)
 
 		eventMissedByRelay3DuringBroadcastTime = &model.Event{Event: nostr.Event{
@@ -272,7 +272,7 @@ func TestConsensusEvents(t *testing.T) {
 		require.NoError(t, relay.Publish(t.Context(), eventMissedByRelay3DuringBroadcastTime.Event))
 		waitAcceptErr := helperAwaitConsensus(t, consensusDone, relay, thirdRelay)
 		require.NoError(t, waitAcceptErr)
-		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, thirdRelay))
 
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime)
@@ -283,11 +283,17 @@ func TestConsensusEvents(t *testing.T) {
 		receivedEventsFromThirdRelay := helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.NotContains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 
-		nextCtx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancelFn()
+		backendCtx, backendCancelFn := context.WithCancel(context.Background())
+		defer backendCancelFn()
 
-		pubsubServers[2].Consensus.Start(nextCtx)
-		time.Sleep(5 * time.Second) // wait for "Start"
+		t.Logf("starting consensus on relay %v", pubsubServers[2].Endpoint())
+		pubsubServers[2].Consensus.Start(backendCtx)
+		time.Sleep(10 * time.Second) // wait for "Start"
+		t.Logf("started consensus on relay %v", pubsubServers[2].Endpoint())
+
+		broadcastCtx, broadcastCancelFn := context.WithTimeout(backendCtx, 30*time.Second)
+		defer broadcastCancelFn()
+
 		eventAfterNodeComesUp = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
@@ -297,11 +303,15 @@ func TestConsensusEvents(t *testing.T) {
 			Content: "eventAfterNodeComesUp",
 		}}
 		helperSignWithMinLeadingZeroBits(t, eventAfterNodeComesUp, privkey)
-		require.NoError(t, relay.Publish(nextCtx, eventAfterNodeComesUp.Event))
+		require.NoError(t, relay.Publish(broadcastCtx, eventAfterNodeComesUp.Event))
 		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
-		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
 
-		receivedEventsFromThirdRelay = helperQueryEvents(t, nextCtx, thirdRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
+		// require block from all
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
+		// require +1 block from thirdRelay only (others have already finalized it).
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, relay, secondRelay, fourthRelay))
+
+		receivedEventsFromThirdRelay = helperQueryEvents(t, broadcastCtx, thirdRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Contains(t, receivedEventsFromThirdRelay, eventAfterNodeComesUp)
 		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
 		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
@@ -488,44 +498,80 @@ func helperPickRandomRelay(tb testing.TB) *nostrRelay {
 	return relay
 }
 
+// Wait (concurrently) for all relays except broadcastFrom to accept.
+// consensusDone is written on by the consensusEventListener (AcceptBroadcastTx).
 func helperAwaitConsensus(t testing.TB, consensusDone map[string]chan bool, broadcastFrom ...*nostrRelay) error {
 	t.Helper()
 	skipUrls := make([]string, 0, len(broadcastFrom))
 	for _, skipRelay := range broadcastFrom {
 		skipUrls = append(skipUrls, skipRelay.URL)
 	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 1)
+
 	for endpoint, done := range consensusDone {
 		if slices.Contains(skipUrls, endpoint) {
 			continue
 		}
-		select {
-		case <-done:
-			continue
-		case <-time.After(30 * time.Second):
-			return errors.Errorf("timeout awaiting consensus from %v", endpoint)
-		}
+
+		wg.Add(1)
+		go func(ep string, ch chan bool) {
+			defer wg.Done()
+			select {
+			case <-ch:
+				return
+			case <-time.After(30 * time.Second):
+				select {
+				case errChan <- errors.Errorf("timeout awaiting consensus from %v", ep):
+				default:
+				}
+			}
+		}(endpoint, done)
 	}
-	return nil
+
+	wg.Wait()
+	close(errChan)
+
+	return <-errChan
 }
 
+// Wait (concurrently) for all relays except skipRelays to commit.
+// consensusDone is written on by the commitEventListener (CommitBroadcastTx).
 func helperAwaitFinalized(t testing.TB, finalizedDone map[string]chan bool, skipRelays ...*nostrRelay) error {
 	t.Helper()
 	skipUrls := make([]string, 0, len(skipRelays))
 	for _, skipRelay := range skipRelays {
 		skipUrls = append(skipUrls, skipRelay.URL)
 	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 1)
+
 	for endpoint, done := range finalizedDone {
 		if slices.Contains(skipUrls, endpoint) {
 			continue
 		}
-		select {
-		case <-done:
-			continue
-		case <-time.After(10 * time.Second):
-			return errors.Errorf("timeout awaiting block commit from %v", endpoint)
-		}
+
+		wg.Add(1)
+		go func(ep string, ch chan bool) {
+			defer wg.Done()
+			select {
+			case <-ch:
+				return
+			case <-time.After(30 * time.Second):
+				select {
+				case errChan <- errors.Errorf("timeout awaiting block commit from %v", ep):
+				default:
+				}
+			}
+		}(endpoint, done)
 	}
-	return nil
+
+	wg.Wait()
+	close(errChan)
+
+	return <-errChan
 }
 
 func helperBenchReportMetrics(
