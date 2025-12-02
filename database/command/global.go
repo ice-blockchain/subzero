@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -25,7 +24,7 @@ import (
 
 var ErrUserIsNotPresentedOnRelay = errors.Errorf("user is not presented on relay")
 
-var disabled = false
+var disabled = true
 
 type (
 	CallbackFunc func(context.Context, ...*model.Event) error
@@ -63,6 +62,7 @@ type Config struct {
 	RelayUrl                   string `yaml:"relay-url"`
 	DiscoveryPort              uint16 `yaml:"discovery-port"`
 	Debug                      bool   `yaml:"debug"`
+	Enabled                    bool   `yaml:"enabled"`
 }
 
 type Option func(*consensus)
@@ -101,16 +101,21 @@ func WithClient(client client.Client) Option {
 	}
 }
 
+func Enabled() bool {
+	conf := cfg.MustGet[Config]()
+	disabled = !conf.Enabled
+	return !disabled
+}
+
 func MustInit(ctx context.Context, opts ...Option) {
 	conf := cfg.MustGet[Config]()
-	if disabled || strings.Contains(conf.RelayUrl, ".testnet.") || (conf.RelayUrl == "" && conf.AbsoluteRootPath == "" && conf.DiscoveryPort == 0) {
-		disabled = true
+	disabled = !conf.Enabled
+	if disabled {
 		return
 	}
 	globalConsensus.Once.Do(func() {
 		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...)
 	})
-
 }
 
 func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *consensus {

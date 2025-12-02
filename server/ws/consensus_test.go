@@ -260,10 +260,10 @@ func TestConsensusEvents(t *testing.T) {
 		stopCtx, stopFn := context.WithCancel(context.Background())
 		defer stopFn()
 
-		t.Logf("stopping consensus on relay %v", pubsubServers[2].Endpoint())
-		err := pubsubServers[2].Consensus.Stop(stopCtx, 2*time.Second) // e.g. 2s in case already shutdown
+		t.Logf("stopping consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
+		err := pubsubServers[2].Consensus.Stop(stopCtx, 5*time.Second)
 		time.Sleep(10 * time.Second)                                   // wait for shutdown..
-		t.Logf("stopped consensus on relay %v: %v", pubsubServers[2].Endpoint(), err)
+		t.Logf("stopped consensus on relay %v %v: %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID(), err)
 
 		// 3 events each broadcast in its own block, we make sure of this with
 		// the helperAwaitFinalized call before sending next events.
@@ -329,10 +329,10 @@ func TestConsensusEvents(t *testing.T) {
 		backendCtx, backendCancelFn := context.WithCancel(context.Background())
 		defer backendCancelFn()
 
-		t.Logf("starting consensus on relay %v", pubsubServers[2].Endpoint())
+		t.Logf("starting consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
 		pubsubServers[2].Consensus.Start(backendCtx)
 		time.Sleep(10 * time.Second) // wait for "Start"
-		t.Logf("started consensus on relay %v", pubsubServers[2].Endpoint())
+		t.Logf("started consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
 
 		broadcastCtx, broadcastCancelFn := context.WithTimeout(backendCtx, 30*time.Second)
 		defer broadcastCancelFn()

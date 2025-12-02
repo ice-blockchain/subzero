@@ -25,6 +25,7 @@ import (
 type TestConsensus interface {
 	Consensus
 	DiscoveryPort() uint16
+	NodeID() string
 	Stop(ctx context.Context, timeout time.Duration) error
 	Start(ctx context.Context)
 	Wait() // Waits for quit channel.
@@ -32,6 +33,15 @@ type TestConsensus interface {
 
 func (c *consensus) DiscoveryPort() uint16 {
 	return c.Config.DiscoveryPort
+}
+
+func (c *consensus) NodeID() string {
+	nodeKeyFile := c.ServerConfig.NodeKeyFile()
+	nodeKey, err := p2p.LoadNodeKey(nodeKeyFile)
+	if err != nil {
+		panic(fmt.Errorf("failed to load node key file: %w", err))
+	}
+	return string(nodeKey.ID())
 }
 
 func (c *consensus) Start(ctx context.Context) {
@@ -126,6 +136,7 @@ func newConsensusNode(ctx context.Context, nodeCfg *config.Config, port uint16, 
 			DiscoveryPort:              port,
 			AbsoluteRootPath:           storage,
 			AbsoluteNodePrivateKeyPath: keyPath.Name(),
+			Enabled:                    true,
 		}),
 	}
 	if len(opts) > 0 {

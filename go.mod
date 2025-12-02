@@ -204,7 +204,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20251107114026-ec5fc875ea0c // indirect
+	github.com/ice-blockchain/cometbft/api v1.0.0-rc.1.0.20251201113607-5c973a880565 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
