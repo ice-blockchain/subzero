@@ -216,6 +216,7 @@ var (
 
 		model.CustomIONKindTokenizedCommunityDefination: newKindValidatorBuilder().
 			OneOfSingle("e", "a").
+			Optional("p").
 			Required("k").
 			Forbidden("expiration").
 			ContentEmpty().
@@ -466,7 +467,12 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 	kindValidator, known := rules[e.Kind]
 	for _, tag := range e.Tags {
 		if data, ok := kindValidator.Tags[tag.Key()]; known && !ok {
-			return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
+			switch {
+			case tag.Key() == "d" && e.IsAddressable():
+				// Allow `d` tag for addressable events even if it's not explicitly listed.
+			default:
+				return errors.Wrapf(ErrUnsupportedTag, "tag: %v", tag)
+			}
 		} else if data.State == tagStateForbidden {
 			return errors.Wrapf(ErrUnsupportedTag, "tag: %v: cannot be used with this kind", tag)
 		}
