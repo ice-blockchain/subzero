@@ -1411,7 +1411,10 @@ func verifyEphemeralAttestation(event *model.Event, embeddings ...*model.Ephemer
 
 func eventValidForEphemeralAttestation(event *model.Event) bool {
 	switch event.Kind {
-	case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
+	case model.CustomIONKindEditableTextNote,
+		nostr.KindTextNote,
+		nostr.KindArticle,
+		model.CustomIONKindRepostOfTokenizedCommunityDefination:
 		// Reply, quote or mention.
 		refTags := map[string]struct{}{
 			"e": {},
@@ -1442,6 +1445,8 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 			val, err := nostr.ParseTimestamp(event.GetTag("published_at").Value())
 			return err == nil && event.CreatedAt.After(val)
 		}
+	case model.CustomIONKindTokenizedCommunityAction:
+		return true
 	case nostr.KindFollowList:
 		return true
 	case nostr.KindReaction:
