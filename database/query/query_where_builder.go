@@ -668,6 +668,9 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 		case model.CustomIONKindRepostOfArticle:
 			repostKinds = append(repostKinds, strconv.Itoa(nostr.KindArticle))
 
+		case model.CustomIONKindRepostOfTokenizedCommunityDefination:
+			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityDefination))
+
 		default:
 			kinds = append(kinds, kind)
 		}
@@ -1018,7 +1021,14 @@ where
 	}
 
 	switch current.Reduce.Kinds[0] {
-	case nostr.KindTextNote, nostr.KindRepost, nostr.KindReaction, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote, model.CustomIONKindPollVote:
+	case nostr.KindTextNote,
+		nostr.KindRepost,
+		nostr.KindReaction,
+		nostr.KindArticle,
+		nostr.KindGenericRepost,
+		model.CustomIONKindEditableTextNote,
+		model.CustomIONKindTokenizedCommunityDefination,
+		model.CustomIONKindPollVote:
 		tag := current.Reduce.Tag // Could be "q" or "e" or "p" or empty.
 		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id and et.deleted = false ")
 		if current.Reduce.Author != "" {
@@ -1632,14 +1642,15 @@ func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []strin
 	}
 
 	var supportedKinds = map[int]struct{}{
-		nostr.KindReaction:                  {},
-		nostr.KindFollowList:                {},
-		nostr.KindTextNote:                  {},
-		nostr.KindRepost:                    {},
-		nostr.KindArticle:                   {},
-		nostr.KindGenericRepost:             {},
-		model.CustomIONKindEditableTextNote: {},
-		model.CustomIONKindCommunityJoin:    {},
+		nostr.KindReaction:                              {},
+		nostr.KindFollowList:                            {},
+		nostr.KindTextNote:                              {},
+		nostr.KindRepost:                                {},
+		nostr.KindArticle:                               {},
+		nostr.KindGenericRepost:                         {},
+		model.CustomIONKindEditableTextNote:             {},
+		model.CustomIONKindCommunityJoin:                {},
+		model.CustomIONKindTokenizedCommunityDefination: {},
 	}
 	for _, kind := range filter.Kinds {
 		if _, ok := supportedKinds[kind]; !ok {
@@ -1701,7 +1712,12 @@ func (b *queryBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 				case nostr.KindFollowList:
 					referenceType = "follower"
 
-				case nostr.KindTextNote, nostr.KindRepost, nostr.KindArticle, nostr.KindGenericRepost, model.CustomIONKindEditableTextNote:
+				case nostr.KindTextNote,
+					nostr.KindRepost,
+					nostr.KindArticle,
+					nostr.KindGenericRepost,
+					model.CustomIONKindTokenizedCommunityDefination,
+					model.CustomIONKindEditableTextNote:
 					if tagsHasQuote(filter.Tags) {
 						referenceType = "quote"
 					} else if _, ref := filter.Tags["e"]; ref {

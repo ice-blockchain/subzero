@@ -59,7 +59,7 @@ func TestEventScore(t *testing.T) {
 
 	ts := nostr.Now().Add(time.Hour)
 
-	var evNote, evArticle model.Event
+	var evNote, evArticle, evTC model.Event
 	evNote.ID = "note"
 	evNote.Kind = nostr.KindTextNote
 	evNote.PubKey = "note_pub"
@@ -74,7 +74,16 @@ func TestEventScore(t *testing.T) {
 	evArticle.Tags = model.Tags{
 		{"d", "my article"},
 	}
-	require.NoError(t, db.AcceptEvents(t.Context(), &evNote, &evArticle))
+	evTC.ID = "tc"
+	evTC.Kind = model.CustomIONKindTokenizedCommunityDefination
+	evTC.PubKey = "tc_pub"
+	evTC.CreatedAt = ts
+	evTC.Content = "tc content"
+	evTC.Tags = model.Tags{
+		{"d", "my tc"},
+	}
+
+	require.NoError(t, db.AcceptEvents(t.Context(), &evNote, &evArticle, &evTC))
 
 	targetEvents := []struct {
 		Tag     string
@@ -83,6 +92,7 @@ func TestEventScore(t *testing.T) {
 		JSON    string
 	}{
 		{"a", evArticle.ID, evArticle.Address(), evArticle.String()},
+		{"a", evTC.ID, evTC.Address(), evTC.String()},
 		{"e", evNote.ID, evNote.Address(), evNote.String()},
 	}
 	t.Logf("target events: %v", targetEvents)
@@ -122,19 +132,19 @@ func TestEventScore(t *testing.T) {
 			helperPointsScoreEqual(t, db, target.ID, 4, 4e4) // like (1) + repost (3).
 		}
 	})
-	var quotes []string
+	var quotes []model.Event
 	t.Run("Quote", func(t *testing.T) {
 		for _, target := range targetEvents {
 			var ev model.Event
 			ev.Content = "quote"
 			ev.ID = "quote" + target.ID
-			ev.PubKey = "quote_pub"
+			ev.PubKey = "quote_pub" + target.ID
 			ev.Kind = nostr.KindTextNote
 			if target.Tag == "a" {
 				ev.Kind = model.CustomIONKindEditableTextNote
 				ev.Tags = model.Tags{
 					{model.CustomIONTagAddressableQ, target.Address},
-					{"d", "quote"},
+					{"d", "quote" + target.ID},
 				}
 			} else {
 				ev.Tags = model.Tags{
@@ -142,7 +152,7 @@ func TestEventScore(t *testing.T) {
 				}
 			}
 			ev.CreatedAt = nostr.Now()
-			quotes = append(quotes, ev.ID)
+			quotes = append(quotes, ev)
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperPointsScoreEqual(t, db, target.ID, 8, 8e4) // like (1) + repost (3) + quote (4).
 		}
@@ -158,12 +168,11 @@ func TestEventScore(t *testing.T) {
 				ev.Kind = nostr.KindTextNote
 				if target.Tag == "a" {
 					ev.Kind = nostr.KindArticle
+					ev.Tags = append(ev.Tags, model.Tag{"d", "comment_root_" + target.ID})
 				}
 				ev.CreatedAt = nostr.Now()
-				ev.Tags = model.Tags{
-					{target.Tag, target.Address, "", "root"},
-					{target.Tag, target.Address, "", "reply"},
-				}
+				ev.Tags = append(ev.Tags, model.Tag{target.Tag, target.Address, "", "root"})
+				ev.Tags = append(ev.Tags, model.Tag{target.Tag, target.Address, "", "reply"})
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 				helperPointsScoreEqual(t, db, target.ID, 10, 10e4) // like (1) + repost (3) + quote (4) + root comment (2).
 				replies = append(replies, &ev)
@@ -192,13 +201,13 @@ func TestEventScore(t *testing.T) {
 	})
 	t.Run("Delete", func(t *testing.T) {
 		t.Run("Quote", func(t *testing.T) {
-			for _, id := range quotes {
+			for _, q := range quotes {
 				var ev model.Event
 				ev.Kind = nostr.KindDeletion
-				ev.ID = "delete_" + id
-				ev.PubKey = "quote_pub"
+				ev.ID = "delete_" + q.ID
+				ev.PubKey = q.PubKey
 				ev.Tags = model.Tags{
-					{"e", id},
+					{"e", q.ID},
 				}
 				require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			}
@@ -215,20 +224,22 @@ func TestEventScore(t *testing.T) {
 			ev.Tags = model.Tags{
 				{"a", evArticle.Address(), "", "root"},
 				{"a", evArticle.Address(), "", "reply"},
+				{"d", "comment_root_" + evArticle.ID},
 				{"published_at", strconv.FormatInt(int64(nostr.Now())-1, 10)},
 			}
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			helperPointsScoreEqual(t, db, evArticle.ID, 4, 4e4) // like (1) + repost (3).
 			helperPointsScoreEqual(t, db, evNote.ID, 6, 6e4)    // like (1) + repost (3) + root comment (2).
+			helperPointsScoreEqual(t, db, evTC.ID, 6, 6e4)      // like (1) + repost (3) + root comment (2).
 		})
 		t.Run("rollback deletes", func(t *testing.T) {
-			for _, id := range quotes {
+			for _, q := range quotes {
 				var ev model.Event
 				ev.Kind = nostr.KindDeletion
-				ev.ID = "delete_" + id
-				ev.PubKey = "quote_pub"
+				ev.ID = "delete_" + q.ID
+				ev.PubKey = q.PubKey
 				ev.Tags = model.Tags{
-					{"e", id},
+					{"e", q.ID},
 				}
 				require.NoError(t, db.RollbackEvents(t.Context(), &ev))
 			}
@@ -241,6 +252,7 @@ func TestEventScore(t *testing.T) {
 			}
 			helperPointsScoreEqual(t, db, evArticle.ID, 5, 5e4) // like (1) + quote(4)
 			helperPointsScoreEqual(t, db, evNote.ID, 7, 7e4)    // like (1) + root comment (2) + quote(4)
+			helperPointsScoreEqual(t, db, evTC.ID, 7, 7e4)      // like (1) + root comment (2) + quote(4)
 		})
 	})
 }

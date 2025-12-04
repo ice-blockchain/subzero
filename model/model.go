@@ -50,8 +50,9 @@ const (
 	CustomIONKindTokenizedCommunityAction     = 1175
 	KindDVMCountResponse                      = 6400
 
-	CustomIONKindRepostOfArticle          = 16_30023
-	CustomIONKindRepostOfEditableTextNote = 16_30175
+	CustomIONKindRepostOfArticle                      = 16_30023
+	CustomIONKindRepostOfEditableTextNote             = 16_30175
+	CustomIONKindRepostOfTokenizedCommunityDefination = 16_31175
 
 	// TODO: change to proper value.
 	CustomIONSystemMessage = 999_999

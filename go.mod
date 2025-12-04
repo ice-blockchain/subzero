@@ -23,7 +23,7 @@ require (
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
 	github.com/docker/go-connections v0.6.0
-	github.com/dundee/gdu/v5 v5.32.1-0.20251128145232-88943f7861a0
+	github.com/dundee/gdu/v5 v5.32.1-0.20251204102112-88c68c5963f5
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4

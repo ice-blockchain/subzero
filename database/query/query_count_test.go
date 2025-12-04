@@ -338,6 +338,32 @@ func TestEventCounters(t *testing.T) {
 			helperMustBePrecalculatedCount(t, db, 3, f1, f2)
 		})
 	})
+	t.Run("Reactions on TC", func(t *testing.T) {
+		var tcDef model.Event
+		tcDef.ID = "1tc"
+		tcDef.Kind = model.CustomIONKindTokenizedCommunityDefination
+		tcDef.PubKey = "pub1tc"
+		tcDef.CreatedAt = 1
+		require.NoError(t, db.AcceptEvents(t.Context(), &tcDef))
+		t.Run("React", func(t *testing.T) {
+			var ev model.Event
+			ev.ID = "2tc"
+			ev.Kind = nostr.KindReaction
+			ev.PubKey = "pub2tc"
+			ev.CreatedAt = 2
+			ev.Tags = model.Tags{{"e", tcDef.ID}, {"p", tcDef.PubKey}, {"k", strconv.Itoa(tcDef.Kind)}}
+			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
+			helperMustBePrecalculatedCount(t, db, 1, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", tcDef.ID)})
+		})
+		t.Run("Delete", func(t *testing.T) {
+			var delEv1 model.Event
+			delEv1.Kind = nostr.KindDeletion
+			delEv1.PubKey = "pub2tc"
+			delEv1.Tags = model.Tags{{"e", "2tc"}}
+			require.NoError(t, db.AcceptEvents(t.Context(), &delEv1))
+			helperMustBePrecalculatedCount(t, db, 0, model.Filter{Kinds: []int{nostr.KindReaction}, Tags: model.TagMap{}.SetLiterals("e", tcDef.ID)})
+		})
+	})
 }
 
 func TestEventMultiReactions(t *testing.T) {
