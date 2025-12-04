@@ -49,3 +49,23 @@ It is meant to signal that the author of that event has blocked some user by spe
   // rest of the fields ...
 }
 ```
+
+### Archiving Conversations
+
+A new kind `2175` immutable event is added, that MUST be used only as a rumor. The gift wrap MUST not have any expiration set.
+
+It is meant to signal that the author of that event has archived some conversation by specifying that conversation's identifier in the `h` tag.
+
+###### Example
+```json
+{
+  "pubkey": "<sender-pubkey, the one doing the archiving>",
+  "kind": 2175,
+  "tags": [
+    ["b", "<sender materKey>"],
+    ["h", "<conversation id that's being archived>"]
+  ],
+  "content": "<optional message-in-plain-text, specifying the reason of the archiving>",
+  // rest of the fields ...
+}
+```
