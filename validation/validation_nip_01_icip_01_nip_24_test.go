@@ -218,3 +218,25 @@ func TestValidateKindProfileMetadataEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestAllowImplicitDtagForAddressableEvents(t *testing.T) {
+	t.Parallel()
+
+	const kind = model.CustomIONKindTokenizedCommunityDefination
+
+	r, ok := KindSupportedTags[kind]
+	require.True(t, ok)
+	require.NotContains(t, r.Tags, "d")
+
+	var ev model.Event
+	ev.Kind = kind
+	ev.CreatedAt = nostr.Now()
+	ev.Tags = model.Tags{
+		{"e", "some-event-id"},
+		{"k", "0"},
+		{"d", "some-addressable-tag"},
+	}
+	require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	require.NoError(t, validateEventTags(&ev, KindSupportedTags))
+}

@@ -48,7 +48,9 @@ func TestAPI(t *testing.T) {
 	addr, release := mainTestContainer.MustTempDB(t.Context())
 	defer release()
 
-	conn, err := connector.New(appcontext.TestContext(t),
+	ctx := appcontext.TestContext(t)
+
+	conn, err := connector.New(ctx,
 		connector.WithWriteURLs(addr),
 		connector.WithDDL(&schema),
 	)
@@ -56,27 +58,27 @@ func TestAPI(t *testing.T) {
 	require.NotNil(t, conn)
 
 	t.Run("Tx", func(t *testing.T) {
-		err := connector.DoInTransaction(t.Context(), conn, func(tx connector.QueryExecer) error {
-			_, err = connector.Get[bool](t.Context(), tx, `SELECT true`)
+		err := connector.DoInTransaction(ctx, conn, func(tx connector.QueryExecer) error {
+			_, err = connector.Get[bool](ctx, tx, `SELECT true`)
 			return err
 		})
 		require.NoError(t, err)
 	})
 	t.Run("Ping", func(t *testing.T) {
-		err := conn.Ping(t.Context())
+		err := conn.Ping(ctx)
 		require.NoError(t, err)
 	})
 	t.Run("Exec", func(t *testing.T) {
 		const stmt = `INSERT INTO test (name) VALUES ($1)`
 
-		r, err := connector.Exec(t.Context(), conn, stmt, "test1")
+		r, err := connector.Exec(ctx, conn, stmt, "test1")
 		require.NoError(t, err)
 		require.EqualValues(t, 1, r)
 	})
 	t.Run("Get", func(t *testing.T) {
 		const stmt = `SELECT name FROM test WHERE id = $1`
 
-		r, err := connector.Get[string](t.Context(), conn, stmt, 1)
+		r, err := connector.Get[string](ctx, conn, stmt, 1)
 		require.NoError(t, err)
 		require.NotNil(t, r)
 		require.EqualValues(t, "test1", *r)
