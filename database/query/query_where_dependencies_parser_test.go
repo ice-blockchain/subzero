@@ -82,6 +82,17 @@ func TestParseDepRequest(t *testing.T) {
 			},
 		},
 		{
+			Input: "kind0>kind3",
+			Expected: filterDependency{
+				Start: filterDependencyStart{
+					Kind: 0,
+				},
+				Reduce: filterDependencyReduce{
+					Kinds: []int{3},
+				},
+			},
+		},
+		{
 			Input: "kind1+q>kind10002",
 			Expected: filterDependency{
 				Start: filterDependencyStart{
@@ -335,6 +346,23 @@ func TestSelectWithDependencies(t *testing.T) {
 			require.ElementsMatch(t, []string{"id2", "id1"}, []string{events[0].ID, events[1].ID})
 		})
 	})
+	t.Run("kind0>kind3", func(t *testing.T) {
+		var ev model.Event
+
+		ev.ID = "id3f"
+		ev.Kind = nostr.KindFollowList
+		ev.PubKey = "pk1"
+		ev.CreatedAt = 2
+		err := db.AcceptEvents(t.Context(), &ev)
+		require.NoError(t, err)
+
+		events := helperSelectEvents(t, db, model.Filter{
+			Kinds:  []int{nostr.KindProfileMetadata},
+			Search: "include:dependencies:kind0>kind3",
+		})
+		require.Len(t, events, 2)
+		require.ElementsMatch(t, []string{"id1", "id3f"}, []string{events[0].ID, events[1].ID})
+	})
 	t.Run("kind1>$logged_in_user_pubkey@kind1+e+root", func(t *testing.T) {
 		var ev model.Event
 
@@ -518,7 +546,7 @@ func TestSelectWithDependencies(t *testing.T) {
 			Authors: []string{"t4pk3", "pk1"},
 			Search:  "include:dependencies:kind1>kind0 include:dependencies:kind30008+profile_badges>kind30009>kind8",
 		})
-		require.Len(t, events, 7) // 4 from the first search, 3 from the second.
+		require.Len(t, events, 8) // 5 from the first search, 3 from the second.
 	})
 	t.Run("kind10002", func(t *testing.T) {
 		t.Run("kind6>kind10002", func(t *testing.T) {

@@ -62,7 +62,7 @@ checkGenerated: generate
 	true;
 
 build-all@ci/cd:
-	go build -tags $(TAGS) -a -v -race ./...
+	go build -tags $(TAGS) -v -race ./...
 
 build: build-all@ci/cd
 
@@ -165,7 +165,7 @@ buildAllBinaries:
 binary-specific-service:
 	set -xe; \
 	echo "$@: $(SERVICE_NAME) / $(GOOS) / $(GOARCH)" ; \
-	go build -tags $(TAGS) -a -v -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
+	go build -tags $(TAGS) -v -o ./cmd/$${SERVICE_NAME}/bin ./cmd/$${SERVICE_NAME}; \
 	cp ./cmd/$${SERVICE_NAME}/bin ./$${SERVICE_NAME}.$${GOOS}.$${GOARCH}.bin; \
 
 all: checkLicense checkModVersion checkIfAllDependenciesAreUpToDate checkGenerated build test coverage benchmark clean
