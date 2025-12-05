@@ -4,6 +4,7 @@ package validation
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -220,6 +221,7 @@ var (
 			Required("k").
 			Forbidden("expiration").
 			ContentEmpty().
+			Validate(validateInternalTopicTC).
 			Build(),
 
 		model.CustomIONKindTokenizedCommunityAction: newKindValidatorBuilder().
@@ -232,9 +234,11 @@ var (
 				"tx_type",
 				"tx_amount",
 				"tx_amount_price_usd",
+				"tx_currency",
 			).
 			Forbidden("expiration").
 			ContentEmpty().
+			Validate(validateInternalTopicTC).
 			Build(),
 	}
 
@@ -243,6 +247,15 @@ var (
 		model.CustomIONKindAttestation: {}, // Could be multiple attestations, like active, revoked, etc.
 	}
 )
+
+func validateInternalTopicTC(_ *eventValidator, event *model.Event) error {
+	for _, tag := range event.Tags {
+		if tag.Key() == "t" && tag.Value() == "community_token" {
+			return nil
+		}
+	}
+	return fmt.Errorf("missing required tag %q with value %q", "t", "community_token")
+}
 
 func validateATags(e *model.Event, expectedKinds ...int) error {
 	return validateAddressableTag(e, "a", expectedKinds...)
