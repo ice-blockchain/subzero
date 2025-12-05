@@ -1172,7 +1172,7 @@ not exists (select true from events subev where subev.kind = :` + reduceKindPara
 and e.hidden=false
 group by e.master_pubkey, e.pubkey`)
 
-	case nostr.KindProfileMetadata, model.CustomIONKindAttestation:
+	case nostr.KindProfileMetadata, model.CustomIONKindAttestation, nostr.KindFollowList:
 		b.WriteString("e.kind = :")
 		b.WriteValue(filterID, "rkind", current.Reduce.Kinds[0])
 		b.ApplyTextSearch(filter)
