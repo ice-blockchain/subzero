@@ -14,9 +14,10 @@ import (
 
 func validateKindGiftWrapEvent(v *eventValidator, e *model.Event) error {
 	subkindNoExpiration := map[int]struct{}{
-		model.CustomIONKindUserBlock:      {},
-		model.CustomIONKindFundReceive:    {},
-		model.CustomIONKindFundSendNotify: {},
+		model.CustomIONKindUserBlock:           {},
+		model.CustomIONKindFundReceive:         {},
+		model.CustomIONKindFundSendNotify:      {},
+		model.CustomIONKindArchiveConversation: {},
 	}
 	kTag := e.GetTag("k").Value()
 	subkind, err := strconv.ParseInt(kTag, 10, 64)

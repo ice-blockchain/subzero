@@ -40,6 +40,7 @@ const (
 	CustomIONKindFundReceive                  = 1755
 	CustomIONKindFundSendNotify               = 1756
 	CustomIONKindUserBlock                    = 1757
+	CustomIONKindArchiveConversation          = 2175
 	CustomIONKindAttestation                  = 10_100
 	CustomIONKindRelayListMetadata            = 20_002
 	CustomIONKindEphemeralEmbedding           = 21_750
