@@ -301,6 +301,67 @@ class DatabaseManager:
               AND NOT e.deleted
               AND NOT e.hidden;
         """,
+
+        "num_verified_profiles": """
+            SELECT count(id) as total
+            FROM events
+            WHERE verified
+                AND kind=0
+                AND NOT hidden
+                AND NOT has_ephemeral_attestation;
+        """,
+
+        "num_posts_from_verified_profiles": """
+            SELECT count(id) as total
+            FROM events
+            WHERE verified
+                AND kind in (1, 30175, 30023)
+                AND 'unclassified' != all (t_tags)
+                AND cardinality(t_tags) > 0
+                AND NOT hidden
+                AND NOT deleted;
+        """,
+
+        "posts_per_topic_verified": """
+            SELECT
+                unnested_topic AS topic,
+                COUNT(id) AS post_count
+            FROM
+                events,
+                unnest(t_tags) AS unnested_topic
+            WHERE kind IN (1, 30023, 30175)
+                AND NOT is_reply
+                AND expiration IS NULL
+                AND NOT deleted
+                AND NOT hidden
+                AND verified
+                AND unnested_topic <> 'unclassified'
+                AND cardinality(t_tags) > 0
+                AND NOT starts_with(unnested_topic, '#')
+                AND NOT starts_with(unnested_topic, '$')
+            GROUP BY unnested_topic
+            HAVING COUNT(id) >= %s
+            ORDER BY post_count DESC, topic ASC LIMIT 50;
+        """,
+
+        "lang_per_posts_verified": """
+            SELECT
+                lang,
+                COUNT(id) AS post_count
+            FROM
+                events
+            WHERE kind IN (1, 30023, 30175)
+                AND NOT is_reply
+                AND expiration IS NULL
+                AND NOT deleted
+                AND NOT hidden
+                AND verified
+                AND 'unclassified' != all (t_tags)
+                AND cardinality(t_tags) > 0
+            GROUP BY lang
+            HAVING COUNT(id) >= 5
+            ORDER BY post_count DESC LIMIT 50;
+        """,
     }
 
     @classmethod
@@ -324,6 +385,7 @@ class DatabaseManager:
             "videos_length": 0,
             "following_actions": 0,
             "profile_updates_by_database": [],
+            "verified_profiles_by_database": [],
 
             "reactions_per_day": [],
             "messages_per_day": [],
@@ -401,6 +463,32 @@ class DatabaseManager:
                         {"database_name": "Current Database", "profile_count": profile_count}
                     ]
 
+                    results["verified_profiles"] = 0
+                    cur.execute(cls.QUERIES["num_verified_profiles"])
+                    verified_profiles_result = cur.fetchone()
+                    if verified_profiles_result:
+                        results["verified_profiles"] = verified_profiles_result[0]
+                        results["verified_profiles_by_database"] = [
+                                    {"database_name": "Current Database", "profile_count": verified_profiles_result[0]}
+                                ]
+
+                    results["verified_posts"] = 0
+                    cur.execute(cls.QUERIES["num_posts_from_verified_profiles"])
+                    verified_posts_result = cur.fetchone()
+                    if verified_posts_result:
+                        results["verified_posts"] = verified_posts_result[0]
+
+
+                    results["verified_posts_per_topic"] = []
+                    cur.execute(cls.QUERIES["posts_per_topic_verified"], (min_posts,))
+                    for r in cur.fetchall():
+                        results["verified_posts_per_topic"].append({"topic": r[0], "post_count": r[1]})
+
+                    results["verified_posts_per_language"] = []
+                    cur.execute(cls.QUERIES["lang_per_posts_verified"])
+                    for r in cur.fetchall():
+                        results["verified_posts_per_language"].append({"language": r[0], "post_count": r[1]})
+
                     cur.execute(daily_queries["reactions_per_day"], (days_minus_1, days))
                     results["reactions_per_day"] = [
                         {"event_date": str(r[0]), "event_count": r[1]} for r in cur.fetchall()
@@ -467,6 +555,9 @@ class DatabaseManager:
             "posts_with_topics": 0,
             "posts_without_topic": 0,
 
+            "verified_profiles": 0,
+            "verified_posts": 0,
+
             "reactions": 0,
             "messages": 0,
             "reposts": 0,
@@ -480,9 +571,12 @@ class DatabaseManager:
             "error": None
         }
         aggregated_topics = {}
+        aggregated_verified_topics = {}
+        aggregated_verified_languages = {}
         aggregated_days = {}
         aggregated_messages_by_kind = {}
         aggregated_profile_databases = {}
+        aggregated_verified_profiles_by_database = {}
 
         aggregated_reactions_per_day = {}
         aggregated_messages_per_day = {}
@@ -519,10 +613,20 @@ class DatabaseManager:
             total_results["videos"] += server_stats["videos"]
             total_results["videos_length"] += server_stats["videos_length"]
             total_results["following_actions"] += server_stats["following_actions"]
+            total_results["verified_profiles"] += server_stats.get("verified_profiles", 0)
+            total_results["verified_posts"] += server_stats.get("verified_posts", 0)
 
             for item in server_stats["posts_per_topic"]:
                 topic = item["topic"]
                 aggregated_topics[topic] = aggregated_topics.get(topic, 0) + item["post_count"]
+
+            for item in server_stats.get("verified_posts_per_topic", []):
+                topic = item["topic"]
+                aggregated_verified_topics[topic] = aggregated_verified_topics.get(topic, 0) + item["post_count"]
+
+            for item in server_stats.get("verified_posts_per_language", []):
+                topic = item["language"]
+                aggregated_verified_languages[topic] = aggregated_verified_languages.get(topic, 0) + item["post_count"]
 
             cls._aggregate_daily_data(aggregated_days, server_stats["posts_per_day"], "post_date", "post_count")
 
@@ -533,6 +637,10 @@ class DatabaseManager:
             for item in server_stats["profile_updates_by_database"]:
                 profile_count = item["profile_count"]
                 aggregated_profile_databases[alias] = aggregated_profile_databases.get(alias, 0) + profile_count
+
+            for item in server_stats.get("verified_profiles_by_database", []):
+                profile_count = item["profile_count"]
+                aggregated_verified_profiles_by_database[alias] = aggregated_verified_profiles_by_database.get(alias, 0) + profile_count
 
             cls._aggregate_daily_data(aggregated_reactions_per_day, server_stats["reactions_per_day"])
             cls._aggregate_daily_data(aggregated_messages_per_day, server_stats["messages_per_day"])
@@ -555,6 +663,17 @@ class DatabaseManager:
         ]
         total_results["posts_per_topic"] = sorted(filtered_topics, key=lambda x: x['post_count'], reverse=True)
 
+        total_results["verified_posts_per_topic"] = sorted(
+            [{"topic": t, "post_count": c} for t, c in aggregated_verified_topics.items()],
+            key=lambda x: x['post_count'],
+            reverse=True
+        )
+        total_results["verified_posts_per_language"] = sorted(
+            [{"language": t, "post_count": c} for t, c in aggregated_verified_languages.items()],
+            key=lambda x: x['post_count'],
+            reverse=True
+        )
+
         total_results["posts_per_day"] = [
             {"post_date": d, "post_count": c}
             for d, c in sorted(aggregated_days.items())
@@ -568,6 +687,11 @@ class DatabaseManager:
         total_results["profile_updates_by_database"] = [
             {"database_name": db, "profile_count": c}
             for db, c in sorted(aggregated_profile_databases.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+        total_results["verified_profiles_by_database"] = [
+            {"database_name": db, "profile_count": c}
+            for db, c in sorted(aggregated_verified_profiles_by_database.items(), key=lambda x: x[1], reverse=True)
         ]
 
         total_results["reactions_per_day"] = [

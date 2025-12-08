@@ -30,6 +30,8 @@ vendor/
 *.patch
 go.work
 
+__pycache__
+
 subzero-ion-connect
 subzero-ion-connect-authgen
 subzero-ion-connect-indexer
