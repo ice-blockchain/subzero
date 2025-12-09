@@ -30,7 +30,7 @@ A new kind `30014` addressable event that is the modifiable version of the kind 
 }
 ```
 
-### Blocking/Muting Users
+### Blocking Users
 
 A new kind `1757` immutable event is added, that MUST be used only as a rumor. The gift wrap MUST not have any expiration set.
 
@@ -66,6 +66,28 @@ It is meant to signal that the author of that event has archived some conversati
     ["h", "<conversation id that's being archived>"]
   ],
   "content": "<optional message-in-plain-text, specifying the reason of the archiving>",
+  // rest of the fields ...
+}
+```
+
+### Muting Users
+
+A new kind `3175` immutable event is added, that MUST be used only as a rumor. The gift wrap MUST not have any expiration set.
+
+It is meant to signal that the author of that event has muted some user by specifying that user in the `p` tag.
+
+Muting represents the ability for the user to limit the distractions the client apps provide as a result of other user actions: I.E. not sending push notifications when someone liked you muted liked your post.
+
+###### Example
+```json
+{
+  "pubkey": "<sender-pubkey, the one doing the muting>",
+  "kind": 3175,
+  "tags": [
+    ["b", "<sender materKey>"],
+    ["p", "<receiver-pubkey/masterKey> the one being muted"]
+  ],
+  "content": "<optional message-in-plain-text, specifying the reason of the muting>",
   // rest of the fields ...
 }
 ```
