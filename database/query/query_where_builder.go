@@ -671,6 +671,9 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 		case model.CustomIONKindRepostOfTokenizedCommunityDefination:
 			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityDefination))
 
+		case model.CustomIONKindRepostOfTokenizedCommunityAction:
+			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityAction))
+
 		default:
 			kinds = append(kinds, kind)
 		}
@@ -926,6 +929,39 @@ func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, f
 	b.WriteString(`) AS t LEFT JOIN events e ON t.master_pubkey = e.master_pubkey AND e.kind = 0 AND e.hidden = FALSE`)
 }
 
+func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	b.WriteString(` union all select `)
+	for i, f := range b.fieldsNames("tc", filterID) {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(f)
+	}
+	b.WriteString(` from (
+	with tc_definitions as (
+		select e.*
+		from ` + cteName + ` r
+		inner join event_tags et on r.id = et.event_id
+		inner join events e on e.address = et.event_tag_value1
+		where
+			r.kind = 1175
+			and et.event_tag_key IN ('e', 'a')
+			and e.kind = 31175
+			and e.hidden = false
+	)
+	select *
+	from tc_definitions
+	union all --- Append the original posts
+	select e.*
+	from tc_definitions td
+	inner join event_tags et ON td.id = et.event_id
+	inner join events e ON e.address = et.event_tag_value1
+	where
+		et.event_tag_key IN ('e', 'a')
+		and e.hidden = false
+	) tc`)
+}
+
 func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
 	if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.KindDVMCountResponse {
 		if len(current.Reduce.Kinds) > 1 {
@@ -1003,6 +1039,10 @@ where
 `)
 	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == nostr.KindProfileMetadata && current.Reduce.Author != "" {
 		b.BuildForMostRelevantFollowers(filterID, cteName, filter, current)
+		return
+	} else if current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefination && current.Start.Kind == model.CustomIONKindTokenizedCommunityAction {
+		// kind1175>kind31175 with additional data.
+		b.BuildForTCDataFromAction(filterID, cteName, filter, current)
 		return
 	} else {
 		b.WriteString(` union all select `)

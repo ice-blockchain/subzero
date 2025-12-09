@@ -23,7 +23,7 @@ require (
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
 	github.com/docker/go-connections v0.6.0
-	github.com/dundee/gdu/v5 v5.32.1-0.20251204102112-88c68c5963f5
+	github.com/dundee/gdu/v5 v5.32.1-0.20251209115503-b885127f17bd
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4
@@ -319,7 +319,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.23.0 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
-	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
+	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9 // indirect
 	golang.org/x/image v0.34.0 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect

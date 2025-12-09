@@ -13,7 +13,6 @@ function formatDuration(totalSeconds) {
     }
 }
 
-
 class ChartManager {
     constructor() {
         this.topicsChart = null;
@@ -87,6 +86,106 @@ class ChartManager {
         });
     }
 
+    createLanguageChart(container, languageData) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chart-wrapper';
+        wrapper.style.height = `${Math.max(400, languageData.length * 40 + 100)}px`;
+
+        const canvas = document.createElement('canvas');
+        canvas.id = 'languagesChart';
+        wrapper.appendChild(canvas);
+        container.appendChild(wrapper);
+
+        // Add toggle button and data table
+        const tableHeader = document.createElement('div');
+        tableHeader.style.display = 'flex';
+        tableHeader.style.alignItems = 'center';
+        tableHeader.style.gap = '0.5rem';
+        tableHeader.style.marginTop = '1rem';
+        tableHeader.style.cursor = 'pointer';
+
+        const tableTitle = document.createElement('h3');
+        tableTitle.innerText = 'Data Table';
+        tableTitle.style.margin = '0';
+        tableHeader.appendChild(tableTitle);
+
+        const toggleButton = document.createElement('button');
+        toggleButton.innerText = 'Show';
+        toggleButton.style.padding = '0.3rem 0.8rem';
+        toggleButton.style.fontSize = '0.9rem';
+        tableHeader.appendChild(toggleButton);
+
+        container.appendChild(tableHeader);
+
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'data-table-wrapper';
+        tableWrapper.style.display = 'none'; // Hidden by default
+        tableWrapper.style.marginTop = '0.5rem';
+
+        const table = document.createElement('table');
+        table.className = 'distribution-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Language</th>
+                    <th>Post Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${languageData.map(item => `
+                    <tr>
+                        <td>${item.language}</td>
+                        <td>${item.post_count.toLocaleString()}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        tableWrapper.appendChild(table);
+        container.appendChild(tableWrapper);
+
+        // Toggle functionality
+        tableHeader.addEventListener('click', () => {
+            const isHidden = tableWrapper.style.display === 'none';
+            tableWrapper.style.display = isHidden ? 'block' : 'none';
+            toggleButton.innerText = isHidden ? 'Hide' : 'Show';
+        });
+
+        const ctx = canvas.getContext('2d');
+        this.languagesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: languageData.map(item => item.language),
+                datasets: [{
+                    label: 'Number of Posts',
+                    data: languageData.map(item => item.post_count),
+                    backgroundColor: 'rgba(255, 193, 7, 0.6)',
+                    borderColor: 'rgba(255, 193, 7, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                scales: {
+                    x: { beginAtZero: true },
+                    y: { ticks: { font: { size: 13 } } }
+                },
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true }
+                },
+                layout: {
+                    padding: {
+                        top: 20,
+                        bottom: 20,
+                        left: 20,
+                        right: 20
+                    }
+                }
+            }
+        });
+    }
+
     createTopicChart(container, topicData) {
         const wrapper = document.createElement('div');
         wrapper.className = 'chart-wrapper';
@@ -96,6 +195,60 @@ class ChartManager {
         canvas.id = 'topicsChart';
         wrapper.appendChild(canvas);
         container.appendChild(wrapper);
+
+        // Add toggle button and data table
+        const tableHeader = document.createElement('div');
+        tableHeader.style.display = 'flex';
+        tableHeader.style.alignItems = 'center';
+        tableHeader.style.gap = '0.5rem';
+        tableHeader.style.marginTop = '1rem';
+        tableHeader.style.cursor = 'pointer';
+
+        const tableTitle = document.createElement('h3');
+        tableTitle.innerText = 'Data Table';
+        tableTitle.style.margin = '0';
+        tableHeader.appendChild(tableTitle);
+
+        const toggleButton = document.createElement('button');
+        toggleButton.innerText = 'Show';
+        toggleButton.style.padding = '0.3rem 0.8rem';
+        toggleButton.style.fontSize = '0.9rem';
+        tableHeader.appendChild(toggleButton);
+
+        container.appendChild(tableHeader);
+
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'data-table-wrapper';
+        tableWrapper.style.display = 'none'; // Hidden by default
+        tableWrapper.style.marginTop = '0.5rem';
+
+        const table = document.createElement('table');
+        table.className = 'distribution-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Post Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${topicData.map(item => `
+                    <tr>
+                        <td>${item.topic}</td>
+                        <td>${item.post_count.toLocaleString()}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        tableWrapper.appendChild(table);
+        container.appendChild(tableWrapper);
+
+        // Toggle functionality
+        tableHeader.addEventListener('click', () => {
+            const isHidden = tableWrapper.style.display === 'none';
+            tableWrapper.style.display = isHidden ? 'block' : 'none';
+            toggleButton.innerText = isHidden ? 'Hide' : 'Show';
+        });
 
         const ctx = canvas.getContext('2d');
         this.topicsChart = new Chart(ctx, {
@@ -149,6 +302,14 @@ class ChartManager {
             <div class="stat-card">
                 <h3>Posts without Topic</h3>
                 <div class="value">${data.posts_without_topic.toLocaleString()}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Number of verified users</h3>
+                <div class="value">${data.verified_profiles.toLocaleString()}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Number of verified posts</h3>
+                <div class="value">${data.verified_posts.toLocaleString()}</div>
             </div>
         `;
         return statsGrid;

@@ -10,7 +10,7 @@ function initializeStatsPage(serverAlias) {
 
     function renderContent(data) {
         contentArea.innerHTML = '';
-        
+
         if (data.error) {
             contentArea.innerHTML = `<div class="error"><strong>Error:</strong> ${data.error}</div>`;
             return;
@@ -27,12 +27,12 @@ function initializeStatsPage(serverAlias) {
         contentArea.appendChild(activityTitle);
 
         const activityGrid = window.chartManager.renderUserActivityGrid(data);
-        
+
         if (serverAlias !== 'total') {
             const userCountCard = window.chartManager.renderSingleServerUserCount(data);
             activityGrid.appendChild(userCountCard);
         }
-        
+
         contentArea.appendChild(activityGrid);
 
         const chartArea = document.createElement('div');
@@ -41,14 +41,14 @@ function initializeStatsPage(serverAlias) {
 
         const dailyChartWrapper = document.createElement('div');
         dailyChartWrapper.className = 'centered-chart-wrapper';
-        
+
         const dailyChartTitle = document.createElement('h2');
         dailyChartTitle.innerText = `Posts in Last ${days} Days`;
         dailyChartWrapper.appendChild(dailyChartTitle);
 
         const dailyData = data.posts_per_day;
         const isDailyDataEmpty = dailyData.every(item => item.post_count === 0);
-        
+
         if (isDailyDataEmpty) {
             const emptyMessage = window.chartManager.renderEmptyChart(`No posts found in the last ${days} days.`);
             dailyChartWrapper.appendChild(emptyMessage);
@@ -57,22 +57,37 @@ function initializeStatsPage(serverAlias) {
             dailyChartContainer.className = 'chart-container';
             dailyChartContainer.style.maxHeight = '400px';
             dailyChartContainer.style.marginBottom = '0';
-            
+
             window.chartManager.createDailyChart(dailyChartContainer, dailyData);
             dailyChartWrapper.appendChild(dailyChartContainer);
         }
-        
+
         chartArea.appendChild(dailyChartWrapper);
 
         const timeSeriesWrapper = document.createElement('div');
         timeSeriesWrapper.className = 'time-series-wrapper';
 
+        const timeSeriesHeader = document.createElement('div');
+        timeSeriesHeader.style.display = 'flex';
+        timeSeriesHeader.style.alignItems = 'center';
+        timeSeriesHeader.style.gap = '1rem';
+        timeSeriesHeader.style.cursor = 'pointer';
+
         const timeSeriesTitle = document.createElement('h2');
         timeSeriesTitle.innerText = `Activity Timeline (Last ${days} Days)`;
-        timeSeriesWrapper.appendChild(timeSeriesTitle);
+        timeSeriesTitle.style.margin = '0';
+        timeSeriesHeader.appendChild(timeSeriesTitle);
+
+        const toggleButton = document.createElement('button');
+        toggleButton.innerText = 'Show';
+        toggleButton.style.padding = '0.5rem 1rem';
+        timeSeriesHeader.appendChild(toggleButton);
+
+        timeSeriesWrapper.appendChild(timeSeriesHeader);
 
         const timeSeriesGrid = document.createElement('div');
         timeSeriesGrid.className = 'time-series-grid';
+        timeSeriesGrid.style.display = 'none'; // Hidden by default
 
         const activities = [
             { key: 'reactions_per_day', title: 'Reactions', color: 'rgba(255, 99, 132, 0.6)' },
@@ -86,35 +101,42 @@ function initializeStatsPage(serverAlias) {
 
         activities.forEach(activity => {
             const activityData = data[activity.key] || [];
-            
+
             const chartContainer = document.createElement('div');
             chartContainer.className = 'time-series-chart';
-            
+
             const chartTitle = document.createElement('h3');
             chartTitle.innerText = activity.title;
             chartContainer.appendChild(chartTitle);
-            
+
             if (activity.note) {
                 const chartNote = document.createElement('div');
                 chartNote.className = 'chart-note';
                 chartNote.innerText = activity.note;
                 chartContainer.appendChild(chartNote);
             }
-            
+
             const chartCanvas = document.createElement('div');
             chartCanvas.className = 'chart-canvas';
             chartContainer.appendChild(chartCanvas);
-            
+
             window.chartManager.createActivityTimeSeriesChart(chartCanvas, activityData, activity.title, activity.color);
             timeSeriesGrid.appendChild(chartContainer);
         });
 
         timeSeriesWrapper.appendChild(timeSeriesGrid);
+
+        timeSeriesHeader.addEventListener('click', () => {
+            const isHidden = timeSeriesGrid.style.display === 'none';
+            timeSeriesGrid.style.display = isHidden ? 'grid' : 'none';
+            toggleButton.innerText = isHidden ? 'Hide' : 'Show';
+        });
+
         chartArea.appendChild(timeSeriesWrapper);
 
         const messagesWrapper = document.createElement('div');
         messagesWrapper.className = 'centered-chart-wrapper';
-        
+
         const messagesTitle = document.createElement('h2');
         messagesTitle.innerText = 'Messages by Wrapped Kind';
         messagesWrapper.appendChild(messagesTitle);
@@ -122,7 +144,7 @@ function initializeStatsPage(serverAlias) {
         const messagesContainer = document.createElement('div');
         messagesContainer.className = 'chart-container';
         messagesContainer.style.maxHeight = '400px';
-        
+
         if (data.messages_by_wrapped_kind && data.messages_by_wrapped_kind.length > 0) {
             window.chartManager.createMessagesBreakdownChart(messagesContainer, data.messages_by_wrapped_kind);
         } else {
@@ -135,14 +157,14 @@ function initializeStatsPage(serverAlias) {
         if (serverAlias === 'total') {
             const profileWrapper = document.createElement('div');
             profileWrapper.className = 'centered-chart-wrapper';
-            
+
             const profileTitle = document.createElement('h2');
             profileTitle.innerText = 'User Distribution by Database';
             profileWrapper.appendChild(profileTitle);
 
             const profileContainer = document.createElement('div');
             profileContainer.className = 'table-container';
-            
+
             if (data.profile_updates_by_database && data.profile_updates_by_database.length > 0) {
                 window.chartManager.createProfileDistributionTable(profileContainer, data.profile_updates_by_database);
             } else {
@@ -159,10 +181,32 @@ function initializeStatsPage(serverAlias) {
 
         const topicChartContainer = document.createElement('div');
         topicChartContainer.className = 'chart-container';
-        
+
         const topicData = data.posts_per_topic;
         window.chartManager.createTopicChart(topicChartContainer, topicData);
         chartArea.appendChild(topicChartContainer);
+
+        const topicVerifiedChartTitle = document.createElement('h2');
+        topicVerifiedChartTitle.innerText = 'Verified Posts per Topic';
+        chartArea.appendChild(topicVerifiedChartTitle);
+
+        const topicVerifiedChartContainer = document.createElement('div');
+        topicVerifiedChartContainer.className = 'chart-container';
+
+        const topicVerifiedData = data.verified_posts_per_topic;
+        window.chartManager.createTopicChart(topicVerifiedChartContainer, topicVerifiedData);
+        chartArea.appendChild(topicVerifiedChartContainer);
+
+        const languageVerifiedChartTitle = document.createElement('h2');
+        languageVerifiedChartTitle.innerText = 'Verified Posts per Language';
+        chartArea.appendChild(languageVerifiedChartTitle);
+
+        const languageVerifiedChartContainer = document.createElement('div');
+        languageVerifiedChartContainer.className = 'chart-container';
+
+        const languageVerifiedData = data.verified_posts_per_language;
+        window.chartManager.createLanguageChart(languageVerifiedChartContainer, languageVerifiedData);
+        chartArea.appendChild(languageVerifiedChartContainer);
     }
 
     function setupProgressBar() {
@@ -211,6 +255,7 @@ function initializeStatsPage(serverAlias) {
                 renderContent(data);
             } catch (error) {
                 contentArea.innerHTML = `<div class="error"><strong>Error:</strong> Failed to connect to the server or API. Please check server logs.</div>`;
+                console.error('Error fetching stats:', error);
             } finally {
                 refreshButton.disabled = false;
             }
@@ -219,6 +264,6 @@ function initializeStatsPage(serverAlias) {
 
     refreshButton.addEventListener('click', fetchAndUpdateData);
     periodSelect.addEventListener('change', fetchAndUpdateData);
-    
+
     fetchAndUpdateData();
 }

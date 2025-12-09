@@ -15,6 +15,8 @@ import (
 func helperSelectEvents(t *testing.T, db *dbClient, filters ...model.Filter) (events []*model.Event) {
 	t.Helper()
 
+	t.Logf("selecting events: %s", model.Filters(filters).String())
+
 	for ev, err := range db.SelectEvents(t.Context(), filters...) {
 		require.NoError(t, err)
 		require.NotNil(t, ev)

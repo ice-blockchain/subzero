@@ -18,6 +18,7 @@ func validateKindGiftWrapEvent(v *eventValidator, e *model.Event) error {
 		model.CustomIONKindFundReceive:         {},
 		model.CustomIONKindFundSendNotify:      {},
 		model.CustomIONKindArchiveConversation: {},
+		model.CustomIONKindMute:                {},
 	}
 	kTag := e.GetTag("k").Value()
 	subkind, err := strconv.ParseInt(kTag, 10, 64)
