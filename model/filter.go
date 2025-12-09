@@ -37,27 +37,34 @@ func filterMatchAuthors(filter *Filter, event *Event, currentMasterKey, currentD
 }
 
 func filterMatchKind(filter *Filter, ev *Event) bool {
+	repostOfKinds := map[int]int{
+		CustomIONKindRepostOfArticle:                      nostr.KindArticle,
+		CustomIONKindRepostOfEditableTextNote:             CustomIONKindEditableTextNote,
+		CustomIONKindRepostOfTokenizedCommunityDefination: CustomIONKindTokenizedCommunityDefination,
+		CustomIONKindRepostOfTokenizedCommunityAction:     CustomIONKindTokenizedCommunityAction,
+	}
+
 	if len(filter.Kinds) == 0 {
 		return true // No kind filter means all kinds match.
 	}
 
 	for _, k := range filter.Kinds {
 		switch k {
-		case CustomIONKindRepostOfArticle, CustomIONKindRepostOfEditableTextNote:
-			// Repost of an article or editable text note.
-			if ev.Kind == nostr.KindGenericRepost {
-				if val := ev.GetTag("k").Value(); val != "" {
-					if n, err := strconv.Atoi(val); err == nil && (n == nostr.KindArticle || n == CustomIONKindEditableTextNote) {
-						return true
-					}
-				}
-			}
 		case ev.Kind:
 			// Direct match with the given kind.
 			return true
 		case -ev.Kind:
 			// Negative kind match, meaning we want to exclude this kind.
 			return false
+		default:
+			// Check for repost kinds.
+			if ev.Kind == nostr.KindGenericRepost {
+				if val, err := strconv.Atoi(ev.GetTag("k").Value()); val > 0 && err == nil {
+					if repostOriginalKind, ok := repostOfKinds[k]; ok && val == repostOriginalKind {
+						return true
+					}
+				}
+			}
 		}
 
 	}
