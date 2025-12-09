@@ -1979,7 +1979,7 @@ func TestReduceKind3EventsFromFollowersQuery(t *testing.T) {
 	})
 }
 
-func TestFlowTC_GetRootEventAndDefinationFromAction(t *testing.T) {
+func TestFlowTC_GetAndDelete(t *testing.T) {
 	t.Parallel()
 
 	db, _ := helperEnsureDatabaseWithData(t)
@@ -2021,4 +2021,37 @@ func TestFlowTC_GetRootEventAndDefinationFromAction(t *testing.T) {
 	})
 	require.Len(t, events, 3) // 1 action, 1 definition, 1 post.
 	require.ElementsMatch(t, []*model.Event{&evAction, &evDefiniton, &evPost}, events)
+
+	t.Run("Delete is not allowed", func(t *testing.T) {
+		t.Run("Action", func(t *testing.T) {
+			var evActionDelete model.Event
+
+			evActionDelete.Kind = nostr.KindDeletion
+			evActionDelete.CreatedAt = nostr.Now()
+			evActionDelete.Tags = model.Tags{
+				{"e", evAction.ID},
+			}
+			require.NoError(t, evActionDelete.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(t.Context(), &evActionDelete))
+
+			events := helperSelectEvents(t, db, model.Filter{IDs: []string{evAction.ID}})
+			require.Len(t, events, 1)
+			require.Equal(t, &evAction, events[0])
+		})
+		t.Run("Post", func(t *testing.T) {
+			var evPostDelete model.Event
+
+			evPostDelete.Kind = nostr.KindDeletion
+			evPostDelete.CreatedAt = nostr.Now()
+			evPostDelete.Tags = model.Tags{
+				{"e", evPost.ID},
+			}
+			require.NoError(t, evPostDelete.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, db.AcceptEvents(t.Context(), &evPostDelete))
+
+			events := helperSelectEvents(t, db, model.Filter{IDs: []string{evPost.ID}})
+			require.Len(t, events, 1)
+			require.Equal(t, &evPost, events[0])
+		})
+	})
 }

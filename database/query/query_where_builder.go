@@ -1641,6 +1641,39 @@ func (b *queryBuilder) BuildForDelete(filters ...databaseFilterDelete) (where st
 	b.WriteString(" AND ")
 	b.WriteString(whereBuilderDefaultWhere)
 
+	// Exclude tokenized community actions.
+	b.WriteString(" AND kind not in (1175)")
+
+	// Exclude tc_definitions that have corresponding tc_actions with posts.
+	// `e` is the main events table alias.
+	b.WriteString(` AND (
+		case
+			when e.kind = 31175 then
+				NOT EXISTS (
+					select 1
+					from events tc_def
+					inner join event_tags et on tc_def.id = et.event_id
+					where
+						et.event_tag_key IN ('e', 'a')
+						and et.event_tag_value1 = e.address
+						and tc_def.kind = 1175
+						and tc_def.hidden = false
+				)
+			when e.kind in (0, 1, 30023, 30175) then
+				NOT EXISTS (
+					select 1
+					from events tc_def
+					inner join event_tags et on tc_def.id = et.event_id
+					where
+						et.event_tag_key IN ('e', 'a')
+						and et.event_tag_value1 = e.address
+						and tc_def.kind = 31175
+						and tc_def.hidden = false
+				)
+			else
+				true
+		end)`)
+
 	return b.String(), b.Params, nil
 }
 
