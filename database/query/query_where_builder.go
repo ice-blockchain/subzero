@@ -953,7 +953,7 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 	from tc_definitions
 	union all --- Append the first action
 	select e.*
-	from events e where e.hidden=false and e.kind = 1175 and e.id in (select r.tc_action_id from ` + cteName + ` r where r.kind = 1175)
+	from events e where e.hidden=false and e.kind = 1175 and e.id in (select r.first_1175_address from ` + cteName + ` r where r.kind = 1175)
 	union all --- Append the original posts
 	select e.*
 	from tc_definitions td
@@ -1512,7 +1512,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 	}
 
 	// Additional fields that are not visible in the main select but used for filtering/sorting.
-	fields = append(fields, "tc_action_id")
+	fields = append(fields, "first_1175_address")
 
 	var sb strings.Builder
 	sb.WriteString(`( select `)

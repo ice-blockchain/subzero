@@ -120,7 +120,7 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 func helperSelectTCActionID(t *testing.T, db *dbClient, eventID string) string {
 	t.Helper()
 
-	value, err := connector.GetNamed[sql.NullString](t.Context(), db.db, "select tc_action_id from events where id = :event_id", map[string]any{
+	value, err := connector.GetNamed[sql.NullString](t.Context(), db.db, "select first_1175_address from events where id = :event_id", map[string]any{
 		"event_id": eventID,
 	})
 	if errors.Is(err, connector.ErrNotFound) {
