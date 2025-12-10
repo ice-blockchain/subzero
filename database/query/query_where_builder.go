@@ -1573,6 +1573,7 @@ func (b *queryBuilder) BuildForAccountDelete(masterKey string) (where string, pa
 		where
 			ev.master_pubkey = :` + masterValueName + `
 			and ev.hidden=false
+			and ev.kind not in (1175, 31175)
 		union all
 		select
 			badges.id

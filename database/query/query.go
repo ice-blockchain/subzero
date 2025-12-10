@@ -38,6 +38,7 @@ var (
 	ErrInvalidRequest            = errors.New("invalid request")
 	ErrRaceCondition             = errors.New("race condition")
 	ErrReadOnly                  = connector.ErrReadOnly
+	ErrForbidden                 = errors.New("forbidden")
 
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
@@ -422,6 +423,21 @@ func (db *dbClient) deleteEventsWithDependencies(ctx context.Context, doAccessCh
 
 	builder := newQueryBuilder()
 	if doAccessCheck {
+		if len(filters) == 1 && filters[0].AccountDelete && filters[0].Author != "" {
+			hasTokeinization, err := connector.GetNamed[bool](
+				ctx,
+				db.db,
+				`select exists(select 1 from events e where e.hidden=false and e.master_pubkey = :key and e.kind in (1175, 31175))`,
+				map[string]any{
+					"key": filters[0].Author,
+				},
+			)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "failed to check tokenization existence")
+			} else if hasTokeinization != nil && *hasTokeinization {
+				return nil, nil, errors.Wrap(ErrForbidden, "account with tokenization cannot be deleted")
+			}
+		}
 		where, params, err = builder.BuildForDelete(filters...)
 	} else {
 		var genericFilters model.Filters

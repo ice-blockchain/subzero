@@ -105,6 +105,15 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 			require.Len(t, events, 1)
 			require.Equal(t, &evPost, events[0])
 		})
+		t.Run("Account Delete", func(t *testing.T) {
+			var evAccountDelete model.Event
+
+			evAccountDelete.Kind = nostr.KindDeletion
+			evAccountDelete.CreatedAt = nostr.Now()
+			require.NoError(t, evAccountDelete.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			err := db.AcceptEvents(t.Context(), &evAccountDelete)
+			require.ErrorIs(t, err, ErrForbidden)
+		})
 	})
 }
 
