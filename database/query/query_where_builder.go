@@ -951,6 +951,9 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 	)
 	select *
 	from tc_definitions
+	union all --- Append the first action
+	select e.*
+	from events e where e.hidden=false and e.kind = 1175 and e.id in (select r.first_1175_address from ` + cteName + ` r where r.kind = 1175)
 	union all --- Append the original posts
 	select e.*
 	from tc_definitions td
@@ -1508,6 +1511,9 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 		}
 	}
 
+	// Additional fields that are not visible in the main select but used for filtering/sorting.
+	fields = append(fields, "first_1175_address")
+
 	var sb strings.Builder
 	sb.WriteString(`( select `)
 	for i, f := range fields {
@@ -1567,6 +1573,7 @@ func (b *queryBuilder) BuildForAccountDelete(masterKey string) (where string, pa
 		where
 			ev.master_pubkey = :` + masterValueName + `
 			and ev.hidden=false
+			and ev.kind not in (1175, 31175)
 		union all
 		select
 			badges.id
@@ -1640,6 +1647,39 @@ func (b *queryBuilder) BuildForDelete(filters ...databaseFilterDelete) (where st
 
 	b.WriteString(" AND ")
 	b.WriteString(whereBuilderDefaultWhere)
+
+	// Exclude tokenized community actions.
+	b.WriteString(" AND kind not in (1175)")
+
+	// Exclude tc_definitions that have corresponding tc_actions with posts.
+	// `e` is the main events table alias.
+	b.WriteString(` AND (
+		case
+			when e.kind = 31175 then
+				NOT EXISTS (
+					select 1
+					from events tc_def
+					inner join event_tags et on tc_def.id = et.event_id
+					where
+						et.event_tag_key IN ('e', 'a')
+						and et.event_tag_value1 = e.address
+						and tc_def.kind = 1175
+						and tc_def.hidden = false
+				)
+			when e.kind in (0, 1, 30023, 30175) then
+				NOT EXISTS (
+					select 1
+					from events tc_def
+					inner join event_tags et on tc_def.id = et.event_id
+					where
+						et.event_tag_key IN ('e', 'a')
+						and et.event_tag_value1 = e.address
+						and tc_def.kind = 31175
+						and tc_def.hidden = false
+				)
+			else
+				true
+		end)`)
 
 	return b.String(), b.Params, nil
 }

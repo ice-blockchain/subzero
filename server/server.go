@@ -19,6 +19,7 @@ import (
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
 	"github.com/ice-blockchain/subzero/server/broadcaster"
 	"github.com/ice-blockchain/subzero/server/cert"
+	"github.com/ice-blockchain/subzero/server/http/events"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip96"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
@@ -194,5 +195,6 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 		GET("/health-check", func(c *gin.Context) {
 			c.JSON(http.StatusOK, map[string]any{})
 		}).
+		GET("/v1/events/:eventAddress", events.GetEventByAddress).
 		Any("/xfiles/* tus-handler", gin.WrapH(http.StripPrefix("/xfiles/", tus)))
 }
