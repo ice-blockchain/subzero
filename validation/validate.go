@@ -4,7 +4,6 @@ package validation
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -46,7 +45,7 @@ type (
 		// Tag map: tag key -> tag state.
 		Tags map[string]tagData
 		// Additional validation function.
-		Validate func(v *eventValidator, e *model.Event) error
+		Validate []func(ctx context.Context, v *eventValidator, e *model.Event) error
 		// Additional flags for given kind.
 		Flags uint
 	}
@@ -66,6 +65,7 @@ var (
 	ErrEventInvalidID                 = errors.New("event id is invalid")
 	ErrEventInvalidSign               = errors.New("event signature is invalid")
 	ErrSignatureByIONIdentityRequired = errors.New("event requires signature by ion identity")
+	ErrWalletRequired                 = errors.New("valid wallet address is required")
 
 	CommongTags = []string{
 		"t",
@@ -89,7 +89,7 @@ var (
 		nostr.KindReaction: newKindValidatorBuilder().
 			Required("p", "k").
 			OneOf("e", "a").
-			Validate(func(v *eventValidator, e *model.Event) error {
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
 				kTag := e.GetTag("k").Value()
 				kValue, err := strconv.Atoi(kTag)
 				if err != nil {
@@ -189,7 +189,7 @@ var (
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
-			Validate(func(v *eventValidator, e *model.Event) error {
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
 				return validateKindFundReceive(e)
 			}).
 			Build(),
@@ -200,7 +200,7 @@ var (
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
-			Validate(func(v *eventValidator, e *model.Event) error {
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
 				return validateKindFundSendNotify(e)
 			}).
 			Build(),
@@ -216,12 +216,13 @@ var (
 			Build(),
 
 		model.CustomIONKindTokenizedCommunityDefination: newKindValidatorBuilder().
-			OneOfSingle("e", "a").
-			Optional("p").
+			OneOfSingle("e", "a", "h").
+			Optional("p", "platform").
 			Required("k").
 			Forbidden("expiration").
 			ContentEmpty().
 			Validate(validateInternalTopicTC).
+			Validate(validateTokenizedCommunityFirstBuy).
 			Build(),
 
 		model.CustomIONKindTokenizedCommunityAction: newKindValidatorBuilder().
@@ -247,15 +248,6 @@ var (
 		model.CustomIONKindAttestation: {}, // Could be multiple attestations, like active, revoked, etc.
 	}
 )
-
-func validateInternalTopicTC(_ *eventValidator, event *model.Event) error {
-	for _, tag := range event.Tags {
-		if tag.Key() == "t" && tag.Value() == "community_token" {
-			return nil
-		}
-	}
-	return fmt.Errorf("missing required tag %q with value %q", "t", "community_token")
-}
 
 func validateATags(e *model.Event, expectedKinds ...int) error {
 	return validateAddressableTag(e, "a", expectedKinds...)
@@ -353,7 +345,7 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", contentSize, maxSize)
 	}
 	if v, ok := KindSupportedTags[e.Kind]; ok {
-		if err := v.Execute(ev, e); err != nil {
+		if err := v.Execute(ctx, ev, e); err != nil {
 			return errors.Wrap(ErrWrongEventParams, err.Error())
 		}
 	}
@@ -573,7 +565,7 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 				return errors.Wrapf(ErrWrongEventParams, "one of tags %v must be present", data.Tags)
 			} else if len(found) > 1 {
 				keys := make([]string, 0, len(found))
-				for key := range maps.Keys(found) {
+				for key := range found {
 					keys = append(keys, key)
 				}
 				return errors.Wrapf(ErrWrongEventParams, "only one of tags %v must be present, found %v", data.Tags, keys)
@@ -692,9 +684,8 @@ func (t *kindValidatorBuilder) OneOfSingle(tags ...string) *kindValidatorBuilder
 	return t
 }
 
-func (t *kindValidatorBuilder) Validate(f func(v *eventValidator, e *model.Event) error) *kindValidatorBuilder {
-	t.Validator.Validate = f
-
+func (t *kindValidatorBuilder) Validate(f ...func(ctx context.Context, v *eventValidator, e *model.Event) error) *kindValidatorBuilder {
+	t.Validator.Validate = append(t.Validator.Validate, f...)
 	return t
 }
 
@@ -702,7 +693,7 @@ func (t *kindValidatorBuilder) Build() kindValidator {
 	return t.Validator
 }
 
-func (v *kindValidator) Execute(ev *eventValidator, e *model.Event) (err error) {
+func (v *kindValidator) Execute(ctx context.Context, ev *eventValidator, e *model.Event) (err error) {
 	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
 		err = errors.Join(err, ErrContentEmpty)
 	}
@@ -712,8 +703,8 @@ func (v *kindValidator) Execute(ev *eventValidator, e *model.Event) (err error) 
 	if v.Flags&kindValidatorFlagIONIdentityKeySignatureRequired != 0 && !slices.Contains(ev.IONIdentityPublicKeys(), e.PubKey) {
 		err = errors.Join(err, ErrSignatureByIONIdentityRequired)
 	}
-	if v.Validate != nil {
-		err = errors.Join(err, v.Validate(ev, e))
+	for _, f := range v.Validate {
+		err = errors.Join(err, f(ctx, ev, e))
 	}
 	return err
 }

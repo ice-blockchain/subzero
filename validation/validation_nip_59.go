@@ -3,6 +3,7 @@
 package validation
 
 import (
+	"context"
 	"strconv"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func validateKindGiftWrapEvent(v *eventValidator, e *model.Event) error {
+func validateKindGiftWrapEvent(_ context.Context, v *eventValidator, e *model.Event) error {
 	subkindNoExpiration := map[int]struct{}{
 		model.CustomIONKindUserBlock:           {},
 		model.CustomIONKindFundReceive:         {},
