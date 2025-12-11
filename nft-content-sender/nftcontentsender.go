@@ -72,7 +72,7 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 
 func getBSCWalletAddress(wallets map[string]string) string {
 	for network, walletAddr := range wallets {
-		if strings.EqualFold(network, "bsc") || strings.EqualFold(network, "bsc-testnet") {
+		if strings.EqualFold(network, "bsc") || strings.EqualFold(network, "bsctestnet") {
 			return walletAddr
 		}
 	}
