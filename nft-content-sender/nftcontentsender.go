@@ -72,7 +72,7 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 
 func getBSCWalletAddress(wallets map[string]string) string {
 	for network, walletAddr := range wallets {
-		if strings.EqualFold(network, "bsc") {
+		if strings.EqualFold(network, "bsc") || strings.EqualFold(network, "bsc-testnet") {
 			return walletAddr
 		}
 	}
@@ -101,10 +101,16 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 			if err := json.Unmarshal([]byte(contentEvent.Previous.Content), &previousContent); err != nil {
 				return errors.Wrapf(err, "invalid previous profile metadata content for user %s", contentEvent.GetMasterPublicKey())
 			}
+
+			hadNoNFT := len(previousContent.IONContentNFTCollections) == 0
+			hasNFT := len(parsedContent.IONContentNFTCollections) > 0
+			nftCollectionsAdded := hadNoNFT && hasNFT
+
 			currentBSC := getBSCWalletAddress(parsedContent.Wallets)
 			previousBSC := getBSCWalletAddress(previousContent.Wallets)
-			bscWasAddedOrChanged := currentBSC != "" && currentBSC != previousBSC
-			if len(parsedContent.IONContentNFTCollections) > 0 || !bscWasAddedOrChanged {
+			bscWalletChanged := currentBSC != previousBSC
+
+			if !nftCollectionsAdded && !bscWalletChanged {
 				return nil
 			}
 		default:
