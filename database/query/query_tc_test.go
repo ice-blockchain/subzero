@@ -5,6 +5,7 @@ package query
 import (
 	"cmp"
 	"database/sql"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -72,7 +73,16 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 		Search: "include:dependencies:kind1175>kind31175 include:dependencies:kind1>kind10100",
 	})
 	require.Len(t, events, 4) // 2 action (first buy + requested one), 1 definition, 1 post.
-	require.ElementsMatch(t, []*model.Event{&evAction, &evAction2, &evDefiniton, &evPost}, events)
+
+	firstBuyIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evAction.ID })
+	require.Greater(t, firstBuyIndex, -1)
+	firstBuyEvent := events[firstBuyIndex]
+
+	require.Equal(t, model.CustomIONKindEphemeralEmbedding, firstBuyEvent.Kind)
+	require.EqualValues(t, evAction.String(), firstBuyEvent.Content)
+
+	events = slices.Delete(events, firstBuyIndex, firstBuyIndex+1)
+	require.ElementsMatch(t, []*model.Event{&evAction2, &evDefiniton, &evPost}, events)
 
 	t.Run("Delete is not allowed", func(t *testing.T) {
 		t.Run("Action", func(t *testing.T) {

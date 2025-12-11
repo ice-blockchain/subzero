@@ -26,7 +26,8 @@ import (
 const (
 	replyMarkerIndex = 3 // event_tag_value3.
 
-	maxTagValues = 5
+	maxTagValues          = 5
+	ephemeralEmbeddingBit = 1 << 17 // Bit 17 indicates event must be embedded into an ephemeral one.
 )
 
 var (
@@ -1060,7 +1061,29 @@ func newEphemeralEmbeddingEvent(kind model.Kind, masterKey, id string, now nostr
 	return &ev
 }
 
+func (db *dbClient) packEventIntoEphemeralEmbedding(event *databaseEvent) *databaseEvent {
+	var ev databaseEvent
+
+	ev.Event = new(model.Event)
+	ev.Kind = model.CustomIONKindEphemeralEmbedding
+	ev.CreatedAt = event.CreatedAt
+	ev.Content = event.String()
+	ev.Tags = model.Tags{
+		{"p", cmp.Or(event.GetMasterPublicKey(), event.PubKey)},
+		{"e", event.ID},
+		{"k", strconv.Itoa(event.Kind)},
+	}
+	db.mustSignDatabaseEvent(&ev)
+
+	return &ev
+}
+
 func (db *dbClient) eventTransform(event *databaseEvent) *databaseEvent {
+	if event.Kind&ephemeralEmbeddingBit != 0 {
+		event.Kind &= ^ephemeralEmbeddingBit
+		return db.packEventIntoEphemeralEmbedding(event)
+	}
+
 	switch event.Sig {
 	case "PACK":
 		// TODO: remove this later with kind3 hack.

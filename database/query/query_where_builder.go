@@ -949,13 +949,28 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 			and e.kind = 31175
 			and e.hidden = false
 	)
-	select *
+	select `)
+	b.WriteFields(b.fieldsNames("tc_definitions", filterID+"tc_def")...)
+	b.WriteString(`
 	from tc_definitions
 	union all --- Append the first action
-	select e.*
+	select `)
+	for i, f := range b.fieldsNames("e", filterID+"first_1175") {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if f == "e.kind" {
+			// Mask the high bit for kind1175 to indicate it's from action and we must pack it as 21750.
+			f += "|0x" + strconv.FormatInt(ephemeralEmbeddingBit, 16) + " as kind"
+		}
+		b.WriteString(f)
+	}
+	b.WriteString(`
 	from events e where e.hidden=false and e.kind = 1175 and e.id in (select r.first_1175_address from ` + cteName + ` r where r.kind = 1175)
 	union all --- Append the original posts
-	select e.*
+	select `)
+	b.WriteFields(b.fieldsNames("e", filterID+"tc_post")...)
+	b.WriteString(`
 	from tc_definitions td
 	inner join event_tags et ON td.id = et.event_id
 	inner join events e ON e.address = et.event_tag_value1
