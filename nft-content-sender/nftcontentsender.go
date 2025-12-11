@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -69,6 +70,16 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	return errors.Wrap(globalSender.sender.processEvents(ctx, events...), "failed to process content events")
 }
 
+func getBSCWalletAddress(wallets map[string]string) string {
+	for network, walletAddr := range wallets {
+		if strings.EqualFold(network, "bsc") || strings.EqualFold(network, "bsc-testnet") {
+			return walletAddr
+		}
+	}
+
+	return ""
+}
+
 func (p *sender) processEvents(ctx context.Context, events ...*model.Event) error {
 	if len(events) == 0 {
 		return nil
@@ -86,7 +97,20 @@ func (p *sender) processEvents(ctx context.Context, events ...*model.Event) erro
 			if err := json.Unmarshal([]byte(contentEvent.Content), &parsedContent); err != nil {
 				return errors.Wrapf(err, "invalid profile metadata content for user %s", contentEvent.GetMasterPublicKey())
 			}
-			if len(parsedContent.IONContentNFTCollections) > 0 {
+			var previousContent model.ProfileMetadataContent
+			if err := json.Unmarshal([]byte(contentEvent.Previous.Content), &previousContent); err != nil {
+				return errors.Wrapf(err, "invalid previous profile metadata content for user %s", contentEvent.GetMasterPublicKey())
+			}
+
+			hadNoNFT := len(previousContent.IONContentNFTCollections) == 0
+			hasNFT := len(parsedContent.IONContentNFTCollections) > 0
+			nftCollectionsAdded := hadNoNFT && hasNFT
+
+			currentBSC := getBSCWalletAddress(parsedContent.Wallets)
+			previousBSC := getBSCWalletAddress(previousContent.Wallets)
+			bscWalletChanged := currentBSC != previousBSC
+
+			if !nftCollectionsAdded && !bscWalletChanged {
 				return nil
 			}
 		default:
