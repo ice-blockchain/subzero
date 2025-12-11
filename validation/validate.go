@@ -216,8 +216,8 @@ var (
 			Build(),
 
 		model.CustomIONKindTokenizedCommunityDefination: newKindValidatorBuilder().
-			OneOfSingle("e", "a").
-			Optional("p").
+			OneOfSingle("e", "a", "h").
+			Optional("p", "platform").
 			Required("k").
 			Forbidden("expiration").
 			ContentEmpty().
@@ -573,7 +573,7 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 				return errors.Wrapf(ErrWrongEventParams, "one of tags %v must be present", data.Tags)
 			} else if len(found) > 1 {
 				keys := make([]string, 0, len(found))
-				for key := range maps.Keys(found) {
+				for key := range found {
 					keys = append(keys, key)
 				}
 				return errors.Wrapf(ErrWrongEventParams, "only one of tags %v must be present, found %v", data.Tags, keys)
