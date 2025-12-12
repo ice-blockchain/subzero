@@ -30,7 +30,7 @@ require (
 	github.com/gin-contrib/pprof v1.5.3
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-logr/logr v1.4.3
-	github.com/go-playground/validator/v10 v10.28.0
+	github.com/go-playground/validator/v10 v10.29.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
