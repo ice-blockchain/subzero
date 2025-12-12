@@ -64,16 +64,18 @@ type (
 )
 
 const (
-	NotificationTypeReaction         NotificationType = "reaction"
-	NotificationTypeRepost           NotificationType = "repost"
-	NotificationTypeMentionReply     NotificationType = "mention_reply"
-	NotificationTypeDirectMessage    NotificationType = "direct_message"
-	NotificationTypeGroupChatMessage NotificationType = "group_chat_message"
-	NotificationTypeChannelMessage   NotificationType = "channel_message"
-	NotificationTypePaymentRequest   NotificationType = "payment_request"
-	NotificationTypePaymentReceived  NotificationType = "payment_received"
-	NotificationTypeSystem           NotificationType = "system"
-	NotificationTypeNewFollower      NotificationType = "new_follower"
+	NotificationTypeReaction                  NotificationType = "reaction"
+	NotificationTypeRepost                    NotificationType = "repost"
+	NotificationTypeMentionReply              NotificationType = "mention_reply"
+	NotificationTypeDirectMessage             NotificationType = "direct_message"
+	NotificationTypeGroupChatMessage          NotificationType = "group_chat_message"
+	NotificationTypeChannelMessage            NotificationType = "channel_message"
+	NotificationTypePaymentRequest            NotificationType = "payment_request"
+	NotificationTypePaymentReceived           NotificationType = "payment_received"
+	NotificationTypeSystem                    NotificationType = "system"
+	NotificationTypeNewFollower               NotificationType = "new_follower"
+	NotificationTypeTokenizedCommunityCreated NotificationType = "community_token_created"
+	NotificationTypeTokenizedCommunityAction  NotificationType = "community_token_swapped"
 
 	CompressionMethodZlib = "zlib"
 )
@@ -131,15 +133,27 @@ var (
 			Body:     "Someone is now following you",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
+		NotificationTypeTokenizedCommunityCreated: {
+			Title:    "Someone created a token based on your post or a profile",
+			Body:     "Token created",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeTokenizedCommunityAction: {
+			Title:    "Someone swapped a token from your tokenized community",
+			Body:     "Token swapped",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
-		nostr.KindTextNote:                  {},
-		model.CustomIONKindEditableTextNote: {},
-		nostr.KindGenericRepost:             {},
-		nostr.KindReaction:                  {},
-		nostr.KindGiftWrap:                  {},
-		nostr.KindFollowList:                {},
-		model.CustomIONSystemMessage:        {},
+		nostr.KindTextNote:                              {},
+		model.CustomIONKindEditableTextNote:             {},
+		nostr.KindGenericRepost:                         {},
+		nostr.KindReaction:                              {},
+		nostr.KindGiftWrap:                              {},
+		nostr.KindFollowList:                            {},
+		model.CustomIONSystemMessage:                    {},
+		model.CustomIONKindTokenizedCommunityDefination: {},
+		model.CustomIONKindTokenizedCommunityAction:     {},
 	}
 )
 
@@ -405,6 +419,9 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	case nostr.KindGiftWrap:
 		notifications, err = pm.handleGiftWrapEvent(event)
 		err = errors.Wrap(err, "failed to handle gift wrap event")
+	case model.CustomIONKindTokenizedCommunityDefination, model.CustomIONKindTokenizedCommunityAction:
+		notifications, err = pm.handleTokenizedCommunityEvent(ctx, event, relevantEvents...)
+		err = errors.Wrap(err, "failed to handle tokenized community definition event")
 	case nostr.KindFollowList:
 		return pm.handleNewFollowerEvent(event, relevantEvents...)
 	}
