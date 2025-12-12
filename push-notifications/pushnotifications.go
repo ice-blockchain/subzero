@@ -74,8 +74,8 @@ const (
 	NotificationTypePaymentReceived           NotificationType = "payment_received"
 	NotificationTypeSystem                    NotificationType = "system"
 	NotificationTypeNewFollower               NotificationType = "new_follower"
-	NotificationTypeTokenizedCommunityCreated NotificationType = "tc_tokenized"
-	NotificationTypeTokenizedCommunityAction  NotificationType = "tc_action"
+	NotificationTypeTokenizedCommunityCreated NotificationType = "community_token_created"
+	NotificationTypeTokenizedCommunityAction  NotificationType = "community_token_swapped"
 
 	CompressionMethodZlib = "zlib"
 )
