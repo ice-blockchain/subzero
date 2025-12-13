@@ -931,7 +931,7 @@ func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, f
 
 func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
 	b.WriteString(` union all select `)
-	for i, f := range b.fieldsNames("tc", filterID) {
+	for i, f := range b.fieldsNames("tc", "") {
 		if i > 0 {
 			b.WriteString(", ")
 		}
@@ -950,7 +950,17 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 			and e.hidden = false
 	)
 	select `)
-	b.WriteFields(b.fieldsNames("tc_definitions", filterID+"tc_def")...)
+	kindMask := "|0x" + strconv.FormatInt(ephemeralEmbeddingBit, 16) + " as kind"
+	for i, f := range b.fieldsNames("tc_definitions", filterID+"tc_def") {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if f == "tc_definitions.kind" {
+			// Mask the high bit as we want it as ephemeral embedding.
+			f += kindMask
+		}
+		b.WriteString(f)
+	}
 	b.WriteString(`
 	from tc_definitions
 	union all --- Append the first action
@@ -961,7 +971,7 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 		}
 		if f == "e.kind" {
 			// Mask the high bit for kind1175 to indicate it's from action and we must pack it as 21750.
-			f += "|0x" + strconv.FormatInt(ephemeralEmbeddingBit, 16) + " as kind"
+			f += kindMask
 		}
 		b.WriteString(f)
 	}

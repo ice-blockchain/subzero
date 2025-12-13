@@ -74,15 +74,26 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 	})
 	require.Len(t, events, 4) // 2 action (first buy + requested one), 1 definition, 1 post.
 
-	firstBuyIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evAction.ID })
-	require.Greater(t, firstBuyIndex, -1)
-	firstBuyEvent := events[firstBuyIndex]
+	t.Run("1175 first buy is ephemeral embedding", func(t *testing.T) {
+		firstBuyIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evAction.ID })
+		require.Greater(t, firstBuyIndex, -1)
+		firstBuyEvent := events[firstBuyIndex]
+		require.Equal(t, model.CustomIONKindEphemeralEmbedding, firstBuyEvent.Kind)
+		require.EqualValues(t, evAction.String(), firstBuyEvent.Content)
 
-	require.Equal(t, model.CustomIONKindEphemeralEmbedding, firstBuyEvent.Kind)
-	require.EqualValues(t, evAction.String(), firstBuyEvent.Content)
+		events = slices.Delete(events, firstBuyIndex, firstBuyIndex+1)
+	})
+	t.Run("31175 definition is ephemeral embedding", func(t *testing.T) {
+		defIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evDefiniton.ID })
+		require.Greater(t, defIndex, -1)
+		receivedDefEvent := events[defIndex]
+		require.Equal(t, model.CustomIONKindEphemeralEmbedding, receivedDefEvent.Kind)
+		require.EqualValues(t, evDefiniton.String(), receivedDefEvent.Content)
 
-	events = slices.Delete(events, firstBuyIndex, firstBuyIndex+1)
-	require.ElementsMatch(t, []*model.Event{&evAction2, &evDefiniton, &evPost}, events)
+		events = slices.Delete(events, defIndex, defIndex+1)
+	})
+
+	require.ElementsMatch(t, []*model.Event{&evAction2, &evPost}, events)
 
 	t.Run("Delete is not allowed", func(t *testing.T) {
 		t.Run("Action", func(t *testing.T) {
