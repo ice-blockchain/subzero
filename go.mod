@@ -43,7 +43,7 @@ require (
 	github.com/imroc/req/v3 v3.56.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/jackc/tern/v2 v2.3.3
+	github.com/jackc/tern/v2 v2.3.4
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/jmoiron/sqlx v1.4.0
@@ -73,7 +73,7 @@ require (
 	github.com/tus/tusd/v2 v2.8.0
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.15.5
-	github.com/xssnick/tonutils-storage v1.3.1
+	github.com/xssnick/tonutils-storage v1.3.2
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/contrib/bridges/otelslog v0.14.0
 	go.opentelemetry.io/otel v1.39.0
