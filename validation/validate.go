@@ -234,9 +234,8 @@ var (
 				"tx_address",
 				"tx_type",
 				"tx_amount",
-				"tx_amount_price_usd",
-				"tx_currency",
 			).
+			Optional("p").
 			Forbidden("expiration").
 			ContentEmpty().
 			Validate(validateInternalTopicTC).
