@@ -23,7 +23,7 @@ require (
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/dchenk/go-render-quill v0.0.0-20211110010230-f51106477162
 	github.com/docker/go-connections v0.6.0
-	github.com/dundee/gdu/v5 v5.32.1-0.20251212163858-03a085bfab84
+	github.com/dundee/gdu/v5 v5.32.1-0.20251215100624-6e79e462c907
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/georgysavva/scany/v2 v2.1.4
@@ -60,6 +60,7 @@ require (
 	github.com/riverqueue/river v0.28.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.28.0
 	github.com/rs/zerolog v1.34.0
+	github.com/samber/slog-zerolog/v2 v2.9.0
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/shirou/gopsutil/v4 v4.25.11
 	github.com/spf13/cobra v1.10.2
@@ -277,6 +278,8 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
+	github.com/samber/lo v1.52.0 // indirect
+	github.com/samber/slog-common v0.19.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.6 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirkon/dst v0.26.4 // indirect
