@@ -168,16 +168,8 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	return globalDB.Client.AcceptEvents(ctx, events...)
 }
 
-func CommitEvents(ctx context.Context, events ...*model.Event) error {
-	return globalDB.Client.CommitEvents(ctx, events...)
-}
-
 func RollbackEvents(ctx context.Context, events ...*model.Event) error {
 	return globalDB.Client.RollbackEvents(ctx, events...)
-}
-
-func CommitEvents(ctx context.Context, events ...*model.Event) error {
-	return globalDB.Client.CommitEvents(ctx, events...)
 }
 
 func GetStoredEvents(ctx context.Context, filters ...model.Filter) EventIterator {
