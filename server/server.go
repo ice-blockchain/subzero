@@ -166,6 +166,10 @@ func (r *router) MustListenAndServe(ctx context.Context) {
 }
 
 func (r *router) BroadcastUserEvents(ctx context.Context, events ...*model.Event) error {
+	if command.Enabled() {
+		log.Debug().Msg("skipping broadcasting user events because consensus enabled")
+		return nil
+	}
 	return r.Broadcaster.Broadcast(ctx, events...)
 }
 

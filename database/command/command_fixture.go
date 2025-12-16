@@ -18,18 +18,30 @@ import (
 	"github.com/ice-blockchain/cometbft/config"
 	"github.com/ice-blockchain/cometbft/crypto/ed25519"
 	"github.com/ice-blockchain/cometbft/multiplex"
+	"github.com/ice-blockchain/cometbft/multiplex/runtime"
 	"github.com/ice-blockchain/cometbft/p2p"
 )
 
 type TestConsensus interface {
 	Consensus
 	DiscoveryPort() uint16
+	NodeID() string
 	Stop(ctx context.Context, timeout time.Duration) error
 	Start(ctx context.Context)
+	Wait() // Waits for quit channel.
 }
 
 func (c *consensus) DiscoveryPort() uint16 {
 	return c.Config.DiscoveryPort
+}
+
+func (c *consensus) NodeID() string {
+	nodeKeyFile := c.ServerConfig.NodeKeyFile()
+	nodeKey, err := p2p.LoadNodeKey(nodeKeyFile)
+	if err != nil {
+		panic(fmt.Errorf("failed to load node key file: %w", err))
+	}
+	return string(nodeKey.ID())
 }
 
 func (c *consensus) Start(ctx context.Context) {
@@ -37,7 +49,13 @@ func (c *consensus) Start(ctx context.Context) {
 		panic("the server is already running")
 	}
 	c.ServerConfig.Instrumentation.Namespace = uuid.NewString()
-	server, err := multiplex.NewServer(ctx, c, c.ServerConfig, c.Logger)
+	server, err := multiplex.NewServer(ctx, c, c.ServerConfig, c.Logger,
+		multiplex.WithRuntimeManagerOptions(
+			runtime.RegistryWithConsensusOptions(
+				runtime.ConsensusPoolWithAcceptor(c),
+			),
+		),
+	)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}
@@ -46,6 +64,14 @@ func (c *consensus) Start(ctx context.Context) {
 	}
 	c.Server = server
 	go c.waitForStop(ctx)
+}
+
+func (c *consensus) Wait() {
+	if c.Server == nil {
+		return
+	}
+
+	c.Server.Wait()
 }
 
 func (c *consensus) Stop(ctx context.Context, timeout time.Duration) error {
@@ -110,6 +136,7 @@ func newConsensusNode(ctx context.Context, nodeCfg *config.Config, port uint16, 
 			DiscoveryPort:              port,
 			AbsoluteRootPath:           storage,
 			AbsoluteNodePrivateKeyPath: keyPath.Name(),
+			Enabled:                    true,
 		}),
 	}
 	if len(opts) > 0 {
