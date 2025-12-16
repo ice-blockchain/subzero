@@ -80,6 +80,28 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 	require.NoError(t, evAction3.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction3))
 
+	t.Run("Find definition for the given post", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{evPost.ID},
+			Search: "include:dependencies:kind30175>kind31175",
+		})
+		require.Len(t, events, 2) // 1 post + 1 definition.
+		for _, ev := range events {
+			switch ev.Kind {
+			case model.CustomIONKindEditableTextNote:
+				require.Equal(t, &evPost, ev)
+
+			case model.CustomIONKindEphemeralEmbedding:
+				var receivedDef model.Event
+				require.NoError(t, receivedDef.UnmarshalJSON([]byte(ev.Content)))
+				require.Equal(t, evDefiniton, receivedDef)
+
+			default:
+				t.Fatalf("unexpected event kind: %d", ev.Kind)
+			}
+		}
+	})
+
 	events := helperSelectEvents(t, db, model.Filter{
 		Since:  &evAction2.CreatedAt,
 		Until:  &evAction2.CreatedAt,
@@ -359,8 +381,15 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 		switch ev.Kind {
 		case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
 			posts = append(posts, ev)
-		case model.CustomIONKindTokenizedCommunityAction:
-			actions = append(actions, ev)
+		case model.CustomIONKindEphemeralEmbedding:
+			var action model.Event
+			ok, err := ev.CheckSignature()
+			require.NoError(t, err)
+			require.True(t, ok)
+			require.NoError(t, action.UnmarshalJSON([]byte(ev.Content)))
+			actions = append(actions, &action)
+		default:
+			t.Fatalf("unexpected event kind: %d", ev.Kind)
 		}
 	}
 
