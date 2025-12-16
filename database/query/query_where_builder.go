@@ -976,7 +976,18 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 		b.WriteString(f)
 	}
 	b.WriteString(`
-	from events e where e.hidden=false and e.kind = 1175 and e.id in (select r.first_1175_address from ` + cteName + ` r where r.kind = 1175)
+	from (
+		select distinct on (e.master_pubkey) e.*
+		from events e
+		inner join ` + cteName + ` r ON e.master_pubkey = r.master_pubkey and r.kind = 1175
+		inner join event_tags et ON r.id = et.event_id
+		where
+			e.hidden=false
+			and e.kind = 1175
+			and et.event_tag_key IN ('e', 'a')
+			and et.event_tag_value1 in (select address from tc_definitions)
+		order by e.master_pubkey, e.lookup_created_at asc
+	) e
 	union all --- Append the original posts
 	select `)
 	b.WriteFields(b.fieldsNames("e", filterID+"tc_post")...)

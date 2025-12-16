@@ -53,10 +53,17 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 		{"token_address", "0xTokenAddress"},
 	}
 	require.NoError(t, evAction.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(t.Context(), &evPost, &evDefiniton, &evAction))
+
+	evActionFirstBuyAnotherUser := evAction
+	evActionFirstBuyAnotherUser.CreatedAt--
+	evActionFirstBuyAnotherUser.Content = "This is first buy by another user"
+	require.NoError(t, evActionFirstBuyAnotherUser.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	require.NoError(t, db.AcceptEvents(t.Context(), &evPost, &evDefiniton, &evActionFirstBuyAnotherUser))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evAction))
 
 	evAction2.Kind = model.CustomIONKindTokenizedCommunityAction
-	evAction2.CreatedAt = 3
+	evAction2.CreatedAt = evAction.CreatedAt + 1
 	evAction2.Content = "This is action 2"
 	evAction2.Tags = model.Tags{
 		{"a", evDefiniton.Address()},
@@ -66,6 +73,12 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 	}
 	require.NoError(t, evAction2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction2))
+
+	evAction3 := evAction2
+	evAction3.CreatedAt++
+	evAction3.Content = "This is action 3" // Should be totally ignored in the query.
+	require.NoError(t, evAction3.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evAction3))
 
 	events := helperSelectEvents(t, db, model.Filter{
 		Since:  &evAction2.CreatedAt,
