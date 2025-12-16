@@ -4,8 +4,6 @@ go 1.25.5
 
 replace (
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20251001102109-e2a999a12f4d
-	github.com/quic-go/qpack => github.com/quic-go/qpack v0.5.1
-	github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.56.0
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250814151456-e141b5cb6e0b
 )
 
@@ -40,7 +38,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ice-blockchain/cometbft v1.0.0-rc1.0.20250714150930-6fb404dc7d83
 	github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830
-	github.com/imroc/req/v3 v3.56.0
+	github.com/imroc/req/v3 v3.57.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jackc/tern/v2 v2.3.4
@@ -99,7 +97,7 @@ require (
 	atomicgo.dev/schedule v0.1.0 // indirect
 	cel.dev/expr v0.25.1 // indirect
 	cloud.google.com/go v0.123.0 // indirect
-	cloud.google.com/go/auth v0.17.0 // indirect
+	cloud.google.com/go/auth v0.18.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/firestore v1.20.0 // indirect
@@ -228,7 +226,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
-	github.com/maruel/natural v1.2.1 // indirect
+	github.com/maruel/natural v1.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect

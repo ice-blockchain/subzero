@@ -976,7 +976,18 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 		b.WriteString(f)
 	}
 	b.WriteString(`
-	from events e where e.hidden=false and e.kind = 1175 and e.id in (select r.first_1175_address from ` + cteName + ` r where r.kind = 1175)
+	from (
+		select distinct on (e.master_pubkey) e.*
+		from events e
+		inner join ` + cteName + ` r ON e.master_pubkey = r.master_pubkey and r.kind = 1175
+		inner join event_tags et ON r.id = et.event_id
+		where
+			e.hidden=false
+			and e.kind = 1175
+			and et.event_tag_key IN ('e', 'a')
+			and et.event_tag_value1 in (select address from tc_definitions)
+		order by e.master_pubkey, e.lookup_created_at asc
+	) e
 	union all --- Append the original posts
 	select `)
 	b.WriteFields(b.fieldsNames("e", filterID+"tc_post")...)
@@ -1128,6 +1139,39 @@ where
 		}
 		b.WriteString(` LIMIT 1) FROM ` + cteName + ` em) AND e.hidden = FALSE AND e.deleted = FALSE`)
 
+	// kind[0/30175/1/30023]>kind1175 - find first buy action for each post.
+	case model.CustomIONKindTokenizedCommunityAction:
+		switch current.Start.Kind {
+		case nostr.KindProfileMetadata,
+			nostr.KindTextNote,
+			nostr.KindArticle,
+			model.CustomIONKindEditableTextNote:
+			b.WriteString(` e.id IN (
+				SELECT DISTINCT ON (tc_def.id) act.id
+				FROM (
+					SELECT def.address AS def_address, def.id
+					FROM events def
+					INNER JOIN event_tags et ON def.id = et.event_id
+					WHERE def.kind = 31175
+						AND def.hidden = false
+						AND et.event_tag_key IN ('e', 'a')
+						AND et.event_tag_value1 IN (`)
+			b.WriteString(b.BuildQueryForDependencyStart(filterID, cteName, "address", &current.Start))
+			b.WriteString(`)
+				) tc_def
+				INNER JOIN event_tags act_et ON act_et.event_tag_value1 = tc_def.def_address
+				INNER JOIN events act ON act.id = act_et.event_id
+				WHERE act.kind = :`)
+			b.WriteValue(filterID, "rkind", current.Reduce.Kinds[0])
+			b.WriteString(`
+					AND act.hidden = false
+					AND act.first_1175_address IS NULL
+					AND act_et.event_tag_key IN ('e', 'a')
+			) AND e.hidden = false`)
+		default:
+			log.Warn().Int("start_kind", current.Start.Kind).
+				Msg("unsupported start kind for tokenized community action reduce")
+		}
 	case nostr.KindProfileBadges:
 		// kindXXX>kind30008+profile_badges>kind30009>kind8.
 		if current.Start.ProfileBadges &&
@@ -1293,6 +1337,9 @@ group by e.master_pubkey, e.pubkey`)
 		if current.Reduce.Group && current.Reduce.Kinds[1] == nostr.KindReaction {
 			b.WriteString(" GROUP BY reference_id, counters.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
 		}
+	default:
+		log.Warn().Ints("reduce_kinds", current.Reduce.Kinds).
+			Msg("unsupported reduce kinds in dependency")
 	}
 }
 
