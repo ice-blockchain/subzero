@@ -47,6 +47,10 @@ var (
 	errUnsupportedCombination = errors.New("unsupported filter combination")
 )
 
+var (
+	maskKindEphemeralEmbedding = "|0x" + strconv.FormatInt(ephemeralEmbeddingBit, 16) + " as kind"
+)
+
 type (
 	rank         int
 	queryBuilder struct {
@@ -950,14 +954,13 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 			and e.hidden = false
 	)
 	select `)
-	kindMask := "|0x" + strconv.FormatInt(ephemeralEmbeddingBit, 16) + " as kind"
 	for i, f := range b.fieldsNames("tc_definitions", filterID+"tc_def") {
 		if i > 0 {
 			b.WriteString(", ")
 		}
 		if f == "tc_definitions.kind" {
 			// Mask the high bit as we want it as ephemeral embedding.
-			f += kindMask
+			f += maskKindEphemeralEmbedding
 		}
 		b.WriteString(f)
 	}
@@ -971,7 +974,7 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 		}
 		if f == "e.kind" {
 			// Mask the high bit for kind1175 to indicate it's from action and we must pack it as 21750.
-			f += kindMask
+			f += maskKindEphemeralEmbedding
 		}
 		b.WriteString(f)
 	}
@@ -1088,6 +1091,12 @@ where
 		for i, f := range b.fieldsNames("e", filterID) {
 			if i > 0 {
 				b.WriteString(", ")
+			}
+			if f == "e.kind" && len(current.Reduce.Kinds) > 0 {
+				switch current.Reduce.Kinds[0] {
+				case model.CustomIONKindTokenizedCommunityAction, model.CustomIONKindTokenizedCommunityDefination:
+					f += maskKindEphemeralEmbedding
+				}
 			}
 			b.WriteString(f)
 		}
