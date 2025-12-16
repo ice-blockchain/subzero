@@ -281,7 +281,7 @@ func (h *handler) streamEvents(ctx context.Context, respWriter Writer, sub *mode
 		var totalGet, totalSend time.Duration
 		for event, err := range getter(getterCtx, filters...) {
 			if err != nil {
-				return errors.Wrapf(err, "getter %d: failed to fetch events for subscription %+v", i, sub)
+				return errors.Wrapf(err, "getter %d: filters %s: failed to fetch events", i, sub.Filters.String())
 			}
 			n++
 			totalGet += time.Since(itNow)
