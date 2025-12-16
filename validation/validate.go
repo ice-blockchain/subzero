@@ -215,7 +215,7 @@ var (
 			Optional("nonce").
 			Build(),
 
-		model.CustomIONKindTokenizedCommunityDefination: newKindValidatorBuilder().
+		model.CustomIONKindTokenizedCommunityDefinition: newKindValidatorBuilder().
 			OneOfSingle("e", "a", "h").
 			Optional("p", "platform").
 			Required("k").

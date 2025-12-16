@@ -48,7 +48,7 @@ const (
 	CustomIONKindDirectMessage                = 30_014
 	CustomIONKindEditableTextNote             = 30_175
 	CustomIONKindDeviceRegistration           = 31_751
-	CustomIONKindTokenizedCommunityDefination = 31_175
+	CustomIONKindTokenizedCommunityDefinition = 31_175
 	CustomIONKindTokenizedCommunityAction     = 1175
 	KindDVMCountResponse                      = 6400
 

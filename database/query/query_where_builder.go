@@ -673,7 +673,7 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 			repostKinds = append(repostKinds, strconv.Itoa(nostr.KindArticle))
 
 		case model.CustomIONKindRepostOfTokenizedCommunityDefination:
-			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityDefination))
+			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityDefinition))
 
 		case model.CustomIONKindRepostOfTokenizedCommunityAction:
 			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityAction))
@@ -1082,7 +1082,7 @@ where
 	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == nostr.KindProfileMetadata && current.Reduce.Author != "" {
 		b.BuildForMostRelevantFollowers(filterID, cteName, filter, current)
 		return
-	} else if current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefination && current.Start.Kind == model.CustomIONKindTokenizedCommunityAction {
+	} else if current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefinition && current.Start.Kind == model.CustomIONKindTokenizedCommunityAction {
 		// kind1175>kind31175 with additional data.
 		b.BuildForTCDataFromAction(filterID, cteName, filter, current)
 		return
@@ -1094,7 +1094,7 @@ where
 			}
 			if f == "e.kind" && len(current.Reduce.Kinds) > 0 {
 				switch current.Reduce.Kinds[0] {
-				case model.CustomIONKindTokenizedCommunityAction, model.CustomIONKindTokenizedCommunityDefination:
+				case model.CustomIONKindTokenizedCommunityAction, model.CustomIONKindTokenizedCommunityDefinition:
 					f += maskKindEphemeralEmbedding
 				}
 			}
@@ -1115,7 +1115,7 @@ where
 		nostr.KindArticle,
 		nostr.KindGenericRepost,
 		model.CustomIONKindEditableTextNote,
-		model.CustomIONKindTokenizedCommunityDefination,
+		model.CustomIONKindTokenizedCommunityDefinition,
 		model.CustomIONKindPollVote:
 		tag := current.Reduce.Tag // Could be "q" or "e" or "p" or empty.
 		b.WriteString(" e.id in (select (select mctx.event_id from event_tags mctx inner join events et ON mctx.event_id = et.id and et.deleted = false ")
@@ -1811,7 +1811,7 @@ func isValidPrecalculatedCounterFilter(filter *model.Filter) (references []strin
 		nostr.KindGenericRepost:                         {},
 		model.CustomIONKindEditableTextNote:             {},
 		model.CustomIONKindCommunityJoin:                {},
-		model.CustomIONKindTokenizedCommunityDefination: {},
+		model.CustomIONKindTokenizedCommunityDefinition: {},
 	}
 	for _, kind := range filter.Kinds {
 		if _, ok := supportedKinds[kind]; !ok {
@@ -1877,7 +1877,7 @@ func (b *queryBuilder) BuildForPrecalculatedCounters(filters ...model.Filter) (s
 					nostr.KindRepost,
 					nostr.KindArticle,
 					nostr.KindGenericRepost,
-					model.CustomIONKindTokenizedCommunityDefination,
+					model.CustomIONKindTokenizedCommunityDefinition,
 					model.CustomIONKindEditableTextNote:
 					if tagsHasQuote(filter.Tags) {
 						referenceType = "quote"

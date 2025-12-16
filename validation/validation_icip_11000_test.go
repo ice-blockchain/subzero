@@ -26,7 +26,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 	require.NoError(t, userPost.SignWithAlg(pk, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	var postTokenizedEvent model.Event
-	postTokenizedEvent.Kind = model.CustomIONKindTokenizedCommunityDefination
+	postTokenizedEvent.Kind = model.CustomIONKindTokenizedCommunityDefinition
 	postTokenizedEvent.CreatedAt = nostr.Now()
 	postTokenizedEvent.Tags = model.Tags{
 		{"e", userPost.Address()},
@@ -58,7 +58,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 	t.Run("Defination event without 'p' tag", func(t *testing.T) {
 		var ev model.Event
 
-		ev.Kind = model.CustomIONKindTokenizedCommunityDefination
+		ev.Kind = model.CustomIONKindTokenizedCommunityDefinition
 		ev.Tags = model.Tags{
 			{"a", "tc_event_address"},
 			{"k", "0"},
@@ -69,7 +69,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 	t.Run("Defination event with 'p' tag for xcom", func(t *testing.T) {
 		var ev model.Event
 
-		ev.Kind = model.CustomIONKindTokenizedCommunityDefination
+		ev.Kind = model.CustomIONKindTokenizedCommunityDefinition
 		ev.Tags = model.Tags{
 			{"h", "tc_event_address"},
 			{"k", "1"},
@@ -87,7 +87,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 		}
 		var ev model.Event
 
-		ev.Kind = model.CustomIONKindTokenizedCommunityDefination
+		ev.Kind = model.CustomIONKindTokenizedCommunityDefinition
 		ev.Tags = model.Tags{
 			{"a", "some_event_address"},
 			{"p", "creator_pubkey"},
@@ -148,7 +148,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 	t.Run("Tokenized event is profile metadata", func(t *testing.T) {
 		var tcDef, tcBuy model.Event
 
-		tcDef.Kind = model.CustomIONKindTokenizedCommunityDefination
+		tcDef.Kind = model.CustomIONKindTokenizedCommunityDefinition
 		tcDef.CreatedAt = nostr.Now()
 		tcDef.Tags = model.Tags{
 			{"a", userProfileWithWallet.Address()},

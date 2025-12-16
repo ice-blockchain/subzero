@@ -25,7 +25,7 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 
 	user1Priv, user2Priv := model.GeneratePrivateKey(), model.GeneratePrivateKey()
 
-	var evPost, evAction, evAction2, evDefiniton model.Event
+	var evPost, evAction, evAction2, evDefinition model.Event
 	evPost.Kind = model.CustomIONKindEditableTextNote
 	evPost.Content = "This is a post"
 	evPost.CreatedAt = nostr.Now()
@@ -34,20 +34,20 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 	}
 	require.NoError(t, evPost.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	evDefiniton.Kind = model.CustomIONKindTokenizedCommunityDefination
-	evDefiniton.CreatedAt = nostr.Now()
-	evDefiniton.Tags = model.Tags{
+	evDefinition.Kind = model.CustomIONKindTokenizedCommunityDefinition
+	evDefinition.CreatedAt = nostr.Now()
+	evDefinition.Tags = model.Tags{
 		{"a", evPost.Address()},
 		{"d", "def1"},
 		{"k", strconv.Itoa(evPost.Kind)},
 	}
-	require.NoError(t, evDefiniton.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, evDefinition.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	evAction.Kind = model.CustomIONKindTokenizedCommunityAction
 	evAction.CreatedAt = nostr.Now()
 	evAction.Content = "This is action 1"
 	evAction.Tags = model.Tags{
-		{"a", evDefiniton.Address()},
+		{"a", evDefinition.Address()},
 		{"tx_type", "test_buy"},
 		{"network", "testnet"},
 		{"token_address", "0xTokenAddress"},
@@ -59,14 +59,14 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 	evActionFirstBuyAnotherUser.Content = "This is first buy by another user"
 	require.NoError(t, evActionFirstBuyAnotherUser.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	require.NoError(t, db.AcceptEvents(t.Context(), &evPost, &evDefiniton, &evActionFirstBuyAnotherUser))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evPost, &evDefinition, &evActionFirstBuyAnotherUser))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction))
 
 	evAction2.Kind = model.CustomIONKindTokenizedCommunityAction
 	evAction2.CreatedAt = evAction.CreatedAt + 1
 	evAction2.Content = "This is action 2"
 	evAction2.Tags = model.Tags{
-		{"a", evDefiniton.Address()},
+		{"a", evDefinition.Address()},
 		{"tx_type", "test_buy2"},
 		{"network", "testnet"},
 		{"token_address", "0xTokenAddress"},
@@ -94,7 +94,7 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 			case model.CustomIONKindEphemeralEmbedding:
 				var receivedDef model.Event
 				require.NoError(t, receivedDef.UnmarshalJSON([]byte(ev.Content)))
-				require.Equal(t, evDefiniton, receivedDef)
+				require.Equal(t, evDefinition, receivedDef)
 
 			default:
 				t.Fatalf("unexpected event kind: %d", ev.Kind)
@@ -119,11 +119,11 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 		events = slices.Delete(events, firstBuyIndex, firstBuyIndex+1)
 	})
 	t.Run("31175 definition is ephemeral embedding", func(t *testing.T) {
-		defIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evDefiniton.ID })
+		defIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evDefinition.ID })
 		require.Greater(t, defIndex, -1)
 		receivedDefEvent := events[defIndex]
 		require.Equal(t, model.CustomIONKindEphemeralEmbedding, receivedDefEvent.Kind)
-		require.EqualValues(t, evDefiniton.String(), receivedDefEvent.Content)
+		require.EqualValues(t, evDefinition.String(), receivedDefEvent.Content)
 
 		events = slices.Delete(events, defIndex, defIndex+1)
 	})
@@ -207,7 +207,7 @@ func TestFlowTC_LinkActionID(t *testing.T) {
 	}
 	require.NoError(t, evPost.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	evDefiniton.Kind = model.CustomIONKindTokenizedCommunityDefination
+	evDefiniton.Kind = model.CustomIONKindTokenizedCommunityDefinition
 	evDefiniton.CreatedAt = nostr.Now()
 	evDefiniton.Tags = model.Tags{
 		{"a", evPost.Address()},
@@ -275,7 +275,7 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 
 	var evDef1, evDef2 model.Event
 
-	evDef1.Kind = model.CustomIONKindTokenizedCommunityDefination
+	evDef1.Kind = model.CustomIONKindTokenizedCommunityDefinition
 	evDef1.CreatedAt = nostr.Now()
 	evDef1.Tags = model.Tags{
 		{"a", evPost1.Address()},
@@ -284,7 +284,7 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 	}
 	require.NoError(t, evDef1.SignWithAlg(postAuthor, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	evDef2.Kind = model.CustomIONKindTokenizedCommunityDefination
+	evDef2.Kind = model.CustomIONKindTokenizedCommunityDefinition
 	evDef2.CreatedAt = nostr.Now()
 	evDef2.Tags = model.Tags{
 		{"e", evPost2.ID},

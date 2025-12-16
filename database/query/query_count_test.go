@@ -341,7 +341,7 @@ func TestEventCounters(t *testing.T) {
 	t.Run("Reactions on TC", func(t *testing.T) {
 		var tcDef model.Event
 		tcDef.ID = "1tc"
-		tcDef.Kind = model.CustomIONKindTokenizedCommunityDefination
+		tcDef.Kind = model.CustomIONKindTokenizedCommunityDefinition
 		tcDef.PubKey = "pub1tc"
 		tcDef.CreatedAt = 1
 		require.NoError(t, db.AcceptEvents(t.Context(), &tcDef))

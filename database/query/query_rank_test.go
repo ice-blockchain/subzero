@@ -75,7 +75,7 @@ func TestEventScore(t *testing.T) {
 		{"d", "my article"},
 	}
 	evTC.ID = "tc"
-	evTC.Kind = model.CustomIONKindTokenizedCommunityDefination
+	evTC.Kind = model.CustomIONKindTokenizedCommunityDefinition
 	evTC.PubKey = "tc_pub"
 	evTC.CreatedAt = ts
 	evTC.Content = "tc content"

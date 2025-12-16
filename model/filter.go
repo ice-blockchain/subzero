@@ -40,7 +40,7 @@ func filterMatchKind(filter *Filter, ev *Event) bool {
 	repostOfKinds := map[int]int{
 		CustomIONKindRepostOfArticle:                      nostr.KindArticle,
 		CustomIONKindRepostOfEditableTextNote:             CustomIONKindEditableTextNote,
-		CustomIONKindRepostOfTokenizedCommunityDefination: CustomIONKindTokenizedCommunityDefination,
+		CustomIONKindRepostOfTokenizedCommunityDefination: CustomIONKindTokenizedCommunityDefinition,
 		CustomIONKindRepostOfTokenizedCommunityAction:     CustomIONKindTokenizedCommunityAction,
 	}
 

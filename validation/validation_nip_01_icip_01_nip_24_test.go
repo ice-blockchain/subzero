@@ -222,7 +222,7 @@ func TestValidateKindProfileMetadataEvent(t *testing.T) {
 func TestAllowImplicitDtagForAddressableEvents(t *testing.T) {
 	t.Parallel()
 
-	const kind = model.CustomIONKindTokenizedCommunityDefination
+	const kind = model.CustomIONKindTokenizedCommunityDefinition
 
 	r, ok := KindSupportedTags[kind]
 	require.True(t, ok)
