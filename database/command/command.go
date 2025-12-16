@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/ice-blockchain/cometbft/multiplex/types"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/cometbft/config"
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/types"
 	"github.com/ice-blockchain/subzero/model"
 )
 
@@ -56,6 +56,7 @@ func (c *consensus) waitForStop(ctx context.Context) {
 	if c.Server != nil {
 		c.Logger.Debug("stopping consensus server")
 		err = c.Server.Stop()
+		c.Server.Wait()
 		c.Logger.Debug("stopped consensus server")
 	}
 	if ch != nil {

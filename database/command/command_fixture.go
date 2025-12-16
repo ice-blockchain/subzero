@@ -27,6 +27,7 @@ type TestConsensus interface {
 	DiscoveryPort() uint16
 	Stop(ctx context.Context, timeout time.Duration) error
 	Start(ctx context.Context)
+	Wait() // Waits for quit channel.
 }
 
 func (c *consensus) DiscoveryPort() uint16 {
@@ -53,6 +54,14 @@ func (c *consensus) Start(ctx context.Context) {
 	}
 	c.Server = server
 	go c.waitForStop(ctx)
+}
+
+func (c *consensus) Wait() {
+	if c.Server == nil {
+		return
+	}
+
+	c.Server.Wait()
 }
 
 func (c *consensus) Stop(ctx context.Context, timeout time.Duration) error {
