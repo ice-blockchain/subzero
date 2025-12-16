@@ -262,7 +262,7 @@ func TestConsensusEvents(t *testing.T) {
 
 		t.Logf("stopping consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
 		err := pubsubServers[2].Consensus.Stop(stopCtx, 5*time.Second)
-		time.Sleep(10 * time.Second)                                   // wait for shutdown..
+		time.Sleep(10 * time.Second) // wait for shutdown..
 		t.Logf("stopped consensus on relay %v %v: %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID(), err)
 
 		// 3 events each broadcast in its own block, we make sure of this with
