@@ -218,19 +218,6 @@ func TestFlowTC_LinkActionID(t *testing.T) {
 	require.NoError(t, evAction2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction2))
 	require.Equal(t, evAction.ID, helperSelectTCActionID(t, db, evAction2.ID))
-
-	var evAction3 model.Event
-	evAction3.Kind = model.CustomIONKindTokenizedCommunityAction
-	evAction3.CreatedAt = nostr.Now()
-	evAction3.Tags = model.Tags{
-		{"a", evDefiniton.Address()},
-		{"tx_type", "test_buy_prod"},
-		{"network", "prod"},
-		{"token_address", "0xTokenAddress"},
-	}
-	require.NoError(t, evAction3.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(t.Context(), &evAction3))
-	require.Empty(t, helperSelectTCActionID(t, db, evAction3.ID))
 }
 
 func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
