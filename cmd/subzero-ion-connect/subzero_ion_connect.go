@@ -131,10 +131,6 @@ func init() {
 		return nil
 	})
 	command.RegisterCommitListener(func(ctx context.Context, events ...*model.Event) error {
-		if err := query.CommitEvents(ctx, events...); err != nil {
-			return errors.Wrapf(err, "failed to delete outdated replaced events")
-		}
-
 		if err := storage.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrapf(err, "storage.AcceptEvents failed: %s", model.Events(events).String())
 		}
