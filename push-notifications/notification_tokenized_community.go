@@ -30,7 +30,7 @@ func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Con
 			}
 			for ev, err := range query.GetStoredEvents(ctx, model.Filter{
 				IDs:   []string{eventID},
-				Kinds: []int{model.CustomIONKindTokenizedCommunityDefination},
+				Kinds: []int{model.CustomIONKindTokenizedCommunityDefinition},
 				Limit: 1,
 			}) {
 				if err != nil {
@@ -47,7 +47,7 @@ func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Con
 			}
 		}
 
-	case model.CustomIONKindTokenizedCommunityDefination:
+	case model.CustomIONKindTokenizedCommunityDefinition:
 		notifyType = NotificationTypeTokenizedCommunityCreated
 		targetMasterKey = event.GetTag("p").Value()
 

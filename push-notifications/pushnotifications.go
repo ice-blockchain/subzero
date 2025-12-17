@@ -152,7 +152,7 @@ var (
 		nostr.KindGiftWrap:                              {},
 		nostr.KindFollowList:                            {},
 		model.CustomIONSystemMessage:                    {},
-		model.CustomIONKindTokenizedCommunityDefination: {},
+		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindTokenizedCommunityAction:     {},
 	}
 )
@@ -419,7 +419,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	case nostr.KindGiftWrap:
 		notifications, err = pm.handleGiftWrapEvent(event)
 		err = errors.Wrap(err, "failed to handle gift wrap event")
-	case model.CustomIONKindTokenizedCommunityDefination, model.CustomIONKindTokenizedCommunityAction:
+	case model.CustomIONKindTokenizedCommunityDefinition, model.CustomIONKindTokenizedCommunityAction:
 		notifications, err = pm.handleTokenizedCommunityEvent(ctx, event, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle tokenized community definition event")
 	case nostr.KindFollowList:
