@@ -15,6 +15,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
 	"github.com/rs/zerolog/log"
+	"github.com/zeebo/xxh3"
 )
 
 type (
@@ -239,6 +240,15 @@ func (events Events) String() string {
 		sb.WriteString(e.String())
 	}
 	return sb.String()
+}
+
+func (events Events) Hash() string {
+	h := xxh3.New()
+	for _, e := range events {
+		h.WriteString(e.ID)
+		h.WriteString(e.Content)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (events Events) IDs() []string {

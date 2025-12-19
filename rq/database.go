@@ -5,12 +5,14 @@ package rq
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -19,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/puddle/v2"
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,6 +33,10 @@ type (
 		CurrentIndex uint64
 		SwitchMu     sync.Mutex
 	}
+)
+
+var (
+	errNoActiveMaster = errors.New("no active master available")
 )
 
 func newDatabaseClient(ctx context.Context, username, password string, urls ...string) (*databaseClient, error) {
@@ -66,7 +73,7 @@ func newDatabaseClient(ctx context.Context, username, password string, urls ...s
 	}
 
 	if client.Active.Load() == nil {
-		return nil, errors.Errorf("no active master was found among %d write URLs", len(client.Masters))
+		return nil, errors.Wrapf(errNoActiveMaster, "no active master was found among %d write URLs", len(client.Masters))
 	}
 
 	return client, nil
@@ -177,7 +184,14 @@ func shouldSwitchMaster(err error) bool {
 			pgerrcode.IsOperatorIntervention(code)
 	}
 
-	return false
+	return errors.IsAny(err,
+		context.DeadlineExceeded,
+		puddle.ErrClosedPool,
+		io.ErrUnexpectedEOF,
+		io.EOF,
+		syscall.EPIPE,
+		net.ErrClosed,
+	)
 }
 
 func (db *databaseClient) switchMaster(ctx context.Context, reason error) error {
@@ -202,12 +216,22 @@ func (db *databaseClient) switchMaster(ctx context.Context, reason error) error 
 				Msg("cannot connect to master at index")
 			continue
 		}
+		if err := conn.Ping(ctx); err != nil {
+			log.Warn().
+				Str("context", "rq-database").
+				Err(err).
+				Int("master_index", i).
+				Msg("cannot ping master at index")
+			conn.Close()
+			continue
+		}
+
 		log.Info().
 			Str("context", "rq-database").
 			Int("from_index", int(db.CurrentIndex)).
 			Int("to_index", i).
 			Err(reason).
-			Msg("switching master")
+			Msg("switched active master")
 		oldMaster = db.Active.Swap(conn)
 		db.CurrentIndex = uint64(i)
 		break
@@ -218,15 +242,27 @@ func (db *databaseClient) switchMaster(ctx context.Context, reason error) error 
 		return nil
 	}
 
-	return errors.Errorf("no active master was found among %d write URLs", len(db.Masters))
+	return errors.Wrapf(errNoActiveMaster, "no active master was found among %d write URLs", len(db.Masters))
 }
 
 func calculateConnectOrder(addresses []string, currentIndex int) []int {
+	switch len(addresses) {
+	case 0:
+		return []int{}
+	case 1:
+		return []int{0}
+	case 2:
+		return []int{(currentIndex + 1) % 2, currentIndex}
+	}
+
 	all := make([]int, len(addresses))
 	for i := range all {
 		all[i] = i
 	}
-	return append(all[currentIndex+1:], all[:currentIndex]...)
+
+	order := append(all[currentIndex+1:], all[:currentIndex]...)
+	order = append(order, currentIndex) // Try the current master last.
+	return order
 }
 
 func createPgURL(username, password, target string) (string, error) {

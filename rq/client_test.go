@@ -69,15 +69,14 @@ func TestProcessDifferentJobs(t *testing.T) {
 
 	ctx, _ := appcontext.NewAppContext(t.Context())
 
-	addr, release := query.NewTestDatabase(ctx)
-	defer release()
+	addr, _ := testContainer.MustTempDB(ctx)
 
 	client, err := newClient(ctx,
 		WithConfig(&Config{
-			DB: DBConfig{
-				WriteUrls: []string{addr},
+			Config: query.Config{
+				WriteURLs: []string{addr},
+				RelayURL:  "https://example.com/relay",
 			},
-			RelayURL: "https://example.com/relay",
 		}),
 	)
 	require.NoError(t, err)
@@ -111,5 +110,5 @@ func TestProcessDifferentJobs(t *testing.T) {
 			t.Error("timeout waiting for substraction result")
 		}
 	})
-	client.Stop(ctx)
+	require.NoError(t, client.Close(ctx))
 }

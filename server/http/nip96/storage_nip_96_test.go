@@ -38,6 +38,7 @@ import (
 	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/server/cert"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
@@ -88,11 +89,6 @@ func TestMain(m *testing.M) {
 		Cdn: storage.CdnConfig{
 			URLUpload:   "https://storage.bunnycdn.com/ice-staging/profile", // Set STORAGE_CDN_ACCESS_KEY to work.
 			URLDownload: "https://ice-staging.b-cdn.net/profile",
-			DB: struct {
-				WriteUrls []string `yaml:"write-urls"`
-				Username  string   `yaml:"username,omitempty"`
-				Password  string   `yaml:"password,omitempty"`
-			}{WriteUrls: []string{dbConnString}},
 		},
 	}))
 
@@ -107,8 +103,9 @@ func initServer(serverCtx context.Context, port uint16, opts ...storage.Option) 
 	validation.MustInit(serverCtx, validation.WithIONIdentityPublicKeys(func() []string {
 		return []string{}
 	}))
-	initStorage(serverCtx, opts...)
+	initStorage(serverCtx, nil, opts...)
 	uploader := NewUploadHandler(serverCtx, false, nip11.NewFetcher(serverCtx, nip11.WithInsecureFetch()))
+
 	tlsConf := cert.MustGenerateTLSConfigSelfSigned("localhost")
 	tlsConf.NextProtos = []string{"http/1.1", "h2"}
 	return fixture.NewTestServer(
@@ -286,7 +283,7 @@ func TestNIP96(t *testing.T) {
 		})
 
 		storage.Reset()
-		initStorage(t.Context(), storage.WithConfig(&storage.Config{
+		initStorage(t.Context(), nil, storage.WithConfig(&storage.Config{
 			PrivateKey:              testPrivateKey,
 			IONStorageConfigURL:     "https://ton.org/testnet-global.config.json",
 			AbsoluteRootStoragePath: newStorageRoot,
@@ -296,11 +293,6 @@ func TestNIP96(t *testing.T) {
 			Cdn: storage.CdnConfig{
 				URLUpload:   "https://storage.bunnycdn.com/ice-staging/profile", // Set STORAGE_CDN_ACCESS_KEY to work
 				URLDownload: "https://ice-staging.b-cdn.net/profile",
-				DB: struct {
-					WriteUrls []string `yaml:"write-urls"`
-					Username  string   `yaml:"username,omitempty"`
-					Password  string   `yaml:"password,omitempty"`
-				}{WriteUrls: []string{dbConnString}},
 			},
 		}))
 		t.Logf("new storage root at %v initialized", newStorageRoot)
@@ -872,11 +864,11 @@ func expectedResponse(caption string) *nip96.UploadResponse {
 	return expectedResponses[caption]
 }
 
-func initStorage(ctx context.Context, opts ...storage.Option) {
+func initStorage(ctx context.Context, rqClient rq.Client, opts ...storage.Option) {
 	transportOverride := http.DefaultClient.Transport
 	http.DefaultClient.Transport = http.DefaultTransport
 	ctx, _ = appcontext.NewAppContext(ctx)
-	storage.MustInit(ctx, opts...)
+	storage.MustInit(ctx, rqClient, opts...)
 	http.DefaultClient.Transport = transportOverride
 }
 

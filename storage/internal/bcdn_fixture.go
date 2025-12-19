@@ -16,40 +16,40 @@ import (
 )
 
 func (c *client) CdnDownloadURL(filename string) string {
-	if strings.HasPrefix(filename, c.config.URLDownload) {
+	if strings.HasPrefix(filename, c.Config.URLDownload) {
 		return filename
 	}
-	u, _ := url.JoinPath(c.config.URLDownload, filename)
+	u, _ := url.JoinPath(c.Config.URLDownload, filename)
 
 	return u
 }
 
-func VerifyFileOnCdn(tb *testing.T, ctx context.Context, cdnClient CDNClient, fileName string) {
+func VerifyFileOnCdn(tb testing.TB, ctx context.Context, cdnClient CDNClient, fileName string) {
 	tb.Helper()
+
 	url := cdnClient.(*client).CdnDownloadURL(fileName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	require.NoError(tb, err)
-	httpClient := http.DefaultClient
-	resp, err := httpClient.Do(req)
-	defer func() {
-		require.NoError(tb, resp.Body.Close())
-	}()
+
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(tb, err)
 	require.Equal(tb, http.StatusOK, resp.StatusCode, url)
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	require.NoError(tb, err)
 	require.NotEmpty(tb, bodyBytes)
+	require.NoError(tb, resp.Body.Close())
 }
-func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, cdnClient CDNClient, fileName string) {
+
+func VerifyFileDeletedOnCdn(tb testing.TB, ctx context.Context, cdnClient CDNClient, fileName string) {
 	tb.Helper()
+
 	url := cdnClient.(*client).CdnDownloadURL(fileName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	require.NoError(tb, err)
-	httpClient := http.DefaultClient
-	resp, err := httpClient.Do(req)
-	defer func() {
-		require.NoError(tb, resp.Body.Close())
-	}()
+
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(tb, err)
 	require.Equal(tb, http.StatusNotFound, resp.StatusCode, url)
+	require.NoError(tb, resp.Body.Close())
 }

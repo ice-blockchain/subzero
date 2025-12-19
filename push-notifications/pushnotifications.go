@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -25,6 +26,8 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
+	"github.com/ice-blockchain/subzero/rq"
+	"github.com/ice-blockchain/subzero/server/broadcaster"
 )
 
 type (
@@ -33,13 +36,16 @@ type (
 	NotificationType        string
 
 	PushNotificationManager struct {
+		pushNotificationClient pn.Client
+		rq                     rq.Client
+		broadcaster            eventBroadcaster
 		userDevicesMap         map[PublicKey]map[DeviceID]DeviceInfo
-		pushNotificationClient *pn.Client
-		relayURL               string
-		deviceMutex            sync.RWMutex
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
+		relayURL               string
+		privateKey             string
+		deviceMutex            sync.RWMutex
 	}
 
 	notificationTranslation struct {
@@ -49,12 +55,13 @@ type (
 	}
 
 	config struct {
-		FCMCredentialsFile string   `yaml:"fcm-credentials-file"`
-		PrivateKey         string   `yaml:"private-key"`
-		RelayURL           string   `yaml:"relay-url"`
-		FCMAndroidConfigs  []string `yaml:"fcm-android-configs"`
-		FCMIOSConfigs      []string `yaml:"fcm-ios-configs"`
-		FCMWebConfigs      []string `yaml:"fcm-web-configs"`
+		FCMCredentialsFile  string   `yaml:"fcm-credentials-file"`
+		PrivateKey          string   `yaml:"private-key"`
+		RelayURL            string   `yaml:"relay-url"`
+		BroadcastPrivateKey string   `yaml:"broadcast-private-key" validate:"required"`
+		FCMAndroidConfigs   []string `yaml:"fcm-android-configs"`
+		FCMIOSConfigs       []string `yaml:"fcm-ios-configs"`
+		FCMWebConfigs       []string `yaml:"fcm-web-configs"`
 	}
 
 	compressorPoolItem struct {
@@ -62,9 +69,15 @@ type (
 		base64Encoder io.WriteCloser
 		zlibWriter    *zlib.Writer
 	}
+
+	eventBroadcaster interface {
+		BroadcastTo(ctx context.Context, target string, events model.Events) (err error)
+		Close()
+	}
 )
 
 const (
+	NotificationTypePost                      NotificationType = "post"
 	NotificationTypeReaction                  NotificationType = "reaction"
 	NotificationTypeRepost                    NotificationType = "repost"
 	NotificationTypeMentionReply              NotificationType = "mention_reply"
@@ -82,8 +95,7 @@ const (
 )
 
 var (
-	globalPushNotificationManager *PushNotificationManager
-	DefaultTranslations           = map[NotificationType]notificationTranslation{
+	defaultTranslations = map[NotificationType]notificationTranslation{
 		NotificationTypeReaction: {
 			Title:    "New reaction",
 			Body:     "Someone reacted to your post",
@@ -92,6 +104,11 @@ var (
 		NotificationTypeRepost: {
 			Title:    "New repost",
 			Body:     "Someone reposted your post",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypePost: {
+			Title:    "New post",
+			Body:     "Someone posted a new post",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeMentionReply: {
@@ -156,22 +173,29 @@ var (
 		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindTokenizedCommunityAction:     {},
 	}
+	allowedBroadcastKinds = map[int]struct{}{
+		model.CustomIONKindTokenizedCommunityAction:     {},
+		model.CustomIONKindTokenizedCommunityDefinition: {},
+		model.CustomIONKindEditableTextNote:             {},
+		nostr.KindArticle:                               {},
+		nostr.KindTextNote:                              {},
+		nostr.KindGenericRepost:                         {},
+	}
+
+	globalPushNotificationManager *PushNotificationManager
 )
 
-func MustInit(ctx context.Context, antsPool *ants.Pool) {
-	userDevicesMap := make(map[PublicKey]map[DeviceID]DeviceInfo)
-
+func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClient rq.Client, selfTest bool) (*PushNotificationManager, error) {
 	var pnClient pn.Client
 	var err error
 
-	config := cfg.MustGet[config]()
-
 	if config.FCMCredentialsFile == "" {
-		panic("[push-notifications] FCM credentials not provided")
+		return nil, fmt.Errorf("FCM credentials not provided")
 	}
 	if config.PrivateKey == "" {
-		panic("[push-notifications] private key is empty")
+		return nil, fmt.Errorf("private key is empty")
 	}
+
 	var opts []pn.Option
 	if strings.HasPrefix(strings.TrimSpace(config.FCMCredentialsFile), "{") {
 		opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
@@ -186,14 +210,21 @@ func MustInit(ctx context.Context, antsPool *ants.Pool) {
 
 	pnClient, err = pn.New(ctx, opts...)
 	if err != nil {
-		log.Fatal().Err(err).Msg("[push-notifications] failed to create push notification client")
+		return nil, errors.Wrap(err, "failed to create push notification client")
 	}
-	globalPushNotificationManager = &PushNotificationManager{
-		userDevicesMap:         userDevicesMap,
-		pushNotificationClient: &pnClient,
+
+	manager := &PushNotificationManager{
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: pnClient,
 		relayURL:               config.RelayURL,
 		stats:                  newPushStats(),
 		antsPool:               antsPool,
+		rq:                     rqClient,
+		privateKey:             config.PrivateKey,
+		broadcaster: broadcaster.New(broadcaster.Config{
+			RelayURL:   config.RelayURL,
+			PrivateKey: config.BroadcastPrivateKey,
+		}),
 		compressorPool: &sync.Pool{
 			New: func() any {
 				buf := &bytes.Buffer{}
@@ -209,16 +240,39 @@ func MustInit(ctx context.Context, antsPool *ants.Pool) {
 		},
 	}
 
-	globalPushNotificationManager.mustRunSelfTest(ctx, pnClient, config.PrivateKey)
+	if selfTest {
+		manager.mustRunSelfTest(ctx, config.PrivateKey)
+	}
 
-	globalPushNotificationManager.stats.StartPeriodicLogging(ctx)
+	if err := manager.syncDevices(ctx); err != nil {
+		return nil, errors.Wrap(err, "failed to perform full device synchronization at startup")
+	}
 
-	if err := globalPushNotificationManager.syncDevices(ctx); err != nil {
-		log.Fatal().Err(err).Msg("[push-notifications] failed to perform full device synchronization at startup")
+	manager.registerWorkers()
+
+	return manager, nil
+}
+
+func (pnm *PushNotificationManager) registerWorkers() {
+	if reg := pnm.rq.Register(); reg != nil {
+		rq.RegisterWorker(reg, &broadcasterRelayFinderWorker{Manager: pnm})
+		rq.RegisterWorker(reg, &broadcasterBroadcastWorker{Manager: pnm})
+		rq.RegisterWorker(reg, &broadcasterUserNotificationWorker{Manager: pnm})
+		rq.RegisterWorker(reg, &broadcasterPushNotificationWorker{Manager: pnm})
 	}
 }
 
-func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) error {
+func MustInit(ctx context.Context, antsPool *ants.Pool, rqClient rq.Client) {
+	m, err := newManager(ctx, cfg.MustGet[config](), antsPool, rqClient, true)
+	if err != nil {
+		log.Panic().Err(err).Msg("[push-notifications] failed to initialize push notification manager")
+	}
+
+	m.stats.StartPeriodicLogging(ctx)
+	globalPushNotificationManager = m
+}
+
+func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, privateKey string) error {
 	devicePriv, devicePub := model.GenerateKeyPair()
 	serverPrivX25519, err := nip44.ConvertEd25519PrivateKeyToX25519(privateKey)
 	if err != nil {
@@ -273,15 +327,15 @@ func (pnm *PushNotificationManager) runSelfTest(ctx context.Context, pnClient pn
 		Title:       "self-test",
 		Body:        "self-test",
 	}
-	if err = pnClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceTokenError(err) {
+	if err = pnm.pushNotificationClient.SendSingle(ctx, n); err != nil && !pn.IsInvalidDeviceTokenError(err) {
 		return errors.Wrap(err, "unexpected error")
 	}
 
 	return nil
 }
 
-func (pm *PushNotificationManager) mustRunSelfTest(ctx context.Context, pnClient pn.Client, privateKey string) {
-	if err := pm.runSelfTest(ctx, pnClient, privateKey); err != nil {
+func (pm *PushNotificationManager) mustRunSelfTest(ctx context.Context, privateKey string) {
+	if err := pm.runSelfTest(ctx, privateKey); err != nil {
 		log.Fatal().Err(err).Msg("[push-notifications] self-test failed")
 	}
 }
@@ -293,16 +347,94 @@ func GetFCMConfigs() (androidConfigs, iosConfigs, webConfigs []string) {
 }
 
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
-	var errs error
-	errs = errors.Join(errs,
-		globalPushNotificationManager.AcceptEvents(ctx, events),
-		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
-	)
-	if errs != nil {
-		return errors.Wrap(errs, "failed to process events")
+	var err error
+
+	var hasOnlyEphemeralEvents = true
+	for _, event := range events {
+		if event.Kind != model.CustomIONKindEphemeralEmbedding {
+			hasOnlyEphemeralEvents = false
+			break
+		}
 	}
 
-	return nil
+	// Ephemeral embedding batch may come only from broadcaster, so we handle it separately.
+	if hasOnlyEphemeralEvents && len(events) > 0 {
+		return globalPushNotificationManager.AcceptEventsFromBroadcast(ctx, events)
+	}
+
+	err = errors.Join(err,
+		globalPushNotificationManager.AcceptEvents(ctx, events),
+		globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events),
+		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
+	)
+
+	return errors.Wrap(err, "failed to process events")
+
+}
+
+func (pm *PushNotificationManager) AcceptEventsFromBroadcast(ctx context.Context, events []*model.Event) error {
+	var batchID string
+
+	if len(events) > 0 {
+		if lTag := events[0].GetTag("l"); lTag != nil && lTag.Value() == "batch" && len(lTag) >= 3 {
+			batchID = lTag[2]
+		}
+	}
+	return errors.Wrapf(
+		pm.rq.Push(ctx,
+			&broadcasterUserNotificationWorkerArgs{
+				EphemeralEvents: events,
+				BatchID:         batchID,
+			},
+		),
+		"failed to push a job for processing %d ephemeral events from broadcaster",
+		len(events),
+	)
+}
+
+func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context, events []*model.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	return errors.Wrapf(
+		pm.rq.Push(
+			ctx,
+			&broadcasterRelayFinderWorkerArgs{
+				Events:  events,
+				BatchID: model.Events(events).Hash(),
+			},
+		),
+		"failed to push a job for broadcasting %d events",
+		len(events),
+	)
+}
+
+func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *model.Event, source ...string) *model.Event {
+	var ev model.Event
+
+	ev.CreatedAt = contentEvent.CreatedAt
+	ev.Kind = model.CustomIONKindEphemeralEmbedding
+	ev.Content = contentEvent.String()
+	ev.Tags = model.Tags{
+		{"e", contentEvent.ID},
+		{"p", contentEvent.GetMasterPublicKey()},
+		{"k", strconv.Itoa(int(contentEvent.Kind))},
+	}
+	if len(source) > 0 {
+		ev.Tags = append(ev.Tags, model.Tag{"l", "batch", source[0]})
+	}
+	if err := ev.SignWithAlg(pm.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
+		log.Panic().Err(err).Str("context", "PUSH_NOTIFICATIONS").Str("event_id", contentEvent.ID).Msg("failed to sign ephemeral embedding event for broadcasting")
+	}
+
+	return &ev
+}
+
+func (pm *PushNotificationManager) packEventsForBroadcast(_ context.Context, in model.Events, batch string) (out model.Events) {
+	for i := range in {
+		out = append(out, pm.createEphemeralEmbeddingEvent(in[i], batch))
+	}
+	return out
 }
 
 func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*model.Event) error {
@@ -474,7 +606,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 		wg.Add(1)
 		if err := pm.antsPool.Submit(func() {
 			defer wg.Done()
-			err := (*pm.pushNotificationClient).SendSingle(ctx, notification)
+			err := pm.pushNotificationClient.SendSingle(ctx, notification)
 
 			if err != nil {
 				pm.stats.RecordError(notification.SourceEvent, err)
@@ -501,7 +633,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 		wg.Add(1)
 		if err := pm.antsPool.Submit(func() {
 			defer wg.Done()
-			err := (*pm.pushNotificationClient).SendTopic(ctx, notification)
+			err := pm.pushNotificationClient.SendTopic(ctx, notification)
 			if err != nil {
 				pm.stats.RecordError(notification.SourceEvent, err)
 			} else {
@@ -639,6 +771,46 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	return devices
 }
 
+// collectTargetMasterKeys iterates through all registered user devices and identifies
+// which master keys (users) have at least one device with filters matching the provided event.
+// It returns a slice of master keys for users who should receive a notification for the event.
+func (pm *PushNotificationManager) collectTargetMasterKeys(event *model.Event) (keys []string) {
+	const currentUserKeyPlaceholder = "current_user"
+
+	pm.deviceMutex.RLock()
+	defer pm.deviceMutex.RUnlock()
+
+	// TODO: Optimize this to use some index rather than iterating over all users and devices.
+	for masterKey, devices := range pm.userDevicesMap {
+		for _, deviceInfo := range devices {
+			if !model.FiltersMatch(deviceInfo.Filters, event, currentUserKeyPlaceholder, currentUserKeyPlaceholder) {
+				continue
+			}
+			keys = append(keys, masterKey)
+			break
+		}
+	}
+
+	return keys
+}
+
+func (pm *PushNotificationManager) collectTargetDevices(event *model.Event) (devices []*DeviceRegistrationEvent) {
+	const currentUserKeyPlaceholder = "current_user"
+
+	pm.deviceMutex.RLock()
+	defer pm.deviceMutex.RUnlock()
+
+	for _, alldevices := range pm.userDevicesMap {
+		for _, deviceInfo := range alldevices {
+			if !model.FiltersMatch(deviceInfo.Filters, event, currentUserKeyPlaceholder, currentUserKeyPlaceholder) {
+				continue
+			}
+			devices = append(devices, deviceInfo.Event)
+		}
+	}
+	return devices
+}
+
 func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
@@ -673,7 +845,7 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 }
 
 func (pm *PushNotificationManager) getTranslation(notificationType NotificationType) notificationTranslation {
-	translation, ok := DefaultTranslations[notificationType]
+	translation, ok := defaultTranslations[notificationType]
 	if !ok {
 		log.Error().Str("context", "PUSH_NOTIFICATIONS").
 			Str("notification_type", string(notificationType)).
@@ -704,18 +876,6 @@ func (pm *PushNotificationManager) compressAndEncodeBase64(data string) (string,
 	}
 
 	return compressor.buf.String(), nil
-}
-
-func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *model.Event) *model.Event {
-	ephemeralEvent := &model.Event{
-		Event: nostr.Event{
-			Kind:      model.CustomIONKindEphemeralEmbedding,
-			CreatedAt: nostr.Now(),
-			Content:   contentEvent.String(),
-		},
-	}
-
-	return ephemeralEvent
 }
 
 func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, event *model.Event) (bool, *model.Event, *model.Event, error) {

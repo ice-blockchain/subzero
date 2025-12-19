@@ -26,6 +26,7 @@ import (
 	"github.com/ice-blockchain/subzero/dvm"
 	"github.com/ice-blockchain/subzero/model"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
+	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/validation"
@@ -75,9 +76,14 @@ var (
 			logInit()
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
+			rq := rq.MustNewClient(cmd.Context())
+			defer rq.Close(cmd.Context())
 			command.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
-			pushnotifications.MustInit(cmd.Context(), antsPool)
+			pushnotifications.MustInit(cmd.Context(), antsPool, rq)
+			if err := rq.Start(cmd.Context()); err != nil {
+				log.Panic().Err(err).Msg("failed to start rq client")
+			}
 			webserver = server.New(cmd.Context())
 			webserver.MustListenAndServe(cmd.Context())
 		},

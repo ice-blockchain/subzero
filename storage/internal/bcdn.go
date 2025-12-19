@@ -15,110 +15,67 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
 	"github.com/imroc/req/v3"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
-	"github.com/riverqueue/river/rivermigrate"
 	"github.com/rs/zerolog/log"
+
+	"github.com/ice-blockchain/subzero/rq"
 )
 
 type (
 	CDNClient interface {
-		FileUpload(ctx context.Context, data io.Reader, contentType, fileName string) error
 		FileDelete(ctx context.Context, name string) error
-		Stop(ctx context.Context) error
 		FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error
 		HealthCheck(ctx context.Context) error
+		FileUpload(ctx context.Context, data io.Reader, contentType, fileName string) error
 	}
-	CdnConfig struct {
-		AccessKey       string        `yaml:"access-key"`
-		URLUpload       string        `yaml:"url-upload"`
-		URLDownload     string        `yaml:"url-download"`
-		MaxQueueWorkers int           `yaml:"max-queue-workers"`
-		JobMaxTimeout   time.Duration `yaml:"max-job-timeout"`
-		DB              struct {
-			WriteUrls []string `yaml:"write-urls"`
-			Username  string   `yaml:"username,omitempty"`
-			Password  string   `yaml:"password,omitempty"`
-		} `yaml:"db"`
+	CDNConfig struct {
+		AccessKey     string        `yaml:"access-key"`
+		URLUpload     string        `yaml:"url-upload"`
+		URLDownload   string        `yaml:"url-download"`
+		JobMaxTimeout time.Duration `yaml:"max-job-timeout"`
 	}
+
 	client struct {
-		river.WorkerDefaults[*jobParams]
-		workers             *river.Workers
-		config              *CdnConfig
-		relayUrl            string
-		rootPath            string
-		river               atomic.Pointer[river.Client[pgx.Tx]]
-		db                  *DB
-		healthCheckPassedAt atomic.Int64
-		healthCheckMtx      sync.Mutex
+		RqClient            rq.Client
+		Config              *CDNConfig
+		RelayURL            string
+		RootPath            string
+		HealthCheckPassedAt atomic.Int64
+		HealthCheckMux      sync.RWMutex
 	}
 )
 
 const (
 	defaultJobTimeout = 10 * time.Minute
-	defaultWorkers    = 95
 )
 
-func NewCDNClient(ctx context.Context, config *CdnConfig, relayUrl, rootPath string) CDNClient {
-	if config.MaxQueueWorkers == 0 {
-		config.MaxQueueWorkers = defaultWorkers
+func NewCDNClient(ctx context.Context, config *CDNConfig, rqClient rq.Client, relayUrl, rootPath string) CDNClient {
+	var cdnClient = &client{
+		Config:   config,
+		RelayURL: relayUrl,
+		RootPath: rootPath,
+		RqClient: rqClient,
 	}
-	if config.JobMaxTimeout == 0 {
-		config.JobMaxTimeout = defaultJobTimeout
-	}
-	c := &client{
-		config:   config,
-		relayUrl: relayUrl,
-		rootPath: rootPath,
-	}
-	var err error
-	c.workers = river.NewWorkers()
-	if err = river.AddWorkerSafely[*jobParams](c.workers, c); err != nil {
-		log.Panic().
-			Str("context", "STORAGE").
-			Err(err).
-			Msg("failed to register cdnUpload worker")
-	}
-	c.db, err = NewDBConn(ctx,
-		WithWriteURLs(config.DB.Username, config.DB.Password, config.DB.WriteUrls...),
-		WithMigration("river", func(ctx context.Context, pool *pgxpool.Pool) error {
-			migrator, err := rivermigrate.New[pgx.Tx](riverpgxv5.New(pool), &rivermigrate.Config{})
-			if err != nil {
-				return errors.Wrap(err, "cannot create river migrator")
-			}
-			_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
-			return errors.Wrap(err, "failed to migrate river")
-		}),
-	)
-	if err != nil {
-		log.Panic().
-			Str("context", "STORAGE").
-			Err(err).
-			Msg("failed setup db connection")
-	}
-	if err = c.HealthCheck(ctx); err != nil {
+
+	rq.RegisterWorker(rqClient.Register(), &cdnUploadWorker{
+		Client:     cdnClient,
+		JobTimeout: config.JobMaxTimeout,
+		RootPath:   rootPath,
+		RelayURL:   relayUrl,
+	})
+	if err := cdnClient.HealthCheck(ctx); err != nil {
 		log.Panic().
 			Str("context", "STORAGE").
 			Err(err).
 			Msg("failed to bootstrap cdn")
 	}
-	if err = c.initQueueProcessing(ctx, config); err != nil {
-		log.Panic().
-			Str("context", "STORAGE").
-			Err(err).
-			Msg("failed to init queue processing")
-	}
-	return c
+	return cdnClient
 }
 
 func (c *client) cdnUploadURL(filename string) string {
-	if strings.HasPrefix(filename, c.config.URLUpload) {
+	if strings.HasPrefix(filename, c.Config.URLUpload) {
 		return filename
 	}
-	u, _ := url.JoinPath(c.config.URLUpload, filename)
-
+	u, _ := url.JoinPath(c.Config.URLUpload, filename)
 	return u
 }
 
@@ -127,7 +84,6 @@ func (c *client) FileUpload(ctx context.Context, data io.Reader, contentType, fi
 	if err != nil {
 		return errors.Wrapf(err, "error reading file %v", fileName)
 	}
-
 	return errors.Wrapf(c.doCdnUpload(ctx, contentType, fileName, fileData), "error uploading file %v", fileName)
 }
 
@@ -136,19 +92,25 @@ func (c *client) doCdnUpload(ctx context.Context, contentType, fileName string, 
 		SetHeader("Content-Type", contentType).
 		SetBodyBytes(fileData).
 		Put(c.cdnUploadURL(fileName))
-	if err == nil && resp.IsSuccessState() {
+	if err != nil {
+		return errors.Wrap(err, "upload file request failed")
+	}
+
+	if resp.IsSuccessState() {
 		return nil
 	}
-	if err == nil && !resp.IsSuccessState() {
-		body, rErr := resp.ToString()
-		if rErr != nil {
-			log.Error().Str("context", "STORAGE").Err(rErr).Int("status", resp.GetStatusCode()).Msg("failed to upload file")
-		}
 
-		err = errors.Errorf("upload new file failed with status: %v,body: %v", resp.GetStatusCode(), body)
-	}
+	body, err := resp.ToString()
+	log.Error().
+		Str("context", "STORAGE").
+		Err(err).
+		Str("body", body).
+		Str("file", fileName).
+		Str("content_type", contentType).
+		Int("status", resp.GetStatusCode()).
+		Msg("failed to upload file")
 
-	return errors.Wrap(err, "upload file request failed")
+	return errors.Errorf("upload new failed: code %v", resp.GetStatusCode())
 }
 
 func (c *client) FileDelete(ctx context.Context, name string) error {
@@ -156,11 +118,13 @@ func (c *client) FileDelete(ctx context.Context, name string) error {
 	if filename == "" {
 		return nil
 	}
+
 	resp, err := c.cdnReq(ctx).Delete(c.cdnUploadURL(filename))
-	if err == nil && (resp.IsSuccessState() || resp.GetStatusCode() == 404) {
+	if err == nil && (resp.IsSuccessState() || resp.GetStatusCode() == http.StatusNotFound) {
 		return nil
 	}
-	if err == nil && !resp.IsSuccessState() && resp.GetStatusCode() != 404 {
+
+	if err == nil && !resp.IsSuccessState() && resp.GetStatusCode() != http.StatusNotFound {
 		body, rErr := resp.ToString()
 		if rErr != nil {
 			log.Error().Str("context", "STORAGE").Err(rErr).Int("status", resp.GetStatusCode()).Msg("failed to delete file")
@@ -175,32 +139,36 @@ func (c *client) FileDelete(ctx context.Context, name string) error {
 func (c *client) cdnReq(ctx context.Context) *req.Request {
 	return req.
 		SetContext(ctx).
-		SetRetryBackoffInterval(10*time.Millisecond, 1*time.Second). //nolint:mnd,gomnd // .
+		SetRetryBackoffInterval(100*time.Millisecond, 1*time.Second).
 		SetRetryHook(func(resp *req.Response, err error) {
-			switch { //nolint:revive // .
+			var body string
+			if resp != nil {
+				body, _ = resp.ToString()
+			}
+			switch {
 			case err != nil:
-				log.Error().Str("context", "STORAGE").Err(err).Msg("failed to upload file, retrying... ")
+				log.Error().Str("context", "STORAGE").Err(err).Str("body", body).Msg("failed to upload file, retrying... ")
 			case resp.GetStatusCode() == http.StatusTooManyRequests:
-				log.Error().Str("context", "STORAGE").Int("status", resp.GetStatusCode()).Msg("rate limit for upload file reached, retrying...")
+				log.Error().Str("context", "STORAGE").Int("status", resp.GetStatusCode()).Str("body", body).Msg("rate limit for upload file reached, retrying...")
 			case resp.GetStatusCode() >= http.StatusInternalServerError:
-				log.Error().Str("context", "STORAGE").Int("status", resp.GetStatusCode()).Msg("internal server error for upload file, retrying...")
+				log.Error().Str("context", "STORAGE").Int("status", resp.GetStatusCode()).Str("body", body).Msg("internal server error for upload file, retrying...")
 			}
 		}).
 		SetRetryCount(25).
 		SetRetryCondition(func(resp *req.Response, err error) bool {
 			return err != nil || resp.GetStatusCode() == http.StatusTooManyRequests || resp.GetStatusCode() >= http.StatusInternalServerError
 		}).
-		SetHeader("AccessKey", c.config.AccessKey)
+		SetHeader("AccessKey", c.Config.AccessKey)
 }
 
 func (c *client) HealthCheck(ctx context.Context) error {
-	locked := c.healthCheckMtx.TryLock()
-	if hPassed := time.Unix(c.healthCheckPassedAt.Load(), 0); !locked || time.Now().Sub(hPassed) <= 30*time.Second {
+	locked := c.HealthCheckMux.TryLock()
+	if hPassed := time.Unix(c.HealthCheckPassedAt.Load(), 0); !locked || time.Since(hPassed) <= 30*time.Second {
 		return nil
 	}
 	defer func() {
 		if locked {
-			c.healthCheckMtx.Unlock()
+			c.HealthCheckMux.Unlock()
 		}
 	}()
 	bootstrapCtx, cancelBootstrap := context.WithTimeout(ctx, 30*time.Second)
@@ -212,9 +180,23 @@ func (c *client) HealthCheck(ctx context.Context) error {
 	if resp.GetStatusCode() != http.StatusNotFound {
 		return errors.Errorf("cdn healthcheck failed with status: %v", resp.GetStatusCode())
 	}
-	if err = c.db.Ping(ctx); err != nil {
-		return errors.Wrapf(err, "failed to ping database")
+	if err = c.RqClient.HealthCheck(ctx); err != nil {
+		return errors.Wrapf(err, "failed to perform rq client health check")
 	}
-	c.healthCheckPassedAt.Store(time.Now().Unix())
+	c.HealthCheckPassedAt.Store(time.Now().Unix())
 	return nil
+}
+
+func (c *client) FileUploadAsync(ctx context.Context, filePath, contentType, fileName string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	err := c.RqClient.Push(ctx, &cdnUploadWorkerArgs{
+		ContentType: contentType,
+		FileName:    fileName,
+		FilePath:    filePath,
+		RelayURL:    c.RelayURL,
+	})
+	return errors.Wrapf(err, "failed to enqueue cdn upload job for file %v", fileName)
 }

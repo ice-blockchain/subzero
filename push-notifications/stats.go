@@ -20,18 +20,18 @@ import (
 
 type (
 	PushStats struct {
-		mu            sync.RWMutex
+		startTime     time.Time
 		successByKind map[string]*uint64
 		errorsByKind  map[string]map[string]*uint64
 		totalSuccess  *uint64
 		totalErrors   *uint64
-		startTime     time.Time
+		mu            sync.RWMutex
 	}
 	StatsSnapshot struct {
-		TotalSuccess  uint64                       `json:"total_success"`
-		TotalErrors   uint64                       `json:"total_errors"`
 		SuccessByKind map[string]uint64            `json:"success_by_kind"`
 		ErrorsByKind  map[string]map[string]uint64 `json:"errors_by_kind"`
+		TotalSuccess  uint64                       `json:"total_success"`
+		TotalErrors   uint64                       `json:"total_errors"`
 		Duration      time.Duration                `json:"duration"`
 	}
 )
