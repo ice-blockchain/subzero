@@ -434,7 +434,7 @@ func TestCheckMentionWhoCanReplySettings(t *testing.T) {
 			name: "user is mentioned in root post content",
 			rootPost: &model.Event{
 				Event: nostr.Event{
-					Content: "Only nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm and nostr:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj can reply",
+					Content: "Only nostr:nprofile1qqsgy2xak5fc8jrf5e2qydnheup4amwtca4k96c3evkj7t2wy4d7z8q400gfm and ion:nprofile1qqs86zuljkandqe73upkma2gc3fpme0rwkqtjvhmqz044vdkhyhc4ysysh7dj can reply",
 				},
 			},
 			reply: &model.Event{

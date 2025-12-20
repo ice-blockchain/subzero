@@ -29,7 +29,7 @@ type (
 )
 
 var (
-	nprofileRegex = regexp.MustCompile(`(?:nostr:)?nprofile1[a-z0-9]+`)
+	nprofileRegex = regexp.MustCompile(`(?:nostr:|ion:)?nprofile1[a-z0-9]+`)
 )
 
 func ExtractRichTextContent(ev *Event) string {
@@ -207,7 +207,10 @@ func extractPubkeysFromRichText(e *Event) ([]string, error) {
 }
 
 func decodePubkeyFromNprofile(nprofileMatch string) string {
-	nprofileStr := strings.TrimPrefix(nprofileMatch, "nostr:")
+	nprofileStr, ok := strings.CutPrefix(nprofileMatch, "nostr:")
+	if !ok {
+		nprofileStr = strings.TrimPrefix(nprofileMatch, "ion:")
+	}
 	prefix, data, err := nip19.Decode(nprofileStr)
 	if err != nil || prefix != "nprofile" {
 		return ""

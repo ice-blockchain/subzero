@@ -102,7 +102,7 @@ func TestWhoCanReplySettings_MentionedSettings(t *testing.T) {
 		post = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
-			Content:   fmt.Sprintf("hello world: nostr:%v", pkey),
+			Content:   fmt.Sprintf("hello world: ion:%v", pkey),
 			Tags: nostr.Tags{
 				{"settings", model.WhoCanReplySettings, model.MentionWhoCanReplySettings, strconv.FormatInt(time.Now().Unix(), 10)},
 			},
