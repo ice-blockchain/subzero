@@ -491,10 +491,12 @@ func validateEventTags(e *model.Event, rules map[model.Kind]kindValidator) error
 				return err
 			}
 		case model.CustomIONTagCommunity:
-			if val, err := uuid.Parse(tag.Value()); err != nil {
-				return errors.Wrapf(ErrWrongEventParams, "tag %v: error: %q: %v", model.CustomIONTagCommunity, tag.Value(), err)
-			} else if version := val.Version(); version != 0x7 {
-				return errors.Wrapf(ErrWrongEventParams, "tag %v: wrong UUID version: %#02x, expected %#02x", model.CustomIONTagCommunity, version, 0x7)
+			if e.Kind != model.CustomIONKindTokenizedCommunityDefinition {
+				if val, err := uuid.Parse(tag.Value()); err != nil {
+					return errors.Wrapf(ErrWrongEventParams, "tag %v: error: %q: %v", model.CustomIONTagCommunity, tag.Value(), err)
+				} else if version := val.Version(); version != 0x7 {
+					return errors.Wrapf(ErrWrongEventParams, "tag %v: wrong UUID version: %#02x, expected %#02x", model.CustomIONTagCommunity, version, 0x7)
+				}
 			}
 		case model.CustomIONTagPoll:
 			if err := validatePollTag(tag); err != nil {

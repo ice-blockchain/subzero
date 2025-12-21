@@ -28,7 +28,7 @@ require (
 	github.com/gin-contrib/pprof v1.5.3
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-logr/logr v1.4.3
-	github.com/go-playground/validator/v10 v10.29.0
+	github.com/go-playground/validator/v10 v10.30.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gobwas/httphead v0.1.0
 	github.com/gobwas/ws v1.4.0
@@ -52,7 +52,7 @@ require (
 	github.com/nbd-wtf/go-nostr v0.52.3
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/puzpuzpuz/xsync/v4 v4.2.0
-	github.com/quic-go/quic-go v0.57.1
+	github.com/quic-go/quic-go v0.58.0
 	github.com/quic-go/webtransport-go v0.9.0
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/riverqueue/river v0.28.0
