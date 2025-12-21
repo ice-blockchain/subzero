@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -16,6 +15,7 @@ import (
 	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 	"github.com/ice-blockchain/cometbft/multiplex"
 	"github.com/ice-blockchain/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/runtime"
 	"github.com/ice-blockchain/cometbft/p2p"
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
@@ -62,6 +62,7 @@ type Config struct {
 	RelayUrl                   string `yaml:"relay-url"`
 	DiscoveryPort              uint16 `yaml:"discovery-port"`
 	Debug                      bool   `yaml:"debug"`
+	Enabled                    bool   `yaml:"enabled"`
 }
 
 type Option func(*consensus)
@@ -100,16 +101,21 @@ func WithClient(client client.Client) Option {
 	}
 }
 
+func Enabled() bool {
+	conf := cfg.MustGet[Config]()
+	disabled = !conf.Enabled
+	return !disabled
+}
+
 func MustInit(ctx context.Context, opts ...Option) {
 	conf := cfg.MustGet[Config]()
-	if disabled || strings.Contains(conf.RelayUrl, ".testnet.") || (conf.RelayUrl == "" && conf.AbsoluteRootPath == "" && conf.DiscoveryPort == 0) {
-		disabled = true
+	disabled = !conf.Enabled
+	if disabled {
 		return
 	}
 	globalConsensus.Once.Do(func() {
 		globalConsensus.Consensus = mustInit(ctx, config.DefaultConfig(), opts...)
 	})
-
 }
 
 func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *consensus {
@@ -129,12 +135,6 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 
 	serverCfg.SetRoot(c.Config.AbsoluteRootPath)
 	serverCfg.NodeKey = c.Config.AbsoluteNodePrivateKeyPath
-	serverCfg.MultiplexConfig = config.MultiplexBaseConfig(
-		map[string]string{},
-		map[string][]string{},
-	).MultiplexConfig
-	serverCfg.P2P.MaxPacketMsgPayloadSize = 1 * 1024 * 1024
-	serverCfg.DBBackend = "goleveldb"
 	serverCfg.DiscoveryPort = c.Config.DiscoveryPort
 	if c.Config.ExternalAddress != "" {
 		serverCfg.P2P.ExternalAddress = c.Config.ExternalAddress
@@ -159,7 +159,13 @@ func mustInit(ctx context.Context, serverCfg *config.Config, opts ...Option) *co
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to generate consensus node key"))
 	}
-	cometbftServer, err := multiplex.NewServer(ctx, c, serverCfg, c.Logger)
+	cometbftServer, err := multiplex.NewServer(ctx, c, serverCfg, c.Logger,
+		multiplex.WithRuntimeManagerOptions(
+			runtime.RegistryWithConsensusOptions(
+				runtime.ConsensusPoolWithAcceptor(c),
+			),
+		),
+	)
 	if err != nil {
 		panic(errors.Wrapf(err, "failed to start consensus server"))
 	}

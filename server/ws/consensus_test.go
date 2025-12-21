@@ -69,9 +69,11 @@ func TestConsensusEvents(t *testing.T) {
 		return nil
 	})
 	command.RegisterRollbackListener(query.RollbackEvents)
-	consensusDone := map[string]chan bool{}
+	consensusDone := map[string]chan bool{} // relays accepted event
+	finalizedDone := map[string]chan bool{} // block commit includes event
 	for _, s := range pubsubServers {
 		consensusDone[s.Endpoint()] = make(chan bool, 1000)
+		finalizedDone[s.Endpoint()] = make(chan bool, 1000)
 	}
 	accepted := xsync.NewMap[string, bool]()
 	normalAccept := func(ctx context.Context, events ...*model.Event) error {
@@ -87,10 +89,28 @@ func TestConsensusEvents(t *testing.T) {
 		return nil
 	}
 	command.RegisterAcceptListener(normalAccept)
+
+	committed := xsync.NewMap[string, bool]()
+	normalCommit := func(ctx context.Context, events ...*model.Event) error {
+		if _, ok := committed.Load(mapPort(ctx).Endpoint() + helperHashEvents(t, events...)); ok {
+			return nil
+		}
+		finalizedDone[mapPort(ctx).Endpoint()] <- true
+		committed.Store(mapPort(ctx).Endpoint()+helperHashEvents(t, events...), true)
+		t.Log("COMMIT", mapPort(ctx).Endpoint(), events[0].Kind, events[0].Content)
+		return nil
+	}
+	command.RegisterCommitListener(normalCommit)
+
 	RegisterWSSubscriptionListener(func(ctx context.Context, filters ...model.Filter) EventIterator {
 		return mapPort(ctx).DB.SelectEvents(ctx, filters...)
 	})
-	relay := helperMustNewRelay(t, pubsubServers[0])
+
+	relay := helperMustNewRelay(t, pubsubServers[0])       // :9988
+	secondRelay := helperMustNewRelay(t, pubsubServers[1]) // :9977
+	thirdRelay := helperMustNewRelay(t, pubsubServers[2])  // :9966
+	fourthRelay := helperMustNewRelay(t, pubsubServers[3]) // :9955
+
 	var ev, ev2 *model.Event
 	var attestationEvent *model.Event
 	masterPrivKey, masterPubkey := model.GenerateKeyPair()
@@ -118,6 +138,8 @@ func TestConsensusEvents(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, relaysList, privkey)
 		require.NoError(t, relay.PublishMany(t.Context(), &attestationEvent.Event, &relaysList.Event))
 		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
+
 		ev = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
@@ -130,8 +152,9 @@ func TestConsensusEvents(t *testing.T) {
 
 		require.NoError(t, relay.Publish(t.Context(), ev.Event))
 		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
 	})
-	secondRelay := helperMustNewRelay(t, pubsubServers[1])
+
 	t.Run("query events", func(t *testing.T) {
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Len(t, receivedEventsFromFirstRelay, 1)
@@ -151,6 +174,7 @@ func TestConsensusEvents(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev2, privkey)
 		require.NoError(t, secondRelay.Publish(t.Context(), ev2.Event))
 		require.NoError(t, helperAwaitConsensus(t, consensusDone, secondRelay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
 		receivedEventsFromFirstRelay = helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Len(t, receivedEventsFromFirstRelay, 2)
 		require.Contains(t, receivedEventsFromFirstRelay, ev)
@@ -182,7 +206,6 @@ func TestConsensusEvents(t *testing.T) {
 	})
 
 	var notAcceptedEvent *model.Event
-	thirdRelay := helperMustNewRelay(t, pubsubServers[2])
 	t.Run("failed consensus rolled back", func(t *testing.T) {
 		rolledBack := map[string]chan bool{}
 		for _, s := range pubsubServers {
@@ -226,24 +249,60 @@ func TestConsensusEvents(t *testing.T) {
 		require.Contains(t, receivedEventsFromThirdRelay, ev2)
 		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
 	})
+
 	command.RegisterAcceptListener(normalAccept)
 	command.RegisterRollbackListener(query.RollbackEvents)
-	var eventMissedByRelay3DuringBroadcastTime, eventAfterNodeComesUp *model.Event
+	var eventMissedByRelay3DuringBroadcastTime,
+		eventMissedByRelay3DuringBroadcastTime2,
+		eventMissedByRelay3DuringBroadcastTime3,
+		eventAfterNodeComesUp *model.Event
 	t.Run("relay fetches missed data after downtime, broadcast still works as 2/3 reached", func(t *testing.T) {
-		err := pubsubServers[2].Consensus.Stop(t.Context(), 10*time.Second)
-		t.Logf("stopping consensus on relay %v: %v", pubsubServers[2].Endpoint(), err)
-		eventMissedByRelay3DuringBroadcastTime = &model.Event{Event: nostr.Event{
-			CreatedAt: nostr.Now(),
-			Kind:      nostr.KindTextNote,
-			Tags: model.Tags{
-				{model.CustomIONTagOnBehalfOf, masterPubkey},
-			},
-			Content: "eventMissedByRelay3DuringBroadcastTime",
-		}}
+		stopCtx, stopFn := context.WithCancel(context.Background())
+		defer stopFn()
+
+		t.Logf("stopping consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
+		err := pubsubServers[2].Consensus.Stop(stopCtx, 5*time.Second)
+		time.Sleep(10 * time.Second) // wait for shutdown..
+		t.Logf("stopped consensus on relay %v %v: %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID(), err)
+
+		// 3 events each broadcast in its own block, we make sure of this with
+		// the helperAwaitFinalized call before sending next events.
+		eventsMissedByRelay3DuringBroadcastTime := []*model.Event{
+			&model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Tags: model.Tags{
+					{model.CustomIONTagOnBehalfOf, masterPubkey},
+				},
+				Content: "eventMissedByRelay3DuringBroadcastTime",
+			}},
+			&model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Tags: model.Tags{
+					{model.CustomIONTagOnBehalfOf, masterPubkey},
+				},
+				Content: "eventMissedByRelay3DuringBroadcastTime2",
+			}},
+			&model.Event{Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      nostr.KindTextNote,
+				Tags: model.Tags{
+					{model.CustomIONTagOnBehalfOf, masterPubkey},
+				},
+				Content: "eventMissedByRelay3DuringBroadcastTime3",
+			}},
+		}
+
+		// broadcast+commit missedEvent #1
+		eventMissedByRelay3DuringBroadcastTime = eventsMissedByRelay3DuringBroadcastTime[0]
 		helperSignWithMinLeadingZeroBits(t, eventMissedByRelay3DuringBroadcastTime, privkey)
 		require.NoError(t, relay.Publish(t.Context(), eventMissedByRelay3DuringBroadcastTime.Event))
 		waitAcceptErr := helperAwaitConsensus(t, consensusDone, relay, thirdRelay)
 		require.NoError(t, waitAcceptErr)
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, thirdRelay))
+
+		// missedEvent #1 sanity checks.
 		receivedEventsFromFirstRelay := helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime)
 		require.NotContains(t, receivedEventsFromFirstRelay, notAcceptedEvent)
@@ -252,7 +311,33 @@ func TestConsensusEvents(t *testing.T) {
 		require.NotContains(t, receivedEventsFromSecondRelay, notAcceptedEvent)
 		receivedEventsFromThirdRelay := helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.NotContains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
-		pubsubServers[2].Consensus.Start(t.Context())
+
+		// broadcast+commit missedEvent #2
+		eventMissedByRelay3DuringBroadcastTime2 = eventsMissedByRelay3DuringBroadcastTime[1]
+		helperSignWithMinLeadingZeroBits(t, eventMissedByRelay3DuringBroadcastTime2, privkey)
+		require.NoError(t, relay.Publish(t.Context(), eventMissedByRelay3DuringBroadcastTime2.Event))
+		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay, thirdRelay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, thirdRelay))
+
+		// broadcast+commit missedEvent #3
+		eventMissedByRelay3DuringBroadcastTime3 = eventsMissedByRelay3DuringBroadcastTime[2]
+		helperSignWithMinLeadingZeroBits(t, eventMissedByRelay3DuringBroadcastTime3, privkey)
+		require.NoError(t, relay.Publish(t.Context(), eventMissedByRelay3DuringBroadcastTime3.Event))
+		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay, thirdRelay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, thirdRelay))
+
+		backendCtx, backendCancelFn := context.WithCancel(context.Background())
+		defer backendCancelFn()
+
+		t.Logf("starting consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
+		pubsubServers[2].Consensus.Start(backendCtx)
+		time.Sleep(10 * time.Second) // wait for "Start"
+		t.Logf("started consensus on relay %v %v", pubsubServers[2].Endpoint(), pubsubServers[2].Consensus.NodeID())
+
+		broadcastCtx, broadcastCancelFn := context.WithTimeout(backendCtx, 30*time.Second)
+		defer broadcastCancelFn()
+
+		// thirdRelay is back and will blocksync #1,#2,#3 before working on afterEvent #4.
 		eventAfterNodeComesUp = &model.Event{Event: nostr.Event{
 			CreatedAt: nostr.Now(),
 			Kind:      nostr.KindTextNote,
@@ -262,12 +347,34 @@ func TestConsensusEvents(t *testing.T) {
 			Content: "eventAfterNodeComesUp",
 		}}
 		helperSignWithMinLeadingZeroBits(t, eventAfterNodeComesUp, privkey)
-		require.NoError(t, relay.Publish(t.Context(), eventAfterNodeComesUp.Event))
+		require.NoError(t, relay.Publish(broadcastCtx, eventAfterNodeComesUp.Event))
 		require.NoError(t, helperAwaitConsensus(t, consensusDone, relay))
-		time.Sleep(10 * time.Second)
-		receivedEventsFromThirdRelay = helperQueryEvents(t, t.Context(), thirdRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
+
+		// require +3 blocks from thirdRelay only (others have already finalized those).
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, relay, secondRelay, fourthRelay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, relay, secondRelay, fourthRelay))
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone, relay, secondRelay, fourthRelay))
+		// require block with eventAfterNodeComesUp from all
+		require.NoError(t, helperAwaitFinalized(t, finalizedDone))
+
+		// all events verification, sanity checks for queries.
+		receivedEventsFromFirstRelay = helperQueryEvents(t, t.Context(), relay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
+		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime2)
+		require.Contains(t, receivedEventsFromFirstRelay, eventMissedByRelay3DuringBroadcastTime3)
+		require.Contains(t, receivedEventsFromFirstRelay, eventAfterNodeComesUp)
+		require.NotContains(t, receivedEventsFromFirstRelay, notAcceptedEvent)
+		receivedEventsFromSecondRelay = helperQueryEvents(t, t.Context(), secondRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
+		require.Contains(t, receivedEventsFromSecondRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.Contains(t, receivedEventsFromSecondRelay, eventMissedByRelay3DuringBroadcastTime2)
+		require.Contains(t, receivedEventsFromSecondRelay, eventMissedByRelay3DuringBroadcastTime3)
+		require.Contains(t, receivedEventsFromSecondRelay, eventAfterNodeComesUp)
+		require.NotContains(t, receivedEventsFromSecondRelay, notAcceptedEvent)
+		receivedEventsFromThirdRelay = helperQueryEvents(t, broadcastCtx, thirdRelay, nostr.Filter{Kinds: []int{nostr.KindTextNote}})
 		require.Contains(t, receivedEventsFromThirdRelay, eventAfterNodeComesUp)
 		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime)
+		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime2)
+		require.Contains(t, receivedEventsFromThirdRelay, eventMissedByRelay3DuringBroadcastTime3)
 		require.NotContains(t, receivedEventsFromThirdRelay, notAcceptedEvent)
 	})
 
@@ -317,6 +424,7 @@ func TestConsensusEvents(t *testing.T) {
 	helperMustCloseRelay(t, relay)
 	helperMustCloseRelay(t, secondRelay)
 	helperMustCloseRelay(t, thirdRelay)
+	helperMustCloseRelay(t, fourthRelay)
 }
 
 func BenchmarkConcurrentConsensusEvents(b *testing.B) {
@@ -452,24 +560,80 @@ func helperPickRandomRelay(tb testing.TB) *nostrRelay {
 	return relay
 }
 
+// Wait (concurrently) for all relays except broadcastFrom to accept.
+// consensusDone is written on by the consensusEventListener (AcceptBroadcastTx).
 func helperAwaitConsensus(t testing.TB, consensusDone map[string]chan bool, broadcastFrom ...*nostrRelay) error {
 	t.Helper()
 	skipUrls := make([]string, 0, len(broadcastFrom))
 	for _, skipRelay := range broadcastFrom {
 		skipUrls = append(skipUrls, skipRelay.URL)
 	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 1)
+
 	for endpoint, done := range consensusDone {
 		if slices.Contains(skipUrls, endpoint) {
 			continue
 		}
-		select {
-		case <-done:
-			continue
-		case <-time.After(30 * time.Second):
-			return errors.Errorf("timeout awaiting consensus from %v", endpoint)
-		}
+
+		wg.Add(1)
+		go func(ep string, ch chan bool) {
+			defer wg.Done()
+			select {
+			case <-ch:
+				return
+			case <-time.After(30 * time.Second):
+				select {
+				case errChan <- errors.Errorf("timeout awaiting consensus from %v", ep):
+				default:
+				}
+			}
+		}(endpoint, done)
 	}
-	return nil
+
+	wg.Wait()
+	close(errChan)
+
+	return <-errChan
+}
+
+// Wait (concurrently) for all relays except skipRelays to commit.
+// consensusDone is written on by the commitEventListener (CommitBroadcastTx).
+func helperAwaitFinalized(t testing.TB, finalizedDone map[string]chan bool, skipRelays ...*nostrRelay) error {
+	t.Helper()
+	skipUrls := make([]string, 0, len(skipRelays))
+	for _, skipRelay := range skipRelays {
+		skipUrls = append(skipUrls, skipRelay.URL)
+	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 1)
+
+	for endpoint, done := range finalizedDone {
+		if slices.Contains(skipUrls, endpoint) {
+			continue
+		}
+
+		wg.Add(1)
+		go func(ep string, ch chan bool) {
+			defer wg.Done()
+			select {
+			case <-ch:
+				return
+			case <-time.After(60 * time.Second):
+				select {
+				case errChan <- errors.Errorf("timeout awaiting block commit from %v", ep):
+				default:
+				}
+			}
+		}(endpoint, done)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	return <-errChan
 }
 
 func helperBenchReportMetrics(
