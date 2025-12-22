@@ -85,50 +85,32 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 			IDs:    []string{evPost.ID},
 			Search: "include:dependencies:kind30175>kind31175",
 		})
-		require.Len(t, events, 2) // 1 post + 1 definition.
+
+		require.Len(t, events, 3) // 1 post + 1 definition + 1 action.
 		for _, ev := range events {
 			switch ev.Kind {
 			case model.CustomIONKindEditableTextNote:
 				require.Equal(t, &evPost, ev)
 
 			case model.CustomIONKindEphemeralEmbedding:
-				var receivedDef model.Event
-				require.NoError(t, receivedDef.UnmarshalJSON([]byte(ev.Content)))
-				require.Equal(t, evDefinition, receivedDef)
+				var nested model.Event
+				require.NoError(t, nested.UnmarshalJSON([]byte(ev.Content)))
+				switch nested.Kind {
+				case model.CustomIONKindTokenizedCommunityAction:
+					require.Equal(t, evActionFirstBuyAnotherUser, nested)
+
+				case model.CustomIONKindTokenizedCommunityDefinition:
+					require.Equal(t, evDefinition, nested)
+
+				default:
+					require.Failf(t, "unexpected nested event kind", "got %d", nested.Kind)
+				}
 
 			default:
-				t.Fatalf("unexpected event kind: %d", ev.Kind)
+				require.Failf(t, "unexpected event kind", "got %d", ev.Kind)
 			}
 		}
 	})
-
-	events := helperSelectEvents(t, db, model.Filter{
-		Since:  &evAction2.CreatedAt,
-		Until:  &evAction2.CreatedAt,
-		Search: "include:dependencies:kind1175>kind31175 include:dependencies:kind1>kind10100",
-	})
-	require.Len(t, events, 4) // 2 action (first buy + requested one), 1 definition, 1 post.
-
-	t.Run("1175 first buy is ephemeral embedding", func(t *testing.T) {
-		firstBuyIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evAction.ID })
-		require.Greater(t, firstBuyIndex, -1)
-		firstBuyEvent := events[firstBuyIndex]
-		require.Equal(t, model.CustomIONKindEphemeralEmbedding, firstBuyEvent.Kind)
-		require.EqualValues(t, evAction.String(), firstBuyEvent.Content)
-
-		events = slices.Delete(events, firstBuyIndex, firstBuyIndex+1)
-	})
-	t.Run("31175 definition is ephemeral embedding", func(t *testing.T) {
-		defIndex := slices.IndexFunc(events, func(e *model.Event) bool { return e.GetTag("e").Value() == evDefinition.ID })
-		require.Greater(t, defIndex, -1)
-		receivedDefEvent := events[defIndex]
-		require.Equal(t, model.CustomIONKindEphemeralEmbedding, receivedDefEvent.Kind)
-		require.EqualValues(t, evDefinition.String(), receivedDefEvent.Content)
-
-		events = slices.Delete(events, defIndex, defIndex+1)
-	})
-
-	require.ElementsMatch(t, []*model.Event{&evAction2, &evPost}, events)
 
 	t.Run("Delete is not allowed", func(t *testing.T) {
 		t.Run("Action", func(t *testing.T) {
@@ -242,7 +224,7 @@ func TestFlowTC_LinkActionID(t *testing.T) {
 	require.Equal(t, evAction.ID, helperSelectTCActionID(t, db, evAction2.ID))
 }
 
-func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
+func TestFlowTC_FirstBuyFromPost(t *testing.T) {
 	t.Parallel()
 
 	db := helperNewDatabase(t)
@@ -292,6 +274,20 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 		{"k", strconv.Itoa(evPost2.Kind)},
 	}
 	require.NoError(t, evDef2.SignWithAlg(postAuthor, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	var evDef1FirstBuy, evDef2FirstBuy model.Event
+
+	evDef1FirstBuy = evDef1
+	evDef1FirstBuy.CreatedAt++
+	evDef1FirstBuy.Tags = slices.Clone(evDef1.Tags)
+	evDef1FirstBuy.Tags = append(evDef1FirstBuy.Tags, model.Tag{"p", evDef1.GetMasterPublicKey()})
+	require.NoError(t, evDef1FirstBuy.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	evDef2FirstBuy = evDef2
+	evDef2FirstBuy.CreatedAt++
+	evDef2FirstBuy.Tags = slices.Clone(evDef2.Tags)
+	evDef2FirstBuy.Tags = append(evDef2FirstBuy.Tags, model.Tag{"p", evDef2.GetMasterPublicKey()})
+	require.NoError(t, evDef2FirstBuy.SignWithAlg(user3Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	var evAction1_1, evAction1_2, evAction1_3 model.Event
 
@@ -354,6 +350,7 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 
 	require.NoError(t, db.AcceptEvents(t.Context(), &evPost1, &evPost2, &evPost3))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evDef1, &evDef2))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evDef1FirstBuy, &evDef2FirstBuy))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction1_1)) // First buy for def1.
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction1_2, &evAction1_3))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction2_1)) // First buy for def2.
@@ -365,31 +362,45 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 	require.Empty(t, helperSelectTCActionID(t, db, evAction2_1.ID), "first action should have NULL first_1175_address")
 	require.Equal(t, evAction2_1.ID, helperSelectTCActionID(t, db, evAction2_2.ID))
 
-	// Select posts with dependency filter to get first buy actions.
-	// Using kind30175>kind1175 to find first buy actions for posts.
 	events := helperSelectEvents(t, db, model.Filter{
 		Kinds:  []int{evPost1.Kind, evPost2.Kind, evPost3.Kind},
-		Search: "include:dependencies:kind30175>kind1175 include:dependencies:kind1>kind1175 include:dependencies:kind0>kind1175",
+		Search: "include:dependencies:kind30175>kind31175 include:dependencies:kind1>kind31175 include:dependencies:kind0>kind31175",
 	})
 
-	// 3 posts + 2 first buy actions (one per definition).
-	require.Len(t, events, 5)
+	// 3 posts + 2 first buy actions (one per definition) + 2 definitions + 2 def first buys = 9 events.
+	require.Len(t, events, 9)
 
 	// Extract posts and actions.
-	var posts, actions []*model.Event
+	var posts, actions, defs, defFirstBuy []*model.Event
 	for _, ev := range events {
 		switch ev.Kind {
 		case model.CustomIONKindEditableTextNote, nostr.KindTextNote, nostr.KindArticle:
 			posts = append(posts, ev)
+
 		case model.CustomIONKindEphemeralEmbedding:
-			var action model.Event
+			var nested model.Event
 			ok, err := ev.CheckSignature()
 			require.NoError(t, err)
 			require.True(t, ok)
-			require.NoError(t, action.UnmarshalJSON([]byte(ev.Content)))
-			actions = append(actions, &action)
+
+			require.NoError(t, nested.UnmarshalJSON([]byte(ev.Content)))
+			ok, err = nested.CheckSignature()
+			require.NoError(t, err)
+			require.True(t, ok)
+			switch nested.Kind {
+			case model.CustomIONKindTokenizedCommunityDefinition:
+				if nested.GetTag("p").Value() != "" {
+					defFirstBuy = append(defFirstBuy, &nested)
+				} else {
+					defs = append(defs, &nested)
+				}
+			case model.CustomIONKindTokenizedCommunityAction:
+				actions = append(actions, &nested)
+			default:
+				require.Failf(t, "unexpected nested event kind", "got %d", nested.Kind)
+			}
 		default:
-			t.Fatalf("unexpected event kind: %d", ev.Kind)
+			require.Failf(t, "unexpected event kind", "got %d", ev.Kind)
 		}
 	}
 
@@ -400,4 +411,12 @@ func TestFlowTC_FirstBuyActionFromPost(t *testing.T) {
 	// Verify only 2 first buy actions are returned.
 	require.Len(t, actions, 2)
 	require.ElementsMatch(t, []*model.Event{&evAction1_1, &evAction2_1}, actions)
+
+	// Verify both definitions are returned.
+	require.Len(t, defs, 2)
+	require.ElementsMatch(t, []*model.Event{&evDef1, &evDef2}, defs)
+
+	// Verify both definition first buys are returned.
+	require.Len(t, defFirstBuy, 2)
+	require.ElementsMatch(t, []*model.Event{&evDef1FirstBuy, &evDef2FirstBuy}, defFirstBuy)
 }

@@ -3,6 +3,7 @@
 package query
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/bzick/tokenizer"
@@ -282,6 +283,10 @@ var (
 
 	dependenciesParser *tokenizer.Tokenizer
 )
+
+func (s filterDependencyStart) KindIn(kinds ...int) bool {
+	return slices.Contains(kinds, s.Kind)
+}
 
 func init() {
 	dependenciesParser = tokenizer.New()
