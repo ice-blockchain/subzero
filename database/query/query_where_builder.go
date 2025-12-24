@@ -964,7 +964,7 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 		inner join ` + cteName + ` r ON e.master_pubkey = r.master_pubkey and r.kind = 1175
 		inner join event_tags et ON e.id = et.event_id
 		where
-			e.hidden=false
+			e.hidden = false
 			and e.kind = 1175
 			and et.event_tag_key IN ('e', 'a')
 			and et.event_tag_value1 in (select address from tc_definitions)
