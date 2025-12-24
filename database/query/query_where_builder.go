@@ -937,6 +937,53 @@ func (b *queryBuilder) BuildForMostRelevantFollowers(filterID, cteName string, f
 	b.WriteString(`) AS t LEFT JOIN events e ON t.master_pubkey = e.master_pubkey AND e.kind = 0 AND e.hidden = FALSE`)
 }
 
+func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	b.WriteString(` union all select `)
+	b.WriteFields(b.fieldsNames("tc", "", writeFieldFlagMaskKindEphemeralEmbedding)...)
+	b.WriteString(` from (
+	with tc_definitions as (
+		select e.*
+		from ` + cteName + ` r
+		inner join event_tags et on r.id = et.event_id
+		inner join events e on e.address = et.event_tag_value1
+		where
+			r.kind = 1175
+			and et.event_tag_key IN ('e', 'a')
+			and e.kind = 31175
+			and e.hidden = false
+	)
+	select `)
+	b.WriteFields(b.fieldsNames("tc_definitions", filterID+"tc_def_action")...)
+	b.WriteString(` from tc_definitions
+	union all
+	select `)
+	b.WriteFields(b.fieldsNames("e", filterID+"first_1175_action")...)
+	b.WriteString(` from (
+		select distinct on (et.event_tag_value1, e.master_pubkey) e.*
+		from events e
+		inner join ` + cteName + ` r ON e.master_pubkey = r.master_pubkey and r.kind = 1175
+		inner join event_tags et ON e.id = et.event_id
+		where
+			e.hidden=false
+			and e.kind = 1175
+			and et.event_tag_key IN ('e', 'a')
+			and et.event_tag_value1 in (select address from tc_definitions)
+		order by et.event_tag_value1, e.master_pubkey, e.lookup_created_at asc
+	) e
+	where not exists (select 1 from ` + cteName + ` r2 where r2.id = e.id)
+	union all --- Append the original posts
+	select `)
+	b.WriteFields(b.fieldsNames("e", filterID+"tc_post_action")...)
+	b.WriteString(`
+	from tc_definitions td
+	inner join event_tags et ON td.id = et.event_id
+	inner join events e ON e.address = et.event_tag_value1
+	where
+		et.event_tag_key IN ('e', 'a')
+		and e.hidden = false
+	) tc`)
+}
+
 func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
 	b.WriteString(` union all select `)
 	b.WriteFields(b.fieldsNames("tc", "", writeFieldFlagMaskKindEphemeralEmbedding)...)
@@ -968,24 +1015,12 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 			e.hidden = false
 			and e.kind = 31175
 			and e.t_tags && cast(array['community_token_action'] as text[])
-	),
-	tc_action_first_buy as (
-		select e.*
-		from events e
-		inner join event_tags et on e.id = et.event_id and et.event_tag_key in ('e', 'a')
-		inner join tc_definitions td ON td.address = et.event_tag_value1
-		where
-			e.hidden = false
-			and e.kind = 1175
-			and e.first_1175_address is null
 	)
 	select `)
 	b.WriteFields(b.fieldsNames("tc_definitions", filterID+"tc_def")...)
 	b.WriteString(` from tc_definitions union all select `)
 	b.WriteFields(b.fieldsNames("tc_definitions_first_buy", filterID+"first_31175")...)
-	b.WriteString(` from tc_definitions_first_buy union all select `)
-	b.WriteFields(b.fieldsNames("tc_action_first_buy", filterID+"first_1175")...)
-	b.WriteString(` from tc_action_first_buy ) tc`)
+	b.WriteString(` from tc_definitions_first_buy) tc`)
 }
 
 func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
@@ -1066,11 +1101,16 @@ where
 	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == nostr.KindProfileMetadata && current.Reduce.Author != "" {
 		b.BuildForMostRelevantFollowers(filterID, cteName, filter, current)
 		return
-	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefinition &&
-		current.Start.KindIn(nostr.KindProfileMetadata, nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote) {
-		// kind[0/30175/1/30023]>kind31175 with additional data.
-		b.BuildForTCDataFromPost(filterID, cteName, filter, current)
-		return
+	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefinition {
+		if current.Start.KindIn(nostr.KindProfileMetadata, nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote) {
+			// kind[0/30175/1/30023]>kind31175 with additional data.
+			b.BuildForTCDataFromPost(filterID, cteName, filter, current)
+			return
+		} else if current.Start.Kind == model.CustomIONKindTokenizedCommunityAction {
+			// kind1175>kind31175 with additional data.
+			b.BuildForTCDataFromAction(filterID, cteName, filter, current)
+			return
+		}
 	} else {
 		b.WriteString(` union all select `)
 		for i, f := range b.fieldsNames("e", filterID) {
