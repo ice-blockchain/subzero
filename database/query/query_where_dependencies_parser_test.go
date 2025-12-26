@@ -311,6 +311,7 @@ func TestParseDepRequest(t *testing.T) {
 			if c.Err != nil {
 				require.ErrorIs(t, err, c.Err)
 			} else {
+				c.Expected.Expr = c.Input
 				require.Equal(t, &c.Expected, filter)
 			}
 		})

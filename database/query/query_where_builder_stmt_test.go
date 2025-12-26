@@ -338,6 +338,7 @@ func TestParseNostrFilter(t *testing.T) {
 		require.True(t, *f.Images)
 		require.Len(t, f.Dependencies, 1)
 		require.Equal(t, &filterDependency{
+			Expr: "kind1>kind2",
 			Start: filterDependencyStart{
 				Kind: 1,
 			},
@@ -357,6 +358,7 @@ func TestParseNostrFilter(t *testing.T) {
 		require.False(t, *f.Images)
 		require.Len(t, f.Dependencies, 1)
 		require.Equal(t, &filterDependency{
+			Expr: "kind1>kind3",
 			Start: filterDependencyStart{
 				Kind: 1,
 			},
@@ -377,6 +379,7 @@ func TestParseNostrFilter(t *testing.T) {
 		require.False(t, *f.Images)
 		require.Len(t, f.Dependencies, 1)
 		require.Equal(t, &filterDependency{
+			Expr: "kind1>kind3",
 			Start: filterDependencyStart{
 				Kind: 1,
 			},

@@ -1004,7 +1004,7 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 	default:
 		// For some generic post, just filter directly by `r.address`.
 		existsCondition = `select 1 from event_tags et
-				inner join ` + cteName + ` r on et.event_tag_value1 = r.address 
+				inner join ` + cteName + ` r on et.event_tag_value1 = r.address
 				where
 					et.event_id = e.id
 					and et.event_tag_key in ('e', 'a')
@@ -1128,7 +1128,7 @@ where
 		return
 	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefinition {
 		if current.Start.KindIn(nostr.KindProfileMetadata, nostr.KindTextNote, nostr.KindRepost, nostr.KindGenericRepost, nostr.KindArticle, model.CustomIONKindEditableTextNote) {
-			// kind[0/6/16/30175/1/30023]>kind31175 with additional data.
+			// kind[0/1/6/16/30023/30175]>kind31175 with additional data.
 			b.BuildForTCDataFromPost(filterID, cteName, filter, current)
 			return
 		} else if current.Start.Kind == model.CustomIONKindTokenizedCommunityAction {
@@ -1405,7 +1405,7 @@ group by e.master_pubkey, e.pubkey`)
 		}
 		b.WriteString(")")
 		if current.Reduce.Group && current.Reduce.Kinds[1] == nostr.KindReaction {
-			b.WriteString(" GROUP BY reference_id, counters.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
+			b.WriteString(" GROUP BY counters.reference_id, counters.kind, evr.pubkey, evr.master_pubkey, evr.h_tag, evr.id, evr.kind, evr.master_pubkey, evr.d_tag, evr.address")
 		}
 	default:
 		log.Warn().Ints("reduce_kinds", current.Reduce.Kinds).
