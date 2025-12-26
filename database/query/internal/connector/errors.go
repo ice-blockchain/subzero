@@ -122,7 +122,7 @@ func parseError(err error) error {
 			return errors.WithDetail(ErrSerializationFailure, dbErr.Error())
 		case pgerrcode.InFailedSQLTransaction:
 			return ErrTxAborted
-		case pgerrcode.AmbiguousFunction:
+		case pgerrcode.AmbiguousFunction, pgerrcode.AmbiguousColumn, pgerrcode.InvalidParameterValue:
 			return ErrOperatorError
 		case pgerrcode.UndefinedTable:
 			return errors.Wrap(ErrRelationNotFound, dbErr.TableName)
