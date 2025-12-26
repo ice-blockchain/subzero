@@ -109,6 +109,46 @@ func TestFlowTC_GetAndDelete(t *testing.T) {
 		}
 	})
 
+	t.Run("Find definition for the given repost", func(t *testing.T) {
+		var repostEvent model.Event
+
+		repostEvent.Kind = nostr.KindGenericRepost
+		repostEvent.Content = evPost.String()
+		repostEvent.CreatedAt = nostr.Now()
+		repostEvent.Tags = model.Tags{
+			{"a", evPost.Address()},
+		}
+		require.NoError(t, repostEvent.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, db.AcceptEvents(t.Context(), &repostEvent))
+
+		events := helperSelectEvents(t, db, model.Filter{
+			IDs:    []string{repostEvent.ID},
+			Search: "include:dependencies:kind16>kind31175",
+		})
+
+		require.Len(t, events, 2) // 1 repost + 1 definition.
+		for _, ev := range events {
+			switch ev.Kind {
+			case nostr.KindGenericRepost:
+				require.Equal(t, &repostEvent, ev)
+
+			case model.CustomIONKindEphemeralEmbedding:
+				var nested model.Event
+				require.NoError(t, nested.UnmarshalJSON([]byte(ev.Content)))
+				switch nested.Kind {
+				case model.CustomIONKindTokenizedCommunityDefinition:
+					require.Equal(t, evDefinition, nested)
+
+				default:
+					require.Failf(t, "unexpected nested event kind", "got %d", nested.Kind)
+				}
+
+			default:
+				require.Failf(t, "unexpected event kind", "got %d", ev.Kind)
+			}
+		}
+	})
+
 	t.Run("Delete is not allowed", func(t *testing.T) {
 		t.Run("Action", func(t *testing.T) {
 			var evActionDelete model.Event

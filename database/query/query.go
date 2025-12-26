@@ -77,8 +77,8 @@ type (
 		Verified                bool
 	}
 	databaseRollbackRequest struct {
-		databaseBatchRequest
 		ReplaceableEvents map[string]bool
+		databaseBatchRequest
 	}
 	eventEnricher interface {
 		EnrichEvents(events []*databaseEvent) []*databaseEvent

@@ -32,11 +32,11 @@ type (
 		Password                 string        `yaml:"password,omitempty"`
 		PrivateKey               string        `yaml:"private-key"          validate:"required"`
 		RelayURL                 string        `yaml:"relay-url"            validate:"required,url"`
-		RunDDL                   bool          `yaml:"run-ddl"`
 		WriteURLs                []string      `yaml:"write-urls"`
 		ReadURLs                 []string      `yaml:"read-urls"`
-		DisableSelfTest          bool          `yaml:"disable-self-test"`
 		PeriodicSelfTestInterval time.Duration `yaml:"periodic-self-test-interval"`
+		RunDDL                   bool          `yaml:"run-ddl"`
+		DisableSelfTest          bool          `yaml:"disable-self-test"`
 	}
 	Option func(*Config)
 )

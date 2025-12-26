@@ -29,6 +29,7 @@ type (
 	}
 
 	filterDependency struct {
+		Expr   string
 		Start  filterDependencyStart
 		Reduce filterDependencyReduce
 	}
@@ -397,6 +398,8 @@ func parseDepRequest(in string) (*filterDependency, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse filter expression %q", in)
 	}
+
+	f.Expr = in
 
 	return f, nil
 }
