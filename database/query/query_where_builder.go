@@ -985,9 +985,32 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 }
 
 func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
-	b.WriteString(` union all select `)
+	b.WriteString(` union all (select `)
 	b.WriteFields(b.fieldsNames("tc", "", writeFieldFlagMaskKindEphemeralEmbedding)...)
 	startKind := b.PushValue(filterID, "startKind", current.Start.Kind)
+	var existsCondition string
+	switch current.Start.Kind {
+	case nostr.KindRepost, nostr.KindGenericRepost:
+		// For the reposts, we need to find the original post first.
+		// And then find the tokenized community definition from there.
+		// The TC definition's tags point to the original post's address.
+		existsCondition = `select 1 from ` + cteName + ` r
+				inner join events original_event on original_event.id = r.reference_id
+				inner join event_tags et on et.event_id = e.id
+				where
+					et.event_tag_value1 = original_event.address
+					and et.event_tag_key in ('e', 'a')
+					and r.kind = :` + startKind
+	default:
+		// For some generic post, just filter directly by `r.address`.
+		existsCondition = `select 1 from event_tags et
+				inner join ` + cteName + ` r on et.event_tag_value1 = r.address 
+				where
+					et.event_id = e.id
+					and et.event_tag_key in ('e', 'a')
+					and r.kind = :` + startKind
+	}
+
 	b.WriteString(` from (
 	with tc_definitions as (
 		select e.*
@@ -995,15 +1018,7 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 		where
 			e.kind = 31175
 			and e.hidden = false
-			and exists (
-				select 1
-				from event_tags et
-				inner join ` + cteName + ` r on et.event_tag_value1 = r.address 
-				where
-					et.event_id = e.id
-					and et.event_tag_key in ('e', 'a')
-					and r.kind = :` + startKind + `
-			)
+			and exists (` + existsCondition + `)
 			and not (e.t_tags && cast(array['community_token_action'] as text[]))
 	),
 	tc_definitions_first_buy as (
@@ -1020,10 +1035,20 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 	b.WriteFields(b.fieldsNames("tc_definitions", filterID+"tc_def")...)
 	b.WriteString(` from tc_definitions union all select `)
 	b.WriteFields(b.fieldsNames("tc_definitions_first_buy", filterID+"first_31175")...)
-	b.WriteString(` from tc_definitions_first_buy) tc`)
+	b.WriteString(` from tc_definitions_first_buy) tc)`)
+}
+
+func (b *queryBuilder) BuildDependencyMetadata(current *filterDependency) {
+	b.WriteRune('\n')
+	b.WriteString("---- dependency ----")
+	b.WriteRune('\n')
+	b.WriteString("---- ")
+	b.WriteString(current.Expr)
+	b.WriteRune('\n')
 }
 
 func (b *queryBuilder) BuildDependency(filterID, cteName string, filter *databaseFilterSearch, current *filterDependency) {
+	b.BuildDependencyMetadata(current)
 	if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.KindDVMCountResponse {
 		if len(current.Reduce.Kinds) > 1 {
 			if current.Reduce.Kinds[1] == model.CustomIONKindPollVote && current.Reduce.Group {
@@ -1102,8 +1127,8 @@ where
 		b.BuildForMostRelevantFollowers(filterID, cteName, filter, current)
 		return
 	} else if len(current.Reduce.Kinds) > 0 && current.Reduce.Kinds[0] == model.CustomIONKindTokenizedCommunityDefinition {
-		if current.Start.KindIn(nostr.KindProfileMetadata, nostr.KindTextNote, nostr.KindArticle, model.CustomIONKindEditableTextNote) {
-			// kind[0/30175/1/30023]>kind31175 with additional data.
+		if current.Start.KindIn(nostr.KindProfileMetadata, nostr.KindTextNote, nostr.KindRepost, nostr.KindGenericRepost, nostr.KindArticle, model.CustomIONKindEditableTextNote) {
+			// kind[0/6/16/30175/1/30023]>kind31175 with additional data.
 			b.BuildForTCDataFromPost(filterID, cteName, filter, current)
 			return
 		} else if current.Start.Kind == model.CustomIONKindTokenizedCommunityAction {
@@ -1638,6 +1663,7 @@ func (b *queryBuilder) BuildCTE(filter *databaseFilterSearch) (cte *databaseCTE,
 
 	// Additional fields that are not visible in the main select but used for filtering/sorting.
 	fields = append(fields, "first_1175_address")
+	fields = append(fields, "reference_id")
 
 	var sb strings.Builder
 	sb.WriteString(`( select `)
