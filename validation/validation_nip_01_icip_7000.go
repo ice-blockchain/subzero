@@ -25,7 +25,7 @@ func (ev *eventValidator) validateTextNote(ctx context.Context, rules *ruleSet, 
 		}
 		for _, tag := range e.Tags {
 			switch tag.Key() {
-			case "a", model.CustomIONTagOnBehalfOf, "d", "e", "published_at":
+			case "a", model.CustomIONTagOnBehalfOf, "d", "e", "published_at", model.CustomIONTagAddressableQ:
 			default:
 				return errors.Wrapf(ErrWrongEventParams, "tag %q is not allowed", tag.Key())
 			}
