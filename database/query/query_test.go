@@ -1828,6 +1828,76 @@ func TestSoftDeletedReplies(t *testing.T) {
 	})
 }
 
+func TestEditableTextNoteWithQuoteNotSoftDeleted(t *testing.T) {
+	t.Parallel()
+	db := helperNewDatabase(t)
+	defer db.Close()
+	tcDefinition := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindTokenizedCommunityDefinition,
+			CreatedAt: nostr.Now(),
+			Content:   "",
+			Tags: model.Tags{
+				{"d", "test_tc_def"},
+				{"h", "some_external_platform_id"},
+				{"k", "1"},
+				{"t", "community_token"},
+				{"platform", "xcom"},
+			},
+		},
+	}
+	tcKey := model.GeneratePrivateKey()
+	require.NoError(t, tcDefinition.SignWithAlg(tcKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), tcDefinition))
+
+	quoteEvent := &model.Event{
+		Event: nostr.Event{
+			Kind:      model.CustomIONKindEditableTextNote,
+			CreatedAt: nostr.Now(),
+			Content:   "",
+			Tags: model.Tags{
+				{"d", "test_quote_event"},
+				{"published_at", strconv.FormatInt(time.Now().Unix(), 10)},
+				{"Q", tcDefinition.Address(), "", tcDefinition.PubKey},
+			},
+		},
+	}
+	quoteKey := model.GeneratePrivateKey()
+	require.NoError(t, quoteEvent.SignWithAlg(quoteKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), quoteEvent))
+	events := helperSelectEvents(t, db, model.Filter{
+		IDs: []string{quoteEvent.ID},
+	})
+	require.Len(t, events, 1, "Event with Q tag and empty content should NOT be soft deleted")
+	require.Equal(t, quoteEvent.ID, events[0].ID)
+	eventsFiltered := helperSelectEvents(t, db, model.Filter{
+		Authors: []string{quoteEvent.PubKey},
+		Kinds:   []int{model.CustomIONKindEditableTextNote},
+	})
+	found := false
+	for _, ev := range eventsFiltered {
+		if ev.ID == quoteEvent.ID {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "Quote event should be found when filtering by authors and kinds (without IDs)")
+
+	eventsWithDeps := helperSelectEvents(t, db, model.Filter{
+		Authors: []string{quoteEvent.PubKey},
+		Kinds:   []int{model.CustomIONKindEditableTextNote},
+		Search:  "include:dependencies:kind30175>kind31175",
+	})
+	foundWithDeps := false
+	for _, ev := range eventsWithDeps {
+		if ev.ID == quoteEvent.ID {
+			foundWithDeps = true
+			break
+		}
+	}
+	require.True(t, foundWithDeps, "Quote event should be found with include:dependencies filter")
+}
+
 func TestSelectEventsSortMultipleFilters(t *testing.T) {
 	t.Parallel()
 

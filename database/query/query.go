@@ -272,7 +272,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 	switch e.Kind {
 	case nostr.KindArticle, nostr.KindDraftArticle, model.CustomIONKindEditableTextNote:
 		// Is it a soft delete?
-		if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil {
+		if len(e.Content) < 1 && e.GetTag(model.CustomIONTagRichText) == nil && e.GetTag(model.CustomIONTagAddressableQ) == nil {
 			val, err := nostr.ParseTimestamp(e.GetTag("published_at").Value())
 			event.Deleted = err == nil && e.CreatedAt.After(val)
 		}
