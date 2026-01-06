@@ -112,8 +112,8 @@ func initServer(serverCtx context.Context, port uint16, opts ...storage.Option) 
 	return fixture.NewTestServer(
 		serverCtx,
 		&wsserver.Config{
-			TLSConfig: cert.MustGenerateTLSConfigSelfSigned("localhost"),
-			Port:      port,
+			TLSConfig:    cert.MustGenerateTLSConfigSelfSigned("localhost"),
+			BindingPorts: []uint16{port},
 		},
 		nil,
 		nip11.NewNIP11Handler(

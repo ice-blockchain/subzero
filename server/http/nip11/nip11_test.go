@@ -61,8 +61,8 @@ func initServer(serverCtx context.Context, port uint16) {
 	}
 	globalConfig := cfg.MustGet[globalCfg]()
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
-		TLSConfig: wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
-		Port:      port,
+		TLSConfig:    wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		BindingPorts: []uint16{port},
 	}, nil, NewNIP11Handler(serverCtx, &Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, os.TempDir(), os.TempDir()), map[string]gin.HandlerFunc{})
 	time.Sleep(100 * time.Millisecond)
 }
