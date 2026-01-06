@@ -25,6 +25,7 @@ type (
 		server     *webtransport.Server
 		router     http.Handler
 		cfg        *config.Config
+		port       uint16
 		shutdownCh chan struct{}
 	}
 )

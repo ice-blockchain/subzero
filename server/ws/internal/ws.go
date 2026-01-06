@@ -39,7 +39,7 @@ func NewWSServer(router RegisterRoutes, cfg *config.Config) Server {
 	s.router.RedirectFixedPath = true
 	s.router.RemoveExtraSlash = true
 	s.router.UseRawPath = true
-	s.H3Server = http3.New(s.cfg, s.router)
+	s.H3Server = http3.New(s.cfg, s.router, s.cfg.BindingPorts[0])
 	s.H2Server = http2.New(s.cfg, s.router)
 
 	return s
@@ -72,8 +72,7 @@ func (s *Srv) MustListenAndServe(ctx context.Context) {
 	defer cancel()
 
 	portsMap := make(map[uint16]struct{})
-	portsMap[s.cfg.Port] = struct{}{}
-	for _, port := range s.cfg.AdditionalPorts {
+	for _, port := range s.cfg.BindingPorts {
 		if port > 0 {
 			portsMap[port] = struct{}{}
 		}
@@ -85,7 +84,7 @@ func (s *Srv) MustListenAndServe(ctx context.Context) {
 	if len(allPorts) > 1 {
 		log.Info().Uints16("ports", allPorts).Msg("starting servers on multiple ports")
 	} else {
-		log.Info().Uint16("port", s.cfg.Port).Msg("starting server")
+		log.Info().Uint16("port", allPorts[0]).Msg("starting server")
 	}
 	commonErrCh := make(chan error, len(allPorts)+1)
 	h2Listeners := make([]net.Listener, 0, len(allPorts))
@@ -112,14 +111,12 @@ func (s *Srv) MustListenAndServe(ctx context.Context) {
 	}
 	h3Servers := make([]h3ServerInfo, 0, len(allPorts))
 
-	for _, port := range allPorts {
+	for i, port := range allPorts {
 		var h3Server http3.Server
-		if port == s.cfg.Port {
+		if i == 0 {
 			h3Server = s.H3Server
 		} else {
-			portCfg := *s.cfg
-			portCfg.Port = port
-			h3Server = http3.New(&portCfg, s.router)
+			h3Server = http3.New(s.cfg, s.router, port)
 		}
 
 		h3Servers = append(h3Servers, h3ServerInfo{

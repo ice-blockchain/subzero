@@ -9,11 +9,10 @@ import (
 
 type (
 	Config struct {
-		TLSConfig       *tls.Config
-		WriteTimeout    time.Duration `yaml:"writeTimeout"`
-		ReadTimeout     time.Duration `yaml:"readTimeout"`
-		Port            uint16        `yaml:"port"`
-		AdditionalPorts []uint16      `yaml:"additional-ports"`
-		Debug           bool          `yaml:"debug"`
+		TLSConfig    *tls.Config
+		WriteTimeout time.Duration `yaml:"writeTimeout"`
+		ReadTimeout  time.Duration `yaml:"readTimeout"`
+		BindingPorts []uint16      `yaml:"binding-ports"`
+		Debug        bool          `yaml:"debug"`
 	}
 )

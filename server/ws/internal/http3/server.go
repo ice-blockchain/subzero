@@ -18,8 +18,8 @@ import (
 	"github.com/ice-blockchain/subzero/server/ws/internal/config"
 )
 
-func New(cfg *config.Config, router http.Handler) Server {
-	s := &srv{cfg: cfg, shutdownCh: make(chan struct{})}
+func New(cfg *config.Config, router http.Handler, port uint16) Server {
+	s := &srv{cfg: cfg, port: port, shutdownCh: make(chan struct{})}
 	s.router = router
 
 	return s
@@ -28,13 +28,13 @@ func New(cfg *config.Config, router http.Handler) Server {
 func (s *srv) ListenAndServeTLS(ctx context.Context) error {
 	wtserver := &webtransport.Server{
 		H3: http3.Server{
-			Addr:    fmt.Sprintf(":%v", s.cfg.Port),
-			Port:    int(s.cfg.Port),
+			Addr:    fmt.Sprintf(":%v", s.port),
+			Port:    int(s.port),
 			Handler: s.router,
 			ConnContext: func(connCtx context.Context, c *quic.Conn) context.Context {
 				wsserver := ctx.Value(adapters.CtxKeyServer)
 				ctx = context.WithValue(connCtx, adapters.CtxKeyServer, wsserver)
-				ctx = context.WithValue(ctx, "serverPort", s.cfg.Port)
+				ctx = context.WithValue(ctx, "serverPort", s.port)
 				return ctx
 			},
 			QUICConfig: &quic.Config{

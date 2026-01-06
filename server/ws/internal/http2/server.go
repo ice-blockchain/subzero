@@ -5,7 +5,6 @@ package http2
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -33,20 +32,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, listeners ...net.Listener) 
 			!errors.Is(err, io.EOF) &&
 			!errors.Is(err, h2ec.ErrServerClosed)
 	}
-	if len(listeners) == 0 {
-		s.server = &h2ec.Server{
-			Addr:    fmt.Sprintf(":%v", s.cfg.Port),
-			Handler: s.router,
-			BaseContext: func(_ net.Listener) context.Context {
-				return context.WithValue(ctx, "serverPort", s.cfg.Port)
-			},
-			TLSConfig: s.cfg.TLSConfig,
-		}
-		if err := s.server.ListenAndServeTLS("", ""); isUnexpectedError(err) {
-			return errors.Wrap(err, "failed to start http2/tcp server")
-		}
-		return nil
-	}
+
 	tlsConfig := s.cfg.TLSConfig.Clone()
 	if len(tlsConfig.NextProtos) == 0 {
 		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
@@ -54,8 +40,8 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, listeners ...net.Listener) 
 
 	s.server = &h2ec.Server{
 		Handler: s.router,
-		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
+		BaseContext: func(l net.Listener) context.Context {
+			return context.WithValue(ctx, "serverPort", uint16(l.Addr().(*net.TCPAddr).Port))
 		},
 		TLSConfig: tlsConfig,
 	}

@@ -123,8 +123,8 @@ func helperCreateWsInstance(
 	nostrHandler := newHandler(fmt.Sprintf("wss://localhost:%v", wsPort), "")
 	srv := fixture.NewTestServer(ctx,
 		&Config{
-			Port:      wsPort,
-			TLSConfig: tlsConfig,
+			BindingPorts: []uint16{wsPort},
+			TLSConfig:    tlsConfig,
 		},
 		nostrHandler.Handle,
 		nil,
@@ -188,8 +188,8 @@ func testEcho(t *testing.T, conns int, client func(ctx context.Context) (fixture
 	echoServer := fixture.NewTestServer(
 		t.Context(),
 		&Config{
-			Port:      9999,
-			TLSConfig: LoadTLSConfig(tlsConfig.TLSCert, tlsConfig.TLSKey),
+			BindingPorts: []uint16{9999},
+			TLSConfig:    LoadTLSConfig(tlsConfig.TLSCert, tlsConfig.TLSKey),
 		},
 		func(ctx context.Context, w Writer, in []byte) {
 			if wErr := w.WriteMessage(ctx, int(ws.OpText), []byte("server reply:"+string(in))); wErr != nil {
