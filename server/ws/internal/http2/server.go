@@ -47,12 +47,17 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, listeners ...net.Listener) 
 		}
 		return nil
 	}
+	tlsConfig := s.cfg.TLSConfig.Clone()
+	if len(tlsConfig.NextProtos) == 0 {
+		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
+	}
+
 	s.server = &h2ec.Server{
 		Handler: s.router,
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},
-		TLSConfig: s.cfg.TLSConfig,
+		TLSConfig: tlsConfig,
 	}
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(listeners))
@@ -61,7 +66,7 @@ func (s *srv) ListenAndServeTLS(ctx context.Context, listeners ...net.Listener) 
 		go func(listener net.Listener) {
 			defer wg.Done()
 			log.Info().Str("protocol", "HTTP2").Str("addr", listener.Addr().String()).Msg("HTTP2 server listening")
-			tlsListener := tls.NewListener(listener, s.cfg.TLSConfig)
+			tlsListener := tls.NewListener(listener, tlsConfig)
 			if err := s.server.Serve(tlsListener); isUnexpectedError(err) {
 				errCh <- errors.Wrapf(err, "failed to serve http2/tcp on %s", listener.Addr().String())
 			}
