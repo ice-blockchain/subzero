@@ -12,7 +12,7 @@ type (
 		TLSConfig    *tls.Config
 		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		ReadTimeout  time.Duration `yaml:"readTimeout"`
-		Port         uint16        `yaml:"port"`
+		BindingPorts []uint16      `yaml:"binding-ports"`
 		Debug        bool          `yaml:"debug"`
 	}
 )

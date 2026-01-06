@@ -25,7 +25,7 @@ func NewTestServer(ctx context.Context, cfg *config.Config, cb MockCallback, nip
 	service := newMockService(cb, nip11, extraHttpHandlers)
 	service.server = internal.NewWSServer(service, cfg)
 	service.readerWg = new(sync.WaitGroup)
-	service.port = int(cfg.Port)
+	service.port = int(cfg.BindingPorts[0])
 
 	go service.server.MustListenAndServe(ctx)
 

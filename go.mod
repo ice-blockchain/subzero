@@ -3,6 +3,7 @@ module github.com/ice-blockchain/subzero
 go 1.25.5
 
 replace (
+	github.com/caddyserver/zerossl => github.com/caddyserver/zerossl v0.1.4-0.20251111225255-9a4fc4cf5dc7
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20251001102109-e2a999a12f4d
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250814151456-e141b5cb6e0b
 )
@@ -13,7 +14,7 @@ require (
 	github.com/alitto/pond/v2 v2.6.0
 	github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936
 	github.com/bzick/tokenizer v1.4.10
-	github.com/caddyserver/certmagic v0.25.0
+	github.com/caddyserver/certmagic v0.25.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/cockroachdb/errors v1.12.0
@@ -131,7 +132,7 @@ require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.2 // indirect
 	github.com/bytedance/sonic/loader v0.4.0 // indirect
-	github.com/caddyserver/zerossl v0.1.4-0.20251111225255-9a4fc4cf5dc7 // indirect
+	github.com/caddyserver/zerossl v0.1.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
@@ -262,7 +263,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.4 // indirect
+	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/pterm/pterm v0.12.82 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
