@@ -3,6 +3,7 @@ module github.com/ice-blockchain/subzero
 go 1.25.5
 
 replace (
+	github.com/caddyserver/zerossl => github.com/caddyserver/zerossl v0.1.4-0.20251111225255-9a4fc4cf5dc7
 	github.com/nbd-wtf/go-nostr => github.com/ice-blockchain/go-nostr v0.42.3-ion.0.20251001102109-e2a999a12f4d
 	github.com/xssnick/tonutils-storage => github.com/ice-blockchain/tonutils-storage v0.0.0-20250814151456-e141b5cb6e0b
 )
