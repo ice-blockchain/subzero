@@ -40,9 +40,10 @@ type (
 		ACME                struct {
 			APIKey string `yaml:"api-key"`
 		} `yaml:"acme"`
-		Port               uint16 `yaml:"port"          validate:"required,min=1,max=65535"`
-		IONLibertyDisabled bool   `yaml:"ion-liberty-disabled"`
-		Debug              bool   `yaml:"debug"`
+		Port               uint16   `yaml:"port"               validate:"required,min=1,max=65535"`
+		AdditionalPorts    []uint16 `yaml:"additional-ports"   validate:"omitempty,dive,min=1,max=65535"`
+		IONLibertyDisabled bool     `yaml:"ion-liberty-disabled"`
+		Debug              bool     `yaml:"debug"`
 	}
 	Option func(*router)
 
@@ -151,9 +152,10 @@ func New(ctx context.Context, opts ...Option) Server {
 	r.Handler = wsserver.NewHandler(r.Config.RelayURL, public)
 	r.Server = wsserver.New(
 		&wsserver.Config{
-			Port:      r.Config.Port,
-			Debug:     r.Config.Debug,
-			TLSConfig: mustLoadTLSConfig(ctx, r.Config),
+			Port:            r.Config.Port,
+			AdditionalPorts: r.Config.AdditionalPorts,
+			Debug:           r.Config.Debug,
+			TLSConfig:       mustLoadTLSConfig(ctx, r.Config),
 		},
 		&r,
 	)

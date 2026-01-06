@@ -18,6 +18,8 @@ server:
   acme:
     api-key: foo
   port: 4443
+  additional-ports:
+    - 443
   debug: false
   ion-liberty-disabled: true
   http:

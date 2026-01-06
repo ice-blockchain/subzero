@@ -4,7 +4,9 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -69,26 +71,95 @@ func (s *Srv) MustListenAndServe(ctx context.Context) {
 	s.setupRouter(ctx)
 	defer cancel()
 
-	log.Info().Uint16("port", s.cfg.Port).Msg("starting servers")
+	portsMap := make(map[uint16]struct{})
+	portsMap[s.cfg.Port] = struct{}{}
+	for _, port := range s.cfg.AdditionalPorts {
+		if port > 0 {
+			portsMap[port] = struct{}{}
+		}
+	}
+	allPorts := make([]uint16, 0, len(portsMap))
+	for port := range portsMap {
+		allPorts = append(allPorts, port)
+	}
+	if len(allPorts) > 1 {
+		log.Info().Uints16("ports", allPorts).Msg("starting servers on multiple ports")
+	} else {
+		log.Info().Uint16("port", s.cfg.Port).Msg("starting server")
+	}
+	commonErrCh := make(chan error, len(allPorts)+1)
+	h2Listeners := make([]net.Listener, 0, len(allPorts))
+	for _, port := range allPorts {
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err != nil {
+			log.Panic().Err(err).Uint16("port", port).Msg("failed to create HTTP2 listener")
+		}
+		h2Listeners = append(h2Listeners, listener)
+		log.Info().Uint16("port", port).Msg("created HTTP2 listener")
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.H2Server.ListenAndServeTLS(ctx, h2Listeners...); err != nil && !errors.IsAny(err, io.EOF, http.ErrServerClosed, context.Canceled) {
+			log.Error().Err(err).Msg("HTTP2 server error")
+			commonErrCh <- err
+		}
+	}()
+
+	type h3ServerInfo struct {
+		server http3.Server
+		port   uint16
+	}
+	h3Servers := make([]h3ServerInfo, 0, len(allPorts))
+
+	for _, port := range allPorts {
+		var h3Server http3.Server
+		if port == s.cfg.Port {
+			h3Server = s.H3Server
+		} else {
+			portCfg := *s.cfg
+			portCfg.Port = port
+			h3Server = http3.New(&portCfg, s.router)
+		}
+
+		h3Servers = append(h3Servers, h3ServerInfo{
+			server: h3Server,
+			port:   port,
+		})
+
+		h3ErrCh := s.runServer(ctx, &wg, h3Server)
+		go func(p uint16, ch chan error) {
+			select {
+			case err := <-ch:
+				if err != nil {
+					log.Error().Str("protocol", "HTTP3").Uint16("port", p).Err(err).Msg("server error")
+					commonErrCh <- err
+				}
+			case <-ctx.Done():
+				return
+			}
+		}(port, h3ErrCh)
+	}
 	select {
-	case err := <-s.runServer(ctx, &wg, s.H2Server):
-		log.Panic().Str("context", "HTTP2").Err(err).Msg("server start failed")
-
-	case err := <-s.runServer(ctx, &wg, s.H3Server):
-		log.Panic().Str("context", "HTTP3").Err(err).Msg("server start failed")
-
+	case err := <-commonErrCh:
+		log.Panic().Str("context", "HTTP2/HTTP3").Err(err).Msg("server failed to start")
 	case <-ctx.Done():
 	}
-
 	log.Info().Msg("shutting down servers")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
 	defer shutdownCancel()
-
+	for _, listener := range h2Listeners {
+		if err := listener.Close(); err != nil && !errors.Is(err, io.EOF) {
+			log.Error().Err(err).Str("addr", listener.Addr().String()).Msg("failed to close HTTP2 listener")
+		}
+	}
 	if err := s.H2Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
 		log.Error().Str("context", "HTTP2").Err(err).Msg("server shutdown failed")
 	}
-	if err := s.H3Server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
-		log.Error().Str("context", "HTTP3").Err(err).Msg("server shutdown failed")
+	for _, h3Info := range h3Servers {
+		if err := h3Info.server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, io.EOF) {
+			log.Error().Str("context", "HTTP3").Uint16("port", h3Info.port).Err(err).Msg("server shutdown failed")
+		}
 	}
 
 	wg.Wait()

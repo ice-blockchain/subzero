@@ -4,10 +4,12 @@ package http2
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/rs/zerolog/log"
@@ -25,25 +27,58 @@ func New(cfg *config.Config, router http.Handler) Server {
 	return s
 }
 
-func (s *srv) ListenAndServeTLS(ctx context.Context) error {
-	s.server = &h2ec.Server{
-		Addr:    fmt.Sprintf(":%v", s.cfg.Port),
-		Handler: s.router,
-		BaseContext: func(_ net.Listener) context.Context {
-			return context.WithValue(ctx, "serverPort", s.cfg.Port)
-		},
-		TLSConfig: s.cfg.TLSConfig,
-	}
+func (s *srv) ListenAndServeTLS(ctx context.Context, listeners ...net.Listener) error {
 	isUnexpectedError := func(err error) bool {
 		return err != nil &&
 			!errors.Is(err, io.EOF) &&
 			!errors.Is(err, h2ec.ErrServerClosed)
 	}
-	if err := s.server.ListenAndServeTLS("", ""); isUnexpectedError(err) {
-		return errors.Wrap(err, "failed to start http2/tcp server")
+	if len(listeners) == 0 {
+		s.server = &h2ec.Server{
+			Addr:    fmt.Sprintf(":%v", s.cfg.Port),
+			Handler: s.router,
+			BaseContext: func(_ net.Listener) context.Context {
+				return context.WithValue(ctx, "serverPort", s.cfg.Port)
+			},
+			TLSConfig: s.cfg.TLSConfig,
+		}
+		if err := s.server.ListenAndServeTLS("", ""); isUnexpectedError(err) {
+			return errors.Wrap(err, "failed to start http2/tcp server")
+		}
+		return nil
+	}
+	s.server = &h2ec.Server{
+		Handler: s.router,
+		BaseContext: func(_ net.Listener) context.Context {
+			return ctx
+		},
+		TLSConfig: s.cfg.TLSConfig,
+	}
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(listeners))
+	for _, l := range listeners {
+		wg.Add(1)
+		go func(listener net.Listener) {
+			defer wg.Done()
+			log.Info().Str("protocol", "HTTP2").Str("addr", listener.Addr().String()).Msg("HTTP2 server listening")
+			tlsListener := tls.NewListener(listener, s.cfg.TLSConfig)
+			if err := s.server.Serve(tlsListener); isUnexpectedError(err) {
+				errCh <- errors.Wrapf(err, "failed to serve http2/tcp on %s", listener.Addr().String())
+			}
+		}(l)
 	}
 
-	return nil
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 //nolint:funlen,revive // .

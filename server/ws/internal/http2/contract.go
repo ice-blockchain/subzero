@@ -5,6 +5,7 @@ package http2
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 
 type (
 	Server interface {
-		ListenAndServeTLS(ctx context.Context) error
+		ListenAndServeTLS(ctx context.Context, listeners ...net.Listener) error
 		Shutdown(ctx context.Context) error
 
 		HandleWS(wsHandler adapters.WSHandler, handler http.Handler, writer http.ResponseWriter, req *http.Request)
