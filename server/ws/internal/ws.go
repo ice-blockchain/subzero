@@ -52,14 +52,12 @@ func (s *Srv) setupRouter(ctx context.Context) {
 func (s *Srv) runServer(ctx context.Context, wg *sync.WaitGroup, srv internalServer) chan error {
 	ch := make(chan error, 1)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := srv.ListenAndServeTLS(ctx)
 		if err != nil && !errors.IsAny(err, io.EOF, http.ErrServerClosed, context.Canceled) {
 			ch <- err
 		}
-	}()
+	})
 
 	return ch
 }
@@ -96,14 +94,12 @@ func (s *Srv) MustListenAndServe(ctx context.Context) {
 		h2Listeners = append(h2Listeners, listener)
 		log.Info().Uint16("port", port).Msg("created HTTP2 listener")
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := s.H2Server.ListenAndServeTLS(ctx, h2Listeners...); err != nil && !errors.IsAny(err, io.EOF, http.ErrServerClosed, context.Canceled) {
 			log.Error().Err(err).Msg("HTTP2 server error")
 			commonErrCh <- err
 		}
-	}()
+	})
 
 	type h3ServerInfo struct {
 		server http3.Server

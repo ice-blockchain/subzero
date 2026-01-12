@@ -20,6 +20,21 @@ server:
   binding-ports:
     - 4443
     - 443
+  binding-certs:
+    - cert: /etc/certs/server1.crt
+      key: /etc/certs/server1.key
+    - cert: /etc/certs/server2.crt
+      key: /etc/certs/server2.key
+    - cert: |
+        -----BEGIN CERTIFICATE-----
+        MIIDXTCCAkWgAwIBAgIJAJC1/iNAZwqDMA0GCSqGSIb3DQEBBQUAMEUxCzAJBgNV
+        ...
+        -----END CERTIFICATE-----
+      key: |
+        -----BEGIN PRIVATE KEY-----
+        MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj
+        ...
+        -----END PRIVATE KEY-----
   debug: false
   ion-liberty-disabled: true
   http:
