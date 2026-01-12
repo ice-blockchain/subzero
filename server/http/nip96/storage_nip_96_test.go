@@ -109,10 +109,12 @@ func initServer(serverCtx context.Context, port uint16, opts ...storage.Option) 
 	}))
 	initStorage(serverCtx, opts...)
 	uploader := NewUploadHandler(serverCtx, false, nip11.NewFetcher(serverCtx))
+	tlsConf := cert.MustGenerateTLSConfigSelfSigned("localhost")
+	tlsConf.NextProtos = []string{"http/1.1", "h2"}
 	return fixture.NewTestServer(
 		serverCtx,
 		&wsserver.Config{
-			TLSConfig:    cert.MustGenerateTLSConfigSelfSigned("localhost"),
+			TLSConfig:    tlsConf,
 			BindingPorts: []uint16{port},
 		},
 		nil,
