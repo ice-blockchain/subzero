@@ -272,5 +272,6 @@ func LoadTLSConfig(certOrFileName, keyOrFileName string) *tls.Config {
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2", "http/1.1"},
 	}
 }
