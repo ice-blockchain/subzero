@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -103,6 +104,13 @@ func mustLoadTLSConfig(ctx context.Context, conf *Config) (tls *tls.Config) {
 	default:
 		log.Info().Msg("using provided TLS certificate and key")
 		tls = wsserver.LoadTLSConfig(conf.TLSCert, conf.TLSKey)
+	}
+
+	if !slices.Contains(tls.NextProtos, "h2") {
+		tls.NextProtos = append(tls.NextProtos, "h2")
+	}
+	if !slices.Contains(tls.NextProtos, "http/1.1") {
+		tls.NextProtos = append(tls.NextProtos, "http/1.1")
 	}
 
 	return tls
