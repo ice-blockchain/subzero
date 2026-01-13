@@ -27,7 +27,7 @@ func (ev *eventValidator) validateKindDeviceRegistration(_ context.Context, rule
 	}
 
 	relayTag := e.GetTag("relay").Value()
-	if ev.Config != nil && ev.Config.RelayURL != "" && relayTag != ev.Config.RelayURL {
+	if ev.Config != nil && ev.Config.RelayURL != "" && !ev.Config.EqualRelayURL(relayTag) {
 		return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, ev.Config.RelayURL)
 	}
 	return nil

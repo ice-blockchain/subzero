@@ -84,6 +84,28 @@ func TestHandleAuth(t *testing.T) {
 		require.Equal(t, "challenge123", storedData.Challenge)
 	})
 
+	t.Run("Successful authentication - different ports - master key", func(t *testing.T) {
+		state := connAuthData{
+			Challenge: "challenge123",
+		}
+		h := newHandler("wss://relay.example.com", "")
+		w := &mockWriter{}
+		h.ConnAuth.Store(w, state)
+
+		priv, pub := model.GenerateKeyPair()
+		authEvent := createValidAuthEvent(t, priv, "challenge123", "wss://relay.example.com:898")
+		resp := h.handleAuth(t.Context(), w, authEvent)
+		require.True(t, resp.OK)
+		require.Empty(t, resp.Reason)
+
+		storedData, ok := h.ConnAuth.Load(w)
+		require.True(t, ok)
+		require.True(t, storedData.Authenticated)
+		require.Equal(t, pub, storedData.PublicKey)
+		require.Equal(t, pub, storedData.MasterPublicKey)
+		require.Equal(t, "challenge123", storedData.Challenge)
+	})
+
 	t.Run("Successful authentication - with delegation", func(t *testing.T) {
 		state := connAuthData{
 			Challenge: "challenge123",

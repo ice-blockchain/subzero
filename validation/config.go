@@ -3,6 +3,8 @@
 package validation
 
 import (
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -23,4 +25,25 @@ func (c *Config) MaxContentSizeOf(kind int) int {
 		}
 	}
 	return 0
+}
+
+func (c *Config) EqualRelayURL(relayURL string) bool {
+	if c == nil || c.RelayURL == "" {
+		return true
+	}
+
+	expected, err := url.Parse(c.RelayURL)
+	if err != nil {
+		return false
+	}
+
+	found, err := url.Parse(relayURL)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(expected.Scheme, found.Scheme) &&
+		strings.EqualFold(expected.Path, found.Path) &&
+		strings.EqualFold(expected.Hostname(), found.Hostname()) // Ignore port differences.
+
 }
