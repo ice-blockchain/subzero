@@ -48,6 +48,22 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		ev.Tags = model.Tags{
 			{"d", "device-id"},
 			{"t", model.DeviceTokenOSAndroid},
+			{"relay", "wss://example.com:1234"},
+			{"token", "device-token"},
+		}
+		ev.Content = `[{"kinds":[1]}]`
+		ev.CreatedAt = 1
+		require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, validator.Validate(t.Context(), model.Events{&ev}))
+	})
+
+	t.Run("relay url hostname matches configuration", func(t *testing.T) {
+		t.Parallel()
+		var ev model.Event
+		ev.Kind = model.CustomIONKindDeviceRegistration
+		ev.Tags = model.Tags{
+			{"d", "device-id"},
+			{"t", model.DeviceTokenOSAndroid},
 			{"relay", "wss://example.com"},
 			{"token", "device-token"},
 		}
