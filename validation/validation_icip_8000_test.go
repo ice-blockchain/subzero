@@ -41,7 +41,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		require.NoError(t, validator.Validate(t.Context(), model.Events{&ev}))
 	})
 
-	t.Run("relay url matches configuration", func(t *testing.T) {
+	t.Run("relay url matches configuration with different port", func(t *testing.T) {
 		t.Parallel()
 		var ev model.Event
 		ev.Kind = model.CustomIONKindDeviceRegistration
