@@ -4,6 +4,8 @@ package ws
 
 import (
 	"context"
+	"net/url"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -12,6 +14,16 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/auth"
 )
+
+func authEventVerifier(nostrEvent *nostr.Event) (bool, error) {
+	return (&model.Event{Event: *nostrEvent}).CheckSignature()
+}
+
+func authEventRelayMatcher(expected, found *url.URL) bool {
+	return strings.EqualFold(expected.Scheme, found.Scheme) &&
+		strings.EqualFold(expected.Path, found.Path) &&
+		strings.EqualFold(expected.Hostname(), found.Hostname()) // Ignore port differences.
+}
 
 func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Event) *nostr.OKEnvelope {
 	var resp = nostr.OKEnvelope{EventID: e.Event.ID}
@@ -31,9 +43,9 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 		&e.Event,
 		state.Challenge,
 		h.RelayURL,
-		nip42.WithCustomVerificator(func(nostrEvent *nostr.Event) (bool, error) {
-			return (&model.Event{Event: *nostrEvent}).CheckSignature()
-		}))
+		nip42.WithCustomVerificator(authEventVerifier),
+		nip42.WithCustomRelayMatcher(authEventRelayMatcher),
+	)
 	if err != nil {
 		resp.Reason = "failed to validate auth event: " + err.Error()
 
