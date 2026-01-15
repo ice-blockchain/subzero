@@ -30,6 +30,10 @@ func (m *MetadataHander) Clear() {
 	m.m.Clear()
 }
 
+func (w *MetadataHander) GetOrSet(key string, value any) (actual any, loaded bool) {
+	return w.m.LoadOrStore(key, value)
+}
+
 func (w *MetadataHander) Metadata() WSMetaData {
 	return w
 }

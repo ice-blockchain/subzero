@@ -4,12 +4,7 @@ package ws
 
 import (
 	"context"
-	"crypto/sha512"
-	"encoding/base64"
-	"math"
-	"math/rand/v2"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -37,19 +32,6 @@ var (
 		nostr.KindGenericRepost:             {},
 	}
 )
-
-func generateChallenge(hints ...string) string {
-	const valueMin = 1_000_000_000
-
-	h := sha512.New()
-	h.Write([]byte(time.Now().UTC().Truncate(time.Minute).Format(time.Stamp)))
-	h.Write([]byte(strconv.FormatUint(rand.Uint64N(math.MaxUint64)+valueMin, 16)))
-	for i := range hints {
-		h.Write([]byte(hints[i]))
-	}
-
-	return base64.URLEncoding.EncodeToString(h.Sum(nil))
-}
 
 func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
 	if len(currentkinds) > 0 {
@@ -107,7 +89,8 @@ func canForwardCommunityEvent(ctx context.Context, in *model.Event, masterPubkey
 	return true
 }
 
-func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *model.Subscription, challenge string) error {
+func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *model.Subscription) error {
+	challenge := authConnGenerateChallenge(respWriter)
 	err := h.writeResponse(ctx, respWriter, &nostr.AuthEnvelope{
 		Challenge: &challenge,
 	})
@@ -349,13 +332,9 @@ func (h *handler) streamEventsBuffered(ctx context.Context, respWriter Writer, s
 func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.Subscription) (err error) {
 	if reqMustAuth != nil {
 		if authRequired := reqMustAuth(ctx, sub); authRequired {
-			status, _ := h.ConnAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
-				return connAuthData{
-					Challenge: generateChallenge(sub.ID),
-				}, false
-			})
+			status := authConnGetState(respWriter)
 			if !status.Authenticated {
-				return h.authRequiredReq(ctx, respWriter, sub, status.Challenge)
+				return h.authRequiredReq(ctx, respWriter, sub)
 			} else if !status.IsFilterAllowed(sub.Filters...) {
 				return h.closeSubscriptionWithReason(ctx, respWriter, sub,
 					"error: not allowed to access the requested data")
@@ -410,14 +389,11 @@ func (h *handler) handleEvents(ctx context.Context, respWriter Writer, events []
 
 	if eventMustAuth != nil {
 		if authRequired := eventMustAuth(ctx, events...); authRequired {
-			status, _ := h.ConnAuth.LoadOrCompute(respWriter, func() (connAuthData, bool) {
-				return connAuthData{
-					Challenge: generateChallenge(),
-				}, false
-			})
+			status := authConnGetState(respWriter)
 			if !status.Authenticated {
+				challenge := authConnGenerateChallenge(respWriter)
 				err := h.writeResponse(ctx, respWriter, &nostr.AuthEnvelope{
-					Challenge: &status.Challenge,
+					Challenge: &challenge,
 				})
 				if err != nil {
 					return errors.Wrap(err, "failed to write AUTH message")
@@ -450,8 +426,8 @@ func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.E
 func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) (numberOfSubscriptions int) {
 	for _, event := range events {
 		for w, sub := range h.Subscriptions.Lookup(event) {
-			authData, _ := h.ConnAuth.Load(w)
-			if !canForwardLiveEvent(ctx, sub.Filters, event, &authData.UserDataContext) {
+			authData := authConnGetState(w)
+			if !canForwardLiveEvent(ctx, sub.Filters, event, &authData) {
 				continue
 			}
 

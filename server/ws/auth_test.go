@@ -5,6 +5,9 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"math/rand/v2"
+	"net"
+	"sync"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -28,91 +31,80 @@ func TestHandleAuth(t *testing.T) {
 		resp := h.handleAuth(t.Context(), mockWriter, authEvent)
 
 		require.False(t, resp.OK)
+		require.Contains(t, resp.Reason, "no challenge")
 	})
 
 	t.Run("Already authenticated with different public key", func(t *testing.T) {
-		state := connAuthData{
-			UserDataContext: model.UserDataContext{
-				Authenticated: true,
-				PublicKey:     "foo",
-			},
-			Challenge: "challenge123",
+		state := model.UserDataContext{
+			Authenticated: true,
+			PublicKey:     "foo",
 		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
-		authEvent := createValidAuthEvent(t, model.GeneratePrivateKey(), "challenge123", "wss://relay.example.com")
+		challenge := authConnGenerateChallenge(w)
+		t.Logf("Generated challenge: %s", challenge)
+		authConnSet(w, state)
+		authEvent := createValidAuthEvent(t, model.GeneratePrivateKey(), challenge, "wss://relay.example.com")
 		resp := h.handleAuth(t.Context(), w, authEvent)
 		require.False(t, resp.OK)
+		require.Contains(t, resp.Reason, "already authenticated with a different public key")
 	})
 
 	t.Run("Invalid auth event", func(t *testing.T) {
-		state := connAuthData{
-			Challenge: "challenge123",
-		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
+		authConnGenerateChallenge(w)
 		authEvent := createValidAuthEvent(t, model.GeneratePrivateKey(), "wrong-challenge", "wss://relay.example.com")
 		resp := h.handleAuth(t.Context(), w, authEvent)
 
 		require.False(t, resp.OK)
 		require.Contains(t, resp.Reason, "failed to validate auth event:")
+
+		state := authConnGetState(w)
+		require.False(t, state.Authenticated)
 	})
 
 	t.Run("Successful authentication - master key", func(t *testing.T) {
-		state := connAuthData{
-			Challenge: "challenge123",
-		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
+		challenge := authConnGenerateChallenge(w)
 		priv, pub := model.GenerateKeyPair()
-		authEvent := createValidAuthEvent(t, priv, "challenge123", "wss://relay.example.com")
+		authEvent := createValidAuthEvent(t, priv, challenge, "wss://relay.example.com")
 		resp := h.handleAuth(t.Context(), w, authEvent)
 		require.True(t, resp.OK)
 		require.Empty(t, resp.Reason)
 
-		storedData, ok := h.ConnAuth.Load(w)
-		require.True(t, ok)
+		storedData := authConnGetState(w)
 		require.True(t, storedData.Authenticated)
 		require.Equal(t, pub, storedData.PublicKey)
 		require.Equal(t, pub, storedData.MasterPublicKey)
-		require.Equal(t, "challenge123", storedData.Challenge)
+		require.Equal(t, challenge, authConnGetChallenge(w))
 	})
 
 	t.Run("Successful authentication - different ports - master key", func(t *testing.T) {
-		state := connAuthData{
-			Challenge: "challenge123",
-		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
+		challenge := authConnGenerateChallenge(w)
 		priv, pub := model.GenerateKeyPair()
-		authEvent := createValidAuthEvent(t, priv, "challenge123", "wss://relay.example.com:898")
+		authEvent := createValidAuthEvent(t, priv, challenge, "wss://relay.example.com:898")
 		resp := h.handleAuth(t.Context(), w, authEvent)
 		require.True(t, resp.OK)
 		require.Empty(t, resp.Reason)
 
-		storedData, ok := h.ConnAuth.Load(w)
-		require.True(t, ok)
+		storedData := authConnGetState(w)
 		require.True(t, storedData.Authenticated)
 		require.Equal(t, pub, storedData.PublicKey)
 		require.Equal(t, pub, storedData.MasterPublicKey)
-		require.Equal(t, "challenge123", storedData.Challenge)
+		require.Equal(t, challenge, authConnGetChallenge(w))
 	})
 
 	t.Run("Successful authentication - with delegation", func(t *testing.T) {
-		state := connAuthData{
-			Challenge: "challenge123",
-		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
 		masterPriv, masterPub := model.GenerateKeyPair()
 		priv, pub := model.GenerateKeyPair()
@@ -132,6 +124,8 @@ func TestHandleAuth(t *testing.T) {
 		attestationJSON, err := json.Marshal(attestationEvent)
 		require.NoError(t, err)
 
+		challenge := authConnGenerateChallenge(w)
+
 		authEvent := &model.Event{
 			Event: nostr.Event{
 				Kind:      nostr.KindClientAuthentication,
@@ -139,7 +133,7 @@ func TestHandleAuth(t *testing.T) {
 				Tags: model.Tags{
 					{model.CustomIONTagOnBehalfOf, masterPub},
 					{"attestation", string(attestationJSON)},
-					{"challenge", "challenge123"},
+					{"challenge", challenge},
 					{"relay", "wss://relay.example.com"},
 					{"user-agent", "test-client"},
 				},
@@ -152,8 +146,7 @@ func TestHandleAuth(t *testing.T) {
 		require.Empty(t, resp.Reason)
 
 		// Verify stored auth data
-		storedData, ok := h.ConnAuth.Load(w)
-		require.True(t, ok)
+		storedData := authConnGetState(w)
 		require.True(t, storedData.Authenticated)
 		require.Equal(t, pub, storedData.PublicKey)
 		require.Equal(t, masterPub, storedData.MasterPublicKey)
@@ -164,16 +157,13 @@ func TestHandleAuth(t *testing.T) {
 	})
 
 	t.Run("Failed delegation - invalid attestation", func(t *testing.T) {
-		state := connAuthData{
-			Challenge: "challenge123",
-		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
 		_, masterPub := model.GenerateKeyPair()
 		priv := model.GeneratePrivateKey()
 
+		challenge := authConnGenerateChallenge(w)
 		authEvent := &model.Event{
 			Event: nostr.Event{
 				Kind:      nostr.KindClientAuthentication,
@@ -181,7 +171,7 @@ func TestHandleAuth(t *testing.T) {
 				Tags: model.Tags{
 					{model.CustomIONTagOnBehalfOf, masterPub},
 					{"attestation", "invalid-json"},
-					{"challenge", "challenge123"},
+					{"challenge", challenge},
 					{"relay", "wss://relay.example.com"},
 				},
 			},
@@ -189,21 +179,18 @@ func TestHandleAuth(t *testing.T) {
 		require.NoError(t, authEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		resp := h.handleAuth(t.Context(), w, authEvent)
-
 		require.False(t, resp.OK)
 		require.Contains(t, resp.Reason, "failed to validate on-behalf access:")
 	})
 
 	t.Run("Failed delegation - attestation not found", func(t *testing.T) {
-		state := connAuthData{
-			Challenge: "challenge123",
-		}
 		h := newHandler("wss://relay.example.com", "")
 		w := &mockWriter{}
-		h.ConnAuth.Store(w, state)
 
 		_, masterPub := model.GenerateKeyPair()
 		priv := model.GeneratePrivateKey()
+
+		challenge := authConnGenerateChallenge(w)
 
 		authEvent := &model.Event{
 			Event: nostr.Event{
@@ -211,7 +198,7 @@ func TestHandleAuth(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Tags: model.Tags{
 					{model.CustomIONTagOnBehalfOf, masterPub},
-					{"challenge", "challenge123"},
+					{"challenge", challenge},
 					{"relay", "wss://relay.example.com"},
 				},
 			},
@@ -244,7 +231,16 @@ func createValidAuthEvent(t *testing.T, priv string, challenge, relayURL string)
 
 type mockWriter struct {
 	adapters.MetadataHander
+	Remote     net.Addr
+	RemoteOnce sync.Once
 }
 
 func (*mockWriter) WriteMessage(context.Context, int, []byte) error { return nil }
 func (*mockWriter) Close() error                                    { return nil }
+
+func (m *mockWriter) RemoteAddr() net.Addr {
+	m.RemoteOnce.Do(func() {
+		m.Remote = &net.TCPAddr{IP: net.IPv4(127, 0, 0, byte(rand.Uint32N(253)+1)), Port: rand.IntN(0xffff) + 1}
+	})
+	return m.Remote
+}

@@ -143,7 +143,7 @@ func (t *nostrToken) ValidateAttestation(ctx context.Context, kind int, now time
 		}
 		relayUrl = urlValue.Scheme + "://" + urlValue.Host
 	}
-	kinds, err := auth.ValidateUserAccess(ctx, relayUrl, &t.ev)
+	kinds, _, err := auth.ValidateUserAccess(ctx, relayUrl, &t.ev)
 	if err != nil {
 		return errors.Wrapf(err, "failed to validate on-behalf access")
 	}

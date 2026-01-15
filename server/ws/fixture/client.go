@@ -270,6 +270,10 @@ func (c *wtransportClient) Received() <-chan []byte {
 	return c.inputMessages
 }
 
+func (c *wtransportClient) RemoteAddr() net.Addr {
+	return c.wt.RemoteAddr()
+}
+
 func (c *wtransportClient) WriteMessage(ctx context.Context, messageType int, data []byte) error {
 	err := c.wt.WriteMessageToStream(ctx, data)
 
@@ -287,6 +291,10 @@ func (c *wtransportClient) Close() error {
 	c.closedMx.Unlock()
 	err := c.wt.Close()
 	return err
+}
+
+func (c *wsocketClient) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
 }
 
 func (c *wsocketClient) read(ctx context.Context) {

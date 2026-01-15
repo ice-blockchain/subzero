@@ -24,16 +24,19 @@ type (
 	WSReader interface {
 		Metadata() WSMetaData
 		ReadMessage() (messageType int, p []byte, err error)
+		RemoteAddr() net.Addr
 		io.Closer
 	}
 	WSWriter interface {
 		Metadata() WSMetaData
 		WriteMessage(ctx context.Context, messageType int, data []byte) error
+		RemoteAddr() net.Addr
 		io.Closer
 	}
 	WSMetaData interface {
 		Set(key string, value any)
 		Get(key string) (value any, exists bool)
+		GetOrSet(key string, value any) (actual any, loaded bool)
 		Range() iter.Seq2[string, any]
 		Delete(key string) (oldValue any, loaded bool)
 		Clear()
