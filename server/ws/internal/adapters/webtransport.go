@@ -5,6 +5,7 @@ package adapters
 import (
 	"bufio"
 	"context"
+	"net"
 	"strings"
 	"time"
 
@@ -25,6 +26,10 @@ func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, 
 	}
 
 	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
+}
+
+func (w *WebtransportAdapter) RemoteAddr() net.Addr {
+	return w.session.RemoteAddr()
 }
 
 func (w *WebtransportAdapter) WriteMessage(ctx context.Context, _ int, data []byte) error {

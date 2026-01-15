@@ -105,17 +105,19 @@ func validateUserAccessNotAuthoritative(ctx context.Context, e, attestation *mod
 	return ValidateUserAttestation(ctx, e, attestation)
 }
 
-func ValidateUserAccess(ctx context.Context, relayUrl string, e *model.Event) (allowedKinds map[int]struct{}, err error) {
+func ValidateUserAccess(ctx context.Context, relayUrl string, e *model.Event) (allowedKinds map[int]struct{}, authoritative bool, err error) {
 	attestation := e.GetTag("attestation").Value()
 	if attestation == "" {
 		// User request for authoritative relay.
-		return ValidateUserAccessAuthoritative(ctx, relayUrl, e)
+		allowedKinds, err = ValidateUserAccessAuthoritative(ctx, relayUrl, e)
+		return allowedKinds, err == nil, err
 	}
 
 	var attestationEvent model.Event
 	if err := attestationEvent.UnmarshalJSON([]byte(attestation)); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal attestation event from tag")
+		return nil, false, errors.Wrap(err, "failed to unmarshal attestation event from tag")
 	}
 
-	return validateUserAccessNotAuthoritative(ctx, e, &attestationEvent)
+	allowedKinds, err = validateUserAccessNotAuthoritative(ctx, e, &attestationEvent)
+	return allowedKinds, false, err
 }

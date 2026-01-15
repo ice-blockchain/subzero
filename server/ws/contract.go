@@ -6,8 +6,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/puzpuzpuz/xsync/v4"
-
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -29,15 +27,16 @@ type (
 	Router         = internal.Router
 )
 
+const (
+	connMetadataChallengeKey = "conn_auth_challenge" // Holds the challenge string for the connection.
+	connMetadataAuthKey      = "conn_auth_data"      // Holds the authentication data (model.UserDataContext) for the connection.
+)
+
 var (
 	WithWS = internal.WithWS
 )
 
 type (
-	connAuthData struct {
-		Challenge string
-		model.UserDataContext
-	}
 	subscription struct {
 		Source     *model.Subscription
 		Writer     Writer
@@ -46,7 +45,6 @@ type (
 	}
 	handler struct {
 		Subscriptions      *eventMatcherStorage
-		ConnAuth           *xsync.Map[Writer, connAuthData]
 		RelayURL           string
 		BroadcastPublicKey string
 	}

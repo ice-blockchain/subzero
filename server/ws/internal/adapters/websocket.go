@@ -73,6 +73,10 @@ func (w *WebsocketAdapter) initExtensions(handshake ws.Handshake) {
 	}
 }
 
+func (w *WebsocketAdapter) RemoteAddr() net.Addr {
+	return w.conn.RemoteAddr()
+}
+
 func (w *WebsocketAdapter) writeMessageToWebsocket(messageType int, data []byte) (err error) {
 	if w.Closed() {
 		return nil

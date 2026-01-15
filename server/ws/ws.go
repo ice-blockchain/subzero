@@ -14,7 +14,6 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -77,7 +76,6 @@ func newHandler(relayURL, broadcastPublicKey string) *handler {
 
 	return &handler{
 		Subscriptions:      newEventMatcherStorage(numShards),
-		ConnAuth:           xsync.NewMap[Writer, connAuthData](),
 		RelayURL:           relayURL,
 		BroadcastPublicKey: broadcastPublicKey,
 	}
@@ -114,8 +112,9 @@ func (h *handler) Read(ctx context.Context, stream internal.WS) {
 }
 
 func (h *handler) populateContext(ctx context.Context, respWriter adapters.WSWriter) context.Context {
-	if v, ok := h.ConnAuth.Load(respWriter); ok {
-		return model.SetUserDataInContext(ctx, v.UserDataContext)
+	state := authConnGetState(respWriter)
+	if state.Authenticated {
+		return model.SetUserDataInContext(ctx, state)
 	}
 	return ctx
 }
@@ -129,7 +128,7 @@ func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Durat
 		Str("context", "WEBSOCKET").
 		Dur("duration", duration)
 
-	if v, ok := h.ConnAuth.Load(respWriter); ok && v.Authenticated {
+	if v := authConnGetState(respWriter); v.Authenticated {
 		logger = logger.Str("master_pubkey", v.MasterPublicKey)
 		if v.UserAgent != "" {
 			logger = logger.Str("user_agent", v.UserAgent)

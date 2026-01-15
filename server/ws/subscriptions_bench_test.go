@@ -64,7 +64,7 @@ func BenchmarkAuthLoadAndBroadcast(b *testing.B) {
 				},
 			},
 		})
-		h.ConnAuth.Store(w, connAuthData{Challenge: "challenge-" + strconv.Itoa(idx)})
+		w.Metadata().Set(connMetadataChallengeKey, "challenge-"+strconv.Itoa(idx))
 		writers[idx] = w
 		spareWriters[idx] = new(mockWriter)
 	}
@@ -84,11 +84,11 @@ func BenchmarkAuthLoadAndBroadcast(b *testing.B) {
 
 		for pb.Next() {
 			writer := writers[localRand.Intn(len(writers))]
-			_, _ = h.ConnAuth.Load(writer)
+			_ = authConnGetState(writer)
 
 			if opCount%3 == 0 {
 				nextWriter := spareWriters[localRand.Intn(len(spareWriters))]
-				h.ConnAuth.Store(nextWriter, connAuthData{})
+				nextWriter.Metadata().Set(connMetadataAuthKey, model.UserDataContext{})
 			} else {
 				_ = h.BroadcastNewEvents(b.Context(), &ev)
 			}
