@@ -3,6 +3,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -355,4 +356,109 @@ func TestParseQuillDeltaToPlainText_WithCustomElements(t *testing.T) {
 		]`
 		require.Equal(t, "Header 1 Header 2 Header 3 Regular Bold Italic Underline Link wrapped https://ice.io Image List One Two Quote Some quote Mentions: @ckreioosss Hashtags: #Habits Separator: Code block 8361e203-09ba-4eff-aab8-9c9f06df92d3", parseQuillDeltaToPlainText(deltaJSON))
 	})
+}
+
+func TestReplacePMO(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		content          string
+		tags             nostr.Tags
+		expected         string
+		expectError      bool
+		replaceCondition func(string, string) (bool, string)
+	}{
+		{
+			name:    "ICIP-7001 example",
+			content: "Breaking NEWS! Aliens have landed on the moon! Read all about it on https://bogus.blog.com!",
+			tags: nostr.Tags{
+				{"pmo", "15:21", "*Aliens*"},
+				{"pmo", "68:90", "[Bogus Blog](https://bogus.blog.com)"},
+			},
+			replaceCondition: func(old, new string) (bool, string) { return true, "" },
+			expected:         "Breaking NEWS! *Aliens* have landed on the moon! Read all about it on [Bogus Blog](https://bogus.blog.com)!",
+		},
+		{
+			name:    "single replacement at the start",
+			content: "Hello world",
+			tags: nostr.Tags{
+				{"pmo", "0:5", "Hi"},
+			},
+			replaceCondition: func(old, new string) (bool, string) { return true, "" },
+			expected:         "Hi world",
+		},
+		{
+			name:    "invalid index format",
+			content: "No change here",
+			tags: nostr.Tags{
+				{"pmo", "invalid", "new"},
+				{"pmo", "1:2:3", "new"},
+			},
+			replaceCondition: func(old, new string) (bool, string) { return true, "" },
+			expectError:      true,
+			expected:         "No change here",
+		},
+		{
+			name:    "out of bounds indices",
+			content: "Short",
+			tags: nostr.Tags{
+				{"pmo", "0:10", "too long"},
+				{"pmo", "10:12", "after end"},
+				{"pmo", "-1:2", "negative"},
+			},
+			expectError:      true,
+			replaceCondition: func(old, new string) (bool, string) { return true, "" },
+
+			expected: "Short",
+		},
+		{
+			name:             "no pmo tags",
+			content:          "Just plain text",
+			tags:             nostr.Tags{{"t", "nostr"}},
+			replaceCondition: func(old, new string) (bool, string) { return true, "" },
+			expected:         "Just plain text",
+		},
+		{
+			name:    "process only mention",
+			content: "nprofile1234567789 Hello world",
+			tags: nostr.Tags{
+				{"pmo", "0:18", "@team"},
+				{"pmo", "20:25", "Hi"},
+			},
+			replaceCondition: func(old, new string) (bool, string) { return strings.HasPrefix(new, "@"), "" },
+			expected:         "@team Hello world",
+		},
+		{
+			name:    "process only mention, but replace only part",
+			content: "nprofile1234567789 Hello world",
+			tags: nostr.Tags{
+				{"pmo", "0:18", "[@team](link)"},
+				{"pmo", "20:25", "Hi"},
+			},
+			replaceCondition: func(old, new string) (bool, string) {
+				if !strings.HasPrefix(old, "nprofile") {
+					return false, ""
+				}
+				return true, new[1:6]
+			},
+			expected: "@team Hello world",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &Event{nil, nostr.Event{
+				Content: tt.content,
+				Tags:    tt.tags,
+			}}
+			result, err := ReplacePMO(ev, tt.replaceCondition)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, result)
+			}
+		})
+	}
 }
