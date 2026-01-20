@@ -83,6 +83,7 @@ func GetEventPreview(ctx *gin.Context) {
 	}
 	var eventPreview PostPreview
 	it := query.GetStoredEvents(ctx, eventPreviewFilters(addressStr))
+	events := 0
 	for ev, err := range it {
 		if err != nil {
 			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -93,6 +94,11 @@ func GetEventPreview(ctx *gin.Context) {
 			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		events += 1
+	}
+	if events == 0 {
+		ctx.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "event not found"})
+		return
 	}
 	ctx.JSON(http.StatusOK, eventPreview)
 }
@@ -158,8 +164,9 @@ func updatePreviewWithEvent(preview *PostPreview, ev *model.Event) (err error) {
 		default:
 			if ev.HasVideoIMeta() {
 				preview.Type = "video"
+			} else {
+				preview.Type = "post"
 			}
-			preview.Type = "post"
 		}
 		for _, imeta := range ev.Tags.GetAll([]string{"imeta"}) {
 			media, err := model.ParseIMeta(imeta)
