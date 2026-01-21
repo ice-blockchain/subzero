@@ -730,11 +730,9 @@ func (b *queryBuilder) ApplyFilterAddresses(filter *databaseFilterSearch) {
 	}
 
 	for _, addr := range filter.Addresses {
-		switch {
-		case addr == "":
-		case strings.Contains(addr, ":"):
+		if strings.Contains(addr, ":") {
 			addresses = append(addresses, addr)
-		default:
+		} else {
 			ids = append(ids, addr)
 		}
 	}
