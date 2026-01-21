@@ -700,7 +700,7 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 	return kinds
 }
 
-func (b *queryBuilder) ApplyKinds(filter *databaseFilterSearch, kinds []int) {
+func (b *queryBuilder) ApplyFilterKinds(filter *databaseFilterSearch, kinds []int) {
 	if len(kinds) == 0 {
 		return
 	}
@@ -722,6 +722,28 @@ func (b *queryBuilder) ApplyKinds(filter *databaseFilterSearch, kinds []int) {
 	}
 }
 
+func (b *queryBuilder) ApplyFilterAddresses(filter *databaseFilterSearch) {
+	var addresses, ids []string
+
+	if len(filter.Addresses) == 0 {
+		return
+	}
+
+	for _, addr := range filter.Addresses {
+		if strings.Contains(addr, ":") {
+			addresses = append(addresses, addr)
+		} else {
+			ids = append(ids, addr)
+		}
+	}
+
+	b.MaybeAND()
+	b.WriteRune('(')
+	buildFromSlice(b, sqlOpCodeNONE, filter.ID, addresses, "e.address", "address_full")
+	buildFromSlice(b, sqlOpCodeOR, filter.ID, ids, "e.id", "address_id")
+	b.WriteRune(')')
+}
+
 func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 	if isFilterEmpty(filter) {
 		return nil
@@ -729,8 +751,8 @@ func (b *queryBuilder) ApplyFilter(filter *databaseFilterSearch) error {
 
 	b.WriteRune('(') // Begin the filter section.
 	buildFromSlice(b, sqlOpCodeNONE, filter.ID, filter.IDs, "e.id", "")
-	buildFromSlice(b, sqlOpCodeAND, filter.ID, filter.Addresses, "e.address", "")
-	b.ApplyKinds(filter, b.ApplySpecialKinds(filter))
+	b.ApplyFilterAddresses(filter)
+	b.ApplyFilterKinds(filter, b.ApplySpecialKinds(filter))
 	b.ApplyFilterForExtensions(filter)
 	b.ApplyFilterTtags(filter)
 	b.ApplyFilterLang(filter)

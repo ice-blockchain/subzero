@@ -182,3 +182,70 @@ func TestFilterMatchKind(t *testing.T) {
 		require.False(t, result)
 	})
 }
+
+func TestFilterMatchAddresses(t *testing.T) {
+	t.Parallel()
+
+	var ev Event
+	ev.Kind = CustomIONKindEditableTextNote
+	ev.CreatedAt = nostr.Now()
+	ev.Content = "test content"
+	require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+	var regularEv Event
+	regularEv.Kind = nostr.KindTextNote
+	regularEv.CreatedAt = nostr.Now()
+	regularEv.Content = "regular content"
+	require.NoError(t, regularEv.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+	t.Logf("regular event address %v / id %v", regularEv.Address(), regularEv.ID)
+
+	t.Logf("address %v / id %v", ev.Address(), ev.ID)
+	t.Run("match by address", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{ev.Address()}}
+		result := filterMatchAddresses(filter, &ev)
+		require.True(t, result)
+	})
+	t.Run("match by ID in address", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{ev.ID}}
+		result := filterMatchAddresses(filter, &ev)
+		require.True(t, result)
+	})
+
+	t.Run("empty address filter", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{}}
+		result := filterMatchAddresses(filter, &ev)
+		require.False(t, result)
+	})
+
+	t.Run("no match - wrong address", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{"wrong:address:format"}}
+		result := filterMatchAddresses(filter, &ev)
+		require.False(t, result)
+	})
+
+	t.Run("regular event - match by ID", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{regularEv.ID}}
+		result := filterMatchAddresses(filter, &regularEv)
+		require.True(t, result)
+	})
+
+	t.Run("regular event - match by address (which is ID)", func(t *testing.T) {
+		// For regular events, Address() returns the ID itself.
+		filter := &Filter{Addresses: []string{regularEv.Address()}}
+		result := filterMatchAddresses(filter, &regularEv)
+		require.True(t, result)
+	})
+
+	t.Run("multiple addresses - one matches", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{"wrong:address:1", ev.ID, "wrong:address:2"}}
+		result := filterMatchAddresses(filter, &ev)
+		require.True(t, result)
+	})
+
+	t.Run("multiple addresses - none match", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{"wrong:address:1", "wrong:address:2", "wrong:address:3"}}
+		result := filterMatchAddresses(filter, &ev)
+		require.False(t, result)
+	})
+}

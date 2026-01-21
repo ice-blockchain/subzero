@@ -1036,10 +1036,20 @@ func TestBuilderLookupByAddress(t *testing.T) {
 	err := db.AcceptEvents(t.Context(), &eventRegular, &eventAddressable)
 	require.NoError(t, err)
 
-	events := helperSelectEvents(t, db, model.Filter{
-		Addresses: []string{eventRegular.Address(), eventAddressable.Address()},
+	t.Run("By address", func(t *testing.T) {
+		events := helperSelectEvents(t, db, model.Filter{
+			Addresses: []string{eventRegular.Address(), eventAddressable.Address()},
+		})
+		require.ElementsMatch(t, []*model.Event{&eventAddressable, &eventRegular}, events)
 	})
-	require.Equal(t, []*model.Event{&eventAddressable, &eventRegular}, events)
+	t.Run("By address with ID", func(t *testing.T) {
+		require.NotEqual(t, eventAddressable.ID, eventAddressable.Address())
+		require.Contains(t, eventAddressable.Address(), ":")
+		events := helperSelectEvents(t, db, model.Filter{
+			Addresses: []string{eventRegular.Address(), eventAddressable.ID},
+		})
+		require.ElementsMatch(t, []*model.Event{&eventAddressable, &eventRegular}, events)
+	})
 }
 
 func TestBuilderMultiKindWithDependencies(t *testing.T) {
