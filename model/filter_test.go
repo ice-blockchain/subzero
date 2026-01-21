@@ -182,3 +182,25 @@ func TestFilterMatchKind(t *testing.T) {
 		require.False(t, result)
 	})
 }
+
+func TestFilterMatchAddresses(t *testing.T) {
+	t.Parallel()
+
+	var ev Event
+	ev.Kind = CustomIONKindEditableTextNote
+	ev.CreatedAt = nostr.Now()
+	ev.Content = "test content"
+	require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+	t.Logf("address %v / id %v", ev.Address(), ev.ID)
+	t.Run("match by address", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{ev.Address()}}
+		result := filterMatchAddresses(filter, &ev)
+		require.True(t, result)
+	})
+	t.Run("match by ID in address", func(t *testing.T) {
+		filter := &Filter{Addresses: []string{ev.ID}}
+		result := filterMatchAddresses(filter, &ev)
+		require.True(t, result)
+	})
+}

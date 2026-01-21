@@ -72,6 +72,17 @@ func filterMatchKind(filter *Filter, ev *Event) bool {
 	return false
 }
 
+func filterMatchAddresses(filter *Filter, event *Event) bool {
+	addr := event.Address()
+	for i := range filter.Addresses {
+		switch filter.Addresses[i] {
+		case addr, event.ID:
+			return true
+		}
+	}
+	return false
+}
+
 func FilterMatch(filter *Filter, event *Event, currentMasterKey, currentDeviceKey string) bool {
 	if filter.Since != nil && event.CreatedAt.Before(*filter.Since) {
 		return false
@@ -93,7 +104,7 @@ func FilterMatch(filter *Filter, event *Event, currentMasterKey, currentDeviceKe
 		return false
 	}
 
-	if filter.Addresses != nil && !slices.Contains(filter.Addresses, event.Address()) {
+	if filter.Addresses != nil && !filterMatchAddresses(filter, event) {
 		return false
 	}
 
