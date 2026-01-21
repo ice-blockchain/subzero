@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"html"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	quill "github.com/dchenk/go-render-quill"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
@@ -221,4 +224,61 @@ func decodePubkeyFromNprofile(nprofileMatch string) string {
 	}
 
 	return profile.PublicKey
+}
+
+func ReplacePMO(ev *Event, replace func(orig, replace string) (bool, string)) (string, error) {
+	content := ev.Content
+	pmos := ev.Tags.GetAll([]string{"pmo"})
+	if len(pmos) == 0 {
+		return content, nil
+	}
+
+	type override struct {
+		start int
+		end   int
+		text  string
+	}
+
+	overrides := make([]override, 0, len(pmos))
+	for _, pmo := range pmos {
+		if len(pmo) < 3 {
+			return "", errors.Errorf("invalid PMO tag, less than 3 elements: %v", len(pmo))
+		}
+
+		parts := strings.Split(pmo.Value(), ":")
+		if len(parts) != 2 {
+			return "", errors.Errorf("invalid PMO tag, not start:end separated %v", pmo.Value())
+		}
+
+		var start, end int
+		var err error
+		if start, err = strconv.Atoi(parts[0]); err != nil {
+			return "", errors.Wrapf(err, "invalid PMO tag, start index not a number: %v", parts[0])
+		}
+		if end, err = strconv.Atoi(parts[1]); err != nil {
+			return "", errors.Wrapf(err, "invalid PMO tag, end index not a number: %v", parts[1])
+		}
+		if start < 0 || end < start || start > len(content) || end > len(content) {
+			return "", errors.Errorf("invalid PMO tag, invalid indexes %v %v (len %v)", parts[0], parts[1], len(content))
+		}
+		overrides = append(overrides, override{start, end, pmo[2]})
+	}
+	// start from the end
+	sort.Slice(overrides, func(i, j int) bool {
+		return overrides[i].start > overrides[j].start
+	})
+
+	result := content
+	for _, o := range overrides {
+		ok, newReplacement := replace(result[o.start:o.end], o.text)
+		if !ok {
+			continue
+		}
+		if newReplacement != "" {
+			o.text = newReplacement
+		}
+		result = result[:o.start] + o.text + result[o.end:]
+	}
+
+	return result, nil
 }

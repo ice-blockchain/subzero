@@ -265,5 +265,6 @@ func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
 			c.JSON(http.StatusOK, map[string]any{})
 		}).
 		GET("/v1/events/:eventAddress", events.GetEventByAddress).
+		GET("/v1/events/:eventAddress/previews", events.GetEventPreview).
 		Any("/xfiles/* tus-handler", gin.WrapH(http.StripPrefix("/xfiles/", tus)))
 }
