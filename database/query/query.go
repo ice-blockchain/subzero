@@ -281,6 +281,7 @@ func toDatabaseEvent(e *model.Event) (*databaseEvent, error) {
 		if err := original.UnmarshalJSON([]byte(e.Content)); err == nil {
 			event.Lookup = prepareSearchContent(&original)
 			event.FromTags(original.Tags)
+			event.IsReply = false // Reset for reposts, so FE could have `!amarker:reply !emarker:reply` and still have the repost show up.
 		}
 	}
 

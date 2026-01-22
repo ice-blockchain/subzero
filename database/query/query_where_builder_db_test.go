@@ -1151,3 +1151,54 @@ func TestLookupByLanuage(t *testing.T) {
 		require.ElementsMatch(t, []*model.Event{&eventEn, &eventFr}, events)
 	})
 }
+
+func TestReturnRepostOfReply(t *testing.T) {
+	t.Parallel()
+
+	db := helperNewDatabase(t)
+	defer db.Close()
+
+	user1 := model.GeneratePrivateKey()
+	user2 := model.GeneratePrivateKey()
+	user3 := model.GeneratePrivateKey()
+
+	var rootEvent model.Event
+	rootEvent.Kind = model.CustomIONKindEditableTextNote
+	rootEvent.CreatedAt = 1
+	rootEvent.Content = "root event"
+	rootEvent.Tags = model.Tags{
+		{"d", "root_event"},
+	}
+	require.NoError(t, rootEvent.SignWithAlg(user1, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &rootEvent))
+
+	var replyEvent model.Event
+	replyEvent.Kind = model.CustomIONKindEditableTextNote
+	replyEvent.CreatedAt = 2
+	replyEvent.Content = "reply event"
+	replyEvent.Tags = model.Tags{
+		{"d", "reply_to_root"},
+		{"a", rootEvent.Address(), "", model.TagMarkerRoot},
+		{"a", rootEvent.Address(), "", model.TagMarkerReply},
+	}
+	require.NoError(t, replyEvent.SignWithAlg(user2, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &replyEvent))
+
+	var repostEvent model.Event
+	repostEvent.Kind = nostr.KindGenericRepost
+	repostEvent.CreatedAt = 3
+	repostEvent.Content = replyEvent.String()
+	repostEvent.Tags = model.Tags{
+		{"a", replyEvent.Address()},
+		{"k", strconv.Itoa(replyEvent.Kind)},
+	}
+	require.NoError(t, repostEvent.SignWithAlg(user3, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &repostEvent))
+
+	events := helperSelectEvents(t, db, model.Filter{
+		Kinds:  []int{rootEvent.Kind, replyEvent.Kind, repostEvent.Kind},
+		Search: "!amarker:reply !emarker:reply",
+	})
+	require.Len(t, events, 2)
+	require.ElementsMatch(t, []*model.Event{&rootEvent, &repostEvent}, events) // Should return root and repost, but not reply.
+}
