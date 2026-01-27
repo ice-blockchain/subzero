@@ -1360,6 +1360,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 		WHERE
 			expiration <= :cutoff
 		LIMIT :batch_size
+		FOR UPDATE SKIP LOCKED
 	)
 	DELETE FROM events
 	WHERE id IN (SELECT id FROM expired_events)
