@@ -1016,7 +1016,7 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 		// For the reposts, we need to find the original post first.
 		// And then find the tokenized community definition from there.
 		// The TC definition's tags point to the original post's address.
-		existsCondition = `select 1 from ` + cteName + ` r
+		existsCondition = `select original_event.master_pubkey from ` + cteName + ` r
 				inner join events original_event on original_event.id = r.reference_id
 				inner join event_tags et on et.event_id = e.id
 				where
@@ -1025,7 +1025,7 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 					and r.kind = :` + startKind
 	default:
 		// For some generic post, just filter directly by `r.address`.
-		existsCondition = `select 1 from event_tags et
+		existsCondition = `select r.master_pubkey from event_tags et
 				inner join ` + cteName + ` r on et.event_tag_value1 = r.address
 				where
 					et.event_id = e.id
@@ -1046,11 +1046,10 @@ func (b *queryBuilder) BuildForTCDataFromPost(filterID, cteName string, filter *
 	tc_definitions_first_buy as (
 		select e.*
 		from events e
-		inner join event_tags et on e.id = et.event_id and et.event_tag_key = 'p'
-		inner join tc_definitions td ON td.master_pubkey = et.event_tag_value1
 		where
 			e.hidden = false
 			and e.kind = 31175
+			and exists (select 1 from event_tags et where et.event_id = e.id and et.event_tag_key = 'p' and et.event_tag_value1 in (` + existsCondition + `))
 			and e.t_tags && cast(array['community_token_action'] as text[])
 	)
 	select `)

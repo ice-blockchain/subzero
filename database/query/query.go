@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -1550,6 +1551,7 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 
 	log.Info().Str("context", "DB").Int("write_clients", len(writeURLs)).Msg("self-test: opening write clients")
 	var clients []*dbClient
+	var clientURLs []string
 	for i, writeURL := range writeURLs {
 		client := openDatabase(ctx, []string{writeURL}, []string{}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
 		err := client.AcceptEvents(ctx, writeEvents[i])
@@ -1557,12 +1559,14 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 			return errors.Wrapf(err, "failed to write test event to %s", writeURL)
 		}
 		clients = append(clients, client)
+		clientURLs = append(clientURLs, writeURL)
 	}
 
 	log.Info().Str("context", "DB").Int("read_clients", len(readURLs)).Msg("self-test: opening read clients")
 	for _, readURL := range readURLs {
 		client := openDatabase(ctx, []string{}, []string{readURL}, false, connector.WithLogging(true)).WithPrivateKey(privKey)
 		clients = append(clients, client)
+		clientURLs = append(clientURLs, readURL)
 	}
 
 	defer func() {
@@ -1613,15 +1617,32 @@ func doSelfTest(ctx context.Context, writeURLs []string, readURLs []string) erro
 				Authenticated:   true,
 			})
 		main:
-			for _, client := range clients {
+			for i, client := range clients {
+				var clientEvents []*model.Event
 				it := client.SelectEvents(selectCtx, model.Filter{IDs: writeEvents.IDs()})
 				for ev, err := range it {
 					if err != nil {
 						log.Error().Str("context", "DB").Err(err).Msg("self-test: failed to read test event")
 						continue main
 					}
-					readEvents = append(readEvents, ev)
+					clientEvents = append(clientEvents, ev)
 				}
+				if len(clientEvents) != len(writeEvents) {
+					var target string
+					parsed, err := url.Parse(clientURLs[i])
+					if err == nil {
+						target = parsed.Host
+					} else {
+						target = err.Error() + " - " + clientURLs[i]
+					}
+					log.Error().
+						Str("context", "DB").
+						Int("expected_events", len(writeEvents)).
+						Int("got_events", len(clientEvents)).
+						Str("database", target).
+						Msg("self-test: event count mismatch from client")
+				}
+				readEvents = append(readEvents, clientEvents...)
 			}
 			if len(readEvents) == len(clients)*len(writeEvents) {
 				log.Info().Str("context", "DB").Msg("self-test: successfully read test event from all clients")
