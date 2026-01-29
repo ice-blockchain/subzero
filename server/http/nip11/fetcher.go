@@ -22,29 +22,45 @@ type (
 	Fetcher interface {
 		Fetch(ctx context.Context, relayUrl string) (*RelayInformationDocument, error)
 	}
+	FetcherOption func(*fetcher)
+
 	fetcher struct {
-		cache   *ttlcache.Cache[string, *RelayInformationDocument]
-		sfGroup singleflight.Group
+		Cache    *ttlcache.Cache[string, *RelayInformationDocument]
+		SfGroup  singleflight.Group
+		Insecure bool
 	}
 )
 
-const cacheDuration = 1 * time.Minute
+const (
+	cacheDuration = 1 * time.Minute
+)
 
-func NewFetcher(ctx context.Context) Fetcher {
-	f := &fetcher{
-		cache: ttlcache.New[string, *RelayInformationDocument](ttlcache.WithTTL[string, *RelayInformationDocument](cacheDuration)),
+func WithInsecureFetch() FetcherOption {
+	return func(f *fetcher) {
+		f.Insecure = true
 	}
-	go f.cache.Start()
+}
+
+func NewFetcher(ctx context.Context, opts ...FetcherOption) Fetcher {
+	f := &fetcher{
+		Cache: ttlcache.New(ttlcache.WithTTL[string, *RelayInformationDocument](cacheDuration)),
+	}
+
+	for _, opt := range opts {
+		opt(f)
+	}
+
+	go f.Cache.Start()
 	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		log.Trace().Msg("NIP11 fetcher: shutting down")
-		f.cache.Stop()
+		f.Cache.Stop()
 		return nil
 	})
 	return f
 }
 
 func (f *fetcher) Fetch(ctx context.Context, relayUrl string) (*RelayInformationDocument, error) {
-	item := f.cache.Get(relayUrl)
+	item := f.Cache.Get(relayUrl)
 	var nip11Data *RelayInformationDocument
 	if item != nil && !item.IsExpired() {
 		nip11Data = item.Value()
@@ -54,14 +70,15 @@ func (f *fetcher) Fetch(ctx context.Context, relayUrl string) (*RelayInformation
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to fetch relay's nip11: %v", relayUrl)
 	}
-	f.cache.Set(relayUrl, nip11Data, cacheDuration)
+	f.Cache.Set(relayUrl, nip11Data, cacheDuration)
 
 	return nip11Data, nil
 }
 
 func (f *fetcher) fetch(ctx context.Context, relayUrl string) (*RelayInformationDocument, error) {
-	defer f.sfGroup.Forget(relayUrl)
-	nip11, err, _ := f.sfGroup.Do(relayUrl, func() (any, error) {
+	defer f.SfGroup.Forget(relayUrl)
+
+	nip11, err, _ := f.SfGroup.Do(relayUrl, func() (any, error) {
 		return f.requestNIP11(ctx, relayUrl)
 	})
 	return nip11.(*RelayInformationDocument), err
@@ -80,7 +97,14 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 	default:
 		return nil, errors.Errorf("invalid scheme: %v", u.Scheme)
 	}
-	resp, err := req.
+
+	client := req.C()
+	if f.Insecure {
+		client = client.EnableInsecureSkipVerify()
+	}
+
+	resp, err := client.
+		R().
 		SetContext(ctx).
 		SetRetryCount(3).
 		SetRetryInterval(func(resp *req.Response, attempt int) time.Duration {
@@ -98,6 +122,7 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 		}).
 		SetHeader("Accept", "application/nostr+json").
 		Get(u.String())
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to call relay %v", relayUrl)
 	} else if statusCode := resp.GetStatusCode(); statusCode != http.StatusOK {
@@ -108,6 +133,9 @@ func (f *fetcher) requestNIP11(ctx context.Context, relayUrl string) (*RelayInfo
 		var nip11 RelayInformationDocument
 		if err = json.Unmarshal(data, &nip11); err != nil {
 			return nil, errors.Wrapf(err, "failed to unmarshal data: %v", string(data))
+		}
+		if nip11.URL == "" {
+			nip11.URL = relayUrl
 		}
 		return &nip11, nil
 	}

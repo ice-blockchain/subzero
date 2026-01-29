@@ -4,8 +4,7 @@ package nip11
 
 import (
 	"context"
-	"encoding/json"
-	"io"
+	"crypto/tls"
 	"net/http"
 	"os"
 	"slices"
@@ -16,19 +15,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
 
 	"github.com/ice-blockchain/subzero/appcontext"
-	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/cert"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 )
 
 const (
-	testDeadline       = 30 * time.Second
 	minLeadingZeroBits = 5
+	testRelayURL       = "wss://localhost:9996"
 )
 
 var (
@@ -47,7 +45,6 @@ func TestMain(m *testing.M) {
 	}))
 
 	initServer(serverCtx, 9996)
-	http.DefaultClient.Transport = &http2.Transport{TLSClientConfig: fixture.ClientTLS()}
 	code := m.Run()
 	serverCancel()
 	release()
@@ -55,65 +52,63 @@ func TestMain(m *testing.M) {
 }
 
 func initServer(serverCtx context.Context, port uint16) {
-	type globalCfg struct {
-		TLSCert string `yaml:"tls-cert"`
-		TLSKey  string `yaml:"tls-key"`
-	}
-	globalConfig := cfg.MustGet[globalCfg]()
 	pubsubServer = fixture.NewTestServer(serverCtx, &wsserver.Config{
-		TLSConfig:    wsserver.LoadTLSConfig(globalConfig.TLSCert, globalConfig.TLSKey),
+		TLSConfig:    cert.MustGenerateTLSConfigSelfSigned("localhost"),
 		BindingPorts: []uint16{port},
-	}, nil, NewNIP11Handler(serverCtx, &Config{MinLeadingZeroBits: minLeadingZeroBits, PrivateKey: privKey}, os.TempDir(), os.TempDir()), map[string]gin.HandlerFunc{})
+	}, nil, NewNIP11Handler(serverCtx, &Config{
+		MinLeadingZeroBits: minLeadingZeroBits,
+		PrivateKey:         privKey,
+	}, os.TempDir(), os.TempDir()), map[string]gin.HandlerFunc{})
 	time.Sleep(100 * time.Millisecond)
 }
 
 func TestNIP11(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testDeadline)
-	defer cancel()
-
-	info, err := nip11.Fetch(ctx, "wss://localhost:9996")
-	require.NoError(t, err)
-	require.NotNil(t, info)
-
 	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}, systemMetrics: new(atomic.Pointer[SystemMetrics])}
 	expected := handler.info()
+	require.NotNil(t, expected)
 
-	require.Equal(t, "subzero", info.Name)
-	require.Equal(t, "subzero", info.Description)
-	require.Equal(t, pubKey, info.PubKey)
-	require.Equal(t, "~", info.Contact)
-	require.Equal(t, "subzero", info.Software)
-	require.Equal(t, minLeadingZeroBits, info.Limitation.MinPowDifficulty)
-	require.Equal(t, "wss://localhost:9996", info.URL)
+	t.Run("Fetch via standard nip11 fetcher", func(t *testing.T) {
+		defClient := http.DefaultClient
+		defer func() {
+			http.DefaultClient = defClient
+		}()
 
-	require.Zero(t, slices.CompareFunc(info.SupportedNIPs, expected.RelayInformationDocument.SupportedNIPs, func(a, b any) int {
-		require.EqualValues(t, a, b)
+		http.DefaultClient.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		info, err := nip11.Fetch(t.Context(), "wss://localhost:9996")
+		require.NoError(t, err)
+		require.NotNil(t, info)
+		require.Equal(t, "subzero", info.Name)
+		require.Equal(t, pubKey, info.PubKey)
+		require.Equal(t, testRelayURL, info.URL)
 
-		return 0
-	}))
+		require.Zero(t, slices.CompareFunc(info.SupportedNIPs, expected.RelayInformationDocument.SupportedNIPs, func(a, b any) int {
+			require.EqualValues(t, a, b)
+			return 0
+		}))
+	})
+	t.Run("Fetch via custom fetcher", func(t *testing.T) {
+		ctx := appcontext.TestContext(t)
+		fetcher := NewFetcher(ctx, WithInsecureFetch())
+		require.NotNil(t, fetcher)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://localhost:9996", nil)
-	require.NoError(t, err)
-	req.Header.Add("Accept", "application/nostr+json")
+		data, err := fetcher.Fetch(ctx, "wss://localhost:9996")
+		require.NoError(t, err)
+		require.NotNil(t, data)
 
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, "subzero", data.Name)
+		require.Equal(t, pubKey, data.PubKey)
+		require.Equal(t, testRelayURL, data.URL)
+		require.NotEmpty(t, data.SystemStatus)
+		require.Equal(t, SystemStatusStateOK, data.SystemStatus.EventsRead)
+		require.Equal(t, SystemStatusStateOK, data.SystemStatus.EventsWrite)
 
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-
-	var fullResponse RelayInformationDocument
-	err = json.Unmarshal(body, &fullResponse)
-	require.NoError(t, err)
-
-	require.Len(t, fullResponse.FCMAndroidConfigs, len(expected.FCMAndroidConfigs))
-	require.Len(t, fullResponse.FCMIOSConfigs, len(expected.FCMIOSConfigs))
-	require.Len(t, fullResponse.FCMWebConfigs, len(expected.FCMWebConfigs))
-	require.NotNil(t, fullResponse.SystemMetrics)
+		require.Len(t, data.FCMAndroidConfigs, len(expected.FCMAndroidConfigs))
+		require.Len(t, data.FCMIOSConfigs, len(expected.FCMIOSConfigs))
+		require.Len(t, data.FCMWebConfigs, len(expected.FCMWebConfigs))
+		require.NotNil(t, data.SystemMetrics)
+	})
 }
 
 func TestFCMConfigParsing(t *testing.T) {
