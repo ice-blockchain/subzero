@@ -39,12 +39,22 @@ type (
 		UsedCPU             uint16 `json:"used_cpu"`
 		UsedBandwidth       uint64 `json:"used_bandwidth"`
 	}
+	SystemStatusState string
+	SystemStatus      struct {
+		EventsWrite SystemStatusState `json:"publishing_events"`
+		EventsRead  SystemStatusState `json:"subscribing_for_events"`
+		DVM         SystemStatusState `json:"dvm"`
+		FilesWrite  SystemStatusState `json:"uploading_files"`
+		FilesRead   SystemStatusState `json:"reading_files"`
+		PushesSend  SystemStatusState `json:"sending_push_notifications"`
+	}
 	RelayInformationDocument struct {
 		SystemMetrics                  *SystemMetrics `json:"system_metrics,omitempty"`
 		nip11.RelayInformationDocument `json:",inline"`
-		FCMAndroidConfigs              []FCMConfig `json:"fcm_android_configs"`
-		FCMIOSConfigs                  []FCMConfig `json:"fcm_ios_configs"`
-		FCMWebConfigs                  []FCMConfig `json:"fcm_web_configs"`
+		FCMAndroidConfigs              []FCMConfig  `json:"fcm_android_configs"`
+		FCMIOSConfigs                  []FCMConfig  `json:"fcm_ios_configs"`
+		FCMWebConfigs                  []FCMConfig  `json:"fcm_web_configs"`
+		SystemStatus                   SystemStatus `json:"system_status,omitzero"`
 	}
 	Config struct {
 		PrivateKey         string
@@ -61,6 +71,12 @@ type (
 		lastBandwidthBytes   uint64
 		lastBandwidthBytesAt int64
 	}
+)
+
+const (
+	SystemStatusStateOK          SystemStatusState = "UP"
+	SystemStatusStateError       SystemStatusState = "DOWN"
+	SystemStatusStateMaintenance SystemStatusState = "MAINTENANCE"
 )
 
 const systemMetricsCollectionTime = 30 * time.Second
@@ -157,7 +173,18 @@ func (n *nip11handler) info() RelayInformationDocument {
 		FCMAndroidConfigs: androidConfigs,
 		FCMIOSConfigs:     iosConfigs,
 		FCMWebConfigs:     webConfigs,
-		SystemMetrics:     n.systemMetrics.Load(),
+		SystemStatus: SystemStatus{
+			EventsRead:  SystemStatusStateOK,
+			EventsWrite: SystemStatusStateOK,
+
+			DVM: SystemStatusStateMaintenance,
+
+			FilesRead:  SystemStatusStateOK,
+			FilesWrite: SystemStatusStateMaintenance,
+
+			PushesSend: SystemStatusStateError,
+		},
+		SystemMetrics: n.systemMetrics.Load(),
 	}
 }
 
