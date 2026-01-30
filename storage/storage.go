@@ -31,6 +31,7 @@ import (
 	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/storage/internal"
 	"github.com/ice-blockchain/subzero/storage/statistics"
+	"github.com/ice-blockchain/subzero/tracing/statefsm"
 )
 
 type (
@@ -46,6 +47,13 @@ type (
 		Delete(ctx context.Context, userPubkey, masterKey string, fileSha256 string) error
 		DeleteUser(masterKey string) error
 		StartDownloadNewBag(ctx context.Context, fileHash, masterKey, infohash string) error
+		Health() HealthStatus
+	}
+	HealthStatus struct {
+		LastRead          time.Time
+		LastWrite         time.Time
+		InReadErrorState  bool
+		InWriteErrorState bool
 	}
 	Bootstrap struct {
 		Overlay *overlay.Node
@@ -86,6 +94,10 @@ type (
 		config            *Config
 		rootStoragePath   string
 		closed            atomic.Bool
+		healthReadFSM     statefsm.FSM
+		healthWriteFSM    statefsm.FSM
+		lastRead          atomic.Pointer[time.Time]
+		lastWrite         atomic.Pointer[time.Time]
 		cdn               internal.CDNClient
 	}
 	queueItem struct {
@@ -372,4 +384,32 @@ func (c *client) report(ctx context.Context) {
 				Msg("storage stats")
 		}
 	}
+}
+
+func (c *client) Health() (status HealthStatus) {
+	if lastRead := c.lastRead.Load(); lastRead != nil {
+		status.LastRead = *lastRead
+	}
+	if lastWrite := c.lastWrite.Load(); lastWrite != nil {
+		status.LastWrite = *lastWrite
+	}
+	status.InReadErrorState = c.healthReadFSM.InError()
+	status.InWriteErrorState = c.healthWriteFSM.InError()
+	return status
+}
+
+// RecordReadOperation records the result of a read operation to update health status and returns the given error as is.
+func (c *client) RecordReadOperation(err error) error {
+	now := time.Now()
+	c.lastRead.Store(&now)
+	c.healthReadFSM.Push(err != nil, now)
+	return err
+}
+
+// RecordWriteOperation records the result of a write operation to update health status and returns the given error as is.
+func (c *client) RecordWriteOperation(err error) error {
+	now := time.Now()
+	c.lastWrite.Store(&now)
+	c.healthWriteFSM.Push(err != nil, now)
+	return err
 }

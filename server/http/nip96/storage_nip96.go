@@ -149,7 +149,7 @@ func (s *storageHandler) Upload() gin.HandlerFunc {
 			return
 		}
 		ctx = storage.WithSyncCdnUpload(ctx)
-		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), input.Filename, hex.EncodeToString(hash), input)
+		bagID, url, existed, err := s.storageClient.StartUpload(ctx, now, token.PubKey(), token.MasterPubKey(), input.Filename, hashHex, input)
 
 		if err != nil {
 			log.Error().Err(err).Msg("failed to upload file to ion storage")

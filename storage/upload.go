@@ -33,7 +33,7 @@ import (
 
 func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, masterPubKey, relativePathToFileForUrl, hash string, newFile *FileMetaInput) (bagID, url string, existed bool, err error) {
 	existingBagForUser, _, err := c.bagByUser(masterPubKey)
-	if err != nil {
+	if c.RecordWriteOperation(err) != nil {
 		return "", "", false, errors.Wrapf(err, "failed to find existing bag for user %s", masterPubKey)
 	}
 	var existingHDData []byte
@@ -42,12 +42,12 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 		if existingBagForUser.Header != nil && len(existingBagForUser.Header.Data) > 0 {
 			existingHDData = existingBagForUser.Header.Data
 		} else {
-			if existingHDData, err = c.latestHeaderForBag(existingBagForUser.BagID); err != nil {
+			if existingHDData, err = c.latestHeaderForBag(existingBagForUser.BagID); c.RecordWriteOperation(err) != nil {
 				return "", "", false, errors.Wrapf(err, "failed to get header for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
 		if len(existingHDData) > 0 {
-			if err = json.Unmarshal(existingHDData, &existingHD); err != nil {
+			if err = json.Unmarshal(existingHDData, &existingHD); c.RecordWriteOperation(err) != nil {
 				return "", "", false, errors.Wrapf(err, "corrupted header metadata for bag %v", hex.EncodeToString(existingBagForUser.BagID))
 			}
 		}
@@ -61,7 +61,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 					existed = false
 				} else {
 					return "", "", false,
-						errors.Wrapf(err, "failed to build download url for already existing file %v/%v(%v)", masterPubKey, relativePathToFileForUrl, hash)
+						errors.Wrapf(c.RecordWriteOperation(err), "failed to build download url for already existing file %v/%v(%v)", masterPubKey, relativePathToFileForUrl, hash)
 				}
 			}
 			if existed {
@@ -72,7 +72,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 				}
 				bs := []*Bootstrap{bootstrapNode}
 				b, err := json.Marshal(bs)
-				if err != nil {
+				if c.RecordWriteOperation(err) != nil {
 					return "", "", false, errors.Wrapf(err, "failed to marshal %#v", bs)
 				}
 				bootstrap := base64.StdEncoding.EncodeToString(b)
@@ -89,7 +89,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 	var bs []*Bootstrap
 	var bag *storage.Torrent
 	bag, bs, err = c.upload(ctx, now, userPubKey, masterPubKey, relativePathToFileForUrl, hash, newFile, &existingHD)
-	if err != nil {
+	if c.RecordWriteOperation(err) != nil {
 		return "", "", false, errors.Wrapf(err, "failed to start upload of %v", relativePathToFileForUrl)
 	}
 	bagID = hex.EncodeToString(bag.BagID)
@@ -110,7 +110,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 		go c.stats.ProcessFile(ctx, fullFilePath, gomime.TypeByExtension(filepath.Ext(fullFilePath)), uplFile.Size)
 	}
 	b, err := json.Marshal(bs)
-	if err != nil {
+	if c.RecordWriteOperation(err) != nil {
 		return "", "", false, errors.Wrapf(err, "failed to marshal %#v", bs)
 	}
 	bootstrap := base64.StdEncoding.EncodeToString(b)
@@ -122,7 +122,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 	if !c.cdnEnabled() || newFile == nil {
 		return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, nil
 	}
-	if err = c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile); err != nil {
+	if err = c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile); c.RecordWriteOperation(err) != nil {
 		return "", "", false, errors.Wrapf(c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile), "failed to upload file to cdn")
 	}
 	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, nil
@@ -140,11 +140,11 @@ func (c *client) cdnUpload(ctx context.Context, masterPubKey, relativePathToFile
 		return nil
 	}
 	f, ferr := os.Open(fullFilePath)
-	if ferr != nil {
+	if c.RecordWriteOperation(ferr) != nil {
 		return errors.Wrapf(ferr, "failed to open %v", fullFilePath)
 	}
 	defer f.Close()
-	if err := c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); err != nil {
+	if err := c.cdn.FileUpload(ctx, f, newFile.ContentType, fileNameForCdn); c.RecordWriteOperation(err) != nil {
 		if err = c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(fullFilePath, c.rootStoragePath), newFile.ContentType, fileNameForCdn); err != nil {
 			return errors.Wrapf(err, "failed to enqueue file upload %v to cdn", fileNameForCdn)
 		}
@@ -351,16 +351,17 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 					contentType = gomime.TypeByExtension(filepath.Ext(fileName))
 				}
 				uploadingFilePath := filepath.Join(storagePath, fileName)
-				if err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o744); err != nil {
+				err = os.MkdirAll(filepath.Dir(uploadingFilePath), 0o744)
+				if c.RecordWriteOperation(err) != nil {
 					log.Error().Str("context", "STORAGE").Err(err).Msg("failed to open temp file while processing upload")
 					return "", nil, nil, errors.Wrapf(err, "failed to create tmp dir")
 				}
 				userDir, err := os.OpenRoot(storagePath)
-				if err != nil {
+				if c.RecordWriteOperation(err) != nil {
 					return "", nil, nil, errors.Wrap(err, "failed to open user folder while processing upload")
 				}
 				fileUploadTo, err := userDir.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
-				if err != nil {
+				if c.RecordWriteOperation(err) != nil {
 					return "", nil, nil, errors.Wrap(err, "failed to open temp file while processing upload")
 				}
 				defer func() {
@@ -368,7 +369,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 					fileUploadTo.Close()
 				}()
 				written, err := io.Copy(io.MultiWriter(fileUploadTo, hashCalc), part)
-				if err != nil {
+				if c.RecordWriteOperation(err) != nil {
 					log.Error().
 						Str("context", "STORAGE").
 						Err(err).
@@ -380,6 +381,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 				if fileSize > maxSize {
 					part.Close()
 					defer os.Remove(uploadingFilePath)
+					c.RecordWriteOperation(ErrFileTooBig)
 					return "", &FileMetaInput{FileSize: fileSize}, nil, ErrFileTooBig
 				}
 				log.Trace().Str("context", "STORAGE").
@@ -426,7 +428,7 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 			Msg("hash")
 		hexHash := hex.EncodeToString(hash)
 		newName = hexHash + filepath.Ext(fileName)
-		if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); err != nil {
+		if err = os.Rename(filepath.Join(storagePath, fileName), filepath.Join(storagePath, newName)); c.RecordWriteOperation(err) != nil {
 			log.Error().
 				Str("context", "STORAGE").
 				Err(err).
@@ -450,16 +452,12 @@ func (c *client) SaveFile(ctx context.Context, now time.Time, masterPubKey strin
 }
 
 func readString(part *multipart.Part, name string) (string, error) {
-	bufSize := 1024
-	b := make([]byte, bufSize)
-	read, err := part.Read(b)
+	const sizeCap = 1024
+	data, err := io.ReadAll(io.LimitReader(part, sizeCap))
 	if err != nil {
-		if err == io.EOF {
-			return string(b[:read]), nil
-		}
 		return "", errors.Wrapf(err, "failed to read %v", name)
 	}
-	return string(b[:read]), nil
+	return string(data), nil
 }
 
 func (c *client) forceUploadExistingFiles(ctx context.Context) error {
@@ -477,7 +475,7 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 			masterKey := userDir.Name()
 			userPath, _ := c.BuildUserPath(masterKey, "")
 			userFiles, uploadErr := os.ReadDir(userPath)
-			if err != nil {
+			if uploadErr != nil {
 				log.Error().Err(uploadErr).Str("user", masterKey).Msg("failed to list files in user folder")
 				return
 			}
@@ -486,8 +484,8 @@ func (c *client) forceUploadExistingFiles(ctx context.Context) error {
 				contentType := c.detectContentType(masterKey, uf.Name())
 				uploadErr = errors.Join(uploadErr, errors.Wrapf(c.cdn.FileUploadAsync(ctx, strings.TrimPrefix(filepath.Join(userPath, uf.Name()), c.rootStoragePath), contentType, fName), "failed to upload file %v for usr %v", uf.Name(), masterKey))
 			}
-			if err != nil {
-				log.Error().Err(err).Str("user", masterKey).Msg("failed to upload files for user")
+			if uploadErr != nil {
+				log.Error().Err(uploadErr).Str("user", masterKey).Msg("failed to upload files for user")
 			}
 		}()
 	}

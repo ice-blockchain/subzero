@@ -29,27 +29,27 @@ import (
 
 func (c *client) DownloadUrl(masterPubkey string, fileHash string) (string, error) {
 	bag, _, err := c.bagByUser(masterPubkey)
-	if err != nil {
+	if c.RecordReadOperation(err) != nil {
 		return "", errors.Wrapf(err, "failed to get bagID for the user %v", masterPubkey)
 	}
 	if bag == nil {
 		return "", ErrNotFound
 	}
 	bs, err := c.buildBootstrapNodeInfo(bag)
-	if err != nil {
+	if c.RecordReadOperation(err) != nil {
 		return "", errors.Wrapf(err, "failed to build bootstap for bag %v", hex.EncodeToString(bag.BagID))
 	}
 	file, err := c.detectFile(bag, fileHash)
-	if err != nil {
+	if c.RecordReadOperation(err) != nil {
 		return "", errors.Wrapf(err, "failed to detect file %v in bag %v", fileHash, hex.EncodeToString(bag.BagID))
 	}
 	b, err := json.Marshal([]*Bootstrap{bs})
-	if err != nil {
+	if c.RecordReadOperation(err) != nil {
 		return "", errors.Wrapf(err, "failed to marshal %#v", bs)
 	}
 	bootstrap := base64.StdEncoding.EncodeToString(b)
 	u, _, err := c.buildUrl(hex.EncodeToString(bag.BagID), file, masterPubkey, fileHash, bootstrap)
-	return u, err
+	return u, c.RecordReadOperation(err)
 }
 
 func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx context.Context, fh, master, infohash string) error) error {
@@ -70,20 +70,25 @@ func acceptNewBag(ctx context.Context, event *model.Event, acceptor func(ctx con
 	return acceptor(ctx, fileHash, event.GetMasterPublicKey(), infohash)
 }
 
-func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKey, infohash string) error {
+func (c *client) StartDownloadNewBag(ctx context.Context, fileHash, userMasterKey, infohash string) (err error) {
 	log.Info().Str("context", "STORAGE").
 		Str("user", userMasterKey).
 		Str("infohash", infohash).
 		Msg("accepting NIP-94 infohash with new files")
+
+	defer func() {
+		err = c.RecordReadOperation(err)
+	}()
+
 	spl := strings.Split(infohash, ":")
 	if len(spl) != 3 {
-		return errors.Newf("malformed i tag %v, cannot detect bootstrap and version", infohash)
+		return errors.Errorf("malformed i tag %v, cannot detect bootstrap and version", infohash)
 	}
 	infohash = spl[0]
 	bootstrap := spl[1]
 	version, cErr := strconv.ParseInt(spl[2], 10, 64)
 	if cErr != nil {
-		return errors.Wrapf(cErr, "malformed i tag %v, cannot version", infohash)
+		return errors.Wrapf(cErr, "i tag parse error for tag %v", infohash)
 	}
 
 	if err := c.newBagIDPromoted(ctx, userMasterKey, infohash, &bootstrap, version); err != nil {
@@ -132,6 +137,9 @@ func (c *client) newBagIDPromoted(ctx context.Context, user, bagID string, boots
 }
 
 func (c *client) download(ctx context.Context, bagID, user string, bootstrap *string, newVersion int64) (err error) {
+	defer func() {
+		err = c.RecordReadOperation(err)
+	}()
 	bag, err := hex.DecodeString(bagID)
 	if err != nil {
 		return errors.Wrapf(err, "invalid bagID %v", bagID)
@@ -198,7 +206,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 				Uint64("file_size", tor.Info.FileSize).
 				Strs("files", files).
 				Msg("bag downloaded, disabling download")
-			if pErr := tor.Start(true, false, false); pErr != nil {
+			if pErr := tor.Start(true, false, false); c.RecordReadOperation(pErr) != nil {
 				log.Error().Err(pErr).Hex("bag_id", tor.BagID).Str("user", usr).Msg("failed to stop torrent download after downloading data")
 			}
 			c.activeDownloadsMx.Lock()
@@ -218,7 +226,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 					Uint32("files_count", tor.Header.FilesCount).
 					Uint64("file_size", uint64(tor.Info.FileSize)).
 					Msg("bag header resolved, enabling upload to serve clients with chunks we own")
-				if pErr := tor.StartWithCallback(true, true, false, c.torrentStateCallback(tor, user)); pErr != nil {
+				if pErr := tor.StartWithCallback(true, true, false, c.torrentStateCallback(tor, user)); c.RecordReadOperation(pErr) != nil {
 					log.Error().Err(pErr).Hex("bag_id", tor.BagID).Msg("failed to start torrent upload after downloading header")
 				}
 				if user != nil {
@@ -231,7 +239,7 @@ func (c *client) torrentStateCallback(tor *storage.Torrent, user *string) func(e
 					}
 				}
 				ver := int64(tor.Header.FilesCount)
-				if pErr := c.saveTorrent(tor, user, nil, false, &ver); pErr != nil {
+				if pErr := c.saveTorrent(tor, user, nil, false, &ver); c.RecordReadOperation(pErr) != nil {
 					log.Error().Err(pErr).Hex("bag_id", tor.BagID).Msg("failed save torrent with stopped download after downloading")
 				}
 			}
@@ -267,7 +275,10 @@ func (c *client) connectToBootstrap(ctx context.Context, torrent *storage.Torren
 	return nil
 }
 
-func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string, deletion bool, newVersion *int64) error {
+func (c *client) saveTorrent(tr *storage.Torrent, userPubKey *string, bs *string, deletion bool, newVersion *int64) (err error) {
+	defer func() {
+		err = c.RecordWriteOperation(err)
+	}()
 	if err := c.progressStorage.SetTorrent(tr); err != nil {
 		return errors.Wrap(err, "failed to save torrent into storage")
 	}

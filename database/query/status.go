@@ -6,14 +6,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/ice-blockchain/subzero/tracing/statefsm"
 	"github.com/rs/zerolog/log"
+
+	"github.com/ice-blockchain/subzero/tracing/statefsm"
 )
 
 const (
 	// Threshold for consecutive failed operations before marking the database as unhealthy.
 	consecutiveOperationThreshold = 3
-	// Time window in seconds to consider operations as consecutive.
+	// Time window to consider operations as consecutive.
 	consecutiveWindow = time.Minute
 )
 

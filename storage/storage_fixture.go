@@ -17,10 +17,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/storage/internal"
 )
 
-func calcFileHash(t *testing.T, path string) (string, error) {
+func calcFileHash(t testing.TB, path string) (string, error) {
 	t.Helper()
 
 	f, err := os.Open(path)
@@ -147,9 +148,14 @@ func Reset() {
 	globalClient.Once = sync.Once{}
 }
 
-func VerifyFileOnCdn(tb *testing.T, ctx context.Context, fileName string) {
+func VerifyFileOnCdn(tb testing.TB, ctx context.Context, fileName string) {
 	internal.VerifyFileOnCdn(tb, ctx, globalClient.Client.cdn, fileName)
 }
-func VerifyFileDeletedOnCdn(tb *testing.T, ctx context.Context, fileName string) {
+
+func VerifyFileDeletedOnCdn(tb testing.TB, ctx context.Context, fileName string) {
 	internal.VerifyFileDeletedOnCdn(tb, ctx, globalClient.Client.cdn, fileName)
+}
+
+func NewClient(ctx context.Context, rqClient rq.Client, options ...Option) StorageClient {
+	return mustCreateClient(ctx, rqClient, options...)
 }

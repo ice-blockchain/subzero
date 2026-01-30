@@ -14,9 +14,9 @@ const (
 	testOperationThreshold = 3
 )
 
-func helperNewFSM(tb testing.TB) FSM {
+func helperNewFSM(tb testing.TB, opts ...Option) FSM {
 	tb.Helper()
-	return New(testWindowSize, testOperationThreshold)
+	return New(testWindowSize, testOperationThreshold, opts...)
 }
 
 func TestStateFSM(t *testing.T) {
@@ -125,5 +125,118 @@ func TestStateFSM(t *testing.T) {
 		// State should still be DOWN.
 		t.Logf("FSM state: %s", fsm.String())
 		require.True(t, fsm.InError())
+	})
+}
+
+func TestStateFSMWithThreads(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Concurrent Push calls are safe", func(t *testing.T) {
+		const n = 10
+		fsm := helperNewFSM(t, WithThreadSafety())
+		now := time.Now()
+
+		done := make(chan bool, n)
+		for i := range n {
+			go func(idx int) {
+				defer func() { done <- true }()
+
+				for j := range n * 10 {
+					hasError := idx%2 == 0
+					fsm.Push(hasError, now.Add(time.Duration(j)*time.Millisecond))
+				}
+			}(i)
+		}
+
+		for range n {
+			<-done
+		}
+
+		require.NotNil(t, fsm)
+		t.Logf("FSM state: %s", fsm.String())
+	})
+
+	t.Run("Concurrent reads are safe", func(t *testing.T) {
+		fsm := helperNewFSM(t, WithThreadSafety())
+		now := time.Now()
+
+		for i := range testOperationThreshold {
+			fsm.Push(true, now.Add(time.Duration(i)*time.Second))
+		}
+		require.True(t, fsm.InError())
+
+		const n = 20
+		done := make(chan bool, n)
+		for range n {
+			go func() {
+				defer func() { done <- true }()
+
+				for range n * 5 {
+					_ = fsm.InError()
+					_ = fsm.CurrentErrors()
+					_ = fsm.CurrentSuccesses()
+					_ = fsm.String()
+				}
+			}()
+		}
+
+		for range n {
+			<-done
+		}
+
+		require.True(t, fsm.InError())
+	})
+
+	t.Run("Concurrent reads and writes are safe", func(t *testing.T) {
+		fsm := helperNewFSM(t, WithThreadSafety())
+		now := time.Now()
+
+		const n = 22
+		const r = n / 3
+		const w = n - r
+
+		done := make(chan bool, n)
+
+		for i := range w {
+			go func(idx int) {
+				defer func() { done <- true }()
+
+				for j := range 50 {
+					hasError := idx%2 == 0
+					fsm.Push(hasError, now.Add(time.Duration(j)*time.Millisecond))
+				}
+			}(i)
+		}
+
+		for range r {
+			go func() {
+				defer func() { done <- true }()
+
+				for range 50 {
+					_ = fsm.InError()
+					_ = fsm.CurrentErrors()
+					_ = fsm.CurrentSuccesses()
+					_ = fsm.String()
+				}
+			}()
+		}
+
+		for range n {
+			<-done
+		}
+
+		require.NotNil(t, fsm)
+		t.Logf("FSM state: %s", fsm.String())
+	})
+}
+
+func TestFSMPanicWithInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	require.Panics(t, func() {
+		_ = New(0, 1)
+	})
+	require.Panics(t, func() {
+		_ = New(1, 0)
 	})
 }
