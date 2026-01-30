@@ -379,7 +379,7 @@ jobs:
       - name: Update application tag versions
         run: |
             SERVICES="subzero-ion-connect subzero-ion-connect-indexer"
-            ENVIRONMENTS="staging testnet"
+            ENVIRONMENTS="staging"
             set -xe
             cd secret-infrastructure
             for SERVICE in ${SERVICES}; do
