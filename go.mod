@@ -89,7 +89,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.49.0
 	golang.org/x/sync v0.19.0
-	google.golang.org/api v0.263.0
+	google.golang.org/api v0.264.0
 	google.golang.org/grpc v1.78.0
 )
 
@@ -200,7 +200,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.16.0 // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.6 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
@@ -223,7 +223,7 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lib/pq v1.11.1 // indirect
 	github.com/libdns/libdns v1.1.1 // indirect
-	github.com/linxGnu/grocksdb v1.10.6 // indirect
+	github.com/linxGnu/grocksdb v1.10.7 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect

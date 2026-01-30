@@ -1489,6 +1489,8 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 		}
 	case model.CustomIONKindTokenizedCommunityAction:
 		return true
+	case model.CustomIONKindTokenizedCommunityDefinition:
+		return true
 	case nostr.KindFollowList:
 		return true
 	case nostr.KindReaction:
