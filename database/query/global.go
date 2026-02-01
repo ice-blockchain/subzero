@@ -147,7 +147,11 @@ func MustInit(ctx context.Context, opts ...Option) {
 			}
 		}
 
-		go globalDB.Client.StartExpiredEventsCleanup(ctx)
+		if !globalDB.Client.hasReadURLs {
+			go globalDB.Client.StartExpiredEventsCleanup(ctx)
+		} else {
+			log.Info().Msg("expired events cleanup is disabled on read-preferred database instances")
+		}
 		go globalDB.Client.StartCollectingUsedDatabaseStorage(ctx)
 		appcontext.GetAppContext(ctx).OnShutdown(func() error {
 			err := globalDB.Client.Close()
