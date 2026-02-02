@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
+	"math/rand/v2"
 	"net/url"
 	"slices"
 	"strconv"
@@ -1351,7 +1352,8 @@ func (db *dbClient) generateSelectEventsSQL(ctx context.Context, filter ...model
 }
 
 func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
-	const batchSize = 1000
+	const batchSize = 100
+
 	const stmt = `
 	WITH expired_events AS (
 		SELECT
@@ -1393,6 +1395,12 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 
 		if len(events) < batchSize {
 			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Millisecond * time.Duration(rand.IntN(1000))): // Add random small delay to reduce DB contention.
 		}
 	}
 
