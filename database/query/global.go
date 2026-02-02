@@ -214,6 +214,9 @@ func (db *dbClient) StartExpiredEventsCleanup(ctx context.Context) {
 				select {
 				case ticks <- struct{}{}:
 				default:
+					log.Warn().
+						Str("context", "DATABASE").
+						Msg("skipping expired events cleanup tick because the previous one is still running")
 				}
 			case <-ctx.Done():
 				return
