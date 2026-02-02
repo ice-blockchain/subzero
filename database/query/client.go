@@ -18,8 +18,10 @@ import (
 )
 
 type (
-	dbClient struct {
+	dbOperationReporter func(context.Context, operationType, error)
+	dbClient            struct {
 		db                 *connector.DB
+		operationReporter  dbOperationReporter
 		rollbackableEvents *xsync.Map[eventHash, *databaseRollbackRequest]
 		relayPrivateKey    string
 		relayURL           string
@@ -53,6 +55,8 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
 		hasReadURLs:        len(readURLs) > 0,
+		operationReporter: func(context.Context, operationType, error) {
+		},
 	}
 	options := []connector.Option{
 		connector.WithFieldNameMapper(func(in string) string {
@@ -80,6 +84,11 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 	}
 	client.db = db
 
+	return client
+}
+
+func (client *dbClient) WithOperationReporter(reporter dbOperationReporter) *dbClient {
+	client.operationReporter = reporter
 	return client
 }
 

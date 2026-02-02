@@ -1013,6 +1013,7 @@ func (db *dbClient) executeBatch(ctx context.Context, req *databaseBatchRequest)
 	if err == nil && (!eventsToRollback.Empty() || len(eventsToRollback.ReplaceableEvents) > 0) {
 		db.rollbackableEvents.Store(*req.EventsHash, &eventsToRollback)
 	}
+	db.trackEventWriteError(ctx, err)
 	return err
 }
 
@@ -1238,6 +1239,7 @@ func (db *dbClient) SelectEvents(ctx context.Context, filters ...model.Filter) E
 			if errors.Is(err, connector.ErrNotFound) {
 				err = nil
 			}
+			db.trackEventReadError(ctx, err)
 			yield(nil, errors.Wrap(err, "failed to select events"))
 			return
 		}
@@ -1696,4 +1698,15 @@ func startPeriodicSelfTest(ctx context.Context, writeURLs []string, readURLs []s
 			}
 		}
 	}()
+}
+
+func (db *dbClient) trackEventReadError(ctx context.Context, err error) {
+	if errors.Is(err, ErrRaceCondition) {
+		err = nil
+	}
+	db.operationReporter(ctx, operationTypeRead, err)
+}
+
+func (db *dbClient) trackEventWriteError(ctx context.Context, err error) {
+	db.operationReporter(ctx, operationTypeWrite, err)
 }
