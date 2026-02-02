@@ -419,7 +419,7 @@ func TestMentionWithAuthoritativeEvents(t *testing.T) {
 	recipientMasterPriv, recipientMasterPub := model.GenerateKeyPair()
 	pm := &PushNotificationManager{
 		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       "wss://test-mention-relay.example.com",
+		relayURL:       "wss://test-mention-relay.example.com:8080",
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
 	}

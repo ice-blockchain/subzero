@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -615,6 +616,10 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 	userDevices, ok := pm.userDevicesMap[pubKey]
 	pm.deviceMutex.RUnlock()
 	if !ok || len(userDevices) == 0 {
+		log.Trace().Str("context", "PUSH-NOTIFICATIONS").
+			Str("pubkey", pubKey).
+			Str("event_id", event.ID).
+			Msg("no devices found for user")
 		return nil
 	}
 
@@ -623,6 +628,13 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, eve
 			devices = append(devices, deviceInfo.Event)
 		}
 	}
+
+	log.Trace().Str("context", "PUSH-NOTIFICATIONS").
+		Str("pubkey", pubKey).
+		Int("target_num_devices", len(devices)).
+		Int("total_num_devices", len(userDevices)).
+		Str("event_id", event.ID).
+		Msg("collected valid devices for user")
 
 	return devices
 }
@@ -708,11 +720,18 @@ func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *m
 
 func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, event *model.Event) (bool, *model.Event, *model.Event, error) {
 	masterPubKey := event.GetMasterPublicKey()
+
+	relayTag := model.TagMap{}.Set("r", &pm.relayURL)
+	if u, err := url.Parse(pm.relayURL); err == nil && u.Port() != "" {
+		u.Host = u.Hostname()
+		relayTag = relayTag.Append("r", model.PointerOf(u.String()))
+	}
+
 	it := query.GetStoredEvents(ctx,
 		model.Filter{
 			Authors: []string{masterPubKey},
 			Kinds:   []int{nostr.KindRelayListMetadata},
-			Tags:    model.TagMap{}.Set("r", &pm.relayURL),
+			Tags:    relayTag,
 			Limit:   1,
 		},
 		model.Filter{
