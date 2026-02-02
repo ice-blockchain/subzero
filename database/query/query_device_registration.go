@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -30,21 +31,32 @@ func (db *dbClient) collectDeviceRegistrationEvents(ctx context.Context) EventIt
 		JOIN events e ON et.event_id = e.id AND e.kind = :kind
 		JOIN event_tags et_relay ON et_relay.event_id = e.id 
 			AND et_relay.event_tag_key = 'relay' 
-			AND et_relay.event_tag_value1 = :relay_url
+			AND (
+				(et_relay.event_tag_value1 in (:relay_url_without_port, :relay_url))
+					OR
+				(starts_with(et_relay.event_tag_value1, :relay_url_without_port))
+			)
 		WHERE et.event_tag_key = 'token' AND et.event_tag_value2 != 'invalid' AND et.id > :last_tag_id
 		ORDER BY et.id ASC
 		LIMIT :batch_size
 	`
+
+	relayURLWithoutPort := db.relayURL
+	if u, err := url.Parse(db.relayURL); err == nil {
+		u.Host = u.Hostname()
+		relayURLWithoutPort = u.String()
+	}
 
 	return func(yield func(*model.Event, error) bool) {
 		var lastTagID int64
 
 		for ctx.Err() == nil {
 			params := map[string]any{
-				"kind":        model.CustomIONKindDeviceRegistration,
-				"relay_url":   db.relayURL,
-				"last_tag_id": lastTagID,
-				"batch_size":  batchSize,
+				"kind":                   model.CustomIONKindDeviceRegistration,
+				"relay_url":              db.relayURL,
+				"relay_url_without_port": relayURLWithoutPort,
+				"last_tag_id":            lastTagID,
+				"batch_size":             batchSize,
 			}
 
 			events, err := connector.SelectNamed[databaseEvent](ctx, db.db, sqlQuery, params)
