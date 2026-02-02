@@ -3,9 +3,9 @@
 package validation
 
 import (
-	"net/url"
-	"strings"
 	"time"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
 type (
@@ -32,18 +32,5 @@ func (c *Config) EqualRelayURL(relayURL string) bool {
 		return true
 	}
 
-	expected, err := url.Parse(c.RelayURL)
-	if err != nil {
-		return false
-	}
-
-	found, err := url.Parse(relayURL)
-	if err != nil {
-		return false
-	}
-
-	return strings.EqualFold(expected.Scheme, found.Scheme) &&
-		strings.EqualFold(expected.Path, found.Path) &&
-		strings.EqualFold(expected.Hostname(), found.Hostname()) // Ignore port differences.
-
+	return model.CompareRelaysURLs(c.RelayURL, relayURL)
 }

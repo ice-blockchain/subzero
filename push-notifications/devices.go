@@ -69,7 +69,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 
 	masterPubKey := event.GetMasterPublicKey()
 
-	if event.GetTag("relay").Value() != pm.relayURL {
+	if !model.CompareRelaysURLs(event.GetTag("relay").Value(), pm.relayURL) {
 		if devicesByUser, ok := pm.userDevicesMap[masterPubKey]; ok {
 			if _, exists := devicesByUser[deviceID]; exists {
 				delete(devicesByUser, deviceID)

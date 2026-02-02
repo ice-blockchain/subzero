@@ -3,6 +3,7 @@
 package query
 
 import (
+	"crypto/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -54,6 +55,38 @@ func TestCollectDeviceRegistrationEvents(t *testing.T) {
 			require.Equal(t, expected.Kind, actual.Kind)
 			require.Equal(t, expected.Tags.GetD(), actual.Tags.GetD())
 		}
+	})
+
+	t.Run("relay url with port and without port", func(t *testing.T) {
+		db := helperNewDatabase(t)
+		defer db.Close()
+
+		const eventsCount = 3
+		var relayURLs = []string{
+			db.relayURL + ":443",
+			db.relayURL + ":4443",
+			db.relayURL,
+		}
+
+		var events []*model.Event
+		for range eventsCount {
+			for _, relayURL := range relayURLs {
+				deviceID := "device_" + rand.Text()
+				tokenValue := "token_value_of_" + deviceID
+				event := helperCreateDeviceRegistrationEventWithRelay(t, "", rand.Text(), tokenValue, relayURL)
+				require.NoError(t, event.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+				t.Logf("Inserting event with relay URL: %s: %v", relayURL, event.Address())
+				require.NoError(t, db.AcceptEvents(t.Context(), event))
+				events = append(events, event)
+			}
+		}
+		require.Len(t, events, eventsCount*len(relayURLs))
+
+		collectedEvents := helperCollectAllEvents(t, db.collectDeviceRegistrationEvents(t.Context()))
+		require.Len(t, collectedEvents, len(events))
+
+		require.ElementsMatch(t, events, collectedEvents, "All events must be collected regardless of relay URL format")
 	})
 
 	t.Run("pagination", func(t *testing.T) {
@@ -272,24 +305,29 @@ func TestMarkTokenAsInvalidInEventTags(t *testing.T) {
 	})
 }
 
-func helperCreateDeviceRegistrationEvent(t *testing.T, pubKey, deviceID, tokenValue string) *model.Event {
+func helperCreateDeviceRegistrationEventWithRelay(t *testing.T, pubKey, deviceID, tokenValue, relayURL string) *model.Event {
 	t.Helper()
 
 	event := &model.Event{}
-	event.PubKey = pubKey
-	event.Kind = model.CustomIONKindDeviceRegistration
-
-	tags := nostr.Tags{{"d", deviceID}}
-	if tokenValue != "" {
-		tags = append(tags, nostr.Tag{"token", tokenValue})
-	}
-	tags = append(tags, nostr.Tag{"t", "android"})
-	tags = append(tags, nostr.Tag{"relay", "wss://localhost"})
-	event.Tags = tags
-
 	event.ID = uuid.New().String()
+	event.PubKey = pubKey
+	event.CreatedAt = nostr.Now()
+	event.Kind = model.CustomIONKindDeviceRegistration
+	event.Tags = model.Tags{
+		{"d", deviceID},
+		{"t", "android"},
+		{"relay", relayURL},
+	}
+	if tokenValue != "" {
+		event.Tags = append(event.Tags, model.Tag{"token", tokenValue})
+	}
 
 	return event
+}
+
+func helperCreateDeviceRegistrationEvent(t *testing.T, pubKey, deviceID, tokenValue string) *model.Event {
+	t.Helper()
+	return helperCreateDeviceRegistrationEventWithRelay(t, pubKey, deviceID, tokenValue, "wss://localhost")
 }
 
 func helperCheckTokenStatus(t *testing.T, db *dbClient, eventID, expectedValue string) {
