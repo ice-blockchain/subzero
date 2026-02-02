@@ -62,7 +62,7 @@ func TestCollectDeviceRegistrationEvents(t *testing.T) {
 		defer db.Close()
 
 		const eventsCount = 3
-		var relatyURLs = []string{
+		var relayURLs = []string{
 			db.relayURL + ":443",
 			db.relayURL + ":4443",
 			db.relayURL,
@@ -70,7 +70,7 @@ func TestCollectDeviceRegistrationEvents(t *testing.T) {
 
 		var events []*model.Event
 		for range eventsCount {
-			for _, relayURL := range relatyURLs {
+			for _, relayURL := range relayURLs {
 				deviceID := "device_" + rand.Text()
 				tokenValue := "token_value_of_" + deviceID
 				event := helperCreateDeviceRegistrationEventWithRelay(t, "", rand.Text(), tokenValue, relayURL)
@@ -81,12 +81,12 @@ func TestCollectDeviceRegistrationEvents(t *testing.T) {
 				events = append(events, event)
 			}
 		}
-		require.Len(t, events, eventsCount*len(relatyURLs))
+		require.Len(t, events, eventsCount*len(relayURLs))
 
-		collectedEvennts := helperCollectAllEvents(t, db.collectDeviceRegistrationEvents(t.Context()))
-		require.Len(t, collectedEvennts, len(events))
+		collectedEvents := helperCollectAllEvents(t, db.collectDeviceRegistrationEvents(t.Context()))
+		require.Len(t, collectedEvents, len(events))
 
-		require.ElementsMatch(t, events, collectedEvennts, "All events must be collected regardless of relay URL format")
+		require.ElementsMatch(t, events, collectedEvents, "All events must be collected regardless of relay URL format")
 	})
 
 	t.Run("pagination", func(t *testing.T) {
