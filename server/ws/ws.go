@@ -128,6 +128,14 @@ func (h *handler) logOperation(respWriter adapters.WSWriter, duration time.Durat
 		Str("context", "WEBSOCKET").
 		Dur("duration", duration)
 
+	if remote := respWriter.RemoteAddr(); remote != nil {
+		logger = logger.Str("remote_addr", remote.String())
+	}
+
+	if local := respWriter.LocalAddr(); local != nil {
+		logger = logger.Str("local_addr", local.String())
+	}
+
 	if v := authConnGetState(respWriter); v.Authenticated {
 		logger = logger.Str("master_pubkey", v.MasterPublicKey)
 		if v.UserAgent != "" {

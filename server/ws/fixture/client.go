@@ -274,6 +274,10 @@ func (c *wtransportClient) RemoteAddr() net.Addr {
 	return c.wt.RemoteAddr()
 }
 
+func (c *wtransportClient) LocalAddr() net.Addr {
+	return c.wt.LocalAddr()
+}
+
 func (c *wtransportClient) WriteMessage(ctx context.Context, messageType int, data []byte) error {
 	err := c.wt.WriteMessageToStream(ctx, data)
 
@@ -295,6 +299,10 @@ func (c *wtransportClient) Close() error {
 
 func (c *wsocketClient) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
+}
+
+func (c *wsocketClient) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
 }
 
 func (c *wsocketClient) read(ctx context.Context) {

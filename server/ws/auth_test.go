@@ -231,16 +231,27 @@ func createValidAuthEvent(t *testing.T, priv string, challenge, relayURL string)
 
 type mockWriter struct {
 	adapters.MetadataHander
-	Remote     net.Addr
-	RemoteOnce sync.Once
+	Remote   net.Addr
+	Local    net.Addr
+	AddrOnce sync.Once
 }
 
 func (*mockWriter) WriteMessage(context.Context, int, []byte) error { return nil }
 func (*mockWriter) Close() error                                    { return nil }
 
-func (m *mockWriter) RemoteAddr() net.Addr {
-	m.RemoteOnce.Do(func() {
+func (m *mockWriter) initAddr() {
+	m.AddrOnce.Do(func() {
 		m.Remote = &net.TCPAddr{IP: net.IPv4(127, 0, 0, byte(rand.Uint32N(253)+1)), Port: rand.IntN(0xffff) + 1}
+		m.Local = &net.TCPAddr{IP: net.IPv4(127, 0, 1, byte(rand.Uint32N(253)+1)), Port: rand.IntN(0xffff) + 1}
 	})
+}
+
+func (m *mockWriter) RemoteAddr() net.Addr {
+	m.initAddr()
 	return m.Remote
+}
+
+func (m *mockWriter) LocalAddr() net.Addr {
+	m.initAddr()
+	return m.Local
 }

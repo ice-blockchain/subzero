@@ -4,6 +4,7 @@ package auth
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -66,6 +67,13 @@ func ValidateUserAttestation(ctx context.Context, e, attestationEvent *model.Eve
 
 func ValidateUserAccessAuthoritative(ctx context.Context, currentRelayURL string, e *model.Event) (map[int]struct{}, error) {
 	owner := e.GetMasterPublicKey()
+
+	relayTag := model.TagMap{}.Set("r", &currentRelayURL)
+	if u, err := url.Parse(currentRelayURL); err == nil && u.Port() != "" {
+		u.Host = u.Hostname()
+		relayTag = relayTag.Append("r", model.PointerOf(u.String()))
+	}
+
 	it := query.GetStoredEvents(ctx,
 		model.Filter{
 			Kinds:   []int{model.CustomIONKindAttestation},
@@ -76,7 +84,7 @@ func ValidateUserAccessAuthoritative(ctx context.Context, currentRelayURL string
 		model.Filter{
 			Kinds:   []int{nostr.KindRelayListMetadata},
 			Authors: []string{owner},
-			Tags:    model.TagMap{}.Set("r", &currentRelayURL),
+			Tags:    relayTag,
 			Limit:   1,
 		},
 	)

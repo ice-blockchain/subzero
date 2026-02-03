@@ -28,6 +28,10 @@ func NewWebTransportAdapter(ctx context.Context, session *webtransport.Session, 
 	return wt, NewCustomCancelContext(ctx, wt.closeChannel, shutdownChannel)
 }
 
+func (w *WebtransportAdapter) LocalAddr() net.Addr {
+	return w.session.LocalAddr()
+}
+
 func (w *WebtransportAdapter) RemoteAddr() net.Addr {
 	return w.session.RemoteAddr()
 }
