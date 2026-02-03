@@ -560,7 +560,14 @@ func (c *client) verifyFileOwnershipAndAttestationForFileReplication(ctx context
 		return errors.Wrapf(model.ErrOnBehalfAccessDenied, "kind %d", nostr.KindFileMetadata)
 	}
 	relaysList := model.CollectRelaysFromRelayEvent(relays)
-	relaysValid := slices.Contains(relaysList, senderUrl) && slices.Contains(relaysList, c.config.RelayURL)
+	relaysValid := slices.ContainsFunc(relaysList,
+		func(r string) bool {
+			return model.CompareRelaysURLs(r, senderUrl)
+		}) &&
+		slices.ContainsFunc(relaysList,
+			func(r string) bool {
+				return model.CompareRelaysURLs(r, c.config.RelayURL)
+			})
 	if !relaysValid {
 		return errors.Errorf("failed to verify file ownership, invalid relays %v %v for user %v", senderUrl, c.config.RelayURL, masterPubkey)
 	}

@@ -266,13 +266,11 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 	errCh := make(chan error, len(targets))
 	for pubkey, relays := range targets {
 		for _, relay := range relays {
-			if strings.EqualFold(relay, b.conf.RelayURL) {
+			if model.CompareRelaysURLs(relay, b.conf.RelayURL) {
 				continue // Skip broadcasting to self.
 			}
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				defer appcontext.GetAppContext(ctx).Recover()
-				defer wg.Done()
 				start := time.Now()
 				bxErr := b.broadcastTo(ctx, relay, events)
 				end := time.Since(start)
@@ -285,7 +283,7 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 					Dur("duration", end).
 					Msg("publishing events to relay")
 				errCh <- errors.Wrapf(bxErr, "failed to broadcast %d event(s) of %s", len(events), pubkey)
-			}()
+			})
 		}
 	}
 
