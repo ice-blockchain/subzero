@@ -25,12 +25,14 @@ type (
 		Metadata() WSMetaData
 		ReadMessage() (messageType int, p []byte, err error)
 		RemoteAddr() net.Addr
+		LocalAddr() net.Addr
 		io.Closer
 	}
 	WSWriter interface {
 		Metadata() WSMetaData
 		WriteMessage(ctx context.Context, messageType int, data []byte) error
 		RemoteAddr() net.Addr
+		LocalAddr() net.Addr
 		io.Closer
 	}
 	WSMetaData interface {
