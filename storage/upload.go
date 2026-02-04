@@ -123,7 +123,7 @@ func (c *client) StartUpload(ctx context.Context, now time.Time, userPubKey, mas
 		return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, nil
 	}
 	if err = c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile); c.RecordWriteOperation(err) != nil {
-		return "", "", false, errors.Wrapf(c.cdnUpload(ctx, masterPubKey, relativePathToFileForUrl, fileNameForCdn, newFile), "failed to upload file to cdn")
+		return "", "", false, errors.Wrapf(err, "failed to upload file to cdn")
 	}
 	return bagID + ":" + bootstrap + ":" + strconv.FormatInt(int64(bag.Header.FilesCount), 10), url, existed, nil
 }
