@@ -1362,19 +1362,24 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 			events
 		WHERE
 			expiration <= :cutoff
+			and hidden = false
+			and deleted = false
+		ORDER BY lookup_created_at ASC
 		LIMIT :batch_size
 		FOR UPDATE SKIP LOCKED
 	)
-	DELETE FROM events
-	WHERE id IN (SELECT id FROM expired_events)
+	DELETE FROM events AS de
+		USING expired_events AS ee
+	WHERE
+		de.id = ee.id
 	RETURNING
-		kind,
-		created_at,
-		id,
-		pubkey,
-		sig,
-		content,
-		tags`
+		de.kind,
+		de.created_at,
+		de.id,
+		de.pubkey,
+		de.sig,
+		de.content,
+		de.tags`
 	params := map[string]any{
 		"batch_size": batchSize,
 		"cutoff":     time.Now().UnixNano(),
@@ -1393,7 +1398,7 @@ func (db *dbClient) deleteExpiredEvents(ctx context.Context) (err error) {
 			}
 		}
 
-		if len(events) < batchSize {
+		if len(events) < batchSize || ctx.Err() != nil {
 			break
 		}
 
