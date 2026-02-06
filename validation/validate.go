@@ -236,6 +236,7 @@ var (
 				"tx_amount",
 			).
 			Optional("p").
+			Optional("k", "token_symbol"). // TODO: Make required later.
 			Forbidden("expiration").
 			ContentEmpty().
 			Validate(validateInternalTopicTC).
