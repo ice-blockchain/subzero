@@ -26,6 +26,7 @@ BEGIN
                     AND JSONB_ARRAY_LENGTH(elem) > 1
                 LIMIT 1
             )
+            AND e.lookup_created_at <= to_timestamp_nano(NEW.created_at)
         ORDER BY
             e.lookup_created_at DESC
         LIMIT 1
@@ -93,6 +94,7 @@ SET
                     AND JSONB_ARRAY_LENGTH(elem) > 1
                 LIMIT 1
             )
+            AND e.lookup_created_at <= u.lookup_created_at
         ORDER BY
             e.lookup_created_at DESC
         LIMIT 1

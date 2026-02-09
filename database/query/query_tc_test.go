@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -403,22 +404,22 @@ func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
 	var resetDef1User2, resetDef1User3, resetDef1User4, resetDef2User2 model.Event
 
 	resetDef1User2.Kind = model.CustomIONKindTokenizedCommunityAction
-	resetDef1User2.CreatedAt = evAction1_1.CreatedAt - 1
+	resetDef1User2.CreatedAt = evAction1_1.CreatedAt.Add(-time.Minute)
 	resetDef1User2.Tags = model.Tags{{"a", evDef1.Address()}, {"t", "community_token_position_reset"}}
 	require.NoError(t, resetDef1User2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	resetDef1User3.Kind = model.CustomIONKindTokenizedCommunityAction
-	resetDef1User3.CreatedAt = evAction1_2.CreatedAt - 1
+	resetDef1User3.CreatedAt = evAction1_2.CreatedAt.Add(-time.Minute)
 	resetDef1User3.Tags = model.Tags{{"a", evDef1.Address()}, {"t", "community_token_position_reset"}}
 	require.NoError(t, resetDef1User3.SignWithAlg(user3Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	resetDef1User4.Kind = model.CustomIONKindTokenizedCommunityAction
-	resetDef1User4.CreatedAt = evAction1_3.CreatedAt - 1
+	resetDef1User4.CreatedAt = evAction1_3.CreatedAt.Add(-time.Minute)
 	resetDef1User4.Tags = model.Tags{{"a", evDef1.Address()}, {"t", "community_token_position_reset"}}
 	require.NoError(t, resetDef1User4.SignWithAlg(user4Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	resetDef2User2.Kind = model.CustomIONKindTokenizedCommunityAction
-	resetDef2User2.CreatedAt = evAction2_1.CreatedAt - 1
+	resetDef2User2.CreatedAt = evAction2_1.CreatedAt.Add(-time.Minute)
 	resetDef2User2.Tags = model.Tags{{"a", evDef2.Address()}, {"t", "community_token_position_reset"}}
 	require.NoError(t, resetDef2User2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
@@ -436,11 +437,19 @@ func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
 	require.Empty(t, helperSelectTCActionID(t, db, resetDef1User4.ID), "reset event should have NULL first_1175_address")
 	require.Empty(t, helperSelectTCActionID(t, db, resetDef2User2.ID), "reset event should have NULL first_1175_address")
 
-	require.Equal(t, resetDef1User2.ID, helperSelectTCActionID(t, db, evAction1_1.ID))
-	require.Equal(t, resetDef1User3.ID, helperSelectTCActionID(t, db, evAction1_2.ID))
-	require.Equal(t, resetDef1User4.ID, helperSelectTCActionID(t, db, evAction1_3.ID))
-	require.Equal(t, resetDef2User2.ID, helperSelectTCActionID(t, db, evAction2_1.ID))
-	require.Equal(t, resetDef2User2.ID, helperSelectTCActionID(t, db, evAction2_2.ID))
+	for _, pair := range []struct {
+		ResetEvent  *model.Event
+		ActionEvent *model.Event
+	}{
+		{ResetEvent: &resetDef1User2, ActionEvent: &evAction1_1},
+		{ResetEvent: &resetDef1User3, ActionEvent: &evAction1_2},
+		{ResetEvent: &resetDef1User4, ActionEvent: &evAction1_3},
+		{ResetEvent: &resetDef2User2, ActionEvent: &evAction2_1},
+		{ResetEvent: &resetDef2User2, ActionEvent: &evAction2_2},
+	} {
+		require.True(t, pair.ResetEvent.CreatedAt.Before(pair.ActionEvent.CreatedAt), "reset event should be created before the action event")
+		require.Equal(t, pair.ResetEvent.ID, helperSelectTCActionID(t, db, pair.ActionEvent.ID), "action should be linked to the correct reset event")
+	}
 
 	t.Run("post>kind31175", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{

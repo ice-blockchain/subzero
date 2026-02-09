@@ -245,7 +245,7 @@ var (
 			Validate(validateInternalTopicTC).
 			Build(),
 
-		model.CustomIONKindConsent: newKindValidatorBuilder().
+		model.CustomIONKindBlockchainActivityConsent: newKindValidatorBuilder().
 			OneOfSingle("e", "a").
 			Required("k").
 			NoExpiration().
