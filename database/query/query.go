@@ -1469,7 +1469,7 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 	case model.CustomIONKindEditableTextNote,
 		nostr.KindTextNote,
 		nostr.KindArticle,
-		model.CustomIONKindRepostOfTokenizedCommunityDefination:
+		model.CustomIONKindRepostOfTokenizedCommunityDefinition:
 		// Reply, quote or mention.
 		refTags := map[string]struct{}{
 			"e": {},

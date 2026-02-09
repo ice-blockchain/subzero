@@ -67,7 +67,7 @@ var (
 	ErrSignatureByIONIdentityRequired = errors.New("event requires signature by ion identity")
 	ErrWalletRequired                 = errors.New("valid wallet address is required")
 
-	CommongTags = []string{
+	CommonTags = []string{
 		"t",
 		"l",
 		"L",
@@ -181,7 +181,10 @@ var (
 			Required("published_at").
 			Build(),
 
-		model.CustomIONKindPollVote: newKindValidatorBuilder().OneOfSingle("e", "a").Forbidden("expiration").Build(),
+		model.CustomIONKindPollVote: newKindValidatorBuilder().
+			OneOfSingle("e", "a").
+			NoExpiration().
+			Build(),
 
 		model.CustomIONKindFundReceive: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
@@ -219,7 +222,7 @@ var (
 			OneOfSingle("e", "a", "h").
 			Optional("p", "platform").
 			Required("k").
-			Forbidden("expiration").
+			NoExpiration().
 			ContentEmpty().
 			Validate(validateInternalTopicTC).
 			Validate(validateTokenizedCommunityFirstBuy).
@@ -237,9 +240,16 @@ var (
 			).
 			Optional("p").
 			Optional("k", "token_symbol"). // TODO: Make required later.
-			Forbidden("expiration").
+			NoExpiration().
 			ContentEmpty().
 			Validate(validateInternalTopicTC).
+			Build(),
+
+		model.CustomIONKindBlockchainActivityConsent: newKindValidatorBuilder().
+			OneOfSingle("e", "a").
+			Required("k").
+			NoExpiration().
+			ContentEmpty().
 			Build(),
 	}
 
@@ -614,7 +624,7 @@ type kindValidatorBuilder struct {
 
 func newKindValidatorBuilder() *kindValidatorBuilder {
 	t := newKindValidatorBuilderEmpty()
-	for _, tag := range CommongTags {
+	for _, tag := range CommonTags {
 		t = t.Optional(tag)
 	}
 	return t
@@ -655,6 +665,10 @@ func (t *kindValidatorBuilder) Required(tags ...string) *kindValidatorBuilder {
 		t.Validator.Tags[tag] = tagData{State: tagStateRequired}
 	}
 	return t
+}
+
+func (t *kindValidatorBuilder) NoExpiration() *kindValidatorBuilder {
+	return t.Forbidden("expiration")
 }
 
 func (t *kindValidatorBuilder) Forbidden(tags ...string) *kindValidatorBuilder {

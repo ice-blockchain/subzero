@@ -42,6 +42,7 @@ const (
 	CustomIONKindUserBlock                    = 1757
 	CustomIONKindArchiveConversation          = 2175
 	CustomIONKindMute                         = 3175
+	CustomIONKindBlockchainActivityConsent    = 4175
 	CustomIONKindAttestation                  = 10_100
 	CustomIONKindRelayListMetadata            = 20_002
 	CustomIONKindEphemeralEmbedding           = 21_750
@@ -54,7 +55,7 @@ const (
 
 	CustomIONKindRepostOfArticle                      = 16_30023
 	CustomIONKindRepostOfEditableTextNote             = 16_30175
-	CustomIONKindRepostOfTokenizedCommunityDefination = 16_31175
+	CustomIONKindRepostOfTokenizedCommunityDefinition = 16_31175
 	CustomIONKindRepostOfTokenizedCommunityAction     = 16_1175
 
 	// TODO: change to proper value.
