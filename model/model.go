@@ -42,6 +42,7 @@ const (
 	CustomIONKindUserBlock                    = 1757
 	CustomIONKindArchiveConversation          = 2175
 	CustomIONKindMute                         = 3175
+	CustomIONKindConsent                      = 4175
 	CustomIONKindAttestation                  = 10_100
 	CustomIONKindRelayListMetadata            = 20_002
 	CustomIONKindEphemeralEmbedding           = 21_750
