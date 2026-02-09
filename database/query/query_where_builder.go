@@ -981,16 +981,12 @@ func (b *queryBuilder) BuildForTCDataFromAction(filterID, cteName string, filter
 	select `)
 	b.WriteFields(b.fieldsNames("e", filterID+"first_1175_action")...)
 	b.WriteString(` from (
-		select distinct on (et.event_tag_value1, e.master_pubkey) e.*
+		select distinct e.*
 		from events e
-		inner join ` + cteName + ` r ON e.master_pubkey = r.master_pubkey and r.kind = 1175
-		inner join event_tags et ON e.id = et.event_id
+		inner join ` + cteName + ` r ON r.first_1175_address = e.id and r.kind = 1175
 		where
 			e.hidden = false
 			and e.kind = 1175
-			and et.event_tag_key IN ('e', 'a')
-			and et.event_tag_value1 in (select address from tc_definitions)
-		order by et.event_tag_value1, e.master_pubkey, e.lookup_created_at asc
 	) e
 	where not exists (select 1 from ` + cteName + ` r2 where r2.id = e.id)
 	union all --- Append the original posts

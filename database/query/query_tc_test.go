@@ -217,7 +217,7 @@ func TestFlowTC_LinkActionID(t *testing.T) {
 
 	user1Priv, user2Priv := model.GeneratePrivateKey(), model.GeneratePrivateKey()
 
-	var evPost, evAction, evDefiniton model.Event
+	var evPost, evAction, evDefinition model.Event
 	evPost.Kind = model.CustomIONKindEditableTextNote
 	evPost.Content = "This is a post"
 	evPost.CreatedAt = nostr.Now()
@@ -226,39 +226,51 @@ func TestFlowTC_LinkActionID(t *testing.T) {
 	}
 	require.NoError(t, evPost.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	evDefiniton.Kind = model.CustomIONKindTokenizedCommunityDefinition
-	evDefiniton.CreatedAt = nostr.Now()
-	evDefiniton.Tags = model.Tags{
+	evDefinition.Kind = model.CustomIONKindTokenizedCommunityDefinition
+	evDefinition.CreatedAt = nostr.Now()
+	evDefinition.Tags = model.Tags{
 		{"a", evPost.Address()},
 		{"d", "def1"},
 		{"k", strconv.Itoa(evPost.Kind)},
 	}
-	require.NoError(t, evDefiniton.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, evDefinition.SignWithAlg(user1Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	// Insert a reset event for user2 to establish the position reset baseline.
+	var evReset model.Event
+	evReset.Kind = model.CustomIONKindTokenizedCommunityAction
+	evReset.CreatedAt = nostr.Now()
+	evReset.Tags = model.Tags{
+		{"a", evDefinition.Address()},
+		{"t", "community_token_position_reset"},
+	}
+	require.NoError(t, evReset.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evPost, &evDefinition, &evReset))
+	require.Empty(t, helperSelectTCActionID(t, db, evReset.ID), "reset event should have NULL first_1175_address")
 
 	evAction.Kind = model.CustomIONKindTokenizedCommunityAction
 	evAction.CreatedAt = nostr.Now()
 	evAction.Tags = model.Tags{
-		{"a", evDefiniton.Address()},
+		{"a", evDefinition.Address()},
 		{"tx_type", "test_buy"},
 		{"network", "testnet"},
 		{"token_address", "0xTokenAddress"},
 	}
 	require.NoError(t, evAction.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, db.AcceptEvents(t.Context(), &evPost, &evDefiniton, &evAction))
-	require.Empty(t, helperSelectTCActionID(t, db, evAction.ID))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evAction))
+	require.Equal(t, evReset.ID, helperSelectTCActionID(t, db, evAction.ID))
 
 	var evAction2 model.Event
 	evAction2.Kind = model.CustomIONKindTokenizedCommunityAction
 	evAction2.CreatedAt = nostr.Now()
 	evAction2.Tags = model.Tags{
-		{"a", evDefiniton.Address()},
+		{"a", evDefinition.Address()},
 		{"tx_type", "test_buy_2"},
 		{"network", "testnet"},
 		{"token_address", "0xTokenAddress"},
 	}
 	require.NoError(t, evAction2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction2))
-	require.Equal(t, evAction.ID, helperSelectTCActionID(t, db, evAction2.ID))
+	require.Equal(t, evReset.ID, helperSelectTCActionID(t, db, evAction2.ID))
 }
 
 func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
@@ -387,20 +399,48 @@ func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
 	}
 	require.NoError(t, evAction2_2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
+	// Create reset events for each (user, definition) pair so the trigger can link actions.
+	var resetDef1User2, resetDef1User3, resetDef1User4, resetDef2User2 model.Event
+
+	resetDef1User2.Kind = model.CustomIONKindTokenizedCommunityAction
+	resetDef1User2.CreatedAt = evAction1_1.CreatedAt - 1
+	resetDef1User2.Tags = model.Tags{{"a", evDef1.Address()}, {"t", "community_token_position_reset"}}
+	require.NoError(t, resetDef1User2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	resetDef1User3.Kind = model.CustomIONKindTokenizedCommunityAction
+	resetDef1User3.CreatedAt = evAction1_2.CreatedAt - 1
+	resetDef1User3.Tags = model.Tags{{"a", evDef1.Address()}, {"t", "community_token_position_reset"}}
+	require.NoError(t, resetDef1User3.SignWithAlg(user3Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	resetDef1User4.Kind = model.CustomIONKindTokenizedCommunityAction
+	resetDef1User4.CreatedAt = evAction1_3.CreatedAt - 1
+	resetDef1User4.Tags = model.Tags{{"a", evDef1.Address()}, {"t", "community_token_position_reset"}}
+	require.NoError(t, resetDef1User4.SignWithAlg(user4Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
+	resetDef2User2.Kind = model.CustomIONKindTokenizedCommunityAction
+	resetDef2User2.CreatedAt = evAction2_1.CreatedAt - 1
+	resetDef2User2.Tags = model.Tags{{"a", evDef2.Address()}, {"t", "community_token_position_reset"}}
+	require.NoError(t, resetDef2User2.SignWithAlg(user2Priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
 	require.NoError(t, db.AcceptEvents(t.Context(), &evPost1, &evPost2, &evPost3))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evDef1, &evDef2))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evDef1FirstBuy, &evDef2FirstBuy))
-	require.NoError(t, db.AcceptEvents(t.Context(), &evAction1_1)) // First buy for def1.
+	require.NoError(t, db.AcceptEvents(t.Context(), &resetDef1User2, &resetDef1User3, &resetDef1User4, &resetDef2User2))
+	require.NoError(t, db.AcceptEvents(t.Context(), &evAction1_1))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction1_2, &evAction1_3))
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction2_1)) // First buy for def2.
 	require.NoError(t, db.AcceptEvents(t.Context(), &evAction2_2))
 
-	require.Empty(t, helperSelectTCActionID(t, db, evAction1_1.ID), "first action should have NULL first_1175_address")
-	require.Equal(t, evAction1_1.ID, helperSelectTCActionID(t, db, evAction1_2.ID))
-	require.Equal(t, evAction1_1.ID, helperSelectTCActionID(t, db, evAction1_3.ID))
+	require.Empty(t, helperSelectTCActionID(t, db, resetDef1User2.ID), "reset event should have NULL first_1175_address")
+	require.Empty(t, helperSelectTCActionID(t, db, resetDef1User3.ID), "reset event should have NULL first_1175_address")
+	require.Empty(t, helperSelectTCActionID(t, db, resetDef1User4.ID), "reset event should have NULL first_1175_address")
+	require.Empty(t, helperSelectTCActionID(t, db, resetDef2User2.ID), "reset event should have NULL first_1175_address")
 
-	require.Empty(t, helperSelectTCActionID(t, db, evAction2_1.ID), "first action should have NULL first_1175_address")
-	require.Equal(t, evAction2_1.ID, helperSelectTCActionID(t, db, evAction2_2.ID))
+	require.Equal(t, resetDef1User2.ID, helperSelectTCActionID(t, db, evAction1_1.ID))
+	require.Equal(t, resetDef1User3.ID, helperSelectTCActionID(t, db, evAction1_2.ID))
+	require.Equal(t, resetDef1User4.ID, helperSelectTCActionID(t, db, evAction1_3.ID))
+	require.Equal(t, resetDef2User2.ID, helperSelectTCActionID(t, db, evAction2_1.ID))
+	require.Equal(t, resetDef2User2.ID, helperSelectTCActionID(t, db, evAction2_2.ID))
 
 	t.Run("post>kind31175", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
@@ -461,10 +501,10 @@ func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
 			Search: "include:dependencies:kind1175>kind31175",
 		})
 
-		// 2 actions + 2 def first buys + 2 posts + 1 1175 first buy = 7 events.
-		require.Len(t, events, 7)
+		// 2 actions + 2 definitions + 2 posts + 2 reset events = 8 events.
+		require.Len(t, events, 8)
 
-		var original, def, posts []*model.Event
+		var original, def, posts, resets []*model.Event
 
 		for _, ev := range events {
 			switch ev.Kind {
@@ -482,7 +522,7 @@ func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
 					posts = append(posts, &nested)
 
 				case model.CustomIONKindTokenizedCommunityAction:
-					require.Equal(t, evAction2_1, nested) // First buy for def2.
+					resets = append(resets, &nested)
 
 				default:
 					require.Failf(t, "unexpected nested event kind", "got %d", nested.Kind)
@@ -495,5 +535,6 @@ func TestFlowTC_FirstBuyFromPostOrAction(t *testing.T) {
 		require.ElementsMatch(t, []*model.Event{&evAction1_1, &evAction2_2}, original)
 		require.ElementsMatch(t, []*model.Event{&evPost1, &evPost2}, posts)
 		require.ElementsMatch(t, []*model.Event{&evDef1, &evDef2}, def)
+		require.ElementsMatch(t, []*model.Event{&resetDef1User2, &resetDef2User2}, resets)
 	})
 }
