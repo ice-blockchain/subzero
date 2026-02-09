@@ -67,7 +67,7 @@ var (
 	ErrSignatureByIONIdentityRequired = errors.New("event requires signature by ion identity")
 	ErrWalletRequired                 = errors.New("valid wallet address is required")
 
-	CommongTags = []string{
+	CommonTags = []string{
 		"t",
 		"l",
 		"L",
@@ -624,7 +624,7 @@ type kindValidatorBuilder struct {
 
 func newKindValidatorBuilder() *kindValidatorBuilder {
 	t := newKindValidatorBuilderEmpty()
-	for _, tag := range CommongTags {
+	for _, tag := range CommonTags {
 		t = t.Optional(tag)
 	}
 	return t

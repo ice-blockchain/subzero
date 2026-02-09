@@ -676,7 +676,7 @@ func (b *queryBuilder) ApplySpecialKinds(filter *databaseFilterSearch) (kinds []
 		case model.CustomIONKindRepostOfArticle:
 			repostKinds = append(repostKinds, strconv.Itoa(nostr.KindArticle))
 
-		case model.CustomIONKindRepostOfTokenizedCommunityDefination:
+		case model.CustomIONKindRepostOfTokenizedCommunityDefinition:
 			repostKinds = append(repostKinds, strconv.Itoa(model.CustomIONKindTokenizedCommunityDefinition))
 
 		case model.CustomIONKindRepostOfTokenizedCommunityAction:

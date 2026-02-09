@@ -55,7 +55,7 @@ const (
 
 	CustomIONKindRepostOfArticle                      = 16_30023
 	CustomIONKindRepostOfEditableTextNote             = 16_30175
-	CustomIONKindRepostOfTokenizedCommunityDefination = 16_31175
+	CustomIONKindRepostOfTokenizedCommunityDefinition = 16_31175
 	CustomIONKindRepostOfTokenizedCommunityAction     = 16_1175
 
 	// TODO: change to proper value.
