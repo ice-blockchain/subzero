@@ -34,6 +34,7 @@ import (
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/storage/internal"
 	"github.com/ice-blockchain/subzero/storage/statistics"
 )
@@ -46,7 +47,7 @@ var (
 )
 
 type (
-	CdnConfig = internal.CdnConfig
+	CdnConfig = internal.CDNConfig
 	Config    struct {
 		PrivateKey              string    `yaml:"private-key"`
 		IONStorageConfigURL     string    `yaml:"ion-storage-config-url"`
@@ -257,9 +258,9 @@ func WithConfig(cfg *Config) Option {
 	}
 }
 
-func MustInit(ctx context.Context, opts ...Option) {
+func MustInit(ctx context.Context, rqClient rq.Client, opts ...Option) {
 	globalClient.Once.Do(func() {
-		globalClient.Client = mustInit(ctx, opts...)
+		globalClient.Client = mustInit(ctx, rqClient, opts...)
 	})
 	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		if globalClient.Client == nil {
@@ -272,7 +273,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 	})
 }
 
-func mustInit(ctx context.Context, opts ...Option) *client {
+func mustInit(ctx context.Context, rqClient rq.Client, opts ...Option) *client {
 	var cl = &client{
 		newFiles:          make(map[string]map[string]*FileMetaInput),
 		newFilesMx:        &sync.RWMutex{},
@@ -449,7 +450,10 @@ func mustInit(ctx context.Context, opts ...Option) *client {
 	close(loadMonitoringCh)
 	go cl.startDownloadsFromQueue(ctx)
 	if cl.config.Cdn.URLUpload != "" && cl.config.Cdn.AccessKey != "" {
-		cl.cdn = internal.NewCDNClient(ctx, &cl.config.Cdn, cl.config.RelayURL, cl.rootStoragePath)
+		if rqClient == nil {
+			log.Panic().Str("context", "STORAGE").Msg("nil rq client passed to MustInit while cdn is enabled")
+		}
+		cl.cdn = internal.NewCDNClient(ctx, &cl.config.Cdn, rqClient, cl.config.RelayURL, cl.rootStoragePath)
 		if false {
 			if err = cl.forceUploadExistingFiles(ctx); err != nil {
 				log.Error().Err(err).Msg("failed to upload existing files")

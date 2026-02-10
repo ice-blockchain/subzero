@@ -7,11 +7,13 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
@@ -19,26 +21,24 @@ import (
 	slogzerolog "github.com/samber/slog-zerolog/v2"
 
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/query"
 )
 
 type (
 	Register = river.Workers
 	JobArgs  = river.JobArgs
 
+	InsertOpts = river.InsertOpts
+	UniqueOpts = river.UniqueOpts
+
 	Job[T JobArgs]            = river.Job[T]
 	Worker[T JobArgs]         = river.Worker[T]
 	WorkerDefaults[T JobArgs] = river.WorkerDefaults[T]
 
-	DBConfig struct {
-		Username  string   `yaml:"username,omitempty"`
-		Password  string   `yaml:"password,omitempty"`
-		WriteUrls []string `yaml:"write-urls" validate:"required"`
-	}
 	Config struct {
-		QueueName       string        `yaml:"queue-name"`                        // Queue name to use, could be empty.
-		RelayURL        string        `yaml:"relay-url" validate:"required,url"` // Relay URL of this job queue client.
-		ID              string        `yaml:"id,omitempty"`                      // ID of this client.
-		DB              DBConfig      `yaml:"db"`
+		query.Config
+		QueueName       string        `yaml:"queue-name"`   // Queue name to use, could be empty.
+		ID              string        `yaml:"id,omitempty"` // ID of this client.
 		MaxQueueWorkers int           `yaml:"max-queue-workers"`
 		JobMaxTimeout   time.Duration `yaml:"max-job-timeout"`
 	}
@@ -49,6 +49,8 @@ type (
 		Push(ctx context.Context, jobs ...JobArgs) error
 		Stop(ctx context.Context) error
 		Start(ctx context.Context) error
+		HealthCheck(ctx context.Context) error
+		Close(ctx context.Context) error
 	}
 
 	riverClient = river.Client[pgx.Tx]
@@ -59,6 +61,7 @@ type (
 		DB             *databaseClient
 		Cfg            *Config
 		River          atomic.Pointer[riverClient]
+		SwitchMu       sync.Mutex
 	}
 )
 
@@ -86,7 +89,7 @@ func newClient(ctx context.Context, opts ...Option) (*riverq, error) {
 
 	log.Debug().Str("context", "rq").Str("queue_name", client.Cfg.QueueName).Msg("initializing job queue client")
 
-	db, err := newDatabaseClient(ctx, client.Cfg.DB.Username, client.Cfg.DB.Password, client.Cfg.DB.WriteUrls...)
+	db, err := newDatabaseClient(ctx, client.Cfg.Username, client.Cfg.Password, client.Cfg.WriteURLs...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create database client")
 	}
@@ -95,7 +98,7 @@ func newClient(ctx context.Context, opts ...Option) (*riverq, error) {
 		return nil, errors.Wrap(err, "failed to initialize database client")
 	}
 
-	if err := client.initRiverClient(ctx); err != nil {
+	if err := client.initRiverClient(ctx, db.Get()); err != nil {
 		return nil, errors.Wrap(err, "failed to initialize river client")
 	}
 
@@ -108,12 +111,16 @@ func WithConfig(cfg *Config) Option {
 	}
 }
 
-func MustNewClient[T JobArgs](ctx context.Context, opts ...Option) Client {
+func MustNewClient(ctx context.Context, opts ...Option) Client {
 	client, err := newClient(ctx, opts...)
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to create job queue client")
 	}
 	return client
+}
+
+func (q *riverq) Close(ctx context.Context) error {
+	return errors.Join(q.Stop(ctx), q.DB.Close())
 }
 
 func (q *riverq) Register() *Register {
@@ -126,7 +133,25 @@ func (q *riverq) initOptions(opts ...Option) error {
 	}
 
 	if q.Cfg == nil {
-		q.Cfg = cfg.MustGet[Config]()
+		var err error
+		q.Cfg, err = cfg.Load[Config]()
+		if err != nil {
+			return errors.Wrap(err, "failed to load configuration for rq client")
+		}
+	}
+
+	if len(q.Cfg.WriteURLs) == 0 && len(q.Cfg.ReadURLs) == 0 {
+		dbConf, err := cfg.Get[query.Config]()
+		if err == nil && (len(dbConf.WriteURLs) > 0 || len(dbConf.ReadURLs) > 0 || dbConf.RelayURL != "") {
+			log.Info().
+				Str("context", "rq").
+				Msg("using database configuration for rq client since no explicit configuration provided")
+			q.Cfg.Config = *dbConf
+		}
+	}
+
+	if err := cfg.Validate(q.Cfg); err != nil {
+		return errors.Wrap(err, "configuration validation failed for rq client")
 	}
 
 	if q.Cfg.QueueName == "" && q.Cfg.ID == "" && q.Cfg.RelayURL == "" {
@@ -147,7 +172,7 @@ func (q *riverq) initOptions(opts ...Option) error {
 	return nil
 }
 
-func (q *riverq) initRiverClient(ctx context.Context) error {
+func (q *riverq) initRiverClient(ctx context.Context, pool *pgxpool.Pool) error {
 	id := cmp.Or(q.Cfg.ID, formatQueueName(q.Cfg.RelayURL))
 	log.Info().
 		Str("context", "rq").
@@ -156,7 +181,7 @@ func (q *riverq) initRiverClient(ctx context.Context) error {
 		Msg("initializing river client")
 
 	rClient, err := river.NewClient(
-		riverpgxv5.New(q.DB.Get()),
+		riverpgxv5.New(pool),
 		&river.Config{
 			Queues: map[string]river.QueueConfig{
 				q.Cfg.QueueName: {
@@ -175,8 +200,12 @@ func (q *riverq) initRiverClient(ctx context.Context) error {
 
 	old := q.River.Swap(rClient)
 	if old != nil {
-		log.Info().Str("context", "rq").Msg("stopping old river client")
-		old.Stop(ctx)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		log.Warn().Str("context", "rq").Msg("force stopping old river client")
+		if err := old.StopAndCancel(ctx); err != nil {
+			log.Error().Str("context", "rq").Err(err).Msg("force stopping old river client returned error")
+		}
 	}
 	return err
 }
@@ -204,7 +233,7 @@ func (q *riverq) Stop(ctx context.Context) error {
 	if o == nil {
 		return nil
 	}
-	return o.Stop(ctx)
+	return o.Stop(context.WithoutCancel(ctx))
 }
 
 func (q *riverq) Start(ctx context.Context) error {
@@ -215,24 +244,59 @@ func (q *riverq) Start(ctx context.Context) error {
 	return o.Start(ctx)
 }
 
-func (q *riverq) Push(ctx context.Context, jobs ...JobArgs) error {
-	err := q.push(ctx, jobs...)
-	if !shouldSwitchMaster(err) {
-		return err
-	}
+func (q *riverq) trySwitchMaster(ctx context.Context, reason error) error {
+	q.SwitchMu.Lock()
+	defer q.SwitchMu.Unlock()
 
-	err = q.DB.switchMaster(ctx, err)
+	err := q.DB.switchMaster(ctx, reason)
 	if err != nil {
 		return errors.Wrap(err, "failed to switch master")
 	}
 
-	q.initDatabaseClient(ctx, q.DB)
-	err = q.initRiverClient(ctx)
+	err = q.initDatabaseClient(ctx, q.DB)
+	if err != nil {
+		return errors.Wrap(err, "failed to reinitialize database client after master switch")
+	}
+
+	err = q.initRiverClient(ctx, q.DB.Get())
 	if err != nil {
 		return errors.Wrap(err, "failed to reinitialize river client after master switch")
 	}
 
-	return q.push(ctx, jobs...)
+	if err := q.Start(ctx); err != nil {
+		return errors.Wrap(err, "failed to restart river client after master switch")
+	}
+
+	return nil
+}
+
+func (q *riverq) Push(ctx context.Context, jobs ...JobArgs) error {
+	for attempt := 1; ctx.Err() == nil; attempt++ {
+		err := q.push(ctx, jobs...)
+		if !shouldSwitchMaster(err) {
+			return err
+		}
+
+		select {
+		case <-time.After(time.Millisecond * 500):
+			log.Debug().Str("context", "rq").Int("attempt", attempt).Msg("attempting to switch master and retry push")
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		if q.HealthCheck(ctx) == nil {
+			log.Debug().Str("context", "rq").Int("attempt", attempt).Msg("health check passed, connection was already restored")
+			continue
+		}
+
+		err = q.trySwitchMaster(ctx, err)
+		if err != nil {
+			log.Error().Err(err).Str("context", "rq").Int("attempt", attempt).Msg("master switching error")
+			continue
+		}
+	}
+	return ctx.Err()
 }
 
 func (q *riverq) push(ctx context.Context, jobs ...JobArgs) error {
@@ -254,7 +318,7 @@ func (q *riverq) push(ctx context.Context, jobs ...JobArgs) error {
 		res, err := o.Insert(ctx, jobs[0], opts)
 		if err == nil {
 			log.Debug().Str("context", "rq").
-				Int64("job-id", res.Job.ID).
+				Int64("job_id", res.Job.ID).
 				Str("kind", res.Job.Kind).
 				Msg("pushed job to queue")
 		}
@@ -276,12 +340,20 @@ func (q *riverq) push(ctx context.Context, jobs ...JobArgs) error {
 
 	for _, r := range res {
 		log.Debug().Str("context", "rq").
-			Int64("job-id", r.Job.ID).
+			Int64("job_id", r.Job.ID).
 			Str("kind", r.Job.Kind).
 			Msg("pushed job to queue")
 	}
 
 	return nil
+}
+
+func (q *riverq) HealthCheck(ctx context.Context) error {
+	o := q.River.Load()
+	if o == nil {
+		return ErrNotConnected
+	}
+	return q.DB.Ping(ctx)
 }
 
 func formatQueueName(name string) string {
@@ -313,5 +385,9 @@ func formatQueueName(name string) string {
 }
 
 func RegisterWorker[T JobArgs](register *Register, worker Worker[T]) {
+	log.Info().
+		Str("context", "rq").
+		Type("worker", worker).
+		Msg("registering worker")
 	river.AddWorker(register, worker)
 }

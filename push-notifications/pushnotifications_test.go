@@ -23,9 +23,14 @@ import (
 
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
+	"github.com/ice-blockchain/subzero/rq"
 )
 
 type MockPushClient struct {
+	mock.Mock
+}
+
+type MockRQ struct {
 	mock.Mock
 }
 
@@ -37,6 +42,36 @@ func (m *MockPushClient) SendSingle(ctx context.Context, notification *pn.Notifi
 func (m *MockPushClient) SendTopic(ctx context.Context, notification *pn.Notification[pn.SubscriptionTopic]) error {
 	args := m.Called(ctx, notification)
 	return args.Error(0)
+}
+
+func (m *MockRQ) Start(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *MockRQ) Stop(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *MockRQ) Close(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *MockRQ) HealthCheck(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *MockRQ) Push(ctx context.Context, jobs ...rq.JobArgs) error {
+	args := m.Called(ctx, jobs)
+	return args.Error(0)
+}
+
+func (m *MockRQ) Register() *rq.Register {
+	args := m.Called()
+	return args.Get(0).(*rq.Register)
 }
 
 func helperDecompressZlibAndDecodeBase64(t *testing.T, compressed string) string {
@@ -71,14 +106,38 @@ func helperCreateTestCompressorPool() *sync.Pool {
 	}
 }
 
-func TestCreateNotifications(t *testing.T) {
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-		antsPool:       helperCreateTestAntsPool(t),
-	}
+func helperNewManager(t testing.TB) *PushNotificationManager {
+	t.Helper()
+	m, _ := helperNewManagerWithClient(t)
+	return m
+}
 
+func helperNewManagerWithClient(t testing.TB) (*PushNotificationManager, *MockPushClient) {
+	t.Helper()
+
+	mockClient := new(MockPushClient)
+	client := pn.Client(mockClient)
+
+	return &PushNotificationManager{
+		relayURL:               testRelayURL,
+		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		pushNotificationClient: client,
+		compressorPool:         helperCreateTestCompressorPool(),
+		stats:                  newPushStats(),
+		antsPool:               helperCreateTestAntsPool(t),
+		rq:                     new(MockRQ),
+		privateKey:             model.GeneratePrivateKey(),
+		broadcaster: &mockBroadcaster{
+			T:    t,
+			Chan: make(chan mockedBroadcastEvent, 10),
+		},
+	}, mockClient
+}
+
+func TestCreateNotifications(t *testing.T) {
+	t.Parallel()
+
+	pm := helperNewManager(t)
 	t.Run("Empty device list returns nil", func(t *testing.T) {
 		notifications, err := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
 		require.NoError(t, err)
@@ -129,9 +188,9 @@ func TestCreateNotifications(t *testing.T) {
 				require.Empty(t, notification.Body)
 				require.Empty(t, notification.ImageURL)
 			} else {
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body)
-				require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL)
+				require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, notification.Body)
+				require.Equal(t, defaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL)
 			}
 		}
 	})
@@ -193,12 +252,9 @@ func TestCreateNotifications(t *testing.T) {
 }
 
 func TestCollectUserValidDevices(t *testing.T) {
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-		antsPool:       helperCreateTestAntsPool(t),
-	}
+	t.Parallel()
+
+	pm := helperNewManager(t)
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
 		devices := pm.collectUserValidDevices("non-existent-user", &model.Event{})
@@ -249,12 +305,9 @@ func TestCollectUserValidDevices(t *testing.T) {
 }
 
 func TestHandleEventWithPublicKey(t *testing.T) {
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-		antsPool:       helperCreateTestAntsPool(t),
-	}
+	t.Parallel()
+
+	pm := helperNewManager(t)
 
 	t.Run("Returns nil when reference pubkey is empty", func(t *testing.T) {
 		event := &model.Event{
@@ -287,16 +340,9 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 }
 
 func TestPushNotificationManager_SendNotifications(t *testing.T) {
-	mockClient := new(MockPushClient)
-	client := pn.Client(mockClient)
+	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
-		pushNotificationClient: &client,
-		compressorPool:         helperCreateTestCompressorPool(),
-		stats:                  newPushStats(),
-		antsPool:               helperCreateTestAntsPool(t),
-	}
+	pm, mockClient := helperNewManagerWithClient(t)
 
 	t.Run("Returns nil when no notifications", func(t *testing.T) {
 		err := pm.sendNotifications(t.Context(), nil, nil)
@@ -357,16 +403,9 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 }
 
 func TestPushNotificationManager_HandleInvalidDeviceTokens(t *testing.T) {
-	mockClient := new(MockPushClient)
-	client := pn.Client(mockClient)
+	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
-		pushNotificationClient: &client,
-		compressorPool:         helperCreateTestCompressorPool(),
-		stats:                  newPushStats(),
-		antsPool:               helperCreateTestAntsPool(t),
-	}
+	pm := helperNewManager(t)
 
 	t.Run("Returns nil when no invalid devices", func(t *testing.T) {
 		err := pm.handleInvalidDeviceTokens(t.Context(), nil)
@@ -375,16 +414,9 @@ func TestPushNotificationManager_HandleInvalidDeviceTokens(t *testing.T) {
 }
 
 func TestPushNotificationManager_AcceptEvents(t *testing.T) {
-	mockClient := new(MockPushClient)
-	client := pn.Client(mockClient)
+	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
-		pushNotificationClient: &client,
-		compressorPool:         helperCreateTestCompressorPool(),
-		stats:                  newPushStats(),
-		antsPool:               helperCreateTestAntsPool(t),
-	}
+	pm := helperNewManager(t)
 
 	t.Run("Returns nil when no events", func(t *testing.T) {
 		err := pm.AcceptEvents(t.Context(), nil)
@@ -393,16 +425,9 @@ func TestPushNotificationManager_AcceptEvents(t *testing.T) {
 }
 
 func TestPushNotificationManager_ProcessEvent(t *testing.T) {
-	mockClient := new(MockPushClient)
-	client := pn.Client(mockClient)
+	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
-		pushNotificationClient: &client,
-		compressorPool:         helperCreateTestCompressorPool(),
-		stats:                  newPushStats(),
-		antsPool:               helperCreateTestAntsPool(t),
-	}
+	pm := helperNewManager(t)
 
 	t.Run("Handles TextNote with q tag correctly", func(t *testing.T) {
 		event := &model.Event{
@@ -502,16 +527,9 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 }
 
 func TestPushNotificationManager_CollectNotifications(t *testing.T) {
-	mockClient := new(MockPushClient)
-	client := pn.Client(mockClient)
+	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
-		pushNotificationClient: &client,
-		compressorPool:         helperCreateTestCompressorPool(),
-		stats:                  newPushStats(),
-		antsPool:               helperCreateTestAntsPool(t),
-	}
+	pm := helperNewManager(t)
 
 	t.Run("Returns empty when no events", func(t *testing.T) {
 		single, topic, err := pm.collectNotifications(t.Context(), nil)
@@ -784,37 +802,34 @@ func TestShouldProcessGenericRepostEvent(t *testing.T) {
 }
 
 func TestGetTranslationWithRelevantInfo(t *testing.T) {
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-		antsPool:       helperCreateTestAntsPool(t),
-	}
+	t.Parallel()
+
+	pm := helperNewManager(t)
 	t.Run("Returns default translation", func(t *testing.T) {
 		translation := pm.getTranslation(NotificationTypeReaction)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
+		require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, translation.Title)
+		require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, translation.Body)
+		require.Equal(t, defaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
 
 		translation = pm.getTranslation(NotificationTypeMentionReply)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Title, translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].Body, translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeMentionReply].ImageURL, translation.ImageURL)
+		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, translation.Title)
+		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Body, translation.Body)
+		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].ImageURL, translation.ImageURL)
 
 		translation = pm.getTranslation(NotificationTypeNewFollower)
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, translation.ImageURL)
+		require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, translation.Title)
+		require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, translation.Body)
+		require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, translation.ImageURL)
 
 		translation = pm.getTranslation(NotificationTypeRepost)
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Title, translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].Body, translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeRepost].ImageURL, translation.ImageURL)
+		require.Equal(t, defaultTranslations[NotificationTypeRepost].Title, translation.Title)
+		require.Equal(t, defaultTranslations[NotificationTypeRepost].Body, translation.Body)
+		require.Equal(t, defaultTranslations[NotificationTypeRepost].ImageURL, translation.ImageURL)
 
 		translation = pm.getTranslation(NotificationTypeReaction)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, translation.Title)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, translation.Body)
-		require.Equal(t, DefaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
+		require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, translation.Title)
+		require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, translation.Body)
+		require.Equal(t, defaultTranslations[NotificationTypeReaction].ImageURL, translation.ImageURL)
 	})
 }
 func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
@@ -853,13 +868,7 @@ func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
 func TestProcessEventWithReaction(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-		antsPool:       helperCreateTestAntsPool(t),
-	}
+	pm := helperNewManager(t)
 	recipientPubKey := "recipient_master_pubkey"
 	deviceID := "device1"
 	devicePubKey := "device_pubkey"
@@ -920,8 +929,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notification.Body, "Body should match")
+	require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
+	require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, notification.Body, "Body should match")
 	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
 	require.Contains(t, notification.Data, "event", "Data should contain event")
 
@@ -938,8 +947,8 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Len(t, notificationsFromProcessEvent, 1, "Should create one notification")
 
 	notificationFromProcessEvent := notificationsFromProcessEvent[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Title, notificationFromProcessEvent.Title, "Title should match")
-	require.Equal(t, DefaultTranslations[NotificationTypeReaction].Body, notificationFromProcessEvent.Body, "Body should match")
+	require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, notificationFromProcessEvent.Title, "Title should match")
+	require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, notificationFromProcessEvent.Body, "Body should match")
 	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")
 	require.Contains(t, notificationFromProcessEvent.Data, "event", "Data should contain event")
 
@@ -951,7 +960,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Equal(t, CompressionMethodZlib, notificationFromProcessEvent.Data["compression"], "Compression method should be zlib")
 }
 
-func helperCreateTestAntsPool(t *testing.T) *ants.Pool {
+func helperCreateTestAntsPool(t testing.TB) *ants.Pool {
 	t.Helper()
 
 	return globalTestAntsPool

@@ -320,11 +320,6 @@ func (c *client) Close() (err error) {
 		err = errors.Join(err, errors.Wrapf(dErr, "failed to close db"))
 	}
 	close(c.downloadQueue)
-	if c.cdn != nil {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer shutdownCancel()
-		err = errors.Join(err, c.cdn.Stop(shutdownCtx))
-	}
 	return err
 }
 

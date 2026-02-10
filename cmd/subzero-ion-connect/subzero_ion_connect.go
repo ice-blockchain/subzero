@@ -29,6 +29,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 	nftcontentsender "github.com/ice-blockchain/subzero/nft-content-sender"
 	pushnotifications "github.com/ice-blockchain/subzero/push-notifications"
+	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/server"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/storage"
@@ -79,13 +80,18 @@ var (
 			logInit()
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
+			rqClient := rq.MustNewClient(cmd.Context())
+			defer rqClient.Close(cmd.Context())
 			command.MustInit(cmd.Context())
-			storage.MustInit(cmd.Context())
+			storage.MustInit(cmd.Context(), rqClient)
 			dvm.MustInit(cmd.Context())
-			pushnotifications.MustInit(cmd.Context(), antsPool)
+			pushnotifications.MustInit(cmd.Context(), antsPool, rqClient)
 			hashtagssender.MustInit(cmd.Context())
 			nftcontentsender.MustInit(cmd.Context())
 			followerssender.MustInit(cmd.Context())
+			if err := rqClient.Start(cmd.Context()); err != nil {
+				log.Panic().Err(err).Msg("failed to start rq client")
+			}
 			webserver = server.New(cmd.Context())
 			webserver.MustListenAndServe(cmd.Context())
 		},

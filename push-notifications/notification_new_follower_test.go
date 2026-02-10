@@ -152,9 +152,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
+	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
+	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
@@ -284,14 +284,17 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		require.Equal(t, followListEvent.String(), decompressedEvent, "Decompressed event should match original")
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
-		if platform == model.DeviceTokenOSIOS || platform == model.DeviceTokenOSWeb {
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL, "Image URL should match")
-		} else if platform == model.DeviceTokenOSAndroid {
+		switch platform {
+		case model.DeviceTokenOSIOS, model.DeviceTokenOSWeb:
+			require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, notification.Title, "Title should match")
+			require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, notification.Body, "Body should match")
+			require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL, "Image URL should match")
+		case model.DeviceTokenOSAndroid:
 			require.Equal(t, "", notification.Title, "Title should match")
 			require.Equal(t, "", notification.Body, "Body should match")
 			require.Equal(t, "", notification.ImageURL, "Image URL should match")
+		default:
+			t.Fatalf("unknown platform: %s", platform)
 		}
 	}
 
@@ -549,9 +552,9 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.Len(t, notifications, 1, "Should create one notification")
 
 	notification := notifications[0]
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
-	require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
+	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
+	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 	require.Equal(t, deviceEvent, notification.Target, "Target should match")
 
 	require.Contains(t, notification.Data, "event", "Data should contain event")
@@ -570,11 +573,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 
 	testSuffix := uuid.NewString()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	privKey, followListAuthorPubKey := model.GenerateKeyPair()
 	recipientPubKey1 := "recipient1_" + testSuffix
@@ -734,10 +733,10 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 			require.Equal(t, "", notification.Body, "Android notifications should have empty body")
 			require.Equal(t, "", notification.ImageURL, "Android notifications should have empty image URL")
 		} else {
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].Body, notification.Body,
+			require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
+			require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, notification.Body,
 				"Should use default translation")
-			require.Equal(t, DefaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
+			require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
 		}
 		require.Contains(t, notification.Data, "event", "Data should contain event")
 		require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Should use zlib compression")

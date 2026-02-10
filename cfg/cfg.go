@@ -69,7 +69,7 @@ func Validate[T any](cfg *T) (err error) {
 	return globalValidator.Struct(cfg)
 }
 
-func Get[T any]() (*T, error) {
+func Load[T any]() (*T, error) {
 	var t T
 
 	typeOf := reflect.TypeOf(t)
@@ -88,9 +88,18 @@ func Get[T any]() (*T, error) {
 		return nil, errors.Wrapf(err, "could not deserialised `%v` yaml key `%v` into %+v", yamlConfigurationFilePath, key, t)
 	}
 
-	if err := Validate(&t); err != nil {
-		return nil, errors.Wrapf(err, "could not validate `%v` yaml key `%v`: %v", yamlConfigurationFilePath, key, err)
+	return &t, nil
+}
+
+func Get[T any]() (*T, error) {
+	t, err := Load[T]()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to load config of type `%v`", reflect.TypeOf(t))
 	}
 
-	return &t, nil
+	if err = Validate(t); err != nil {
+		return nil, errors.Wrapf(err, "validation failed for config of type `%v` with value %+v", reflect.TypeOf(t), t)
+	}
+
+	return t, nil
 }

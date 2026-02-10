@@ -190,7 +190,7 @@ func TestLargeFileUploader(t *testing.T) {
 			}
 		})
 		storage.Reset()
-		initStorage(t.Context(), storage.WithConfig(&storage.Config{
+		initStorage(t.Context(), nil, storage.WithConfig(&storage.Config{
 			PrivateKey:              testPrivateKey,
 			RelayURL:                "wss://localhost:9996",
 			ExternalADNLPort:        12349,

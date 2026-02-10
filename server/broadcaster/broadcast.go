@@ -4,7 +4,6 @@ package broadcaster
 
 import (
 	"context"
-	"crypto/tls"
 	"runtime"
 	"strconv"
 	"strings"
@@ -46,7 +45,7 @@ func New(conf Config) *Broadcaster {
 	}
 }
 
-func (b *Broadcaster) newInitAuthEvent(url string) *model.Event {
+func (b *Broadcaster) newInitAuthEvent(string) *model.Event {
 	var ev model.Event
 
 	ev.Kind = nostr.KindClientAuthentication
@@ -68,9 +67,7 @@ func (b *Broadcaster) newRelay(ctx context.Context, url string) (*nostr.Relay, e
 		return ok && err == nil
 	}))
 
-	err := relay.ConnectWithTLS(ctx, &tls.Config{
-		InsecureSkipVerify: true,
-	})
+	err := relay.Connect(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "relay connection failed")
 	}
@@ -214,7 +211,7 @@ func (b *Broadcaster) collectTargets(ctx context.Context, events model.Events) (
 	return targets, nil
 }
 
-func (b *Broadcaster) broadcastTo(ctx context.Context, target string, events model.Events) (err error) {
+func (b *Broadcaster) BroadcastTo(ctx context.Context, target string, events model.Events) (err error) {
 	relay := b.ensureRelay(ctx, target)
 	if relay == nil {
 		return errors.Errorf("%v is not available", target)
@@ -272,7 +269,7 @@ func (b *Broadcaster) Broadcast(ctx context.Context, events ...*model.Event) (er
 			wg.Go(func() {
 				defer appcontext.GetAppContext(ctx).Recover()
 				start := time.Now()
-				bxErr := b.broadcastTo(ctx, relay, events)
+				bxErr := b.BroadcastTo(ctx, relay, events)
 				end := time.Since(start)
 				log.Trace().
 					Str("context", "Broadcaster").

@@ -23,18 +23,18 @@ type (
 		Result chan int
 		WorkerDefaults[testAddWorkerArgs]
 	}
-	testSubstractWorkerArgs struct {
+	testSubtractWorkerArgs struct {
 		A int
 		B int
 	}
-	testSubstractWorker struct {
+	testSubtractWorker struct {
 		T      *testing.T
 		Result chan int
-		WorkerDefaults[testSubstractWorkerArgs]
+		WorkerDefaults[testSubtractWorkerArgs]
 	}
 )
 
-func (testSubstractWorkerArgs) Kind() string {
+func (testSubtractWorkerArgs) Kind() string {
 	return "test_math_sub_args"
 }
 
@@ -53,7 +53,7 @@ func (w *testAddWorker) Work(ctx context.Context, job *Job[testAddWorkerArgs]) e
 	return nil
 }
 
-func (w *testSubstractWorker) Work(ctx context.Context, job *Job[testSubstractWorkerArgs]) error {
+func (w *testSubtractWorker) Work(ctx context.Context, job *Job[testSubtractWorkerArgs]) error {
 	r := job.Args.A - job.Args.B
 	w.T.Logf("Substraction result: %d - %d = %d", job.Args.A, job.Args.B, r)
 	select {
@@ -69,15 +69,14 @@ func TestProcessDifferentJobs(t *testing.T) {
 
 	ctx, _ := appcontext.NewAppContext(t.Context())
 
-	addr, release := query.NewTestDatabase(ctx)
-	defer release()
+	addr, _ := testContainer.MustTempDB(ctx)
 
 	client, err := newClient(ctx,
 		WithConfig(&Config{
-			DB: DBConfig{
-				WriteUrls: []string{addr},
+			Config: query.Config{
+				WriteURLs: []string{addr},
+				RelayURL:  "https://example.com/relay",
 			},
-			RelayURL: "https://example.com/relay",
 		}),
 	)
 	require.NoError(t, err)
@@ -87,7 +86,7 @@ func TestProcessDifferentJobs(t *testing.T) {
 	substractResults := make(chan int, 1)
 
 	RegisterWorker(client.Register(), &testAddWorker{T: t, Result: addResults})
-	RegisterWorker(client.Register(), &testSubstractWorker{T: t, Result: substractResults})
+	RegisterWorker(client.Register(), &testSubtractWorker{T: t, Result: substractResults})
 
 	require.NoError(t, client.Start(ctx))
 
@@ -102,7 +101,7 @@ func TestProcessDifferentJobs(t *testing.T) {
 		}
 	})
 	t.Run("Substraction job", func(t *testing.T) {
-		args := &testSubstractWorkerArgs{A: 20, B: 8}
+		args := &testSubtractWorkerArgs{A: 20, B: 8}
 		require.NoError(t, client.Push(ctx, args))
 		select {
 		case res := <-substractResults:
@@ -111,5 +110,5 @@ func TestProcessDifferentJobs(t *testing.T) {
 			t.Error("timeout waiting for substraction result")
 		}
 	})
-	client.Stop(ctx)
+	require.NoError(t, client.Close(ctx))
 }
