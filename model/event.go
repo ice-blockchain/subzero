@@ -245,6 +245,10 @@ func (events Events) String() string {
 func (events Events) Hash() string {
 	h := xxh3.New()
 	for _, e := range events {
+		if e == nil {
+			h.WriteString("nil")
+			continue
+		}
 		h.WriteString(e.ID)
 		h.WriteString(e.Content)
 	}

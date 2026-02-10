@@ -110,7 +110,7 @@ func (c *client) doCdnUpload(ctx context.Context, contentType, fileName string, 
 		Int("status", resp.GetStatusCode()).
 		Msg("failed to upload file")
 
-	return errors.Errorf("upload new failed: code %v", resp.GetStatusCode())
+	return errors.Errorf("upload file failed: code %v", resp.GetStatusCode())
 }
 
 func (c *client) FileDelete(ctx context.Context, name string) error {

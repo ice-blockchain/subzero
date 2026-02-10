@@ -193,11 +193,11 @@ func helperVerifyBroadcastEvents(t *testing.T, broadcastedEvents []mockedBroadca
 	}
 }
 
-func helperWaitForNotifications(t *testing.T, mockNotifycationClient *mockNotificationClient, expectedEvent *model.Event) {
+func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient, expectedEvent *model.Event) {
 	t.Helper()
 
 	select {
-	case n := <-mockNotifycationClient.Chan:
+	case n := <-mockClient.Chan:
 		t.Logf("Received push notification %#v", n)
 		require.Equal(t, expectedEvent, n.SourceEvent)
 		require.Equal(t, defaultTranslations[NotificationTypePost].Title, n.Title)
@@ -214,13 +214,13 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 	addr, release := query.NewTestDatabase(t.Context())
 	defer release()
 
-	mockNotifycationClient := &mockNotificationClient{
+	mockNotificationClient := &mockNotificationClient{
 		T:    t,
 		Chan: make(chan *internal.Notification[*DeviceRegistrationEvent], 100),
 	}
 
 	pm := helperNewManager(t)
-	pm.pushNotificationClient = internal.Client(mockNotifycationClient)
+	pm.pushNotificationClient = internal.Client(mockNotificationClient)
 
 	dbConf := query.Config{
 		PrivateKey: pm.privateKey,
@@ -330,12 +330,12 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 			require.NoError(t, pm.AcceptEventsFromBroadcast(t.Context(), b.Events))
 		}
 		// Wait just for a single event since we have deduplication inside RQ.
-		helperWaitForNotifications(t, mockNotifycationClient, postEvent)
+		helperWaitForNotifications(t, mockNotificationClient, postEvent)
 	})
 
 	t.Run("Publish_TokenizedCommunityDefinition_From_User2", func(t *testing.T) {
 		pm.broadcaster.(*mockBroadcaster).Reset()
-		mockNotifycationClient.Reset()
+		mockNotificationClient.Reset()
 
 		postEvent := helperCreateTokenizedCommunityDefinitionEvent(t, user2, user4.PublicKey)
 		t.Logf("Publishing 31175 (first buy) event from User2: %s", postEvent.ID)
@@ -350,8 +350,9 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 				t.Logf("Received broadcast to relay %s with %d events", b.RelayURL, len(b.Events))
 				require.Contains(t, user4.Relays, b.RelayURL)
 				receivedBroadcasts = append(receivedBroadcasts, b)
+
 			case <-time.After(time.Second * 5):
-				t.Fatal("Timed out waiting for broadcasts to User3's relays")
+				t.Fatal("Timed out waiting for broadcasts to User4's relays")
 			}
 		}
 
@@ -360,6 +361,6 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 			require.NoError(t, pm.AcceptEventsFromBroadcast(t.Context(), b.Events))
 		}
 		// Wait just for a single event since we have deduplication inside RQ.
-		helperWaitForNotifications(t, mockNotifycationClient, postEvent)
+		helperWaitForNotifications(t, mockNotificationClient, postEvent)
 	})
 }

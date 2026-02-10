@@ -76,12 +76,12 @@ var (
 			logInit()
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
-			rq := rq.MustNewClient(cmd.Context())
-			defer rq.Close(cmd.Context())
+			rqClient := rq.MustNewClient(cmd.Context())
+			defer rqClient.Close(cmd.Context())
 			command.MustInit(cmd.Context())
 			dvm.MustInit(cmd.Context())
-			pushnotifications.MustInit(cmd.Context(), antsPool, rq)
-			if err := rq.Start(cmd.Context()); err != nil {
+			pushnotifications.MustInit(cmd.Context(), antsPool, rqClient)
+			if err := rqClient.Start(cmd.Context()); err != nil {
 				log.Panic().Err(err).Msg("failed to start rq client")
 			}
 			webserver = server.New(cmd.Context())

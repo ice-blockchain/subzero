@@ -145,7 +145,7 @@ func (s *PushStats) StartPeriodicLogging(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info().Msg("🛑 Stopping push notification statistics logging")
+				log.Info().Msg("Stopping push notification statistics logging")
 				return
 			case <-ticker.C:
 				snapshot := s.GetStats()
@@ -153,7 +153,7 @@ func (s *PushStats) StartPeriodicLogging(ctx context.Context) {
 			}
 		}
 	}()
-	log.Info().Msg("📈 Started push notification statistics logging (every 1 minute)")
+	log.Info().Msg("Started push notification statistics logging (every 1 minute)")
 }
 
 func logStats(s StatsSnapshot) {
@@ -177,7 +177,7 @@ func logStats(s StatsSnapshot) {
 		Dur("duration", s.Duration).
 		Interface("success_by_kind", s.SuccessByKind).
 		Interface("errors_by_kind", s.ErrorsByKind).
-		Msg("📊 Push notification statistics")
+		Msg("Push notification statistics")
 }
 
 func classifyError(err error) string {

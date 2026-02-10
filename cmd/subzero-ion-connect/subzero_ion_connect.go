@@ -80,16 +80,16 @@ var (
 			logInit()
 			validation.MustInit(cmd.Context())
 			query.MustInit(cmd.Context())
-			rq := rq.MustNewClient(cmd.Context())
-			defer rq.Close(cmd.Context())
+			rqClient := rq.MustNewClient(cmd.Context())
+			defer rqClient.Close(cmd.Context())
 			command.MustInit(cmd.Context())
-			storage.MustInit(cmd.Context(), rq)
+			storage.MustInit(cmd.Context(), rqClient)
 			dvm.MustInit(cmd.Context())
-			pushnotifications.MustInit(cmd.Context(), antsPool, rq)
+			pushnotifications.MustInit(cmd.Context(), antsPool, rqClient)
 			hashtagssender.MustInit(cmd.Context())
 			nftcontentsender.MustInit(cmd.Context())
 			followerssender.MustInit(cmd.Context())
-			if err := rq.Start(cmd.Context()); err != nil {
+			if err := rqClient.Start(cmd.Context()); err != nil {
 				log.Panic().Err(err).Msg("failed to start rq client")
 			}
 			webserver = server.New(cmd.Context())

@@ -200,10 +200,12 @@ func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClie
 	if strings.HasPrefix(strings.TrimSpace(config.FCMCredentialsFile), "{") {
 		opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
 	} else {
-		if _, err := os.Stat(config.FCMCredentialsFile); err != nil {
-			opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
-		} else {
+		if s, err := os.Stat(config.FCMCredentialsFile); err == nil && !s.IsDir() {
+			log.Debug().Str("context", "PUSH_NOTIFICATIONS").Str("path", config.FCMCredentialsFile).Msg("using FCM credentials from file")
 			opts = append(opts, pn.WithCredentialsFile(config.FCMCredentialsFile))
+		} else {
+			log.Debug().Str("context", "PUSH_NOTIFICATIONS").Str("path", config.FCMCredentialsFile).Msg("using FCM credentials from string")
+			opts = append(opts, pn.WithCredentialsJSON(config.FCMCredentialsFile))
 		}
 	}
 	opts = append(opts, pn.WithPrivateKey(config.PrivateKey))
