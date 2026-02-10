@@ -137,6 +137,7 @@ push-notifications:
   private-key: *pk
   fcm-credentials-file: ./bogus.json
   relay-url: *self
+  broadcast-private-key: *pk
 validation:
   ion-identity-base-url: https://identity.io/
   max-wrapped-event-expiration: 720h
