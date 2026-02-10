@@ -133,7 +133,11 @@ func (q *riverq) initOptions(opts ...Option) error {
 	}
 
 	if q.Cfg == nil {
-		q.Cfg = cfg.MustGet[Config]()
+		var err error
+		q.Cfg, err = cfg.Load[Config]()
+		if err != nil {
+			return errors.Wrap(err, "failed to load configuration for rq client")
+		}
 	}
 
 	if len(q.Cfg.WriteURLs) == 0 && len(q.Cfg.ReadURLs) == 0 && q.Cfg.RelayURL == "" {
@@ -144,6 +148,10 @@ func (q *riverq) initOptions(opts ...Option) error {
 				Msg("using database configuration for rq client since no explicit configuration provided")
 			q.Cfg.Config = *dbConf
 		}
+	}
+
+	if err := cfg.Validate(q.Cfg); err != nil {
+		return errors.Wrap(err, "configuration validation failed for rq client")
 	}
 
 	if q.Cfg.QueueName == "" && q.Cfg.ID == "" && q.Cfg.RelayURL == "" {
