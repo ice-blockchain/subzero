@@ -140,7 +140,7 @@ func (q *riverq) initOptions(opts ...Option) error {
 		}
 	}
 
-	if len(q.Cfg.WriteURLs) == 0 && len(q.Cfg.ReadURLs) == 0 && q.Cfg.RelayURL == "" {
+	if len(q.Cfg.WriteURLs) == 0 && len(q.Cfg.ReadURLs) == 0 {
 		dbConf, err := cfg.Get[query.Config]()
 		if err == nil && (len(dbConf.WriteURLs) > 0 || len(dbConf.ReadURLs) > 0 || dbConf.RelayURL != "") {
 			log.Info().
