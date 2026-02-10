@@ -220,7 +220,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lib/pq v1.11.1 // indirect
+	github.com/lib/pq v1.11.2 // indirect
 	github.com/libdns/libdns v1.1.1 // indirect
 	github.com/linxGnu/grocksdb v1.10.7 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect

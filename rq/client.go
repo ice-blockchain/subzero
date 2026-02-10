@@ -136,6 +136,16 @@ func (q *riverq) initOptions(opts ...Option) error {
 		q.Cfg = cfg.MustGet[Config]()
 	}
 
+	if len(q.Cfg.WriteURLs) == 0 && len(q.Cfg.ReadURLs) == 0 && q.Cfg.RelayURL == "" {
+		dbConf, err := cfg.Get[query.Config]()
+		if err == nil && (len(dbConf.WriteURLs) > 0 || len(dbConf.ReadURLs) > 0 || dbConf.RelayURL != "") {
+			log.Info().
+				Str("context", "rq").
+				Msg("using database configuration for rq client since no explicit configuration provided")
+			q.Cfg.Config = *dbConf
+		}
+	}
+
 	if q.Cfg.QueueName == "" && q.Cfg.ID == "" && q.Cfg.RelayURL == "" {
 		return errors.Wrapf(ErrInvalidArguments, "either queue name or client ID or relay URL must be provided")
 	}
