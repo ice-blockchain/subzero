@@ -210,7 +210,9 @@ var (
 
 		model.CustomIONKindDeviceRegistration: newKindValidatorBuilder().
 			ContentNotEmpty().
-			Required("d", "t", "relay", "token").
+			Required("relay").
+			Optional("t", "token").
+			Validate(validateKindDeviceRegistration).
 			Build(),
 
 		model.CustomIONKindAttestation: newKindValidatorBuilderEmpty().
@@ -453,8 +455,6 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 		return validateCustomIONKindCommunityOwnershipTransferringEvent(ctx, e)
 	case model.CustomIONKindCommunityBanUser:
 		return validateCustomIONKindCommunityBanUserEvent(ctx, e)
-	case model.CustomIONKindDeviceRegistration:
-		return ev.validateKindDeviceRegistration(ctx, rules, batch, e)
 	case model.CustomIONKindEphemeralEmbedding:
 		wrappedRules := &ruleSet{
 			SkipKindProfileProofEventsVerify: true,
