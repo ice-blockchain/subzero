@@ -33,11 +33,15 @@ func validateKindDeviceRegistrationAuthoritative(_ context.Context, ev *eventVal
 	return nil
 }
 
-func validateKindDeviceRegistration(ctx context.Context, ev *eventValidator, e *model.Event) error {
+func validateKindDeviceRegistration(ctx context.Context, ev *eventValidator, e *model.Event, rules *ruleSet) error {
 	var filters model.Filters
 
 	if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "wrong content JSON value: %v", err)
+	}
+
+	if rules != nil && rules.BroadcastMode {
+		return nil
 	}
 
 	dtagValues := strings.SplitN(e.Tags.GetD(), "_", 2)
