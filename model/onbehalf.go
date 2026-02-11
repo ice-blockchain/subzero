@@ -142,11 +142,17 @@ func (r *OnBehalfAccessEntries) IsAccessAllowed(deviceKey string, kind int, now 
 		return false, errors.Wrap(ErrAttestationRecordNotFound, deviceKey)
 	}
 
-	if record.Revoked != nil && now.After(*record.Revoked) {
+	switch {
+	case record.Revoked != nil && !now.Before(*record.Revoked):
 		return false, errors.Wrap(ErrAttestationRecordRevoked, deviceKey)
-	} else if record.End != nil && now.After(*record.End) {
+
+	case record.End != nil && now.After(*record.End):
 		return false, errors.Wrap(ErrAttestationRecordExpired, deviceKey)
-	} else if record.Start != nil && now.Before(*record.Start) {
+
+	case record.Start == nil:
+		return false, errors.Wrapf(ErrAttestationRecordNotFound, "start time is not set for device key %q", deviceKey)
+
+	case now.Before(*record.Start):
 		return false, errors.Wrap(ErrAttestationRecordIsNotActive, deviceKey)
 	}
 

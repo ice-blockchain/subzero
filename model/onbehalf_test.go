@@ -134,7 +134,7 @@ func TestIsAccessAllowed(t *testing.T) {
 		{
 			Name: "kind not allowed",
 			Records: map[string]*OnBehalfAccessEntry{
-				"device": {Kinds: []int{1, 2}},
+				"device": {Kinds: []int{1, 2}, Start: makeTS(10)},
 			},
 			DeviceKey: "device",
 			Kind:      3,
@@ -144,7 +144,7 @@ func TestIsAccessAllowed(t *testing.T) {
 		{
 			Name: "kind allowed",
 			Records: map[string]*OnBehalfAccessEntry{
-				"device": {Kinds: []int{1, 2}},
+				"device": {Kinds: []int{1, 2}, Start: makeTS(10)},
 			},
 			DeviceKey: "device",
 			Kind:      2,
@@ -154,7 +154,7 @@ func TestIsAccessAllowed(t *testing.T) {
 		{
 			Name: "kinds empty allows all",
 			Records: map[string]*OnBehalfAccessEntry{
-				"device": {},
+				"device": {Start: makeTS(10)},
 			},
 			DeviceKey: "device",
 			Kind:      5,
@@ -164,7 +164,7 @@ func TestIsAccessAllowed(t *testing.T) {
 		{
 			Name: "negative kind bypasses kinds check",
 			Records: map[string]*OnBehalfAccessEntry{
-				"device": {Kinds: []int{1}},
+				"device": {Kinds: []int{1}, Start: makeTS(10)},
 			},
 			DeviceKey: "device",
 			Kind:      -1,

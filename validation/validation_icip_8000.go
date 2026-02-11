@@ -40,12 +40,8 @@ func validateKindDeviceRegistration(ctx context.Context, ev *eventValidator, e *
 		return errors.Wrapf(ErrWrongEventParams, "wrong content JSON value: %v", err)
 	}
 
-	dtagValues := strings.SplitN(e.Tags.GetD(), "_", 2) // `master` + '_' + `device-id`.
-	if len(dtagValues) == 0 {
-		return errors.Wrap(ErrWrongEventParams, "d tag value is empty or invalid")
-	}
-
-	if len(dtagValues) > 1 && dtagValues[1] != "" { // Combination of master public key and device id is used.
+	dtagValues := strings.SplitN(e.Tags.GetD(), "_", 2)
+	if len(dtagValues) > 1 && dtagValues[1] != "" { // Combination of master public key and device id is used: `master` + '_' + `device-id`.
 		dtagMasterKey := dtagValues[0]
 
 		authoritativeForDtagMasterKey, _, err := ev.IsRelayAuthoritativeForUser(ctx, ev.Config.RelayURL, dtagMasterKey, "")
