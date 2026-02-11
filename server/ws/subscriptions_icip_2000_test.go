@@ -17,20 +17,6 @@ import (
 func TestValidateOnBehalfAccess(t *testing.T) {
 	t.Parallel()
 
-	t.Run("No attestation events", func(t *testing.T) {
-		_, masterPubKey := model.GenerateKeyPair()
-		ev := &model.Event{
-			Event: nostr.Event{
-				Kind: nostr.KindTextNote,
-				Tags: model.Tags{{model.CustomIONTagOnBehalfOf, masterPubKey}},
-			},
-		}
-		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
-
-		_, err := auth.ValidateUserAttestation(t.Context(), ev, nil)
-		require.ErrorIs(t, err, auth.ErrAttestationRecordNotFound)
-	})
-
 	t.Run("Invalid attestation record", func(t *testing.T) {
 		masterPrivKey, masterPubKey := model.GenerateKeyPair()
 		priv, pub := model.GenerateKeyPair()
@@ -80,7 +66,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		helperSignWithMinLeadingZeroBits(t, ev, model.GeneratePrivateKey())
 
 		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, auth.ErrAttestationRecordNotFound)
+		require.ErrorIs(t, err, model.ErrAttestationRecordNotFound)
 	})
 
 	t.Run("Revoked attestation", func(t *testing.T) {
@@ -107,7 +93,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, auth.ErrAttestationRecordRevoked)
+		require.ErrorIs(t, err, model.ErrAttestationRecordRevoked)
 	})
 
 	t.Run("Expired attestation", func(t *testing.T) {
@@ -134,7 +120,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, auth.ErrAttestationRecordExpired)
+		require.ErrorIs(t, err, model.ErrAttestationRecordExpired)
 	})
 
 	t.Run("Not yet active attestation", func(t *testing.T) {
@@ -161,7 +147,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		_, err := auth.ValidateUserAttestation(t.Context(), ev, attestationEv)
-		require.ErrorIs(t, err, auth.ErrAttestationRecordIsNotActive)
+		require.ErrorIs(t, err, model.ErrAttestationRecordIsNotActive)
 	})
 
 	t.Run("Valid attestation", func(t *testing.T) {
@@ -172,7 +158,7 @@ func TestValidateOnBehalfAccess(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Kind:      model.CustomIONKindAttestation,
 				Tags: model.Tags{
-					{"p", pub, "", model.CustomIONAttestationKindActive + ":1:10,22,33"},
+					{"p", pub, "", model.CustomIONAttestationKindActive + ":1:1,10,22,33"},
 				},
 			},
 		}

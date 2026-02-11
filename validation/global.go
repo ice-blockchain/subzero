@@ -38,3 +38,7 @@ func IsUserBanned(ctx context.Context, pubkey, communityID string) error {
 func IsUserPartOfCommunity(ctx context.Context, communityDefinitionEvent *model.Event, masterPubkey string) error {
 	return global.Validator.IsUserPartOfCommunity(ctx, communityDefinitionEvent, masterPubkey)
 }
+
+func IsRelayAuthoritativeForUser(ctx context.Context, relayURL string, masterKey, deviceKey string) (authoritative bool, kinds []int, err error) {
+	return global.Validator.IsRelayAuthoritativeForUser(ctx, relayURL, masterKey, deviceKey)
+}

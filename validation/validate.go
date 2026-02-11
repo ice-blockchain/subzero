@@ -45,7 +45,7 @@ type (
 		// Tag map: tag key -> tag state.
 		Tags map[string]tagData
 		// Additional validation function.
-		Validate []func(ctx context.Context, v *eventValidator, e *model.Event) error
+		Validate []func(ctx context.Context, v *eventValidator, e *model.Event, rules *ruleSet) error
 		// Additional flags for given kind.
 		Flags uint
 	}
@@ -89,7 +89,7 @@ var (
 		nostr.KindReaction: newKindValidatorBuilder().
 			Required("p", "k").
 			OneOf("e", "a").
-			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event, _ *ruleSet) error {
 				kTag := e.GetTag("k").Value()
 				kValue, err := strconv.Atoi(kTag)
 				if err != nil {
@@ -192,7 +192,7 @@ var (
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
-			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event, _ *ruleSet) error {
 				return validateKindFundReceive(e)
 			}).
 			Build(),
@@ -203,14 +203,16 @@ var (
 			OneOf("p", "l").
 			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
 			RequiredWith("l", "L").
-			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event, _ *ruleSet) error {
 				return validateKindFundSendNotify(e)
 			}).
 			Build(),
 
 		model.CustomIONKindDeviceRegistration: newKindValidatorBuilder().
 			ContentNotEmpty().
-			Required("d", "t", "relay", "token").
+			Required("relay").
+			Optional("t", "token").
+			Validate(validateKindDeviceRegistration).
 			Build(),
 
 		model.CustomIONKindAttestation: newKindValidatorBuilderEmpty().
@@ -355,7 +357,7 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 		return errors.Wrapf(ErrWrongEventParams, "content is too long %d, max is %d", contentSize, maxSize)
 	}
 	if v, ok := KindSupportedTags[e.Kind]; ok {
-		if err := v.Execute(ctx, ev, e); err != nil {
+		if err := v.Execute(ctx, ev, e, rules); err != nil {
 			return errors.Wrap(ErrWrongEventParams, err.Error())
 		}
 	}
@@ -453,8 +455,6 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 		return validateCustomIONKindCommunityOwnershipTransferringEvent(ctx, e)
 	case model.CustomIONKindCommunityBanUser:
 		return validateCustomIONKindCommunityBanUserEvent(ctx, e)
-	case model.CustomIONKindDeviceRegistration:
-		return ev.validateKindDeviceRegistration(ctx, rules, batch, e)
 	case model.CustomIONKindEphemeralEmbedding:
 		wrappedRules := &ruleSet{
 			SkipKindProfileProofEventsVerify: true,
@@ -700,7 +700,7 @@ func (t *kindValidatorBuilder) OneOfSingle(tags ...string) *kindValidatorBuilder
 	return t
 }
 
-func (t *kindValidatorBuilder) Validate(f ...func(ctx context.Context, v *eventValidator, e *model.Event) error) *kindValidatorBuilder {
+func (t *kindValidatorBuilder) Validate(f ...func(ctx context.Context, v *eventValidator, e *model.Event, rules *ruleSet) error) *kindValidatorBuilder {
 	t.Validator.Validate = append(t.Validator.Validate, f...)
 	return t
 }
@@ -709,7 +709,7 @@ func (t *kindValidatorBuilder) Build() kindValidator {
 	return t.Validator
 }
 
-func (v *kindValidator) Execute(ctx context.Context, ev *eventValidator, e *model.Event) (err error) {
+func (v *kindValidator) Execute(ctx context.Context, ev *eventValidator, e *model.Event, rules *ruleSet) (err error) {
 	if v.Flags&kindValidatorFlagContentRequired != 0 && e.Content == "" {
 		err = errors.Join(err, ErrContentEmpty)
 	}
@@ -720,7 +720,7 @@ func (v *kindValidator) Execute(ctx context.Context, ev *eventValidator, e *mode
 		err = errors.Join(err, ErrSignatureByIONIdentityRequired)
 	}
 	for _, f := range v.Validate {
-		err = errors.Join(err, f(ctx, ev, e))
+		err = errors.Join(err, f(ctx, ev, e, rules))
 	}
 	return err
 }

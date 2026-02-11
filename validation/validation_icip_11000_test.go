@@ -64,7 +64,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			{"k", "0"},
 		}
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), &eventValidator{}, &ev))
+		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), &eventValidator{}, &ev, nil))
 	})
 	t.Run("Defination event with 'p' tag for xcom", func(t *testing.T) {
 		var ev model.Event
@@ -76,7 +76,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			{"p", "creator_pubkey"},
 		}
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), &eventValidator{}, &ev))
+		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), &eventValidator{}, &ev, nil))
 	})
 	t.Run("First buy without tokenized event", func(t *testing.T) {
 		v := &eventValidator{
@@ -94,7 +94,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			{"k", "1"},
 		}
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev), ErrNotFound)
+		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev, nil), ErrNotFound)
 	})
 	t.Run("Missing profile metadata event", func(t *testing.T) {
 		v := &eventValidator{
@@ -109,7 +109,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 		ev.Tags = append(ev.Tags, model.Tag{"p", postTokenizedEvent.GetMasterPublicKey()})
 
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev), ErrNotFound)
+		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev, nil), ErrNotFound)
 	})
 	t.Run("Missing profile wallet", func(t *testing.T) {
 		v := &eventValidator{
@@ -126,7 +126,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 		ev.Tags = append(ev.Tags, model.Tag{"p", postTokenizedEvent.GetMasterPublicKey()})
 
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev), ErrWalletRequired)
+		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev, nil), ErrWalletRequired)
 	})
 	t.Run("Valid first buy", func(t *testing.T) {
 		v := &eventValidator{
@@ -143,7 +143,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 		ev.Tags = append(ev.Tags, model.Tag{"p", postTokenizedEvent.GetMasterPublicKey()})
 
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
-		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev))
+		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev, nil))
 	})
 	t.Run("Tokenized event is profile metadata", func(t *testing.T) {
 		var tcDef, tcBuy model.Event
@@ -169,6 +169,6 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			},
 		}
 
-		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &tcBuy))
+		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &tcBuy, nil))
 	})
 }
