@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"encoding/json"
 	"math/rand/v2"
 	"net"
 	"sync"
@@ -121,9 +120,6 @@ func TestHandleAuth(t *testing.T) {
 		}
 		helperSignWithMinLeadingZeroBits(t, attestationEvent, masterPriv)
 
-		attestationJSON, err := json.Marshal(attestationEvent)
-		require.NoError(t, err)
-
 		challenge := authConnGenerateChallenge(w)
 
 		authEvent := &model.Event{
@@ -132,7 +128,7 @@ func TestHandleAuth(t *testing.T) {
 				CreatedAt: nostr.Now(),
 				Tags: model.Tags{
 					{model.CustomIONTagOnBehalfOf, masterPub},
-					{"attestation", string(attestationJSON)},
+					{"attestation", attestationEvent.String()},
 					{"challenge", challenge},
 					{"relay", "wss://relay.example.com"},
 					{"user-agent", "test-client"},
@@ -142,8 +138,8 @@ func TestHandleAuth(t *testing.T) {
 		require.NoError(t, authEvent.SignWithAlg(priv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 		resp := h.handleAuth(t.Context(), w, authEvent)
-		require.True(t, resp.OK)
 		require.Empty(t, resp.Reason)
+		require.True(t, resp.OK)
 
 		// Verify stored auth data
 		storedData := authConnGetState(w)

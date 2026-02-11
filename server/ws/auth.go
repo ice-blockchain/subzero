@@ -115,7 +115,7 @@ func (h *handler) handleAuth(ctx context.Context, respWriter Writer, e *model.Ev
 	if e.PubKey != masterPubKey {
 		var err error
 		if userdata.Kinds, userdata.Authoritative, err = auth.ValidateUserAccess(ctx, h.RelayURL, e); err != nil {
-			if errors.IsAny(err, auth.ErrAttestationRecordNotFound, auth.ErrRelayNotAuthoritative) {
+			if errors.IsAny(err, model.ErrAttestationRecordNotFound, auth.ErrRelayNotAuthoritative) {
 				resp.Reason = auth.ErrRelayNotAuthoritative.Error()
 			} else {
 				resp.Reason = "failed to validate on-behalf access: " + err.Error()

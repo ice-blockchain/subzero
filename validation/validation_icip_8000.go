@@ -15,6 +15,11 @@ import (
 )
 
 func validateKindDeviceRegistrationAuthoritative(_ context.Context, ev *eventValidator, e *model.Event) error {
+	token := e.GetTag("token").Value()
+	if token == "" {
+		return errors.Wrapf(ErrWrongEventParams, "missing token tag")
+	}
+
 	deviceType := e.GetTag("t").Value()
 	if !slices.Contains([]string{model.DeviceTokenOSAndroid, model.DeviceTokenOSIOS, model.DeviceTokenOSWeb}, strings.ToLower(deviceType)) {
 		return errors.Wrapf(ErrWrongEventParams, "invalid device type in t tag: %q", deviceType)
@@ -24,6 +29,7 @@ func validateKindDeviceRegistrationAuthoritative(_ context.Context, ev *eventVal
 	if ev.Config != nil && ev.Config.RelayURL != "" && !ev.Config.EqualRelayURL(relayTag) {
 		return errors.Wrapf(ErrWrongEventParams, "relay tag value %q does not match configured relay URL %q", relayTag, ev.Config.RelayURL)
 	}
+
 	return nil
 }
 
@@ -34,19 +40,37 @@ func validateKindDeviceRegistration(ctx context.Context, ev *eventValidator, e *
 		return errors.Wrapf(ErrWrongEventParams, "wrong content JSON value: %v", err)
 	}
 
-	token := e.GetTag("token").Value()
-	if token != "" {
+	dtagValues := strings.SplitN(e.Tags.GetD(), "_", 2) // `master` + '_' + `device-id`.
+	if len(dtagValues) == 0 {
+		return errors.Wrap(ErrWrongEventParams, "d tag value is empty or invalid")
+	}
+
+	if len(dtagValues) > 1 && dtagValues[1] != "" { // Combination of master public key and device id is used.
+		dtagMasterKey := dtagValues[0]
+
+		authoritativeForDtagMasterKey, _, err := ev.IsRelayAuthoritativeForUser(ctx, ev.Config.RelayURL, dtagMasterKey, "")
+		if err != nil {
+			return errors.Wrapf(err, "failed to check relay authoritativeness for user %v", dtagMasterKey)
+		}
+
+		if authoritativeForDtagMasterKey && dtagMasterKey != e.GetMasterPublicKey() {
+			for _, tag := range e.Tags {
+				switch tag.Key() {
+				case "relay":
+					if v := tag.Value(); v == "" || !nostr.IsValidRelayURL(v) {
+						return errors.Wrapf(ErrWrongEventParams, "invalid relay URL in relay tag: %q", v)
+					}
+				}
+			}
+			return nil
+		}
+		return errors.Wrapf(ErrWrongEventParams, "relay is not authoritative for the master public key in d tag: %v or d tag value is invalid", dtagMasterKey)
+	}
+
+	data := model.GetUserDataFromContext(ctx)
+	if data.Authoritative && data.MasterPublicKey == e.GetMasterPublicKey() {
 		return validateKindDeviceRegistrationAuthoritative(ctx, ev, e)
 	}
 
-	for _, tag := range e.Tags {
-		switch tag.Key() {
-		case "relay":
-			if v := tag.Value(); v == "" || !nostr.IsValidRelayURL(v) {
-				return errors.Wrapf(ErrWrongEventParams, "invalid relay URL in relay tag: %q", v)
-			}
-		}
-	}
-
-	return nil
+	return errors.Wrap(ErrWrongEventParams, "relay is not authoritative for the user and/or master public key is different from the one in the event")
 }

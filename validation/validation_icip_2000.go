@@ -5,6 +5,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -207,4 +208,72 @@ func extractPubkeyFromDeviceIdentificationProof(ev *model.Event) (issuer string,
 	}
 
 	return "", ""
+}
+
+// IsRelayAuthoritativeForUser checks if the relay is authoritative for the user by looking for an attestation event and a relay list event from the user's master public key.
+// If both events are found, it checks if the attestation allows access for the device public key and returns the allowed kinds.
+func (ev *eventValidator) IsRelayAuthoritativeForUser(ctx context.Context, relayURL string, masterKey, deviceKey string) (authoritative bool, kinds []int, err error) {
+	relayTag := model.TagMap{}.Set("r", &relayURL)
+	if u, err := url.Parse(relayURL); err == nil && u.Port() != "" {
+		u.Host = u.Hostname()
+		relayTag = relayTag.Append("r", new(u.String()))
+	}
+
+	deviceTag := model.TagMap{}
+	if deviceKey != "" {
+		deviceTag = deviceTag.Set("p", &deviceKey)
+	}
+
+	it := ev.QueryFunc(ctx,
+		model.Filter{
+			Kinds:   []int{model.CustomIONKindAttestation},
+			Authors: []string{masterKey},
+			Tags:    deviceTag,
+			Limit:   1,
+		},
+		model.Filter{
+			Kinds:   []int{nostr.KindRelayListMetadata},
+			Authors: []string{masterKey},
+			Tags:    relayTag,
+			Limit:   1,
+		},
+	)
+
+	var attestationEvent, relayListEvent *model.Event
+	for ev, err := range it {
+		if err != nil {
+			return false, nil, errors.Wrap(err, "failed to fetch user events")
+		}
+		switch ev.Kind {
+		case model.CustomIONKindAttestation:
+			attestationEvent = ev
+		case nostr.KindRelayListMetadata:
+			relayListEvent = ev
+		}
+	}
+
+	// If there's no relay list event or attestation event, we can't consider the relay authoritative.
+	if relayListEvent == nil || attestationEvent == nil {
+		return false, nil, nil
+	}
+
+	records, err := model.ParseAttestationTags(attestationEvent.Tags)
+	if err != nil {
+		return false, nil, errors.Wrap(err, "failed to parse attestation tags")
+	}
+
+	if deviceKey == "" {
+		// If no device key is provided, we just check that given relay URL is in the user's relay list and it's authoritative.
+		return true, nil, nil
+	}
+
+	allowed, err := records.IsAccessAllowed(deviceKey, -1, nostr.Now())
+	if err != nil {
+		return false, nil, err
+	}
+	if !allowed {
+		return false, nil, errors.Errorf("access not allowed for pubkey %q", deviceKey)
+	}
+
+	return true, records.AllowedKinds(deviceKey), nil
 }

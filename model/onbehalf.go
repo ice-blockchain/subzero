@@ -11,18 +11,30 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type OnBehalfAccessEntry struct {
-	Start   *Timestamp
-	End     *Timestamp
-	Revoked *Timestamp
-	Kinds   []int
-}
+type (
+	OnBehalfAccessEntry struct {
+		Start   *Timestamp
+		End     *Timestamp
+		Revoked *Timestamp
+		Kinds   []int
+	}
+	OnBehalfAccessEntries struct {
+		Records map[string]*OnBehalfAccessEntry
+	}
+)
 
 const (
 	TagAttestationName             = "p"
 	TagAttestationValueIndexPubkey = 1
 	TagAttestationValueIndexRelay  = 2
 	TagAttestationValueIndexAction = 3
+)
+
+var (
+	ErrAttestationRecordNotFound    = errors.New("attestation record not found")
+	ErrAttestationRecordExpired     = errors.New("attestation record is expired")
+	ErrAttestationRecordRevoked     = errors.New("attestation record is revoked")
+	ErrAttestationRecordIsNotActive = errors.New("attestation record is not active yet")
 )
 
 func ParseAttestationString(s string) (action string, ts Timestamp, kinds []int, err error) {
@@ -61,9 +73,9 @@ func ParseAttestationString(s string) (action string, ts Timestamp, kinds []int,
 	return action, ts, kinds, nil
 }
 
-func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
+func ParseAttestationTags(tags Tags) (*OnBehalfAccessEntries, error) {
 	// List of onbehalf access entries, pubkey -> entry.
-	entries := make(map[string]*OnBehalfAccessEntry)
+	entries := &OnBehalfAccessEntries{Records: make(map[string]*OnBehalfAccessEntry)}
 	for _, tag := range tags {
 		if len(tag) < 4 || tag.Key() != TagAttestationName {
 			// Attetation tags are just a part of the regular tags, and regular tags may contain other tags, so just log and go on.
@@ -76,11 +88,11 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 		}
 
 		var entry *OnBehalfAccessEntry
-		if e, ok := entries[tag[TagAttestationValueIndexPubkey]]; ok {
+		if e, ok := entries.Records[tag[TagAttestationValueIndexPubkey]]; ok {
 			entry = e
 		} else {
 			entry = new(OnBehalfAccessEntry)
-			entries[tag[TagAttestationValueIndexPubkey]] = entry
+			entries.Records[tag[TagAttestationValueIndexPubkey]] = entry
 		}
 
 		action, ts, kinds, err := ParseAttestationString(tag[TagAttestationValueIndexAction])
@@ -106,25 +118,50 @@ func ParseAttestationTags(tags Tags) (map[string]*OnBehalfAccessEntry, error) {
 	return entries, nil
 }
 
-func OnBehalfIsAccessAllowed(masterTags Tags, onBehalfPubkey string, kind int, now Timestamp) (bool, error) {
+// AllowedKinds returns the allowed kinds for the given device key, or nil if the device key is not found.
+// It does NOT check the validity of the attestation record (e.g. whether it is expired or revoked).
+func (r *OnBehalfAccessEntries) AllowedKinds(deviceKey string) []int {
+	entry, ok := r.Records[deviceKey]
+	if !ok {
+		return nil
+	} else if len(entry.Kinds) == 0 {
+		// All kinds are allowed.
+		return nil
+	}
+	return slices.Clone(entry.Kinds)
+}
+
+// IsAccessAllowed checks if the given device key is allowed to act on behalf of the master public key for the given kind at the given time.
+func (r *OnBehalfAccessEntries) IsAccessAllowed(deviceKey string, kind int, now Timestamp) (bool, error) {
 	if kind == CustomIONKindAttestation {
-		// Explicitly forbid attestation access for all sub-accounts.
 		return false, nil
 	}
 
+	record, ok := r.Records[deviceKey]
+	if !ok {
+		return false, errors.Wrap(ErrAttestationRecordNotFound, deviceKey)
+	}
+
+	if record.Revoked != nil && now.After(*record.Revoked) {
+		return false, errors.Wrap(ErrAttestationRecordRevoked, deviceKey)
+	} else if record.End != nil && now.After(*record.End) {
+		return false, errors.Wrap(ErrAttestationRecordExpired, deviceKey)
+	} else if record.Start != nil && now.Before(*record.Start) {
+		return false, errors.Wrap(ErrAttestationRecordIsNotActive, deviceKey)
+	}
+
+	if kind >= 0 && len(record.Kinds) > 0 && !slices.Contains(record.Kinds, kind) {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func OnBehalfIsAccessAllowed(masterTags Tags, onBehalfPubkey string, kind int, now Timestamp) (bool, error) {
 	entries, err := ParseAttestationTags(masterTags)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to parse attestation tags")
 	}
-	entry, ok := entries[onBehalfPubkey]
-	if !ok || entry.Revoked != nil {
-		return false, nil
-	}
 
-	if kind > 0 && len(entry.Kinds) > 0 && !slices.Contains(entry.Kinds, kind) {
-		return false, nil
-	}
-
-	return (now.After(*entry.Start)) &&
-		(entry.End == nil || now.Before(*entry.End)), nil
+	return entries.IsAccessAllowed(onBehalfPubkey, kind, now)
 }
