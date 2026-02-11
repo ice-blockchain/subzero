@@ -20,8 +20,9 @@ import (
 
 var (
 	globalDB struct {
-		Client *dbClient
-		Once   sync.Once
+		Client  *dbClient
+		Tracker *statusTracker
+		Once    sync.Once
 	}
 	UsedDatabaseStorage atomic.Uint64
 )
@@ -134,8 +135,10 @@ func MustInit(ctx context.Context, opts ...Option) {
 			log.Warn().Msg("database DDL execution is disabled")
 		}
 
+		globalDB.Tracker = newStatusTracker()
 		globalDB.Client = openDatabase(ctx, conf.WriteURLs, conf.ReadURLs, conf.RunDDL).
 			WithPrivateKey(conf.PrivateKey).
+			WithOperationReporter(globalDB.Tracker.Submit).
 			WithRelayURL(conf.RelayURL)
 
 		if !conf.DisableSelfTest {
@@ -147,6 +150,7 @@ func MustInit(ctx context.Context, opts ...Option) {
 			}
 		}
 
+		globalDB.Tracker.Start(ctx)
 		if !globalDB.Client.hasReadURLs {
 			go globalDB.Client.StartExpiredEventsCleanup(ctx)
 		} else {
@@ -274,4 +278,11 @@ func (db *dbClient) StartCollectingUsedDatabaseStorage(ctx context.Context) {
 
 func CollectDeviceRegistrationEvents(ctx context.Context) EventIterator {
 	return globalDB.Client.collectDeviceRegistrationEvents(ctx)
+}
+
+func GetStatusReport(ctx context.Context) (*Status, error) {
+	if globalDB.Tracker == nil {
+		return nil, errors.New("database status tracker is not initialized")
+	}
+	return globalDB.Tracker.Get(ctx)
 }

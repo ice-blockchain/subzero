@@ -22,6 +22,7 @@ import (
 	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/storage"
 )
 
 type (
@@ -39,22 +40,13 @@ type (
 		UsedCPU             uint16 `json:"used_cpu"`
 		UsedBandwidth       uint64 `json:"used_bandwidth"`
 	}
-	SystemStatusState string
-	SystemStatus      struct {
-		EventsWrite SystemStatusState `json:"publishing_events"`
-		EventsRead  SystemStatusState `json:"subscribing_for_events"`
-		DVM         SystemStatusState `json:"dvm"`
-		FilesWrite  SystemStatusState `json:"uploading_files"`
-		FilesRead   SystemStatusState `json:"reading_files"`
-		PushesSend  SystemStatusState `json:"sending_push_notifications"`
-	}
 	RelayInformationDocument struct {
+		SystemStatus                   *SystemStatus  `json:"system_status,omitzero"`
 		SystemMetrics                  *SystemMetrics `json:"system_metrics,omitempty"`
 		nip11.RelayInformationDocument `json:",inline"`
-		FCMAndroidConfigs              []FCMConfig  `json:"fcm_android_configs"`
-		FCMIOSConfigs                  []FCMConfig  `json:"fcm_ios_configs"`
-		FCMWebConfigs                  []FCMConfig  `json:"fcm_web_configs"`
-		SystemStatus                   SystemStatus `json:"system_status,omitzero"`
+		FCMAndroidConfigs              []FCMConfig `json:"fcm_android_configs"`
+		FCMIOSConfigs                  []FCMConfig `json:"fcm_ios_configs"`
+		FCMWebConfigs                  []FCMConfig `json:"fcm_web_configs"`
 	}
 	Config struct {
 		PrivateKey         string
@@ -64,8 +56,11 @@ type (
 		MinLeadingZeroBits int
 	}
 	nip11handler struct {
+		storageClient        storage.StorageClient
 		cfg                  *Config
 		systemMetrics        *atomic.Pointer[SystemMetrics]
+		systemStatus         *atomic.Pointer[SystemStatus]
+		databaseReportGetter func(context.Context) (*query.Status, error)
 		storagePath          string
 		commandPath          string
 		lastBandwidthBytes   uint64
@@ -73,22 +68,31 @@ type (
 	}
 )
 
-const (
-	SystemStatusStateOK          SystemStatusState = "UP"
-	SystemStatusStateError       SystemStatusState = "DOWN"
-	SystemStatusStateMaintenance SystemStatusState = "MAINTENANCE"
-)
-
 const systemMetricsCollectionTime = 30 * time.Second
 
 func NewNIP11Handler(ctx context.Context, cfg *Config, storagePath, commandPath string) http.Handler {
 	h := &nip11handler{
-		cfg:           cfg,
-		storagePath:   storagePath,
-		commandPath:   commandPath,
-		systemMetrics: new(atomic.Pointer[SystemMetrics]),
+		cfg:                  cfg,
+		storagePath:          storagePath,
+		commandPath:          commandPath,
+		systemMetrics:        new(atomic.Pointer[SystemMetrics]),
+		systemStatus:         new(atomic.Pointer[SystemStatus]),
+		databaseReportGetter: query.GetStatusReport,
+		storageClient:        storage.Client(),
 	}
+
+	// Assume healthy at start.
+	h.systemStatus.Store(&SystemStatus{
+		EventsWrite: SystemStatusStateOK,
+		EventsRead:  SystemStatusStateOK,
+		DVM:         SystemStatusStateOK,
+		FilesWrite:  SystemStatusStateOK,
+		FilesRead:   SystemStatusStateOK,
+		PushesSend:  SystemStatusStateOK,
+	})
+
 	go h.startSystemMetricsCollector(ctx)
+	go h.startSystemStatusCollector(ctx, nil)
 	return h
 }
 
@@ -98,15 +102,18 @@ func (n *nip11handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) 
 		return
 	}
 	writer.Header().Add("Content-Type", "application/json")
-	info := n.info()
-	bytes, err := json.Marshal(info)
+	info := n.info(req.Context())
+
+	encoder := json.NewEncoder(writer)
+	encoder.SetEscapeHTML(true)
+
+	err := encoder.Encode(info)
 	if err != nil {
 		log.Error().Err(err).Interface("info", info).Msg("failed to serialize NIP11 json")
 	}
-	writer.Write(bytes)
 }
 
-func (n *nip11handler) info() RelayInformationDocument {
+func (n *nip11handler) info(context.Context) RelayInformationDocument {
 	var androidConfigs []FCMConfig
 	var iosConfigs []FCMConfig
 	var webConfigs []FCMConfig
@@ -173,18 +180,8 @@ func (n *nip11handler) info() RelayInformationDocument {
 		FCMAndroidConfigs: androidConfigs,
 		FCMIOSConfigs:     iosConfigs,
 		FCMWebConfigs:     webConfigs,
-		SystemStatus: SystemStatus{
-			EventsRead:  SystemStatusStateOK,
-			EventsWrite: SystemStatusStateOK,
-
-			DVM: SystemStatusStateMaintenance,
-
-			FilesRead:  SystemStatusStateOK,
-			FilesWrite: SystemStatusStateMaintenance,
-
-			PushesSend: SystemStatusStateError,
-		},
-		SystemMetrics: n.systemMetrics.Load(),
+		SystemStatus:      n.systemStatus.Load(),
+		SystemMetrics:     n.systemMetrics.Load(),
 	}
 }
 

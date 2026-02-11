@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/server/cert"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
+	"github.com/ice-blockchain/subzero/storage"
 )
 
 const (
@@ -62,11 +64,35 @@ func initServer(serverCtx context.Context, port uint16) {
 	time.Sleep(100 * time.Millisecond)
 }
 
+func helperNewHandler(t testing.TB) *nip11handler {
+	t.Helper()
+
+	handler := &nip11handler{
+		cfg:                  &Config{MinLeadingZeroBits: minLeadingZeroBits},
+		systemMetrics:        new(atomic.Pointer[SystemMetrics]),
+		systemStatus:         new(atomic.Pointer[SystemStatus]),
+		databaseReportGetter: query.GetStatusReport,
+		storageClient:        storage.Client(),
+	}
+
+	handler.systemMetrics.Store(&SystemMetrics{})
+	handler.systemStatus.Store(&SystemStatus{
+		EventsRead:  SystemStatusStateOK,
+		EventsWrite: SystemStatusStateOK,
+		DVM:         SystemStatusStateOK,
+		FilesRead:   SystemStatusStateOK,
+		FilesWrite:  SystemStatusStateOK,
+		PushesSend:  SystemStatusStateOK,
+	})
+
+	return handler
+}
+
 func TestNIP11(t *testing.T) {
 	t.Parallel()
 
-	handler := nip11handler{cfg: &Config{MinLeadingZeroBits: minLeadingZeroBits}, systemMetrics: new(atomic.Pointer[SystemMetrics])}
-	expected := handler.info()
+	handler := helperNewHandler(t)
+	expected := handler.info(t.Context())
 	require.NotNil(t, expected)
 
 	t.Run("Fetch via standard nip11 fetcher", func(t *testing.T) {
@@ -118,17 +144,14 @@ func TestFCMConfigParsing(t *testing.T) {
 	iosConfig := `{"apiKey":"ios-key","appId":"ios-app-id","messagingSenderId":"ios-messaging-sender","projectId":"ios-project"}`
 	webConfig := `{"apiKey":"web-key","appId":"web-app-id","messagingSenderId":"web-messaging-sender","projectId":"web-project"}`
 
-	handler := nip11handler{
-		cfg: &Config{
-			MinLeadingZeroBits: minLeadingZeroBits,
-			FCMAndroidConfigs:  []string{androidConfig},
-			FCMIOSConfigs:      []string{iosConfig},
-			FCMWebConfigs:      []string{webConfig},
-		},
-		systemMetrics: new(atomic.Pointer[SystemMetrics]),
+	handler := helperNewHandler(t)
+	handler.cfg = &Config{
+		MinLeadingZeroBits: minLeadingZeroBits,
+		FCMAndroidConfigs:  []string{androidConfig},
+		FCMIOSConfigs:      []string{iosConfig},
+		FCMWebConfigs:      []string{webConfig},
 	}
-	handler.systemMetrics.Store(&SystemMetrics{})
-	info := handler.info()
+	info := handler.info(t.Context())
 
 	require.Len(t, info.FCMAndroidConfigs, 1)
 	androidCfg := info.FCMAndroidConfigs[0]
@@ -151,14 +174,168 @@ func TestFCMConfigParsing(t *testing.T) {
 	require.Equal(t, "web-messaging-sender", webCfg.MessagingSenderID)
 	require.Equal(t, "web-project", webCfg.ProjectID)
 
-	handlerWithInvalidJSON := nip11handler{
-		cfg: &Config{
-			MinLeadingZeroBits: minLeadingZeroBits,
-			FCMAndroidConfigs:  []string{`invalid json`},
-		},
-		systemMetrics: new(atomic.Pointer[SystemMetrics]),
+	handlerWithInvalidJSON := helperNewHandler(t)
+	handlerWithInvalidJSON.cfg = &Config{
+		MinLeadingZeroBits: minLeadingZeroBits,
+		FCMAndroidConfigs:  []string{`invalid json`},
 	}
-	handlerWithInvalidJSON.systemMetrics.Store(&SystemMetrics{})
-	infoWithInvalidJSON := handlerWithInvalidJSON.info()
+	infoWithInvalidJSON := handlerWithInvalidJSON.info(t.Context())
 	require.Empty(t, infoWithInvalidJSON.FCMAndroidConfigs)
+}
+
+func TestStorageStatusCheck(t *testing.T) {
+	t.Parallel()
+
+	ctx := appcontext.TestContext(t)
+	storageClient := storage.NewClient(ctx, nil, storage.WithConfig(&storage.Config{
+		PrivateKey:              model.GeneratePrivateKey(),
+		AbsoluteRootStoragePath: t.TempDir(),
+		RelayURL:                testRelayURL,
+		IONLibertyDisabled:      true,
+		ExternalADNLPort:        12345,
+		IONStorageConfigURL:     "https://ton.org/testnet-global.config.json",
+	}))
+	require.NotNil(t, storageClient)
+
+	h := helperNewHandler(t)
+	h.storageClient = storageClient
+
+	var report SystemStatus
+	h.RunStorageStatusCheck(ctx, &report)
+	require.Equal(t, SystemStatusStateOK, report.FilesRead)
+	require.Equal(t, SystemStatusStateOK, report.FilesWrite)
+
+	internalReport := storageClient.Health()
+	require.False(t, internalReport.InReadErrorState)
+	require.False(t, internalReport.InWriteErrorState)
+
+	storageClient.Close()
+}
+
+func TestSystemStatusCollectorDatabase(t *testing.T) {
+	t.Parallel()
+
+	t.Run("System status collector sets correct statuses", func(t *testing.T) {
+		var cases = []struct {
+			Name string
+			query.Status
+		}{
+			{
+				Name: "Healthy database",
+				Status: query.Status{
+					LastWrite: time.Now(),
+					LastRead:  time.Now(),
+				},
+			},
+			{
+				Name: "Broken reads",
+				Status: query.Status{
+					LastWrite:        time.Now(),
+					LastRead:         time.Now(),
+					InReadErrorState: true,
+				},
+			},
+			{
+				Name: "Broken writes",
+				Status: query.Status{
+					LastWrite:         time.Now(),
+					LastRead:          time.Now(),
+					InWriteErrorState: true,
+				},
+			},
+		}
+		synctest.Test(t, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Logf("Running case: %s", tc.Name) // t.Run() is not available inside synctest.Test.
+				handler := helperNewHandler(t)
+				require.NotNil(t, handler)
+
+				handler.storageClient = nil // Disable storage checks.
+				handler.databaseReportGetter = func(context.Context) (*query.Status, error) {
+					return &tc.Status, nil
+				}
+
+				ticker := make(chan struct{}, 1)
+
+				workerCtx, workerCancel := context.WithCancel(appcontext.TestContext(t))
+				go handler.startSystemStatusCollector(workerCtx, ticker)
+
+				ticker <- struct{}{}
+				synctest.Wait()
+
+				data := handler.systemStatus.Load()
+				require.NotNil(t, data)
+
+				if tc.InReadErrorState {
+					require.Equal(t, SystemStatusStateError, data.EventsRead)
+				} else {
+					require.Equal(t, SystemStatusStateOK, data.EventsRead)
+				}
+
+				if tc.InWriteErrorState {
+					require.Equal(t, SystemStatusStateError, data.EventsWrite)
+				} else {
+					require.Equal(t, SystemStatusStateOK, data.EventsWrite)
+				}
+
+				if tc.InReadErrorState || tc.InWriteErrorState {
+					require.Equal(t, SystemStatusStateError, data.DVM)
+				} else {
+					require.Equal(t, SystemStatusStateOK, data.DVM)
+				}
+				workerCancel()
+			}
+		})
+	})
+	t.Run("Forced check scheduling", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			handler := helperNewHandler(t)
+			handler.storageClient = nil // Disable storage checks.
+			require.NotNil(t, handler)
+
+			handler.databaseReportGetter = func(context.Context) (*query.Status, error) {
+				return &query.Status{
+					LastWrite:         time.Now().Add(-2 * forceDatabaseCheckInterval),
+					LastRead:          time.Now().Add(-2 * forceDatabaseCheckInterval),
+					InReadErrorState:  true,
+					InWriteErrorState: true,
+				}, nil
+			}
+
+			ticker := make(chan struct{}, 1)
+
+			workerCtx, workerCancel := context.WithCancel(appcontext.TestContext(t))
+			go handler.startSystemStatusCollector(workerCtx, ticker)
+
+			ticker <- struct{}{}
+			time.Sleep(forceDatabaseCheckInterval + time.Second) // Ensure that next forced check would be due.
+			synctest.Wait()
+
+			events := helperSelectEvents(t, model.Filter{Kinds: []int{9998}})
+			require.Len(t, events, 3) // Manual check should have created 3 test events.
+
+			// Force check should fix the status.
+			data := handler.systemStatus.Load()
+			require.NotNil(t, data)
+			require.Equal(t, SystemStatusStateOK, data.EventsRead)
+			require.Equal(t, SystemStatusStateOK, data.EventsWrite)
+			require.Equal(t, SystemStatusStateOK, data.DVM)
+
+			workerCancel()
+		})
+	})
+}
+
+func helperSelectEvents(t *testing.T, filters ...model.Filter) (events []*model.Event) {
+	t.Helper()
+
+	t.Logf("selecting events: %s", model.Filters(filters).String())
+
+	for ev, err := range query.GetStoredEvents(t.Context(), filters...) {
+		require.NoError(t, err)
+		require.NotNil(t, ev)
+		events = append(events, ev)
+	}
+
+	return events
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/storage/internal"
 	"github.com/ice-blockchain/subzero/storage/statistics"
+	"github.com/ice-blockchain/subzero/tracing/statefsm"
 )
 
 var (
@@ -260,7 +261,7 @@ func WithConfig(cfg *Config) Option {
 
 func MustInit(ctx context.Context, rqClient rq.Client, opts ...Option) {
 	globalClient.Once.Do(func() {
-		globalClient.Client = mustInit(ctx, rqClient, opts...)
+		globalClient.Client = mustCreateClient(ctx, rqClient, opts...)
 	})
 	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		if globalClient.Client == nil {
@@ -273,13 +274,15 @@ func MustInit(ctx context.Context, rqClient rq.Client, opts ...Option) {
 	})
 }
 
-func mustInit(ctx context.Context, rqClient rq.Client, opts ...Option) *client {
+func mustCreateClient(ctx context.Context, rqClient rq.Client, opts ...Option) *client {
 	var cl = &client{
 		newFiles:          make(map[string]map[string]*FileMetaInput),
 		newFilesMx:        &sync.RWMutex{},
 		downloadQueue:     make(chan queueItem, 1000000),
 		activeDownloads:   make(map[string]bool),
 		activeDownloadsMx: &sync.RWMutex{},
+		healthReadFSM:     statefsm.New(time.Minute*3, 10, statefsm.WithThreadSafety()),
+		healthWriteFSM:    statefsm.New(time.Minute*3, 10, statefsm.WithThreadSafety()),
 	}
 
 	for _, opt := range opts {
