@@ -22,7 +22,7 @@ import (
 	"github.com/rs/zerolog/log"
 	tusd "github.com/tus/tusd/v2/pkg/handler"
 
-	"github.com/ice-blockchain/subzero/server/http/nip11"
+	"github.com/ice-blockchain/subzero/server/http/nip11/fetcher"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
 	"github.com/ice-blockchain/subzero/storage"
 )
@@ -51,7 +51,7 @@ type storageHandler struct {
 		tusd.TerminaterDataStore
 	}
 	auth               nip98.AuthClient
-	nip11Fetcher       nip11.Fetcher
+	nip11Fetcher       fetcher.Fetcher
 	ionLibertyDisabled bool
 }
 
@@ -437,8 +437,8 @@ func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
-func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, fetcher nip11.Fetcher) Uploader {
-	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: fetcher}
+func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, nip11Fetcher fetcher.Fetcher) Uploader {
+	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: nip11Fetcher}
 	tus, tusStorage := mustNewTusHandler(ctx, s)
 	s.tus = tus
 	s.tusStorage = tusStorage

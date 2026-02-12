@@ -21,6 +21,7 @@ import (
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/cert"
+	"github.com/ice-blockchain/subzero/server/http/nip11/fetcher"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
 	"github.com/ice-blockchain/subzero/storage"
@@ -77,12 +78,12 @@ func helperNewHandler(t testing.TB) *nip11handler {
 
 	handler.systemMetrics.Store(&SystemMetrics{})
 	handler.systemStatus.Store(&SystemStatus{
-		EventsRead:  SystemStatusStateOK,
-		EventsWrite: SystemStatusStateOK,
-		DVM:         SystemStatusStateOK,
-		FilesRead:   SystemStatusStateOK,
-		FilesWrite:  SystemStatusStateOK,
-		PushesSend:  SystemStatusStateOK,
+		EventsRead:  fetcher.SystemStatusStateOK,
+		EventsWrite: fetcher.SystemStatusStateOK,
+		DVM:         fetcher.SystemStatusStateOK,
+		FilesRead:   fetcher.SystemStatusStateOK,
+		FilesWrite:  fetcher.SystemStatusStateOK,
+		PushesSend:  fetcher.SystemStatusStateOK,
 	})
 
 	return handler
@@ -116,10 +117,10 @@ func TestNIP11(t *testing.T) {
 	})
 	t.Run("Fetch via custom fetcher", func(t *testing.T) {
 		ctx := appcontext.TestContext(t)
-		fetcher := NewFetcher(ctx, WithInsecureFetch())
-		require.NotNil(t, fetcher)
+		nipFetcher := fetcher.NewNIP11Fetcher(ctx, fetcher.WithInsecureFetch())
+		require.NotNil(t, nipFetcher)
 
-		data, err := fetcher.Fetch(ctx, "wss://localhost:9996")
+		data, err := nipFetcher.Fetch(ctx, "wss://localhost:9996")
 		require.NoError(t, err)
 		require.NotNil(t, data)
 
@@ -127,8 +128,8 @@ func TestNIP11(t *testing.T) {
 		require.Equal(t, pubKey, data.PubKey)
 		require.Equal(t, testRelayURL, data.URL)
 		require.NotEmpty(t, data.SystemStatus)
-		require.Equal(t, SystemStatusStateOK, data.SystemStatus.EventsRead)
-		require.Equal(t, SystemStatusStateOK, data.SystemStatus.EventsWrite)
+		require.Equal(t, fetcher.SystemStatusStateOK, data.SystemStatus.EventsRead)
+		require.Equal(t, fetcher.SystemStatusStateOK, data.SystemStatus.EventsWrite)
 
 		require.Len(t, data.FCMAndroidConfigs, len(expected.FCMAndroidConfigs))
 		require.Len(t, data.FCMIOSConfigs, len(expected.FCMIOSConfigs))
@@ -202,8 +203,8 @@ func TestStorageStatusCheck(t *testing.T) {
 
 	var report SystemStatus
 	h.RunStorageStatusCheck(ctx, &report)
-	require.Equal(t, SystemStatusStateOK, report.FilesRead)
-	require.Equal(t, SystemStatusStateOK, report.FilesWrite)
+	require.Equal(t, fetcher.SystemStatusStateOK, report.FilesRead)
+	require.Equal(t, fetcher.SystemStatusStateOK, report.FilesWrite)
 
 	internalReport := storageClient.Health()
 	require.False(t, internalReport.InReadErrorState)
@@ -267,21 +268,21 @@ func TestSystemStatusCollectorDatabase(t *testing.T) {
 				require.NotNil(t, data)
 
 				if tc.InReadErrorState {
-					require.Equal(t, SystemStatusStateError, data.EventsRead)
+					require.Equal(t, fetcher.SystemStatusStateError, data.EventsRead)
 				} else {
-					require.Equal(t, SystemStatusStateOK, data.EventsRead)
+					require.Equal(t, fetcher.SystemStatusStateOK, data.EventsRead)
 				}
 
 				if tc.InWriteErrorState {
-					require.Equal(t, SystemStatusStateError, data.EventsWrite)
+					require.Equal(t, fetcher.SystemStatusStateError, data.EventsWrite)
 				} else {
-					require.Equal(t, SystemStatusStateOK, data.EventsWrite)
+					require.Equal(t, fetcher.SystemStatusStateOK, data.EventsWrite)
 				}
 
 				if tc.InReadErrorState || tc.InWriteErrorState {
-					require.Equal(t, SystemStatusStateError, data.DVM)
+					require.Equal(t, fetcher.SystemStatusStateError, data.DVM)
 				} else {
-					require.Equal(t, SystemStatusStateOK, data.DVM)
+					require.Equal(t, fetcher.SystemStatusStateOK, data.DVM)
 				}
 				workerCancel()
 			}
@@ -317,9 +318,9 @@ func TestSystemStatusCollectorDatabase(t *testing.T) {
 			// Force check should fix the status.
 			data := handler.systemStatus.Load()
 			require.NotNil(t, data)
-			require.Equal(t, SystemStatusStateOK, data.EventsRead)
-			require.Equal(t, SystemStatusStateOK, data.EventsWrite)
-			require.Equal(t, SystemStatusStateOK, data.DVM)
+			require.Equal(t, fetcher.SystemStatusStateOK, data.EventsRead)
+			require.Equal(t, fetcher.SystemStatusStateOK, data.EventsWrite)
+			require.Equal(t, fetcher.SystemStatusStateOK, data.DVM)
 
 			workerCancel()
 		})

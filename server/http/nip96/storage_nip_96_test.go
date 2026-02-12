@@ -41,6 +41,7 @@ import (
 	"github.com/ice-blockchain/subzero/rq"
 	"github.com/ice-blockchain/subzero/server/cert"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
+	"github.com/ice-blockchain/subzero/server/http/nip11/fetcher"
 	"github.com/ice-blockchain/subzero/server/http/nip98"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 	"github.com/ice-blockchain/subzero/server/ws/fixture"
@@ -104,7 +105,7 @@ func initServer(serverCtx context.Context, port uint16, opts ...storage.Option) 
 		return []string{}
 	}))
 	initStorage(serverCtx, nil, opts...)
-	uploader := NewUploadHandler(serverCtx, false, nip11.NewFetcher(serverCtx, nip11.WithInsecureFetch()))
+	uploader := NewUploadHandler(serverCtx, false, fetcher.NewNIP11Fetcher(serverCtx, fetcher.WithInsecureFetch()))
 
 	tlsConf := cert.MustGenerateTLSConfigSelfSigned("localhost")
 	tlsConf.NextProtos = []string{"http/1.1", "h2"}

@@ -23,6 +23,7 @@ import (
 	"github.com/ice-blockchain/subzero/server/cert"
 	"github.com/ice-blockchain/subzero/server/http/events"
 	"github.com/ice-blockchain/subzero/server/http/nip11"
+	"github.com/ice-blockchain/subzero/server/http/nip11/fetcher"
 	"github.com/ice-blockchain/subzero/server/http/nip96"
 	wsserver "github.com/ice-blockchain/subzero/server/ws"
 )
@@ -243,7 +244,7 @@ func (r *router) BroadcastNewEvents(ctx context.Context, events ...*model.Event)
 }
 
 func (r *router) RegisterRoutes(ctx context.Context, wsroutes wsserver.Router) {
-	nip11Fetcher := nip11.NewFetcher(ctx)
+	nip11Fetcher := fetcher.NewNIP11Fetcher(ctx)
 	uploader := nip96.NewUploadHandler(ctx, r.Config.IONLibertyDisabled, nip11Fetcher)
 	tus := uploader.LargeFiles()
 	androidConfigs, iosConfigs, webConfigs := pushnotifications.GetFCMConfigs()

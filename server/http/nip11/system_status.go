@@ -23,27 +23,11 @@ import (
 	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/http/nip11/fetcher"
 	"github.com/ice-blockchain/subzero/storage"
 )
 
-type (
-	SystemStatusState string
-
-	SystemStatus struct {
-		EventsWrite SystemStatusState `json:"publishing_events"`
-		EventsRead  SystemStatusState `json:"subscribing_for_events"`
-		DVM         SystemStatusState `json:"dvm"`
-		FilesWrite  SystemStatusState `json:"uploading_files"`
-		FilesRead   SystemStatusState `json:"reading_files"`
-		PushesSend  SystemStatusState `json:"sending_push_notifications"`
-	}
-)
-
 const (
-	SystemStatusStateOK          SystemStatusState = "UP"
-	SystemStatusStateError       SystemStatusState = "DOWN"
-	SystemStatusStateMaintenance SystemStatusState = "MAINTENANCE"
-
 	forceDatabaseCheckInterval = 5 * time.Minute
 	forceStorageCheckInterval  = 10 * time.Minute
 )
@@ -56,15 +40,15 @@ func (n *nip11handler) collectStorageStatus(_ context.Context, systemReport *Sys
 
 	report := n.storageClient.Health()
 
-	systemReport.FilesRead = SystemStatusStateOK
-	systemReport.FilesWrite = SystemStatusStateOK
+	systemReport.FilesRead = fetcher.SystemStatusStateOK
+	systemReport.FilesWrite = fetcher.SystemStatusStateOK
 
 	if report.InReadErrorState {
-		systemReport.FilesRead = SystemStatusStateError
+		systemReport.FilesRead = fetcher.SystemStatusStateError
 	}
 
 	if report.InWriteErrorState {
-		systemReport.FilesWrite = SystemStatusStateError
+		systemReport.FilesWrite = fetcher.SystemStatusStateError
 	}
 
 	scheduleCheck = time.Since(report.LastWrite) > forceStorageCheckInterval ||
@@ -80,20 +64,20 @@ func (n *nip11handler) collectDatabaseStatus(ctx context.Context, systemReport *
 		return false
 	}
 
-	systemReport.EventsRead = SystemStatusStateOK
-	systemReport.EventsWrite = SystemStatusStateOK
-	systemReport.DVM = SystemStatusStateOK
+	systemReport.EventsRead = fetcher.SystemStatusStateOK
+	systemReport.EventsWrite = fetcher.SystemStatusStateOK
+	systemReport.DVM = fetcher.SystemStatusStateOK
 
 	if report.InReadErrorState {
-		systemReport.EventsRead = SystemStatusStateError
+		systemReport.EventsRead = fetcher.SystemStatusStateError
 	}
 
 	if report.InWriteErrorState {
-		systemReport.EventsWrite = SystemStatusStateError
+		systemReport.EventsWrite = fetcher.SystemStatusStateError
 	}
 
 	if report.InReadErrorState || report.InWriteErrorState {
-		systemReport.DVM = SystemStatusStateError
+		systemReport.DVM = fetcher.SystemStatusStateError
 	}
 
 	// Schedule a manual check if the last read or write was long ago.
@@ -133,8 +117,8 @@ func createStorageUploadRequest() (req *http.Request, filename string, hash []by
 }
 
 func (n *nip11handler) RunStorageStatusCheck(ctx context.Context, systemReport *SystemStatus) {
-	systemReport.FilesWrite = SystemStatusStateError
-	systemReport.FilesRead = SystemStatusStateError
+	systemReport.FilesWrite = fetcher.SystemStatusStateError
+	systemReport.FilesRead = fetcher.SystemStatusStateError
 
 	if n.storageClient == nil {
 		log.Error().Msg("storage client is nil, cannot run storage status check")
@@ -189,7 +173,7 @@ func (n *nip11handler) RunStorageStatusCheck(ctx context.Context, systemReport *
 		Str("context", "storage health check").
 		Msg("upload started successfully")
 
-	systemReport.FilesWrite = SystemStatusStateOK
+	systemReport.FilesWrite = fetcher.SystemStatusStateOK
 
 	fullPath, err := n.storageClient.FilePath(masterPubKey, hashHex, filepath.Ext(filename))
 	if err != nil {
@@ -219,7 +203,7 @@ func (n *nip11handler) RunStorageStatusCheck(ctx context.Context, systemReport *
 			Msg("file read from storage successfully with matching hash")
 	}
 
-	systemReport.FilesRead = SystemStatusStateOK
+	systemReport.FilesRead = fetcher.SystemStatusStateOK
 }
 
 func (*nip11handler) RunDatabaseStatusCheck(ctx context.Context, systemReport *SystemStatus) {
@@ -241,9 +225,9 @@ func (*nip11handler) RunDatabaseStatusCheck(ctx context.Context, systemReport *S
 		events = append(events, &ev)
 	}
 
-	systemReport.EventsWrite = SystemStatusStateError
-	systemReport.DVM = SystemStatusStateError
-	systemReport.EventsRead = SystemStatusStateError
+	systemReport.EventsWrite = fetcher.SystemStatusStateError
+	systemReport.DVM = fetcher.SystemStatusStateError
+	systemReport.EventsRead = fetcher.SystemStatusStateError
 
 	err := query.AcceptEvents(ctx, events...)
 	if err != nil {
@@ -251,7 +235,7 @@ func (*nip11handler) RunDatabaseStatusCheck(ctx context.Context, systemReport *S
 		return
 	}
 
-	systemReport.EventsWrite = SystemStatusStateOK
+	systemReport.EventsWrite = fetcher.SystemStatusStateOK
 
 	var received model.Events
 	for attempt := range numEvents {
@@ -279,19 +263,19 @@ func (*nip11handler) RunDatabaseStatusCheck(ctx context.Context, systemReport *S
 	}
 
 	if len(received) == len(events) {
-		systemReport.EventsRead = SystemStatusStateOK
-		systemReport.DVM = SystemStatusStateOK
+		systemReport.EventsRead = fetcher.SystemStatusStateOK
+		systemReport.DVM = fetcher.SystemStatusStateOK
 	}
 }
 
 func (n *nip11handler) startSystemStatusCollector(ctx context.Context, regularTicks chan struct{}) {
 	var status = SystemStatus{
-		EventsWrite: SystemStatusStateOK,
-		EventsRead:  SystemStatusStateOK,
-		DVM:         SystemStatusStateOK,
-		FilesWrite:  SystemStatusStateOK,
-		FilesRead:   SystemStatusStateOK,
-		PushesSend:  SystemStatusStateOK,
+		EventsWrite: fetcher.SystemStatusStateOK,
+		EventsRead:  fetcher.SystemStatusStateOK,
+		DVM:         fetcher.SystemStatusStateOK,
+		FilesWrite:  fetcher.SystemStatusStateOK,
+		FilesRead:   fetcher.SystemStatusStateOK,
+		PushesSend:  fetcher.SystemStatusStateOK,
 	}
 
 	defer appcontext.GetAppContext(ctx).Recover()
