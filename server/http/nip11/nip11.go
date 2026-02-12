@@ -22,32 +22,16 @@ import (
 	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/server/http/nip11/fetcher"
 	"github.com/ice-blockchain/subzero/storage"
 )
 
 type (
-	FCMConfig struct {
-		ApiKey            string `json:"apiKey"`
-		AppID             string `json:"appId"`
-		MessagingSenderID string `json:"messagingSenderId"`
-		ProjectID         string `json:"projectId"`
-	}
-	SystemMetrics struct {
-		UsedFileStorage     uint64 `json:"used_file_storage"`
-		UsedDatabaseStorage uint64 `json:"used_database_storage"`
-		UsedTotalStorage    uint64 `json:"used_total_storage"`
-		UsedMemory          uint64 `json:"used_memory"`
-		UsedCPU             uint16 `json:"used_cpu"`
-		UsedBandwidth       uint64 `json:"used_bandwidth"`
-	}
-	RelayInformationDocument struct {
-		SystemStatus                   *SystemStatus  `json:"system_status,omitzero"`
-		SystemMetrics                  *SystemMetrics `json:"system_metrics,omitempty"`
-		nip11.RelayInformationDocument `json:",inline"`
-		FCMAndroidConfigs              []FCMConfig `json:"fcm_android_configs"`
-		FCMIOSConfigs                  []FCMConfig `json:"fcm_ios_configs"`
-		FCMWebConfigs                  []FCMConfig `json:"fcm_web_configs"`
-	}
+	FCMConfig                = fetcher.FCMConfig
+	RelayInformationDocument = fetcher.RelayInformationDocument
+	SystemMetrics            = fetcher.SystemMetrics
+	SystemStatus             = fetcher.SystemStatus
+
 	Config struct {
 		PrivateKey         string
 		FCMAndroidConfigs  []string
@@ -83,12 +67,12 @@ func NewNIP11Handler(ctx context.Context, cfg *Config, storagePath, commandPath 
 
 	// Assume healthy at start.
 	h.systemStatus.Store(&SystemStatus{
-		EventsWrite: SystemStatusStateOK,
-		EventsRead:  SystemStatusStateOK,
-		DVM:         SystemStatusStateOK,
-		FilesWrite:  SystemStatusStateOK,
-		FilesRead:   SystemStatusStateOK,
-		PushesSend:  SystemStatusStateOK,
+		EventsWrite: fetcher.SystemStatusStateOK,
+		EventsRead:  fetcher.SystemStatusStateOK,
+		DVM:         fetcher.SystemStatusStateOK,
+		FilesWrite:  fetcher.SystemStatusStateOK,
+		FilesRead:   fetcher.SystemStatusStateOK,
+		PushesSend:  fetcher.SystemStatusStateOK,
 	})
 
 	go h.startSystemMetricsCollector(ctx)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package nip11
+package fetcher
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func WithInsecureFetch() FetcherOption {
 	}
 }
 
-func NewFetcher(ctx context.Context, opts ...FetcherOption) Fetcher {
+func NewNIP11Fetcher(ctx context.Context, opts ...FetcherOption) Fetcher {
 	f := &fetcher{
 		Cache: ttlcache.New(ttlcache.WithTTL[string, *RelayInformationDocument](cacheDuration)),
 	}
@@ -61,11 +61,10 @@ func NewFetcher(ctx context.Context, opts ...FetcherOption) Fetcher {
 
 func (f *fetcher) Fetch(ctx context.Context, relayUrl string) (*RelayInformationDocument, error) {
 	item := f.Cache.Get(relayUrl)
-	var nip11Data *RelayInformationDocument
 	if item != nil && !item.IsExpired() {
-		nip11Data = item.Value()
-		return nip11Data, nil
+		return item.Value(), nil
 	}
+
 	nip11Data, err := f.fetch(ctx, relayUrl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to fetch relay's nip11: %v", relayUrl)
