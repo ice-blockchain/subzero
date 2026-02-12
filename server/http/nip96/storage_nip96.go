@@ -437,8 +437,8 @@ func uploadErr(message string) any {
 	return map[string]any{"status": "error", "message": message}
 }
 
-func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, fetcher fetcher.Fetcher) Uploader {
-	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: fetcher}
+func NewUploadHandler(ctx context.Context, ionLibertyDisabled bool, nip11Fetcher fetcher.Fetcher) Uploader {
+	s := &storageHandler{storageClient: storage.Client(), auth: nip98.NewAuth(), ionLibertyDisabled: ionLibertyDisabled, nip11Fetcher: nip11Fetcher}
 	tus, tusStorage := mustNewTusHandler(ctx, s)
 	s.tus = tus
 	s.tusStorage = tusStorage
