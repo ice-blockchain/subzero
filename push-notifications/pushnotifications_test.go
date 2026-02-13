@@ -150,15 +150,15 @@ func TestCreateNotifications(t *testing.T) {
 		deviceEvents := []*DeviceRegistrationEvent{
 			{
 				Event: nostr.Event{
-					Tags: nostr.Tags{
-						nostr.Tag{"t", "ios"},
+					Tags: model.Tags{
+						model.Tag{"t", "ios"},
 					},
 				},
 			},
 			{
 				Event: nostr.Event{
-					Tags: nostr.Tags{
-						nostr.Tag{"t", "android"},
+					Tags: model.Tags{
+						model.Tag{"t", "android"},
 					},
 				},
 			},
@@ -218,8 +218,8 @@ func TestCreateNotifications(t *testing.T) {
 		deviceEvents := []*DeviceRegistrationEvent{
 			{
 				Event: nostr.Event{
-					Tags: nostr.Tags{
-						nostr.Tag{"t", "ios"},
+					Tags: model.Tags{
+						model.Tag{"t", "ios"},
 					},
 				},
 			},
@@ -268,23 +268,23 @@ func TestCollectUserValidDevices(t *testing.T) {
 		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindTextNote,
-				Tags: nostr.Tags{
-					nostr.Tag{"p", pubKey},
+				Tags: model.Tags{
+					model.Tag{"p", pubKey},
 				},
 			},
 		}
 
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
-				Tags:  nostr.TagMap{"p": []nostr.TagValues{{&pubKey}}},
+				Tags:  model.TagMap{"p": []model.TagValues{{&pubKey}}},
 			},
 		}
 
 		deviceEvent := &model.Event{
 			Event: nostr.Event{
-				Tags: nostr.Tags{
-					nostr.Tag{"d", string(deviceID)},
+				Tags: model.Tags{
+					model.Tag{"d", string(deviceID)},
 				},
 			},
 		}
@@ -327,8 +327,8 @@ func TestHandleEventWithPublicKey(t *testing.T) {
 			Event: nostr.Event{
 				Kind:   nostr.KindTextNote,
 				PubKey: masterPubKey,
-				Tags: nostr.Tags{
-					nostr.Tag{"p", masterPubKey},
+				Tags: model.Tags{
+					model.Tag{"p", masterPubKey},
 				},
 			},
 		}
@@ -353,9 +353,9 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 		singleNotification := &pn.Notification[*DeviceRegistrationEvent]{
 			Target: &DeviceRegistrationEvent{
 				Event: nostr.Event{
-					Tags: nostr.Tags{
-						nostr.Tag{"d", "device-1"},
-						nostr.Tag{"token", "valid-token"},
+					Tags: model.Tags{
+						model.Tag{"d", "device-1"},
+						model.Tag{"token", "valid-token"},
 					},
 				},
 			},
@@ -385,9 +385,9 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 		singleNotification := &pn.Notification[*DeviceRegistrationEvent]{
 			Target: &DeviceRegistrationEvent{
 				Event: nostr.Event{
-					Tags: nostr.Tags{
-						nostr.Tag{"d", "device-2"},
-						nostr.Tag{"token", "invalid-token"},
+					Tags: model.Tags{
+						model.Tag{"d", "device-2"},
+						model.Tag{"token", "invalid-token"},
 					},
 				},
 			},
@@ -434,9 +434,9 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			Event: nostr.Event{
 				ID:   "test-event-id",
 				Kind: nostr.KindTextNote,
-				Tags: nostr.Tags{
-					nostr.Tag{"q", "query-value"},
-					nostr.Tag{"p", "recipient-pubkey"},
+				Tags: model.Tags{
+					model.Tag{"q", "query-value"},
+					model.Tag{"p", "recipient-pubkey"},
 				},
 			},
 		}
@@ -488,8 +488,8 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 				ID:      "test-repost-id",
 				Kind:    nostr.KindGenericRepost,
 				Content: string(repostedEventJSON),
-				Tags: nostr.Tags{
-					nostr.Tag{"p", "recipient-pubkey"},
+				Tags: model.Tags{
+					model.Tag{"p", "recipient-pubkey"},
 				},
 			},
 		}
@@ -514,8 +514,8 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 				ID:      "test-repost-id",
 				Kind:    nostr.KindGenericRepost,
 				Content: string(repostedEventJSON),
-				Tags: nostr.Tags{
-					nostr.Tag{"p", "recipient-pubkey"},
+				Tags: model.Tags{
+					model.Tag{"p", "recipient-pubkey"},
 				},
 			},
 		}
@@ -557,9 +557,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				Event: nostr.Event{
 					ID:   "test-event-1",
 					Kind: nostr.KindTextNote,
-					Tags: nostr.Tags{
-						nostr.Tag{"q", "query-value"},
-						nostr.Tag{"p", "recipient-pubkey"},
+					Tags: model.Tags{
+						model.Tag{"q", "query-value"},
+						model.Tag{"p", "recipient-pubkey"},
 					},
 				},
 			},
@@ -567,8 +567,8 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				Event: nostr.Event{
 					ID:   "test-event-2",
 					Kind: nostr.KindRepost,
-					Tags: nostr.Tags{
-						nostr.Tag{"p", "recipient-pubkey"},
+					Tags: model.Tags{
+						model.Tag{"p", "recipient-pubkey"},
 					},
 				},
 			},
@@ -586,8 +586,8 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			Event: nostr.Event{
 				ID:   mainEventID,
 				Kind: nostr.KindTextNote,
-				Tags: nostr.Tags{
-					nostr.Tag{"p", "recipient-pubkey"},
+				Tags: model.Tags{
+					model.Tag{"p", "recipient-pubkey"},
 				},
 			},
 		}
@@ -595,8 +595,8 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
 				Kind: model.CustomIONKindEphemeralEmbedding,
-				Tags: nostr.Tags{
-					nostr.Tag{"e", mainEventID},
+				Tags: model.Tags{
+					model.Tag{"e", mainEventID},
 				},
 			},
 		}
@@ -622,8 +622,8 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		ephemeralEvent := &model.Event{
 			Event: nostr.Event{
 				Kind: model.CustomIONKindEphemeralEmbedding,
-				Tags: nostr.Tags{
-					nostr.Tag{"a", fmt.Sprintf("30023:%v", pubKey)},
+				Tags: model.Tags{
+					model.Tag{"a", fmt.Sprintf("30023:%v", pubKey)},
 				},
 			},
 		}
@@ -641,8 +641,8 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			Event: nostr.Event{
 				ID:   "main-event-id",
 				Kind: model.CustomIONKindEphemeralEmbedding,
-				Tags: nostr.Tags{
-					nostr.Tag{"e", "some-other-event-id"},
+				Tags: model.Tags{
+					model.Tag{"e", "some-other-event-id"},
 				},
 			},
 		}
@@ -659,7 +659,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		recipientPubKey := "recipient-pubkey-for-process-test"
 		devicePubKey := "device-pubkey-for-process-test"
 		deviceID := "device-id-for-process-test"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"d", deviceID},
 			{"t", "ios"},
 			{"token", "test-token-for-process-test"},
@@ -678,7 +678,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		}
 		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = DeviceInfo{
 			Event: deviceEvent,
-			Filters: nostr.Filters{
+			Filters: model.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
 				},
@@ -690,8 +690,8 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			Event: nostr.Event{
 				ID:   "main-event-id",
 				Kind: nostr.KindTextNote,
-				Tags: nostr.Tags{
-					nostr.Tag{"p", recipientPubKey},
+				Tags: model.Tags{
+					model.Tag{"p", recipientPubKey},
 				},
 			},
 		}
@@ -708,7 +708,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		recipientPubKey := "recipient-pubkey"
 		devicePubKey := "device-pubkey"
 		deviceID := "device-id"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"d", deviceID},
 			{"t", "ios"},
 			{"token", "test-token"},
@@ -733,9 +733,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				ID:      "gift-wrap-id",
 				Kind:    nostr.KindGiftWrap,
 				Content: "encrypted-content",
-				Tags: nostr.Tags{
-					nostr.Tag{"k", strconv.Itoa(nostr.KindDirectMessage)},
-					nostr.Tag{"p", recipientPubKey, "", devicePubKey},
+				Tags: model.Tags{
+					model.Tag{"k", strconv.Itoa(nostr.KindDirectMessage)},
+					model.Tag{"p", recipientPubKey, "", devicePubKey},
 				},
 			},
 		}
@@ -852,9 +852,9 @@ func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
 			event := &model.Event{
 				Event: nostr.Event{
 					Kind: tc.kind,
-					Tags: nostr.Tags{
-						nostr.Tag{"k", strconv.Itoa(tc.kind)},
-						nostr.Tag{"p", "recipient_pubkey", "device_pubkey"},
+					Tags: model.Tags{
+						model.Tag{"k", strconv.Itoa(tc.kind)},
+						model.Tag{"p", "recipient_pubkey", "device_pubkey"},
 					},
 				},
 			}
@@ -875,10 +875,10 @@ func TestProcessEventWithReaction(t *testing.T) {
 	senderPubKey := "sender_pubkey"
 
 	filterJSON := `[{"kinds":[7],"#p":["recipient_master_pubkey"]}]`
-	var filters nostr.Filters
+	var filters model.Filters
 	require.NoError(t, json.Unmarshal([]byte(filterJSON), &filters))
 
-	deviceTags := nostr.Tags{
+	deviceTags := model.Tags{
 		{"t", "ios"},
 		{"d", deviceID},
 		{"relay", "wss://relay.example.com"},
@@ -913,7 +913,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 			Kind:    nostr.KindReaction,
 			PubKey:  senderPubKey,
 			Content: "+",
-			Tags: nostr.Tags{
+			Tags: model.Tags{
 				{"p", recipientPubKey},
 				{"e", "original-note-id"},
 			},
