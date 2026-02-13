@@ -57,7 +57,7 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
 	deviceID := DeviceID(event.Tags.GetD())
 
-	var filters nostr.Filters
+	var filters model.Filters
 	if err := json.Unmarshal([]byte(event.Content), &filters); err != nil {
 		return errors.Wrap(err, "failed to unmarshal device filters")
 	}

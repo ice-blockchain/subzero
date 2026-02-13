@@ -87,7 +87,7 @@ func TestGetExtendedKind(t *testing.T) {
 			event: &model.Event{
 				Event: nostr.Event{
 					Kind: nostr.KindGiftWrap,
-					Tags: nostr.Tags{{"k", "7"}},
+					Tags: model.Tags{{"k", "7"}},
 				},
 			},
 			expectedKind: "1059+7",
@@ -97,7 +97,7 @@ func TestGetExtendedKind(t *testing.T) {
 			event: &model.Event{
 				Event: nostr.Event{
 					Kind: nostr.KindGiftWrap,
-					Tags: nostr.Tags{},
+					Tags: model.Tags{},
 				},
 			},
 			expectedKind: "1059",
@@ -146,7 +146,7 @@ func TestPushStats_ExtendedKind_Integration(t *testing.T) {
 	event1059 := &model.Event{
 		Event: nostr.Event{
 			Kind: nostr.KindGiftWrap,
-			Tags: nostr.Tags{{"k", "7"}},
+			Tags: model.Tags{{"k", "7"}},
 		},
 	}
 	stats.RecordSuccess(event1059)

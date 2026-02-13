@@ -4,12 +4,12 @@ package pushnotifications
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand/v2"
+	mathRand "math/rand/v2"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -94,11 +94,12 @@ func (m *mockBroadcaster) Close() {}
 
 func helperCreateTestUser(t *testing.T) *testUser {
 	t.Helper()
+
 	privateKey, publicKey := model.GenerateKeyPair()
-	relayCount := rand.IntN(5) + 1 // 1 to 5 relays.
+	relayCount := mathRand.IntN(5) + 1 // 1 to 5 relays.
 	relays := make([]string, relayCount)
 	for i := range relayCount {
-		relays[i] = fmt.Sprintf("wss://relay-%s-%d.example.com", uuid.NewString()[:8], i)
+		relays[i] = fmt.Sprintf("wss://relay-%s-%d.example.com", rand.Text()[:8], i)
 	}
 	return &testUser{
 		PrivateKey: privateKey,
@@ -130,7 +131,7 @@ func helperCreateDeviceRegistrationEvent(
 ) *model.Event {
 	t.Helper()
 
-	deviceID := uuid.NewString()
+	deviceID := rand.Text()
 	filters := model.Filters{
 		{
 			Kinds:   kinds,
@@ -146,7 +147,7 @@ func helperCreateDeviceRegistrationEvent(
 		{"d", deviceID},
 		{"t", "ios"},
 		{"relay", relayURL},
-		{"token", "encrypted-token-" + uuid.NewString()[:8]},
+		{"token", "encrypted-token-" + rand.Text()[:8]},
 	}
 	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
@@ -160,7 +161,7 @@ func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content str
 	ev.CreatedAt = nostr.Now()
 	ev.Content = content
 	ev.Tags = model.Tags{
-		{"d", uuid.NewString()},
+		{"d", rand.Text()},
 	}
 	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
@@ -174,7 +175,7 @@ func helperCreateTokenizedCommunityDefinitionEvent(t *testing.T, user *testUser,
 	ev.CreatedAt = nostr.Now()
 	ev.Content = "First buy event"
 	ev.Tags = model.Tags{
-		{"d", uuid.NewString()},
+		{"d", rand.Text()},
 		{"p", buyerPubKey},
 	}
 	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
