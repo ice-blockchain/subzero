@@ -8,3 +8,5 @@
 | ICIPs/NIPs | Change Type | NOSTR NIPs Pull Request | comments |
 |------------|-------------|-------------------------|----------|
 | ICIP-5175  | Addition    |                         |          |
+| ICIP-5176  | Addition    |                         |          |
+| ICIP-5177  | Addition    |                         |          |
