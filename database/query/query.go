@@ -46,6 +46,19 @@ var (
 	notifyExpiredEvents func(ctx context.Context, events ...*model.Event) error
 )
 
+var (
+	validKindsForEphemeralAttestation = map[int]struct{}{
+		model.CustomIONKindDeviceRegistration:           {},
+		model.CustomIONKindTokenizedCommunityAction:     {},
+		model.CustomIONKindTokenizedCommunityDefinition: {},
+		nostr.KindFollowList:                            {},
+		nostr.KindReaction:                              {},
+		model.CustomIONKindPollVote:                     {},
+		nostr.KindGenericRepost:                         {},
+		nostr.KindRepost:                                {},
+	}
+)
+
 type (
 	EventIterator = connector.Iterator[*model.Event]
 
@@ -1467,6 +1480,12 @@ func verifyEphemeralAttestation(event *model.Event, embeddings ...*model.Ephemer
 }
 
 func eventValidForEphemeralAttestation(event *model.Event) bool {
+	_, valid := validKindsForEphemeralAttestation[event.Kind]
+	if valid {
+		// Quick check for common cases to avoid expensive tag checks.
+		return true
+	}
+
 	switch event.Kind {
 	case model.CustomIONKindEditableTextNote,
 		nostr.KindTextNote,
@@ -1502,18 +1521,6 @@ func eventValidForEphemeralAttestation(event *model.Event) bool {
 			val, err := nostr.ParseTimestamp(event.GetTag("published_at").Value())
 			return err == nil && event.CreatedAt.After(val)
 		}
-	case model.CustomIONKindTokenizedCommunityAction:
-		return true
-	case model.CustomIONKindTokenizedCommunityDefinition:
-		return true
-	case nostr.KindFollowList:
-		return true
-	case nostr.KindReaction:
-		return true
-	case model.CustomIONKindPollVote:
-		return true
-	case nostr.KindGenericRepost, nostr.KindRepost:
-		return true
 	case nostr.KindDeletion:
 		if kTag := event.GetTag("k"); kTag != nil {
 			kValue, err := strconv.Atoi(kTag.Value())
