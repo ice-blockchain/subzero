@@ -90,7 +90,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	return nil
 }
 
-func (pm *PushNotificationManager) removeDeviceFromCache(deviceID DeviceID, masterPubKey PublicKey) {
+func (pm *PushNotificationManager) removeDeviceFromCache(deviceID DeviceID, masterPubKey string) {
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 

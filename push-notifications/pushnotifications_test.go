@@ -120,7 +120,7 @@ func helperNewManagerWithClient(t testing.TB) (*PushNotificationManager, *MockPu
 
 	return &PushNotificationManager{
 		relayURL:               testRelayURL,
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap:         make(map[string]map[DeviceID]DeviceInfo),
 		pushNotificationClient: client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),

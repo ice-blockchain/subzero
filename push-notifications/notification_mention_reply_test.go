@@ -33,7 +33,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
@@ -165,7 +165,7 @@ func TestMention(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
@@ -277,7 +277,7 @@ func TestSelfReplyNotification(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
@@ -322,7 +322,7 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),

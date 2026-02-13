@@ -32,14 +32,13 @@ import (
 
 type (
 	DeviceRegistrationEvent = pn.DeviceRegistrationEvent
-	PublicKey               = string
 	NotificationType        string
 
 	PushNotificationManager struct {
 		pushNotificationClient pn.Client
 		rq                     rq.Client
 		broadcaster            eventBroadcaster
-		userDevicesMap         map[PublicKey]map[DeviceID]DeviceInfo
+		userDevicesMap         map[string]map[DeviceID]DeviceInfo
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
@@ -216,7 +215,7 @@ func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClie
 	}
 
 	manager := &PushNotificationManager{
-		userDevicesMap:         make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap:         make(map[string]map[DeviceID]DeviceInfo),
 		pushNotificationClient: pnClient,
 		relayURL:               config.RelayURL,
 		stats:                  newPushStats(),
@@ -745,7 +744,7 @@ func (pm *PushNotificationManager) createNotifications(
 	return notifications, nil
 }
 
-func (pm *PushNotificationManager) collectUserValidDevices(pubKey PublicKey, event *model.Event) (devices []*DeviceRegistrationEvent) {
+func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event *model.Event) (devices []*DeviceRegistrationEvent) {
 	pm.deviceMutex.RLock()
 	userDevices, ok := pm.userDevicesMap[pubKey]
 	pm.deviceMutex.RUnlock()
