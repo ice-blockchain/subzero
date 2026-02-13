@@ -183,7 +183,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -249,7 +249,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -287,7 +287,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -325,7 +325,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -364,7 +364,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -404,7 +404,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		testSuffix := uuid.NewString()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -525,7 +525,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
 	}

@@ -37,7 +37,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
@@ -80,7 +80,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
@@ -117,7 +117,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
@@ -151,7 +151,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
@@ -282,7 +282,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 		t.Parallel()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
@@ -295,7 +295,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 	t.Run("process_registration_events", func(t *testing.T) {
 		t.Parallel()
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			relayURL:       testRelayURL,
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
@@ -328,7 +328,7 @@ func TestProcessDeviceRegistrationBatch(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),

@@ -105,7 +105,7 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	testSuffix := uuid.NewString()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
 	}
@@ -179,7 +179,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	testSuffix := uuid.NewString()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
 	}
@@ -319,7 +319,7 @@ func TestCreateNewFollowerNotificationNoDevices(t *testing.T) {
 	testSuffix := uuid.NewString()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
 	}
@@ -351,7 +351,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		testSuffix := uuid.NewString()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -413,7 +413,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		testSuffix := uuid.NewString()
 
 		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+			userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 			compressorPool: helperCreateTestCompressorPool(),
 			stats:          newPushStats(),
 		}
@@ -484,7 +484,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	testSuffix := uuid.NewString()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
 	}

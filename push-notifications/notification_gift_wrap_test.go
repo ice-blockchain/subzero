@@ -32,7 +32,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 		stats:          newPushStats(),
@@ -148,7 +148,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			t.Parallel()
 
 			localPM := &PushNotificationManager{
-				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+				userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 				relayURL:       testRelayURL,
 				compressorPool: helperCreateTestCompressorPool(),
 				stats:          newPushStats(),
@@ -240,7 +240,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			t.Parallel()
 
 			pm := &PushNotificationManager{
-				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+				userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 				relayURL:       testRelayURL,
 				compressorPool: helperCreateTestCompressorPool(),
 			}
@@ -316,7 +316,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 	t.Parallel()
 
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 	}
@@ -388,7 +388,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 	t.Parallel()
 	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
+		userDevicesMap: make(map[string]map[DeviceID]DeviceInfo),
 		relayURL:       testRelayURL,
 		compressorPool: helperCreateTestCompressorPool(),
 	}
