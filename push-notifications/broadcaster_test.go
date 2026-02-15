@@ -123,13 +123,13 @@ func helperCreateRelayListEvent(t *testing.T, user *testUser) *model.Event {
 }
 
 func helperCreateDeviceRegistrationEvent(
-	t *testing.T,
+	tb testing.TB,
 	user *testUser,
 	subscribeToAuthors []string,
 	kinds []int,
 	relayURL string,
 ) *model.Event {
-	t.Helper()
+	tb.Helper()
 
 	deviceID := rand.Text()
 	filters := model.Filters{
@@ -149,7 +149,7 @@ func helperCreateDeviceRegistrationEvent(
 		{"relay", relayURL},
 		{"token", "encrypted-token-" + rand.Text()[:8]},
 	}
-	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(tb, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
 }
 

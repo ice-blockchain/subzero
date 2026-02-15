@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
@@ -20,6 +21,7 @@ type (
 	DeviceInfo struct {
 		Event   *model.Event
 		Filters model.Filters
+		Remote  bool
 	}
 )
 
@@ -45,6 +47,7 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 
 	log.Info().
 		Str("context", "PUSH-NOTIFICATIONS").
+		Int("total_users", len(pm.userDevicesMap)).
 		Int("total_devices", totalDevices).
 		Msg("device synchronization completed")
 
@@ -52,22 +55,42 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 }
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
-	deviceID := event.Tags.GetD()
+	dTag := event.Tags.GetD()
+	masterPubKey, deviceID, remote := event.GetMasterPublicKey(), dTag, false
+
+	// For remote devices, the d-tag format is: <masterPubKey>_<deviceID>.
+	if strings.Contains(dTag, "_") {
+		parts := strings.SplitN(dTag, "_", 2)
+		masterPubKey, deviceID = parts[0], parts[1]
+		remote = true
+	}
+
+	if masterPubKey == "" || deviceID == "" {
+		return fmt.Errorf("invalid device registration event: missing master public key %q or device ID %q in tags", masterPubKey, deviceID)
+	}
 
 	var filters model.Filters
 	if err := json.Unmarshal([]byte(event.Content), &filters); err != nil {
 		return errors.Wrap(err, "failed to unmarshal device filters")
 	}
 
-	deviceInfo := DeviceInfo{Filters: filters, Event: event}
+	deviceInfo := DeviceInfo{
+		Filters: filters,
+		Event:   event,
+		Remote:  remote,
+	}
+
+	// If the relay URL in the event doesn't match the manager's relay URL for local device,
+	// It means the device registration event was created on another relay
+	// And we should just delete the device if it exists in the cache without adding the new one, since we won't be able to send notifications to it.
+	shouldDeleteFromCache := !remote && !model.CompareRelaysURLs(event.GetTag("relay").Value(), pm.relayURL)
 
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
-	masterPubKey := event.GetMasterPublicKey()
-
-	if !model.CompareRelaysURLs(event.GetTag("relay").Value(), pm.relayURL) {
-		if devicesByUser, ok := pm.userDevicesMap[masterPubKey]; ok {
+	if shouldDeleteFromCache {
+		devicesByUser, ok := pm.userDevicesMap[masterPubKey]
+		if ok {
 			if _, exists := devicesByUser[deviceID]; exists {
 				delete(devicesByUser, deviceID)
 				if len(devicesByUser) == 0 {
@@ -75,7 +98,6 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 				}
 			}
 		}
-
 		return nil
 	}
 
@@ -87,7 +109,15 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	return nil
 }
 
-func (pm *PushNotificationManager) removeDeviceFromCache(deviceID string, masterPubKey string) {
+func (pm *PushNotificationManager) removeDeviceFromCache(event *model.Event) {
+	dTag := event.Tags.GetD()
+	masterPubKey, deviceID := event.GetMasterPublicKey(), dTag
+
+	if strings.Contains(dTag, "_") {
+		parts := strings.SplitN(dTag, "_", 2)
+		masterPubKey, deviceID = parts[0], parts[1]
+	}
+
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
@@ -160,7 +190,7 @@ func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, event
 				return fmt.Errorf("device belongs to another user")
 			}
 
-			pm.removeDeviceFromCache(event.Tags.GetD(), event.GetMasterPublicKey())
+			pm.removeDeviceFromCache(event)
 		}
 	}
 
@@ -186,6 +216,6 @@ func (pm *PushNotificationManager) ManageDeviceRegistrationEvents(ctx context.Co
 
 func (pm *PushNotificationManager) removeInvalidTokenDevicesFromCache(deviceEvents model.Events) {
 	for _, deviceEvent := range deviceEvents {
-		pm.removeDeviceFromCache(deviceEvent.Tags.GetD(), deviceEvent.GetMasterPublicKey())
+		pm.removeDeviceFromCache(deviceEvent)
 	}
 }
