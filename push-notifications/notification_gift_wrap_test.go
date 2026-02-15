@@ -55,13 +55,13 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
 
 	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
 	require.True(t, ok, "Device should exist in userDevicesMap")
 
 	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-		pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+		pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 	}
-	pm.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.userDevicesMap[recipientMasterPubKey][(deviceID)] = deviceInfo
 	pm.deviceMutex.Unlock()
 
 	t.Run("self recipient", func(t *testing.T) {
@@ -161,13 +161,13 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			require.NoError(t, localPM.processDeviceRegistrationEvent(deviceEvent))
 
 			localPM.deviceMutex.Lock()
-			deviceInfo, ok := localPM.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+			deviceInfo, ok := localPM.userDevicesMap[devicePubKey][deviceID]
 			require.True(t, ok, "Device should exist in userDevicesMap")
 
 			if _, ok := localPM.userDevicesMap[recipientMasterPubKey]; !ok {
-				localPM.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+				localPM.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 			}
-			localPM.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+			localPM.userDevicesMap[recipientMasterPubKey][deviceID] = deviceInfo
 			localPM.deviceMutex.Unlock()
 
 			eventID := "test_gift_wrap_" + tc.name
@@ -246,13 +246,13 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
 			pm.deviceMutex.Lock()
-			deviceInfo, ok := pm.userDevicesMap[device.pubKey][DeviceID(device.id)]
+			deviceInfo, ok := pm.userDevicesMap[device.pubKey][device.id]
 			require.True(t, ok, "Device should exist in userDevicesMap")
 
 			if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-				pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+				pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 			}
-			pm.userDevicesMap[recipientMasterPubKey][DeviceID(device.id)] = deviceInfo
+			pm.userDevicesMap[recipientMasterPubKey][device.id] = deviceInfo
 			pm.deviceMutex.Unlock()
 
 			event := helperCreateGiftWrapEvent(
@@ -322,13 +322,13 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
 	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
 	require.True(t, ok, "Device should exist in userDevicesMap")
 
 	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-		pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+		pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 	}
-	pm.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.userDevicesMap[recipientMasterPubKey][deviceID] = deviceInfo
 	pm.deviceMutex.Unlock()
 
 	t.Run("Reaction", func(t *testing.T) {
@@ -397,9 +397,9 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
 
 		if _, ok := pm.userDevicesMap[userPubKey]; !ok {
-			pm.userDevicesMap[userPubKey] = make(map[DeviceID]DeviceInfo)
+			pm.userDevicesMap[userPubKey] = make(map[string]DeviceInfo)
 		}
-		pm.userDevicesMap[userPubKey][DeviceID(deviceID)] = deviceInfo
+		pm.userDevicesMap[userPubKey][deviceID] = deviceInfo
 
 		ev := &model.Event{
 			Event: nostr.Event{

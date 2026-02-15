@@ -65,9 +65,9 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		require.Len(t, pm.userDevicesMap, 1)
 		require.Contains(t, pm.userDevicesMap, masterPubKey)
 		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 
-		deviceInfo := pm.userDevicesMap[masterPubKey][DeviceID(deviceID)]
+		deviceInfo := pm.userDevicesMap[masterPubKey][deviceID]
 		require.Equal(t, event, deviceInfo.Event)
 
 		var parsedFilters model.Filters
@@ -128,7 +128,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
 
-		pm.removeDeviceFromCache(DeviceID(deviceID), masterPubKey)
+		pm.removeDeviceFromCache(deviceID, masterPubKey)
 		require.Len(t, pm.userDevicesMap, 0)
 	})
 
@@ -155,15 +155,15 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 
 		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 
-		pm.userDevicesMap[otherPubKey] = make(map[DeviceID]DeviceInfo)
-		pm.userDevicesMap[otherPubKey][DeviceID(deviceID)] = DeviceInfo{
+		pm.userDevicesMap[otherPubKey] = make(map[string]DeviceInfo)
+		pm.userDevicesMap[otherPubKey][deviceID] = DeviceInfo{
 			Event:   event,
 			Filters: filters,
 		}
 		require.Len(t, pm.userDevicesMap, 2)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 	})
 }
 
@@ -271,7 +271,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 	})
 }
 

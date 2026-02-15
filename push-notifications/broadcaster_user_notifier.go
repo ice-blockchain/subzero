@@ -14,10 +14,10 @@ import (
 
 type (
 	broadcasterPushNotificationWorkerArgs struct {
-		Device          *DeviceRegistrationEvent `json:"device"`
-		MasterPublicKey string                   `json:"user_master_public_key"`
-		BatchID         string                   `json:"batch_id"`
-		Events          model.Events             `json:"events"`
+		Device          *model.Event `json:"device"`
+		MasterPublicKey string       `json:"user_master_public_key"`
+		BatchID         string       `json:"batch_id"`
+		Events          model.Events `json:"events"`
 	}
 	broadcasterPushNotificationWorker struct {
 		rq.WorkerDefaults[broadcasterPushNotificationWorkerArgs]
@@ -38,7 +38,7 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		Msg("starting broadcaster push notification worker")
 
 	for _, ev := range job.Args.Events {
-		notification, err := w.Manager.createNotifications([]*DeviceRegistrationEvent{job.Args.Device}, NotificationTypePost, ev)
+		notification, err := w.Manager.createNotifications(model.Events{job.Args.Device}, NotificationTypePost, ev)
 		if err != nil {
 			return errors.Wrap(err, "failed to create notifications")
 		}

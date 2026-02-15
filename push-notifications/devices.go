@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strconv"
 
 	"github.com/cockroachdb/errors"
@@ -15,11 +14,9 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 type (
-	DeviceID   = pn.DeviceID
 	DeviceInfo struct {
 		Event   *model.Event
 		Filters model.Filters
@@ -55,7 +52,7 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 }
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
-	deviceID := DeviceID(event.Tags.GetD())
+	deviceID := event.Tags.GetD()
 
 	var filters model.Filters
 	if err := json.Unmarshal([]byte(event.Content), &filters); err != nil {
@@ -83,14 +80,14 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	}
 
 	if _, ok := pm.userDevicesMap[masterPubKey]; !ok {
-		pm.userDevicesMap[masterPubKey] = make(map[DeviceID]DeviceInfo)
+		pm.userDevicesMap[masterPubKey] = make(map[string]DeviceInfo)
 	}
 	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
 
 	return nil
 }
 
-func (pm *PushNotificationManager) removeDeviceFromCache(deviceID DeviceID, masterPubKey string) {
+func (pm *PushNotificationManager) removeDeviceFromCache(deviceID string, masterPubKey string) {
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
 
@@ -104,59 +101,66 @@ func (pm *PushNotificationManager) removeDeviceFromCache(deviceID DeviceID, mast
 }
 
 func (pm *PushNotificationManager) shouldProcessDeletionEvent(event *model.Event) bool {
+	var kCount int
+
 	if event.Kind != nostr.KindDeletion {
 		return false
 	}
-	kTags := event.GetTags("k")
-	if len(kTags) == 0 {
-		return true
-	}
-	idx := slices.IndexFunc(kTags, func(kTag nostr.Tag) bool {
-		kindStr := kTag.Value()
-		kind, err := strconv.Atoi(kindStr)
-		return err == nil && kind == model.CustomIONKindDeviceRegistration
-	})
-	if idx == -1 {
-		return false
-	}
 
-	return true
+	expectedKValue := strconv.Itoa(model.CustomIONKindDeviceRegistration)
+	for _, tag := range event.Tags {
+		if tag.Key() != "k" {
+			continue
+		}
+		kCount++
+
+		if tag.Value() == expectedKValue {
+			return true
+		}
+	}
+	return kCount == 0 // If there are no 'k' tags, we treat it as a deletion of all kinds, including device registrations.
 }
 
 func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, events []*model.Event) error {
-	var eventIDs []string
 	var deletionEvents []*model.Event
 	for _, event := range events {
 		if pm.shouldProcessDeletionEvent(event) {
 			deletionEvents = append(deletionEvents, event)
 		}
 	}
+
 	if len(deletionEvents) == 0 {
 		return nil
 	}
+
+	var eventIDs []string
 	for _, event := range deletionEvents {
 		for _, tag := range event.GetTags("e") {
 			eventIDs = append(eventIDs, tag.Value())
 		}
 	}
-	if len(eventIDs) > 0 {
-		for event, err := range query.GetStoredEvents(ctx, model.Filter{IDs: eventIDs}) {
-			if err != nil {
-				return errors.Wrap(err, "error getting event")
-			}
-			if event.Kind == model.CustomIONKindDeviceRegistration {
-				pm.deviceMutex.RLock()
-				deviceInfo, exists := pm.userDevicesMap[event.GetMasterPublicKey()][DeviceID(event.Tags.GetD())]
-				pm.deviceMutex.RUnlock()
-				if !exists {
-					return nil
-				}
-				if deviceInfo.Event.GetMasterPublicKey() != event.GetMasterPublicKey() {
-					return fmt.Errorf("device belongs to another user")
-				}
 
-				pm.removeDeviceFromCache(DeviceID(event.Tags.GetD()), event.GetMasterPublicKey())
+	if len(eventIDs) == 0 {
+		return nil
+	}
+
+	// TODO: rebuild devices index to include device registration events ids.
+	for event, err := range query.GetStoredEvents(ctx, model.Filter{IDs: eventIDs}) {
+		if err != nil {
+			return errors.Wrap(err, "error getting event")
+		}
+		if event.Kind == model.CustomIONKindDeviceRegistration {
+			pm.deviceMutex.RLock()
+			deviceInfo, exists := pm.userDevicesMap[event.GetMasterPublicKey()][event.Tags.GetD()]
+			pm.deviceMutex.RUnlock()
+			if !exists {
+				return nil
 			}
+			if deviceInfo.Event.GetMasterPublicKey() != event.GetMasterPublicKey() {
+				return fmt.Errorf("device belongs to another user")
+			}
+
+			pm.removeDeviceFromCache(event.Tags.GetD(), event.GetMasterPublicKey())
 		}
 	}
 
@@ -180,8 +184,8 @@ func (pm *PushNotificationManager) ManageDeviceRegistrationEvents(ctx context.Co
 	return errors.Wrap(errs, "error on processing device registration events")
 }
 
-func (pm *PushNotificationManager) removeInvalidTokenDevicesFromCache(deviceEvents []*DeviceRegistrationEvent) {
+func (pm *PushNotificationManager) removeInvalidTokenDevicesFromCache(deviceEvents model.Events) {
 	for _, deviceEvent := range deviceEvents {
-		pm.removeDeviceFromCache(DeviceID(deviceEvent.Tags.GetD()), deviceEvent.GetMasterPublicKey())
+		pm.removeDeviceFromCache(deviceEvent.Tags.GetD(), deviceEvent.GetMasterPublicKey())
 	}
 }
