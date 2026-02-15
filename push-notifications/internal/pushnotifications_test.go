@@ -57,7 +57,7 @@ func TestCreateSingleMessage(t *testing.T) {
 	event1.Tags = append(event1.Tags, model.Tag{"deviceId", rand.Text()})
 	require.NoError(t, event1.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	notification1 := &Notification[*DeviceRegistrationEvent]{
+	notification1 := &Notification[*model.Event]{
 		Data: map[string]interface{}{
 			"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text()),
 			"number":   42,
@@ -82,7 +82,7 @@ func TestCreateSingleMessage(t *testing.T) {
 	event2 := &model.Event{}
 	event2.Tags = append(event2.Tags, model.Tag{"deviceId", rand.Text()})
 	require.NoError(t, event2.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	notification2 := &Notification[*DeviceRegistrationEvent]{
+	notification2 := &Notification[*model.Event]{
 		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target:   event2,
 		Title:    testTitle,
@@ -101,7 +101,7 @@ func TestCreateSingleMessage(t *testing.T) {
 	event3.Tags = append(event3.Tags, model.Tag{"token", encryptedValidToken})
 	event3.Tags = append(event3.Tags, model.Tag{"deviceId", rand.Text()})
 
-	notification3 := &Notification[*DeviceRegistrationEvent]{
+	notification3 := &Notification[*model.Event]{
 		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target:   event3,
 		Title:    testTitle,
@@ -119,7 +119,7 @@ func TestCreateSingleMessage(t *testing.T) {
 	event4.Tags = append(event4.Tags, model.Tag{"deviceId", rand.Text()})
 	require.NoError(t, event4.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	notification4 := &Notification[*DeviceRegistrationEvent]{
+	notification4 := &Notification[*model.Event]{
 		Data:   map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target: event4,
 	}

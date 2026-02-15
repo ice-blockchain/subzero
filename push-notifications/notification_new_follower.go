@@ -9,13 +9,13 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleNewFollowerEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) handleNewFollowerEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
 	newlyFollowedPubKeys := model.GetNewlyFollowedPubkeys(event, event.Previous)
 	if len(newlyFollowedPubKeys) == 0 {
 		return nil, nil
 	}
 
-	var allNotifications []*pn.Notification[*DeviceRegistrationEvent]
+	var allNotifications []*pn.Notification[*model.Event]
 	for _, recipientPubKey := range newlyFollowedPubKeys {
 		notifications, err := pm.createNewFollowerNotification(event, recipientPubKey, relevantEvents...)
 		if err != nil {
@@ -27,7 +27,7 @@ func (pm *PushNotificationManager) handleNewFollowerEvent(event *model.Event, re
 	return allNotifications, nil
 }
 
-func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Event, recipientPubKey string, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
 	if recipientPubKey == event.GetMasterPublicKey() {
 		return nil, nil
 	}

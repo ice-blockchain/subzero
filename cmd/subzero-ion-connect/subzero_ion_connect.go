@@ -249,8 +249,8 @@ func init() {
 				Msg("broadcast events")
 		})
 		antsPool.Submit(func() {
-			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
-				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents")
+			if err := pushnotifications.AcceptEventsFromBroadcast(ctx, events...); err != nil {
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEventsFromBroadcast")
 			}
 		})
 

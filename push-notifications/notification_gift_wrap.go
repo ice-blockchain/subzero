@@ -23,7 +23,7 @@ var (
 	}
 )
 
-func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
+func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*pn.Notification[*model.Event], error) {
 	var (
 		deviceEvents []*model.Event
 		kTag, pTag   model.Tag

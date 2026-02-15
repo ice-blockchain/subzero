@@ -437,9 +437,9 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.Contains(t, pm.userDevicesMap, recipientPubKey, "User should be in cache")
 		require.Len(t, pm.userDevicesMap[recipientPubKey], 3, "User should have 3 devices")
 
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], DeviceID(deviceID1), "Device 1 should be in cache")
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], DeviceID(deviceID2), "Device 2 should be in cache")
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], DeviceID(deviceID3), "Device 3 should be in cache")
+		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID1, "Device 1 should be in cache")
+		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID2, "Device 2 should be in cache")
+		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID3, "Device 3 should be in cache")
 
 		require.NoError(t, query.AcceptEvents(t.Context(), messageEvent))
 
@@ -449,7 +449,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.NotNil(t, notifications, "Notifications should not be nil")
 		require.Len(t, notifications, 3, "Should create three notifications (one for each device)")
 
-		deviceTypeMap := make(map[string]*pn.Notification[*DeviceRegistrationEvent])
+		deviceTypeMap := make(map[string]*pn.Notification[*model.Event])
 		for _, notification := range notifications {
 			deviceType := notification.Target.GetTag("t").Value()
 			deviceTypeMap[deviceType] = notification
@@ -532,8 +532,8 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	)
 
 	pm.deviceMutex.Lock()
-	pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
-		DeviceID(deviceID): {
+	pm.userDevicesMap[recipientPubKey] = map[string]DeviceInfo{
+		deviceID: {
 			Filters: model.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
@@ -546,7 +546,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	pm.deviceMutex.Unlock()
 
 	notifications, err := pm.createNotifications(
-		[]*DeviceRegistrationEvent{deviceEvent},
+		[]*model.Event{deviceEvent},
 		NotificationTypeMentionReply,
 		messageEvent,
 		profileEvent,

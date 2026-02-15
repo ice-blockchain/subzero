@@ -244,9 +244,9 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	require.Contains(t, pm.userDevicesMap, targetPubKey, "User should be in the device map")
 	require.Len(t, pm.userDevicesMap[targetPubKey], 3, "User should have three devices")
 
-	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID1), "Device 1 should be in the map")
-	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID2), "Device 2 should be in the map")
-	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID3), "Device 3 should be in the map")
+	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID1, "Device 1 should be in the map")
+	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID2, "Device 2 should be in the map")
+	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID3, "Device 3 should be in the map")
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
 	require.NoError(t, err)
@@ -254,7 +254,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	require.NotNil(t, notifications, "Notifications should not be nil")
 	require.Len(t, notifications, 3, "Should create three notifications")
 
-	deviceTypeMap := make(map[string]*pn.Notification[*DeviceRegistrationEvent])
+	deviceTypeMap := make(map[string]*pn.Notification[*model.Event])
 	for _, notification := range notifications {
 		deviceType := notification.Target.GetTag("t").Value()
 		deviceTypeMap[deviceType] = notification
@@ -509,8 +509,8 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	)
 
 	pm.deviceMutex.Lock()
-	pm.userDevicesMap[targetPubKey] = map[DeviceID]DeviceInfo{
-		DeviceID("device1_" + testSuffix): {
+	pm.userDevicesMap[targetPubKey] = map[string]DeviceInfo{
+		"device1_" + testSuffix: {
 			Filters: filters,
 			Event:   deviceEvent,
 		},

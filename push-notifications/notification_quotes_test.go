@@ -41,8 +41,8 @@ func TestProcessEventWithQuotes(t *testing.T) {
 			},
 		}
 
-		pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
-			DeviceID(deviceID): {
+		pm.userDevicesMap[recipientPubKey] = map[string]DeviceInfo{
+			deviceID: {
 				Filters: filters,
 				Event:   deviceEvent,
 			},
@@ -99,9 +99,9 @@ func TestProcessEventWithQuotes(t *testing.T) {
 		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
 
 		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
-			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+			pm.userDevicesMap[recipientPubKey] = make(map[string]DeviceInfo)
 		}
-		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = deviceInfo
+		pm.userDevicesMap[recipientPubKey][deviceID] = deviceInfo
 
 		ev := &model.Event{
 			Event: nostr.Event{

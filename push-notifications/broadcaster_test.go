@@ -35,7 +35,7 @@ type (
 	}
 	mockNotificationClient struct {
 		T    testing.TB
-		Chan chan *internal.Notification[*DeviceRegistrationEvent]
+		Chan chan *internal.Notification[*model.Event]
 	}
 )
 
@@ -60,7 +60,7 @@ func (m *mockNotificationClient) Reset() {
 	}
 }
 
-func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *internal.Notification[*DeviceRegistrationEvent]) error {
+func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *internal.Notification[*model.Event]) error {
 	select {
 	case m.Chan <- notification:
 		m.T.Logf("Mock SendSingle to device %s for master public key %s", notification.Target.PubKey, notification.Target.GetMasterPublicKey())
@@ -217,7 +217,7 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 
 	mockNotificationClient := &mockNotificationClient{
 		T:    t,
-		Chan: make(chan *internal.Notification[*DeviceRegistrationEvent], 100),
+		Chan: make(chan *internal.Notification[*model.Event], 100),
 	}
 
 	pm := helperNewManager(t)
