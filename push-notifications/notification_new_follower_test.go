@@ -125,7 +125,7 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(
 		t,
 		targetPubKey,
-		"device1_"+testSuffix,
+		"device1-"+testSuffix,
 		model.Tags{
 			{"t", "ios"},
 			{"token", "test_token_" + testSuffix},
@@ -194,9 +194,9 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 
 	require.NoError(t, query.AcceptEvents(t.Context(), followListEvent))
 
-	deviceID1 := "device1_" + testSuffix
-	deviceID2 := "device2_" + testSuffix
-	deviceID3 := "device3_" + testSuffix
+	deviceID1 := "device1-" + testSuffix
+	deviceID2 := "device2-" + testSuffix
+	deviceID3 := "device3-" + testSuffix
 
 	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 		t,
@@ -358,7 +358,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey1,
-			"device1_"+testSuffix,
+			"device1-"+testSuffix,
 			model.Tags{
 				{"t", "ios"},
 				{"token", "test_token1_" + testSuffix},
@@ -369,7 +369,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey2,
-			"device2_"+testSuffix,
+			"device2-"+testSuffix,
 			model.Tags{
 				{"t", "android"},
 				{"token", "test_token2_" + testSuffix},
@@ -421,7 +421,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey1,
-			"device1_"+testSuffix,
+			"device1-"+testSuffix,
 			model.Tags{
 				{"t", "ios"},
 				{"token", "test_token1_" + testSuffix},
@@ -432,7 +432,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey2,
-			"device2_"+testSuffix,
+			"device2-"+testSuffix,
 			model.Tags{
 				{"t", "android"},
 				{"token", "test_token2_" + testSuffix},
@@ -608,7 +608,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		"device1_"+testSuffix,
 		model.Tags{
 			{"t", "ios"},
-			{"d", "device1_" + testSuffix},
+			{"d", "device1-" + testSuffix},
 			{"relay", pm.relayURL},
 			{"token", "token1_" + testSuffix},
 		},
@@ -623,7 +623,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		"device2_"+testSuffix,
 		model.Tags{
 			{"t", "android"},
-			{"d", "device2_" + testSuffix},
+			{"d", "device2-" + testSuffix},
 			{"relay", pm.relayURL},
 			{"token", "token2_" + testSuffix},
 		},
@@ -638,7 +638,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		"device3_"+testSuffix,
 		model.Tags{
 			{"t", "web"},
-			{"d", "device3_" + testSuffix},
+			{"d", "device3-" + testSuffix},
 			{"relay", pm.relayURL},
 			{"token", "token3_" + testSuffix},
 		},

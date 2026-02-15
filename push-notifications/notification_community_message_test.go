@@ -37,7 +37,7 @@ func helperCreateCommunityMessageEvent(t *testing.T, id string, pubKey string, c
 	}
 }
 
-func helperCreateCommunityDefinitionEvent(t *testing.T, id string, pubKey string, communityID string, commentsEnabled bool) *model.Event {
+func helperCreateCommunityDefinitionEvent(t testing.TB, id string, pubKey string, communityID string, commentsEnabled bool) *model.Event {
 	t.Helper()
 
 	tags := model.Tags{
@@ -386,9 +386,9 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			},
 		}
 
-		deviceID1 := "device1_" + testSuffix
-		deviceID2 := "device2_" + testSuffix
-		deviceID3 := "device3_" + testSuffix
+		deviceID1 := "device1-" + testSuffix
+		deviceID2 := "device2-" + testSuffix
+		deviceID3 := "device3-" + testSuffix
 
 		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,

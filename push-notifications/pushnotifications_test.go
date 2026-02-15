@@ -865,6 +865,25 @@ func TestShouldSkipEphemeralEventForGiftWrap(t *testing.T) {
 	}
 }
 
+func TestProcessDeviceRegistrationEventWithRemoteDevice(t *testing.T) {
+	t.Parallel()
+
+	pm := helperNewManager(t)
+	ev := helperCreateTestDeviceRegistrationEvent(t, "remote-device-id", "masterkey_deviceID", model.Tags{}, model.Filters{{Kinds: []int{nostr.KindTextNote}}})
+
+	err := pm.processDeviceRegistrationEvent(ev)
+	require.NoError(t, err)
+
+	devices, ok := pm.userDevicesMap["masterkey"]
+	require.True(t, ok, "masterkey should exist in userDevicesMap")
+	require.Len(t, devices, 1, "masterkey should have one device registered")
+
+	deviceInfo, ok := devices["deviceID"]
+	require.True(t, ok)
+	require.Equal(t, ev, deviceInfo.Event)
+	require.True(t, deviceInfo.Remote)
+}
+
 func TestProcessEventWithReaction(t *testing.T) {
 	t.Parallel()
 

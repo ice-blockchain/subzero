@@ -3,7 +3,9 @@
 package pushnotifications
 
 import (
+	"cmp"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"slices"
 	"strconv"
@@ -17,13 +19,19 @@ import (
 
 const testRelayURL = "wss://relay.example.com"
 
-func helperCreateTestDeviceRegistrationEvent(t *testing.T, pubKey string, deviceID string, tags model.Tags, filters model.Filters) *model.Event {
-	t.Helper()
+func helperCreateTestDeviceRegistrationEvent(tb testing.TB, pubKey string, deviceID string, tags model.Tags, filters model.Filters) *model.Event {
+	tb.Helper()
 
 	if !slices.ContainsFunc(tags, func(tag model.Tag) bool {
 		return len(tag) > 2 && tag.Key() == "relay"
 	}) {
 		tags = append(tags, model.Tag{"relay", testRelayURL})
+	}
+
+	if !slices.ContainsFunc(tags, func(tag model.Tag) bool {
+		return len(tag) > 2 && tag.Key() == "d"
+	}) {
+		tags = append(tags, model.Tag{"d", cmp.Or(deviceID, rand.Text())})
 	}
 
 	return &model.Event{
@@ -128,7 +136,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
 
-		pm.removeDeviceFromCache(deviceID, masterPubKey)
+		pm.removeDeviceFromCache(event)
 		require.Len(t, pm.userDevicesMap, 0)
 	})
 
