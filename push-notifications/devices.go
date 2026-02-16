@@ -54,9 +54,9 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 	return nil
 }
 
-func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
-	dTag := event.Tags.GetD()
-	masterPubKey, deviceID, remote := event.GetMasterPublicKey(), dTag, false
+func notificationTarget(e *model.Event) (masterPubKey string, deviceID string, remote bool) {
+	dTag := e.Tags.GetD()
+	masterPubKey, deviceID, remote = e.GetMasterPublicKey(), dTag, false
 
 	// For remote devices, the d-tag format is: <masterPubKey>_<deviceID>.
 	if strings.Contains(dTag, "_") {
@@ -64,6 +64,12 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 		masterPubKey, deviceID = parts[0], parts[1]
 		remote = true
 	}
+
+	return masterPubKey, deviceID, remote
+}
+
+func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
+	masterPubKey, deviceID, remote := notificationTarget(event)
 
 	if masterPubKey == "" || deviceID == "" {
 		return fmt.Errorf("invalid device registration event: missing master public key %q or device ID %q in tags", masterPubKey, deviceID)
@@ -110,13 +116,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 }
 
 func (pm *PushNotificationManager) removeDeviceFromCache(event *model.Event) {
-	dTag := event.Tags.GetD()
-	masterPubKey, deviceID := event.GetMasterPublicKey(), dTag
-
-	if strings.Contains(dTag, "_") {
-		parts := strings.SplitN(dTag, "_", 2)
-		masterPubKey, deviceID = parts[0], parts[1]
-	}
+	masterPubKey, deviceID, _ := notificationTarget(event)
 
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()
@@ -180,16 +180,6 @@ func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, event
 			return errors.Wrap(err, "error getting event")
 		}
 		if event.Kind == model.CustomIONKindDeviceRegistration {
-			pm.deviceMutex.RLock()
-			deviceInfo, exists := pm.userDevicesMap[event.GetMasterPublicKey()][event.Tags.GetD()]
-			pm.deviceMutex.RUnlock()
-			if !exists {
-				return nil
-			}
-			if deviceInfo.Event.GetMasterPublicKey() != event.GetMasterPublicKey() {
-				return fmt.Errorf("device belongs to another user")
-			}
-
 			pm.removeDeviceFromCache(event)
 		}
 	}
