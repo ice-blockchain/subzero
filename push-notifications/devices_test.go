@@ -23,13 +23,13 @@ func helperCreateTestDeviceRegistrationEvent(tb testing.TB, pubKey string, devic
 	tb.Helper()
 
 	if !slices.ContainsFunc(tags, func(tag model.Tag) bool {
-		return len(tag) > 2 && tag.Key() == "relay"
+		return tag.Key() == "relay" && tag.Value() != ""
 	}) {
 		tags = append(tags, model.Tag{"relay", testRelayURL})
 	}
 
 	if !slices.ContainsFunc(tags, func(tag model.Tag) bool {
-		return len(tag) > 2 && tag.Key() == "d"
+		return tag.Key() == "d" && tag.Value() != ""
 	}) {
 		tags = append(tags, model.Tag{"d", cmp.Or(deviceID, rand.Text())})
 	}
