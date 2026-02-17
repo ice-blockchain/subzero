@@ -38,12 +38,12 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		Msg("starting broadcaster push notification worker")
 
 	for _, ev := range job.Args.Events {
-		notification, err := w.Manager.createNotifications(model.Events{job.Args.Device}, NotificationTypePost, ev)
+		notification, err := w.Manager.createNotifications(model.Events{job.Args.Device}, nil, NotificationTypePost, ev)
 		if err != nil {
 			return errors.Wrap(err, "failed to create notifications")
 		}
 
-		err = w.Manager.sendNotifications(ctx, notification, nil)
+		err = w.Manager.sendNotifications(ctx, notification)
 		if err != nil {
 			return errors.Wrap(err, "failed to send notifications")
 		}

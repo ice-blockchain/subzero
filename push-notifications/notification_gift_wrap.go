@@ -10,7 +10,6 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 var (
@@ -23,7 +22,7 @@ var (
 	}
 )
 
-func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*pn.Notification[*model.Event], error) {
+func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) (*notificationTargets, error) {
 	var (
 		deviceEvents []*model.Event
 		kTag, pTag   model.Tag
@@ -51,7 +50,7 @@ func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*p
 	if devicePubKey == "" {
 		return nil, nil
 	}
-	deviceRegistrationEvents := pm.collectUserValidDevices(recipientMasterPubKey, event)
+	deviceRegistrationEvents, _ := pm.collectNotificationDevices(recipientMasterPubKey, event)
 	evIdx := slices.IndexFunc(deviceRegistrationEvents, func(ev *model.Event) bool {
 		return ev.PubKey == devicePubKey
 	})
@@ -59,10 +58,9 @@ func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*p
 		return nil, nil
 	}
 	deviceEvents = append(deviceEvents, deviceRegistrationEvents[evIdx])
-	notifications, err := pm.createNotifications(deviceEvents, mapGiftWrapToNotificationType[kind], event)
+	notifications, err := pm.createNotifications(deviceEvents, nil, mapGiftWrapToNotificationType[kind], event)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create notifications")
 	}
-
 	return notifications, nil
 }

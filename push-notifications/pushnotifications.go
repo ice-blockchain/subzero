@@ -53,6 +53,17 @@ type (
 		ImageURL string
 	}
 
+	remoteNotificationTarget struct {
+		Devices model.Events // Device registration events of other users that should receive the notification.
+		Events  model.Events // Events that should be included in the notification payload for these remote devices.
+	}
+
+	notificationTargets struct {
+		Topic  []*pn.Notification[pn.SubscriptionTopic]
+		Local  []*pn.Notification[*model.Event]
+		Remote []remoteNotificationTarget
+	}
+
 	config struct {
 		FCMCredentialsFile  string   `yaml:"fcm-credentials-file"`
 		PrivateKey          string   `yaml:"private-key"`
@@ -183,6 +194,22 @@ var (
 
 	globalPushNotificationManager *PushNotificationManager
 )
+
+func (n *notificationTargets) Append(other *notificationTargets) {
+	if other == nil {
+		return
+	}
+
+	if len(other.Topic) > 0 {
+		n.Topic = append(n.Topic, other.Topic...)
+	}
+	if len(other.Local) > 0 {
+		n.Local = append(n.Local, other.Local...)
+	}
+	if len(other.Remote) > 0 {
+		n.Remote = append(n.Remote, other.Remote...)
+	}
+}
 
 func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClient rq.Client, selfTest bool) (*PushNotificationManager, error) {
 	var pnClient pn.Client
@@ -347,10 +374,6 @@ func GetFCMConfigs() (androidConfigs, iosConfigs, webConfigs []string) {
 	return config.FCMAndroidConfigs, config.FCMIOSConfigs, config.FCMWebConfigs
 }
 
-func AcceptEventsFromBroadcast(ctx context.Context, events ...*model.Event) error {
-	return globalPushNotificationManager.AcceptEventsFromBroadcast(ctx, events)
-}
-
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	var err error
 
@@ -446,19 +469,18 @@ func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*m
 	if len(events) == 0 {
 		return nil
 	}
-	singleNotifications, topicNotifications, err := pm.collectNotifications(ctx, events)
+
+	notifications, err := pm.collectNotifications(ctx, events)
 	if err != nil {
 		return errors.Wrap(err, "failed to collect notifications")
 	}
 
-	return errors.Wrap(pm.sendNotifications(ctx, singleNotifications, topicNotifications), "failed to send notifications")
+	return errors.Wrap(pm.sendNotifications(ctx, notifications), "failed to send notifications")
 }
 
-func (pm *PushNotificationManager) collectNotifications(ctx context.Context, events []*model.Event) (
-	singleNotifications []*pn.Notification[*model.Event],
-	topicNotifications []*pn.Notification[pn.SubscriptionTopic],
-	err error,
-) {
+func (pm *PushNotificationManager) collectNotifications(ctx context.Context, events model.Events) (*notificationTargets, error) {
+	var targets notificationTargets
+
 	ephemeralByRef, parseErr := model.ParseEphemeralEmbeddingEvents(events...)
 	if parseErr != nil {
 		log.Error().Str("context", "PUSH_NOTIFICATIONS").
@@ -475,7 +497,7 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 		}
 		if event.Kind == model.CustomIONSystemMessage {
 			if notifications := pm.handleSystemEvent(event); notifications != nil {
-				topicNotifications = append(topicNotifications, notifications...)
+				targets.Topic = append(targets.Topic, notifications...)
 			}
 		}
 		var relevantEvents []*model.Event
@@ -488,24 +510,19 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 		}
 		notifications, err := pm.processEvent(ctx, event, relevantEvents...)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to process event")
+			return nil, errors.Wrap(err, "failed to process event")
 		}
-		if notifications != nil {
-			singleNotifications = append(singleNotifications, notifications...)
-		}
+		targets.Append(notifications)
 	}
 
-	return singleNotifications, topicNotifications, nil
+	return &targets, nil
 }
 
 func shouldSkipEphemeralEvent(event *model.Event) bool {
 	return event.Kind == nostr.KindGiftWrap || event.Kind == model.CustomIONSystemMessage
 }
 
-func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
-	var notifications []*pn.Notification[*model.Event]
-	var err error
-
+func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) (notifications *notificationTargets, err error) {
 	if len(relevantEvents) == 0 && !shouldSkipEphemeralEvent(event) {
 		isAuthoritative, profileMetadataEvent, attestationEvent, err := pm.getAuthoritativeEvents(ctx, event)
 		if err != nil {
@@ -582,19 +599,17 @@ func shouldProcessGenericRepostEvent(event *model.Event) (bool, error) {
 	return true, nil
 }
 
-func (pm *PushNotificationManager) sendNotifications(ctx context.Context,
-	singleNotifications []*pn.Notification[*model.Event],
-	topicNotifications []*pn.Notification[pn.SubscriptionTopic],
-) error {
-	totalCount := len(singleNotifications) + len(topicNotifications)
-	if totalCount == 0 {
+func (pm *PushNotificationManager) sendNotifications(ctx context.Context, target *notificationTargets) (err error) {
+	if target == nil {
 		return nil
 	}
 
-	errChan := make(chan error, totalCount)
-	invalidDevices := pm.sendNotificationsAsync(ctx, singleNotifications, topicNotifications, errChan)
-
-	return errors.Wrap(pm.collectErrorsAndProcessInvalidDevices(ctx, totalCount, errChan, invalidDevices), "failed to collect errors and process invalid devices")
+	if totalCount := len(target.Local) + len(target.Topic); totalCount > 0 {
+		errChan := make(chan error, totalCount)
+		invalidDevices := pm.sendNotificationsAsync(ctx, target.Local, target.Topic, errChan)
+		err = errors.Wrap(pm.collectErrorsAndProcessInvalidDevices(ctx, totalCount, errChan, invalidDevices), "failed to collect errors and process invalid devices")
+	}
+	return err
 }
 
 func (pm *PushNotificationManager) sendNotificationsAsync(
@@ -605,7 +620,7 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 ) []*model.Event {
 	var invalidDevicesMutex sync.Mutex
 	var wg sync.WaitGroup
-	invalidDevices := make([]*model.Event, 0)
+	var invalidDevices model.Events
 
 	for _, notification := range singleNotifications {
 		wg.Add(1)
@@ -655,23 +670,21 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 	return invalidDevices
 }
 
-func (pm *PushNotificationManager) collectErrorsAndProcessInvalidDevices(ctx context.Context, totalCount int, errChan chan error, invalidDevices []*model.Event) error {
-	var errors []error
+func (pm *PushNotificationManager) collectErrorsAndProcessInvalidDevices(ctx context.Context, totalCount int, errChan chan error, invalidDevices model.Events) error {
+	var errs []error
 	for i := 0; i < totalCount; i++ {
 		if err := <-errChan; err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
-	}
-	if len(invalidDevices) > 0 {
-		if err := pm.handleInvalidDeviceTokens(ctx, invalidDevices); err != nil {
-			errors = append(errors, err)
-		}
-	}
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to send notifications: %v", errors)
 	}
 
-	return nil
+	if len(invalidDevices) > 0 {
+		if err := pm.handleInvalidDeviceTokens(ctx, invalidDevices); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Wrap(errors.Join(errs...), "one or more errors occurred while sending notifications")
 }
 
 func (pm *PushNotificationManager) handleInvalidDeviceTokens(ctx context.Context, deviceEvents []*model.Event) error {
@@ -687,7 +700,7 @@ func (pm *PushNotificationManager) handleInvalidDeviceTokens(ctx context.Context
 	return nil
 }
 
-func (pm *PushNotificationManager) createNotifications(
+func (pm *PushNotificationManager) createLocalNotifications(
 	deviceRegistrationEvents model.Events,
 	notificationType NotificationType,
 	incomingEvent *model.Event,
@@ -715,10 +728,9 @@ func (pm *PushNotificationManager) createNotifications(
 			return nil, errors.Wrap(err, "failed to compress relevant events data")
 		}
 	}
-	var deviceEventIDs []string
+
 	for _, event := range deviceRegistrationEvents {
-		deviceEventIDs = append(deviceEventIDs, event.ID)
-		data := map[string]interface{}{
+		data := map[string]any{
 			"compression": CompressionMethodZlib,
 			"event":       compressedEvent,
 		}
@@ -748,32 +760,76 @@ func (pm *PushNotificationManager) createNotifications(
 	return notifications, nil
 }
 
-func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event *model.Event) (devices model.Events) {
+func (pm *PushNotificationManager) createRemoteNotifications(
+	deviceRegistrationEvents model.Events,
+	incomingEvent *model.Event,
+	relevantEvents ...*model.Event,
+) ([]remoteNotificationTarget, error) {
+	if len(deviceRegistrationEvents) == 0 {
+		return nil, nil
+	}
+	return nil, nil
+}
+
+func (pm *PushNotificationManager) createNotifications(
+	localDeviceRegistrationEvents model.Events,
+	remoteDeviceRegistrationEvents model.Events,
+	notificationType NotificationType,
+	incomingEvent *model.Event,
+	relevantEvents ...*model.Event,
+) (*notificationTargets, error) {
+	var target notificationTargets
+
+	if len(localDeviceRegistrationEvents) > 0 {
+		localNotifications, err := pm.createLocalNotifications(localDeviceRegistrationEvents, notificationType, incomingEvent, relevantEvents...)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create local notifications")
+		}
+		target.Local = localNotifications
+	}
+
+	if len(remoteDeviceRegistrationEvents) > 0 {
+		remoteNotifications, err := pm.createRemoteNotifications(remoteDeviceRegistrationEvents, incomingEvent, relevantEvents...)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create remote notifications")
+		}
+		target.Remote = remoteNotifications
+	}
+
+	return &target, nil
+}
+
+func (pm *PushNotificationManager) collectNotificationDevices(pubKey string, event *model.Event) (localDevices, remoteDevices model.Events) {
 	pm.deviceMutex.RLock()
+	defer pm.deviceMutex.RUnlock()
+
 	userDevices, ok := pm.userDevicesMap[pubKey]
-	pm.deviceMutex.RUnlock()
 	if !ok || len(userDevices) == 0 {
-		log.Trace().Str("context", "PUSH-NOTIFICATIONS").
+		log.Trace().Str("context", "PUSH_NOTIFICATIONS").
 			Str("pubkey", pubKey).
 			Str("event_id", event.ID).
-			Msg("no devices found for user")
-		return nil
+			Msg("no devices found")
+		return nil, nil
 	}
 
 	for _, deviceInfo := range userDevices {
 		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {
-			devices = append(devices, deviceInfo.Event)
+			if deviceInfo.Remote {
+				remoteDevices = append(remoteDevices, deviceInfo.Event)
+			} else {
+				localDevices = append(localDevices, deviceInfo.Event)
+			}
 		}
 	}
 
-	log.Trace().Str("context", "PUSH-NOTIFICATIONS").
+	log.Trace().Str("context", "PUSH_NOTIFICATIONS").
 		Str("pubkey", pubKey).
-		Int("target_num_devices", len(devices)).
-		Int("total_num_devices", len(userDevices)).
+		Int("target_local_num_devices", len(localDevices)).
+		Int("target_remote_num_devices", len(remoteDevices)).
 		Str("event_id", event.ID).
 		Msg("collected valid devices for user")
 
-	return devices
+	return localDevices, remoteDevices
 }
 
 // collectTargetMasterKeys iterates through all registered user devices and identifies
@@ -790,7 +846,11 @@ func (pm *PushNotificationManager) collectTargetMasterKeys(event *model.Event) (
 		for _, deviceInfo := range devices {
 			if !model.FiltersMatch(deviceInfo.Filters, event, currentUserKeyPlaceholder, currentUserKeyPlaceholder) {
 				continue
+			} else if deviceInfo.Remote {
+				// Remote devices are handled separately, so we skip them here.
+				continue
 			}
+
 			keys = append(keys, masterKey)
 			break
 		}
@@ -816,17 +876,17 @@ func (pm *PushNotificationManager) collectTargetDevices(event *model.Event) (dev
 	return devices
 }
 
-func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
+func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) (*notificationTargets, error) {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil, nil
 	}
-	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
 
-	return pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
+	localDevices, remoteDevices := pm.collectNotificationDevices(referencePubkey, event)
+	return pm.createNotifications(localDevices, remoteDevices, notificationType, event, relevantEvents...)
 }
 
-func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
+func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevantEvents ...*model.Event) (*notificationTargets, error) {
 	qLowerTag := event.GetTag("q")
 	qUpperTag := event.GetTag("Q")
 	var referencePubkey string
@@ -837,11 +897,8 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 	} else {
 		return nil, nil
 	}
-	devices := pm.collectUserValidDevices(referencePubkey, event)
-	if len(devices) == 0 {
-		return nil, nil
-	}
-	notifications, err := pm.createNotifications(devices, NotificationTypeRepost, event, relevantEvents...)
+	local, remote := pm.collectNotificationDevices(referencePubkey, event)
+	notifications, err := pm.createNotifications(local, remote, NotificationTypeRepost, event, relevantEvents...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create notifications")
 	}

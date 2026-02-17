@@ -65,8 +65,9 @@ func TestProcessEventWithQuotes(t *testing.T) {
 
 		notifications, err := pm.processEvent(t.Context(), event)
 		require.NoError(t, err, "Process event should not return an error")
+		require.Len(t, notifications.Local, 1, "Should create one notification")
 
-		notification := notifications[0]
+		notification := notifications.Local[0]
 		require.Equal(t, defaultTranslations[NotificationTypeRepost].Title, notification.Title, "Title should match")
 		require.Equal(t, defaultTranslations[NotificationTypeRepost].Body, notification.Body, "Body should match")
 		require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
@@ -117,18 +118,18 @@ func TestProcessEventWithQuotes(t *testing.T) {
 
 		notifications, err := pm.processEvent(t.Context(), ev)
 		require.NoError(t, err)
-		require.Len(t, notifications, 1, "Should create one notification")
-		require.Equal(t, notifications[0].Target, registrationEvent, "Target should be the registration event")
-		require.Contains(t, notifications[0].Data, "event", "Data should contain event")
+		require.Len(t, notifications.Local, 1, "Should create one notification")
+		require.Equal(t, notifications.Local[0].Target, registrationEvent, "Target should be the registration event")
+		require.Contains(t, notifications.Local[0].Data, "event", "Data should contain event")
 
-		compressedEvent, ok := notifications[0].Data["event"].(string)
+		compressedEvent, ok := notifications.Local[0].Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
 		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
 		require.Equal(t, ev.String(), decompressedEvent, "Decompressed event should match original")
 
-		require.Equal(t, defaultTranslations[NotificationTypeRepost].Title, notifications[0].Title, "Title should match mention notification type")
-		require.Equal(t, defaultTranslations[NotificationTypeRepost].Body, notifications[0].Body, "Body should match mention notification type")
-		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
+		require.Equal(t, defaultTranslations[NotificationTypeRepost].Title, notifications.Local[0].Title, "Title should match mention notification type")
+		require.Equal(t, defaultTranslations[NotificationTypeRepost].Body, notifications.Local[0].Body, "Body should match mention notification type")
+		require.Equal(t, CompressionMethodZlib, notifications.Local[0].Data["compression"], "Compression method should be zlib")
 	})
 }

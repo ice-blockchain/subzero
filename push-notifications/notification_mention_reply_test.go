@@ -97,8 +97,8 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 	t.Run("mention in post", func(t *testing.T) {
 		notifications, err := pm.handleMentionReplyEvent(event2)
 		require.NoError(t, err)
-		require.Len(t, notifications, 2)
-		for _, notification := range notifications {
+		require.Len(t, notifications.Local, 2)
+		for _, notification := range notifications.Local {
 			if notification.Target.GetTag("t").Value() == "ios" {
 				require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
 				require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
@@ -141,8 +141,8 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 
 		notifications, err := pm.handleMentionReplyEvent(replyEvent)
 		require.NoError(t, err)
-		require.Len(t, notifications, 2, "Should notify mentioned user on both devices")
-		for _, notification := range notifications {
+		require.Len(t, notifications.Local, 2, "Should notify mentioned user on both devices")
+		for _, notification := range notifications.Local {
 			if notification.Target.GetTag("t").Value() == "ios" {
 				require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
 				require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
@@ -195,8 +195,8 @@ func TestMention(t *testing.T) {
 
 		notifications, err := pm.handleMentionReplyEvent(event)
 		require.NoError(t, err)
-		require.Len(t, notifications, 1)
-		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
+		require.Len(t, notifications.Local, 1)
+		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notifications.Local[0].Title)
 	})
 
 	t.Run("rich_text nprofile mention", func(t *testing.T) {
@@ -239,8 +239,8 @@ func TestMention(t *testing.T) {
 
 		notifications, err := pm.handleMentionReplyEvent(event)
 		require.NoError(t, err)
-		require.Len(t, notifications, 1)
-		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
+		require.Len(t, notifications.Local, 1)
+		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notifications.Local[0].Title)
 	})
 
 	t.Run("both content and p tag mention - no duplicate", func(t *testing.T) {
@@ -258,8 +258,8 @@ func TestMention(t *testing.T) {
 
 		notifications, err := pm.handleMentionReplyEvent(event)
 		require.NoError(t, err)
-		require.Len(t, notifications, 1, "Should not create duplicate notifications for the same user")
-		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notifications[0].Title)
+		require.Len(t, notifications.Local, 1, "Should not create duplicate notifications for the same user")
+		require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notifications.Local[0].Title)
 	})
 }
 
@@ -375,8 +375,8 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 
 	notifications, err := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
 	require.NoError(t, err)
-	require.Len(t, notifications, 1)
-	notification := notifications[0]
+	require.Len(t, notifications.Local, 1)
+	notification := notifications.Local[0]
 	require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
 	require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
 	require.Equal(t, defaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)
@@ -473,8 +473,9 @@ func TestMentionWithAuthoritativeEvents(t *testing.T) {
 	notifications, err := pm.processEvent(t.Context(), mentionEvent)
 	require.NoError(t, err)
 	require.NotNil(t, notifications)
+	require.Len(t, notifications.Local, 1)
 
-	notification := notifications[0]
+	notification := notifications.Local[0]
 	require.Contains(t, notification.Data, "relevant_events", "Should contain relevant events")
 	relevantEventsData, ok := notification.Data["relevant_events"].(string)
 	require.True(t, ok, "relevant_events should be a string")

@@ -19,9 +19,9 @@ import (
 
 type (
 	DeviceInfo struct {
-		Event   *model.Event
-		Filters model.Filters
-		Remote  bool
+		Event   *model.Event  // Original device registration event, used for extracting tags and content.
+		Filters model.Filters // Parsed filters from the event content, defining what notifications the device is subscribed to.
+		Remote  bool          // Indicates if the device is registered on a different relay (true) or the same relay (false).
 	}
 )
 
@@ -54,7 +54,7 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 	return nil
 }
 
-func notificationTarget(e *model.Event) (masterPubKey string, deviceID string, remote bool) {
+func deviceNotificationTarget(e *model.Event) (masterPubKey string, deviceID string, remote bool) {
 	dTag := e.Tags.GetD()
 	masterPubKey, deviceID, remote = e.GetMasterPublicKey(), dTag, false
 
@@ -69,7 +69,7 @@ func notificationTarget(e *model.Event) (masterPubKey string, deviceID string, r
 }
 
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
-	masterPubKey, deviceID, remote := notificationTarget(event)
+	masterPubKey, deviceID, remote := deviceNotificationTarget(event)
 
 	if masterPubKey == "" || deviceID == "" {
 		return fmt.Errorf("invalid device registration event: missing master public key %q or device ID %q in tags", masterPubKey, deviceID)
@@ -116,7 +116,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 }
 
 func (pm *PushNotificationManager) removeDeviceFromCache(event *model.Event) {
-	masterPubKey, deviceID, _ := notificationTarget(event)
+	masterPubKey, deviceID, _ := deviceNotificationTarget(event)
 
 	pm.deviceMutex.Lock()
 	defer pm.deviceMutex.Unlock()

@@ -145,9 +145,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
-	require.Len(t, notifications, 1, "Should create one notification")
+	require.Len(t, notifications.Local, 1, "Should create one notification")
 
-	notification := notifications[0]
+	notification := notifications.Local[0]
 	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
 	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
 	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
@@ -252,10 +252,10 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
-	require.Len(t, notifications, 3, "Should create three notifications")
+	require.Len(t, notifications.Local, 3, "Should create three notifications")
 
 	deviceTypeMap := make(map[string]*pn.Notification[*model.Event])
-	for _, notification := range notifications {
+	for _, notification := range notifications.Local {
 		deviceType := notification.Target.GetTag("t").Value()
 		deviceTypeMap[deviceType] = notification
 	}
@@ -327,7 +327,7 @@ func TestCreateNewFollowerNotificationNoDevices(t *testing.T) {
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
 	require.NoError(t, err)
 
-	require.Nil(t, notifications, "Notifications should be nil when no devices")
+	require.Empty(t, notifications, "Notifications should be nil when no devices")
 }
 
 func TestHandleNewFollowerEvent(t *testing.T) {
@@ -386,7 +386,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 2, "Should have notifications for both targets")
+		require.Len(t, notifications.Local, 2, "Should have notifications for both targets")
 	})
 
 	t.Run("new_follower_with_old_event", func(t *testing.T) {
@@ -450,7 +450,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 2, "Should have notifications for both new targets")
+		require.Len(t, notifications.Local, 2, "Should have notifications for both new targets")
 	})
 }
 
@@ -521,9 +521,9 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
-	require.Len(t, notifications, 1, "Should create one notification")
+	require.Len(t, notifications.Local, 1, "Should create one notification")
 
-	notification := notifications[0]
+	notification := notifications.Local[0]
 	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Title, notification.Title)
 	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].Body, notification.Body)
 	require.Equal(t, defaultTranslations[NotificationTypeNewFollower].ImageURL, notification.ImageURL)
@@ -689,12 +689,12 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	notifications, err := pm.processEvent(t.Context(), updatedEvent)
 	require.NoError(t, err, "processEvent should not return error")
 
-	require.Len(t, notifications, 2, "Should have two notifications for the two new followers")
+	require.Len(t, notifications.Local, 2, "Should have two notifications for the two new followers")
 
 	deviceTargets := make(map[string]*model.Event)
 	platformCounts := make(map[string]int)
 
-	for _, notification := range notifications {
+	for _, notification := range notifications.Local {
 		targetPubKey := notification.Target.GetMasterPublicKey()
 		deviceTargets[targetPubKey] = notification.Target
 		deviceType := notification.Target.GetTag("t").Value()

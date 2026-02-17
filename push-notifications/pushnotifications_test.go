@@ -139,9 +139,10 @@ func TestCreateNotifications(t *testing.T) {
 
 	pm := helperNewManager(t)
 	t.Run("Empty device list returns nil", func(t *testing.T) {
-		notifications, err := pm.createNotifications(nil, NotificationTypeReaction, &model.Event{})
+		notifications, err := pm.createNotifications(nil, nil, NotificationTypeReaction, &model.Event{})
 		require.NoError(t, err)
-		require.Nil(t, notifications)
+		require.Empty(t, notifications.Local)
+		require.Empty(t, notifications.Remote)
 	})
 
 	t.Run("Creates notifications with correct data", func(t *testing.T) {
@@ -164,11 +165,11 @@ func TestCreateNotifications(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.createNotifications(deviceEvents, NotificationTypeReaction, event)
+		notifications, err := pm.createNotifications(deviceEvents, nil, NotificationTypeReaction, event)
 		require.NoError(t, err)
-		require.Len(t, notifications, 2)
+		require.Len(t, notifications.Local, 2)
 
-		for _, notification := range notifications {
+		for _, notification := range notifications.Local {
 			require.Contains(t, notification.Data, "event")
 			require.Contains(t, notification.Data, "compression")
 			require.Equal(t, "zlib", notification.Data["compression"])
@@ -181,7 +182,7 @@ func TestCreateNotifications(t *testing.T) {
 			require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 		}
 
-		for _, notification := range notifications {
+		for _, notification := range notifications.Local {
 			deviceType := notification.Target.GetTag("t").Value()
 			if deviceType == "android" {
 				require.Empty(t, notification.Title)
@@ -225,15 +226,15 @@ func TestCreateNotifications(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.createNotifications(deviceEvents, NotificationTypeMentionReply, event, relevantEvents...)
+		notifications, err := pm.createNotifications(deviceEvents, nil, NotificationTypeMentionReply, event, relevantEvents...)
 		require.NoError(t, err)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications.Local, 1)
 
-		require.Contains(t, notifications[0].Data, "relevant_events")
-		require.Contains(t, notifications[0].Data, "compression")
-		require.Equal(t, "zlib", notifications[0].Data["compression"])
+		require.Contains(t, notifications.Local[0].Data, "relevant_events")
+		require.Contains(t, notifications.Local[0].Data, "compression")
+		require.Equal(t, "zlib", notifications.Local[0].Data["compression"])
 
-		compressedRelevantEvents, ok := notifications[0].Data["relevant_events"].(string)
+		compressedRelevantEvents, ok := notifications.Local[0].Data["relevant_events"].(string)
 		require.True(t, ok, "relevant_events should be a string")
 
 		decompressedEvents := helperDecompressZlibAndDecodeBase64(t, compressedRelevantEvents)
@@ -242,7 +243,7 @@ func TestCreateNotifications(t *testing.T) {
 			relevantEvents[1].Content,
 		}, ",")
 		require.Equal(t, `[`+combinedContent+`]`, string(decompressedEvents), "Decompressed events should match combined content")
-		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
+		require.Equal(t, CompressionMethodZlib, notifications.Local[0].Data["compression"], "Compression method should be zlib")
 		decompressedStr := string(decompressedEvents)
 		require.Contains(t, decompressedStr, `"name":"user1"`)
 		require.Contains(t, decompressedStr, `"display_name":"User One"`)
@@ -257,8 +258,9 @@ func TestCollectUserValidDevices(t *testing.T) {
 	pm := helperNewManager(t)
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
-		devices := pm.collectUserValidDevices("non-existent-user", &model.Event{})
-		require.Nil(t, devices)
+		devicesLocal, devicesRemote := pm.collectNotificationDevices("non-existent-user", &model.Event{})
+		require.Empty(t, devicesLocal)
+		require.Empty(t, devicesRemote)
 	})
 
 	t.Run("Returns devices that match filters", func(t *testing.T) {
@@ -297,10 +299,10 @@ func TestCollectUserValidDevices(t *testing.T) {
 		}
 		pm.deviceMutex.Unlock()
 
-		devices := pm.collectUserValidDevices(pubKey, event)
-
-		require.Len(t, devices, 1)
-		require.Equal(t, deviceEvent, devices[0])
+		localDevices, remoteDevices := pm.collectNotificationDevices(pubKey, event)
+		require.Len(t, localDevices, 1)
+		require.Empty(t, remoteDevices)
+		require.Equal(t, deviceEvent, localDevices[0])
 	})
 }
 
@@ -345,7 +347,7 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 	pm, mockClient := helperNewManagerWithClient(t)
 
 	t.Run("Returns nil when no notifications", func(t *testing.T) {
-		err := pm.sendNotifications(t.Context(), nil, nil)
+		err := pm.sendNotifications(t.Context(), nil)
 		require.NoError(t, err)
 	})
 
@@ -374,9 +376,10 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 		mockClient.On("SendSingle", t.Context(), singleNotification).Return(nil)
 		mockClient.On("SendTopic", t.Context(), topicNotification).Return(nil)
 
-		err := pm.sendNotifications(t.Context(), []*pn.Notification[*model.Event]{singleNotification},
-			[]*pn.Notification[pn.SubscriptionTopic]{topicNotification})
-
+		err := pm.sendNotifications(t.Context(), &notificationTargets{
+			Topic: []*pn.Notification[pn.SubscriptionTopic]{topicNotification},
+			Local: []*pn.Notification[*model.Event]{singleNotification},
+		})
 		require.NoError(t, err)
 		mockClient.AssertExpectations(t)
 	})
@@ -397,7 +400,9 @@ func TestPushNotificationManager_SendNotifications(t *testing.T) {
 		sendError := errors.New("failed to send notification")
 		mockClient.On("SendSingle", t.Context(), singleNotification).Return(sendError)
 
-		require.Error(t, pm.sendNotifications(t.Context(), []*pn.Notification[*model.Event]{singleNotification}, nil))
+		require.Error(t, pm.sendNotifications(t.Context(), &notificationTargets{
+			Local: []*pn.Notification[*model.Event]{singleNotification},
+		}))
 		mockClient.AssertExpectations(t)
 	})
 }
@@ -496,7 +501,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 
 		notifications, err := pm.processEvent(t.Context(), event)
 		require.NoError(t, err)
-		require.Nil(t, notifications)
+		require.Empty(t, notifications)
 	})
 
 	t.Run("Handles non-editable GenericRepost event correctly", func(t *testing.T) {
@@ -532,10 +537,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 	pm := helperNewManager(t)
 
 	t.Run("Returns empty when no events", func(t *testing.T) {
-		single, topic, err := pm.collectNotifications(t.Context(), nil)
+		targets, err := pm.collectNotifications(t.Context(), nil)
 		require.NoError(t, err)
-		require.Empty(t, single)
-		require.Empty(t, topic)
+		require.Empty(t, targets)
 	})
 	t.Run("Skips unsupported kinds", func(t *testing.T) {
 		unsupported := &model.Event{
@@ -545,10 +549,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			},
 		}
 
-		single, topic, err := pm.collectNotifications(t.Context(), []*model.Event{unsupported})
+		targets, err := pm.collectNotifications(t.Context(), []*model.Event{unsupported})
 		require.NoError(t, err)
-		require.Empty(t, single)
-		require.Empty(t, topic)
+		require.Empty(t, targets)
 	})
 
 	t.Run("Processes multiple events correctly", func(t *testing.T) {
@@ -574,10 +577,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			},
 		}
 
-		single, topic, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.Empty(t, single)
-		require.Empty(t, topic)
+		require.Empty(t, targets)
 	})
 
 	t.Run("Processes ephemeral events correctly", func(t *testing.T) {
@@ -603,10 +605,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent, ephemeralEvent}
 
-		single, topic, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.Empty(t, single)
-		require.Empty(t, topic)
+		require.Empty(t, targets)
 	})
 
 	t.Run("Processes ephemeral events with a tag correctly", func(t *testing.T) {
@@ -630,10 +631,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent, ephemeralEvent}
 
-		single, topic, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.Empty(t, single)
-		require.Empty(t, topic)
+		require.Empty(t, targets)
 	})
 
 	t.Run("Skips ephemeral events when shouldSkipEphemeralEvent returns true", func(t *testing.T) {
@@ -649,10 +649,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent}
 
-		single, topic, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.Empty(t, single)
-		require.Empty(t, topic)
+		require.Empty(t, targets)
 	})
 
 	t.Run("Processes events without ephemeral events correctly", func(t *testing.T) {
@@ -698,10 +697,11 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent}
 
-		single, topic, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.NotEmpty(t, single, "Should process events even without ephemeral events")
-		require.Empty(t, topic)
+		require.NotEmpty(t, targets.Local, "Should process events even without ephemeral events")
+		require.Empty(t, targets.Topic)
+		require.Empty(t, targets.Remote)
 	})
 
 	t.Run("Processes KindGiftWrap events correctly without requiring ephemeral events", func(t *testing.T) {
@@ -742,10 +742,11 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{giftWrapEvent}
 
-		single, topic, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events)
 		require.NoError(t, err)
-		require.NotEmpty(t, single)
-		require.Empty(t, topic)
+		require.NotEmpty(t, targets.Local)
+		require.Empty(t, targets.Topic)
+		require.Empty(t, targets.Remote)
 	})
 }
 
@@ -945,9 +946,9 @@ func TestProcessEventWithReaction(t *testing.T) {
 	notifications, err := pm.handleEventWithPublicKey(event, NotificationTypeReaction)
 	require.NoError(t, err)
 	require.NotNil(t, notifications, "Notifications should not be nil when calling handleEventWithPublicKey directly")
-	require.Len(t, notifications, 1, "Should create one notification when calling handleEventWithPublicKey directly")
+	require.Len(t, notifications.Local, 1, "Should create one notification when calling handleEventWithPublicKey directly")
 
-	notification := notifications[0]
+	notification := notifications.Local[0]
 	require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
 	require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, notification.Body, "Body should match")
 	require.Equal(t, deviceEvent, notification.Target, "Target should be the device event")
@@ -963,9 +964,9 @@ func TestProcessEventWithReaction(t *testing.T) {
 	notificationsFromProcessEvent, err := pm.processEvent(t.Context(), event)
 	require.NoError(t, err)
 	require.NotNil(t, notificationsFromProcessEvent, "Notifications should not be nil")
-	require.Len(t, notificationsFromProcessEvent, 1, "Should create one notification")
+	require.Len(t, notificationsFromProcessEvent.Local, 1, "Should create one notification")
 
-	notificationFromProcessEvent := notificationsFromProcessEvent[0]
+	notificationFromProcessEvent := notificationsFromProcessEvent.Local[0]
 	require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, notificationFromProcessEvent.Title, "Title should match")
 	require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, notificationFromProcessEvent.Body, "Body should match")
 	require.Equal(t, deviceEvent, notificationFromProcessEvent.Target, "Target should be the device event")

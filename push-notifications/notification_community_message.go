@@ -8,11 +8,10 @@ import (
 	"github.com/cockroachdb/errors"
 
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/ice-blockchain/subzero/validation"
 )
 
-func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
+func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) (*notificationTargets, error) {
 	referencePubkey := event.GetTag("p").Value()
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil, nil
@@ -21,8 +20,9 @@ func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Conte
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get community notification type")
 	}
-	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
-	notifications, err := pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
+
+	localDevices, remoteDevices := pm.collectNotificationDevices(referencePubkey, event)
+	notifications, err := pm.createNotifications(localDevices, remoteDevices, notificationType, event, relevantEvents...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create notifications")
 	}

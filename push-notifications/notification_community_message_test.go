@@ -222,9 +222,9 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		require.NoError(t, err, "Should not return error")
 		require.NotNil(t, notifications, "Notifications should not be nil")
-		require.Len(t, notifications, 1, "Should create one notification")
+		require.Len(t, notifications.Local, 1, "Should create one notification")
 
-		notification := notifications[0]
+		notification := notifications.Local[0]
 		require.Equal(t, defaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
 		require.Equal(t, defaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
 		require.Equal(t, deviceEvent, notification.Target, "Target should match")
@@ -447,10 +447,10 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		require.NoError(t, err, "Should not return error")
 		require.NotNil(t, notifications, "Notifications should not be nil")
-		require.Len(t, notifications, 3, "Should create three notifications (one for each device)")
+		require.Len(t, notifications.Local, 3, "Should create three notifications (one for each device)")
 
 		deviceTypeMap := make(map[string]*pn.Notification[*model.Event])
-		for _, notification := range notifications {
+		for _, notification := range notifications.Local {
 			deviceType := notification.Target.GetTag("t").Value()
 			deviceTypeMap[deviceType] = notification
 		}
@@ -547,6 +547,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 
 	notifications, err := pm.createNotifications(
 		[]*model.Event{deviceEvent},
+		nil,
 		NotificationTypeMentionReply,
 		messageEvent,
 		profileEvent,
@@ -554,9 +555,9 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, notifications)
-	require.Len(t, notifications, 1)
+	require.Len(t, notifications.Local, 1)
 
-	notification := notifications[0]
+	notification := notifications.Local[0]
 	require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Title, notification.Title)
 	require.Equal(t, defaultTranslations[NotificationTypeMentionReply].Body, notification.Body)
 	require.Equal(t, defaultTranslations[NotificationTypeMentionReply].ImageURL, notification.ImageURL)

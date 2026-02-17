@@ -185,9 +185,9 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			notifications, err := localPM.handleGiftWrapEvent(event)
 			require.NoError(t, err)
 			require.NotNil(t, notifications, "Notifications should not be nil for "+tc.description)
-			require.Len(t, notifications, 1, "Should create one notification for "+tc.description)
+			require.Len(t, notifications.Local, 1, "Should create one notification for "+tc.description)
 
-			notification := notifications[0]
+			notification := notifications.Local[0]
 			if tc.notifyType == NotificationTypeReaction {
 				require.Equal(t, defaultTranslations[tc.notifyType].Title, notification.Title, "Title should match for "+tc.description)
 				require.Equal(t, defaultTranslations[tc.notifyType].Body, notification.Body, "Body should match for "+tc.description)
@@ -269,9 +269,9 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			notifications, err := pm.handleGiftWrapEvent(event)
 			require.NoError(t, err)
 			require.NotNil(t, notifications, "Notifications should not be nil for "+device.platform)
-			require.Len(t, notifications, 1, "Should create one notification for "+device.platform)
+			require.Len(t, notifications.Local, 1, "Should create one notification for "+device.platform)
 
-			notification := notifications[0]
+			notification := notifications.Local[0]
 
 			if device.platform == model.DeviceTokenOSAndroid {
 				require.Equal(t, "", notification.Title, "Title should be empty for Android")
@@ -346,9 +346,9 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 		notifications, err := pm.handleGiftWrapEvent(event)
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications.Local, 1)
 
-		notification := notifications[0]
+		notification := notifications.Local[0]
 		require.Equal(t, defaultTranslations[NotificationTypeReaction].Title, notification.Title, "Title should match")
 		require.Equal(t, defaultTranslations[NotificationTypeReaction].Body, notification.Body, "Body should match for reaction")
 		require.Equal(t, defaultTranslations[NotificationTypeReaction].ImageURL, notification.ImageURL, "Image URL should match")
@@ -416,15 +416,15 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 		notifications, err := pm.processEvent(t.Context(), ev)
 		require.NoError(t, err)
 		require.NotNil(t, notifications, "Notifications should not be nil")
-		require.Len(t, notifications, 1, "Should create one notification")
-		require.Equal(t, notifications[0].Target, registrationEvent, "Target should be the registration event")
+		require.Len(t, notifications.Local, 1, "Should create one notification")
+		require.Equal(t, notifications.Local[0].Target, registrationEvent, "Target should be the registration event")
 
-		require.Contains(t, notifications[0].Data, "event", "Data should contain event")
-		compressedEvent, ok := notifications[0].Data["event"].(string)
+		require.Contains(t, notifications.Local[0].Data, "event", "Data should contain event")
+		compressedEvent, ok := notifications.Local[0].Data["event"].(string)
 		require.True(t, ok, "event should be a string")
 
 		decompressedEvent := helperDecompressZlibAndDecodeBase64(t, compressedEvent)
 		require.Equal(t, ev.String(), decompressedEvent, "Decompressed event should match original")
-		require.Equal(t, CompressionMethodZlib, notifications[0].Data["compression"], "Compression method should be zlib")
+		require.Equal(t, CompressionMethodZlib, notifications.Local[0].Data["compression"], "Compression method should be zlib")
 	})
 }

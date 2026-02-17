@@ -11,10 +11,9 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
+func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) (*notificationTargets, error) {
 	var targetMasterKey string
 	var notifyType NotificationType
 
@@ -60,8 +59,8 @@ func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Con
 		return nil, nil
 	}
 
-	devices := pm.collectUserValidDevices(targetMasterKey, event)
-	notifications, err := pm.createNotifications(devices, notifyType, event, relevantEvents...)
+	localDevices, remoteDevices := pm.collectNotificationDevices(targetMasterKey, event)
+	notifications, err := pm.createNotifications(localDevices, remoteDevices, notifyType, event, relevantEvents...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create tokenized community notification for type %q", notifyType)
 	}
