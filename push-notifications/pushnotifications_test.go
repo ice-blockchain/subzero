@@ -985,3 +985,36 @@ func helperCreateTestAntsPool(t testing.TB) *ants.Pool {
 
 	return globalTestAntsPool
 }
+
+func TestCreateRemoteNotifications(t *testing.T) {
+	t.Parallel()
+
+	pm := helperNewManager(t)
+
+	var device1, device2 model.Event // 4 total relays, 2 shared, 1 unique.
+	device1.Tags = model.Tags{
+		{"relay", "wss://relay1.EXAmple.com"},
+		{"relay", "wss://relay2.example.com"},
+		{"relay", "wss://relay3.example.com"},
+	}
+	device2.Tags = model.Tags{
+		{"relay", "wss://relay1.example.com:4443"},
+		{"relay", "wss://relay2.example.com"},
+		{"relay", "wss://relay4.example.com"},
+	}
+
+	targets := pm.createRemoteNotifications(model.Events{&device1, &device2}, &model.Event{
+		Event: nostr.Event{
+			ID: "test-event-id",
+		},
+	})
+	require.Len(t, targets, 4, "Should create one notification per unique relay")
+	for relayURL := range targets {
+		r := strings.ToLower(relayURL)
+		switch r {
+		case "wss://relay1.example.com", "wss://relay2.example.com", "wss://relay3.example.com", "wss://relay4.example.com":
+		default:
+			t.Fatalf("Unexpected relay URL in notification: %s", relayURL)
+		}
+	}
+}

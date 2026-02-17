@@ -30,8 +30,7 @@ func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, r
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create notifications")
 		}
-		targets.Local = append(targets.Local, pubkeyNotifications.Local...)
-		targets.Remote = append(targets.Remote, pubkeyNotifications.Remote...)
+		targets.Append(pubkeyNotifications)
 	}
 	for _, pTag := range event.GetTags("p") { // replies in p tag
 		if pTag.Value() == event.GetMasterPublicKey() {

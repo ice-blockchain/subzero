@@ -53,15 +53,14 @@ type (
 		ImageURL string
 	}
 
-	remoteNotificationTarget struct {
-		Devices model.Events // Device registration events of other users that should receive the notification.
-		Events  model.Events // Events that should be included in the notification payload for these remote devices.
+	notificationTargetRemote struct {
+		Events model.Events // Events to send to the devices.
 	}
 
 	notificationTargets struct {
 		Topic  []*pn.Notification[pn.SubscriptionTopic]
 		Local  []*pn.Notification[*model.Event]
-		Remote []remoteNotificationTarget
+		Remote map[string]notificationTargetRemote // Relay URL -> Events.
 	}
 
 	config struct {
@@ -206,8 +205,20 @@ func (n *notificationTargets) Append(other *notificationTargets) {
 	if len(other.Local) > 0 {
 		n.Local = append(n.Local, other.Local...)
 	}
+
 	if len(other.Remote) > 0 {
-		n.Remote = append(n.Remote, other.Remote...)
+		if n.Remote == nil {
+			n.Remote = make(map[string]notificationTargetRemote)
+		}
+		for k, v := range other.Remote {
+			data, ok := n.Remote[k]
+			if !ok {
+				data = v
+			} else {
+				data.Events = append(data.Events, v.Events...)
+			}
+			n.Remote[k] = data
+		}
 	}
 }
 
@@ -437,7 +448,7 @@ func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context,
 	)
 }
 
-func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *model.Event, source ...string) *model.Event {
+func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *model.Event, tags ...model.Tag) *model.Event {
 	var ev model.Event
 
 	ev.CreatedAt = contentEvent.CreatedAt
@@ -448,9 +459,8 @@ func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *m
 		{"p", contentEvent.GetMasterPublicKey()},
 		{"k", strconv.Itoa(int(contentEvent.Kind))},
 	}
-	if len(source) > 0 {
-		ev.Tags = append(ev.Tags, model.Tag{"l", "batch", source[0]})
-	}
+	ev.Tags = append(ev.Tags, tags...)
+
 	if err := ev.SignWithAlg(pm.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		log.Panic().Err(err).Str("context", "PUSH_NOTIFICATIONS").Str("event_id", contentEvent.ID).Msg("failed to sign ephemeral embedding event for broadcasting")
 	}
@@ -458,9 +468,13 @@ func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *m
 	return &ev
 }
 
-func (pm *PushNotificationManager) packEventsForBroadcast(_ context.Context, in model.Events, batch string) (out model.Events) {
+func (pm *PushNotificationManager) packEventsForBroadcast(_ context.Context, in model.Events, batch string, tags ...model.Tag) (out model.Events) {
+	if batch != "" {
+		tags = append(tags, model.Tag{"l", "batch", batch})
+	}
+
 	for i := range in {
-		out = append(out, pm.createEphemeralEmbeddingEvent(in[i], batch))
+		out = append(out, pm.createEphemeralEmbeddingEvent(in[i], tags...))
 	}
 	return out
 }
@@ -609,7 +623,58 @@ func (pm *PushNotificationManager) sendNotifications(ctx context.Context, target
 		invalidDevices := pm.sendNotificationsAsync(ctx, target.Local, target.Topic, errChan)
 		err = errors.Wrap(pm.collectErrorsAndProcessInvalidDevices(ctx, totalCount, errChan, invalidDevices), "failed to collect errors and process invalid devices")
 	}
+
+	if len(target.Remote) > 0 {
+		errChan := make(chan error, len(target.Remote))
+		pm.sendRemoteNotificationsAsync(ctx, target.Remote, errChan)
+		for pushErr := range errChan {
+			err = errors.Join(err, pushErr)
+		}
+	}
+
 	return err
+}
+
+func (pm *PushNotificationManager) sendRemoteNotificationsAsync(ctx context.Context, targets map[string]notificationTargetRemote, errChan chan<- error) {
+	var wg sync.WaitGroup
+
+	for target, data := range targets {
+		wg.Add(1)
+		err := pm.antsPool.Submit(func() {
+			defer wg.Done()
+
+			eventsToSend := model.DeduplicateSlice(data.Events, func(a *model.Event) string {
+				return a.ID
+			})
+
+			batchID := model.Events(eventsToSend).Hash()
+			pushErr := pm.rq.Push(ctx, &broadcasterBroadcastWorkerArgs{
+				Events:   pm.packEventsForBroadcast(ctx, eventsToSend, batchID, model.Tag{"relay", pm.relayURL}),
+				BatchID:  batchID,
+				RelayURL: target,
+			})
+
+			log.Trace().
+				Str("context", "PUSH_NOTIFICATIONS").
+				Str("relay_url", target).
+				Str("batch_id", batchID).
+				Err(pushErr).
+				Int("events_count", len(eventsToSend)).
+				Msg("pushing broadcast job to relay")
+
+			if pushErr != nil {
+				errChan <- errors.Wrapf(pushErr, "failed to push a job for broadcasting to relay %s", target)
+			}
+
+		})
+		if err != nil {
+			wg.Done()
+			errChan <- errors.Wrapf(err, "failed to submit a job for broadcasting to relay %s", target)
+		}
+	}
+
+	wg.Wait()
+	close(errChan)
 }
 
 func (pm *PushNotificationManager) sendNotificationsAsync(
@@ -760,15 +825,39 @@ func (pm *PushNotificationManager) createLocalNotifications(
 	return notifications, nil
 }
 
-func (pm *PushNotificationManager) createRemoteNotifications(
-	deviceRegistrationEvents model.Events,
-	incomingEvent *model.Event,
-	relevantEvents ...*model.Event,
-) ([]remoteNotificationTarget, error) {
-	if len(deviceRegistrationEvents) == 0 {
-		return nil, nil
+func (pm *PushNotificationManager) createRemoteNotifications(devices model.Events, incomingEvent *model.Event, relevantEvents ...*model.Event) map[string]notificationTargetRemote {
+	if len(devices) == 0 {
+		return nil
 	}
-	return nil, nil
+
+	allEvents := model.DeduplicateSlice(append(model.Events{incomingEvent}, relevantEvents...), func(a *model.Event) string {
+		return a.ID
+	})
+	allRelays := make([]string, 0, len(devices))
+	for _, device := range devices {
+		for _, tag := range device.Tags {
+			if !(tag.Key() == "relay" && tag.Value() != "") {
+				continue
+			}
+			allRelays = append(allRelays, tag.Value())
+		}
+	}
+
+	slices.SortStableFunc(allRelays, func(a, b string) int {
+		if model.CompareRelaysURLs(a, b) {
+			return 0
+		}
+		return strings.Compare(a, b)
+	})
+
+	relays := slices.CompactFunc(allRelays, model.CompareRelaysURLs)
+	targets := make(map[string]notificationTargetRemote, len(relays))
+	for i := range relays {
+		targets[relays[i]] = notificationTargetRemote{
+			Events: allEvents,
+		}
+	}
+	return targets
 }
 
 func (pm *PushNotificationManager) createNotifications(
@@ -789,11 +878,7 @@ func (pm *PushNotificationManager) createNotifications(
 	}
 
 	if len(remoteDeviceRegistrationEvents) > 0 {
-		remoteNotifications, err := pm.createRemoteNotifications(remoteDeviceRegistrationEvents, incomingEvent, relevantEvents...)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create remote notifications")
-		}
-		target.Remote = remoteNotifications
+		target.Remote = pm.createRemoteNotifications(remoteDeviceRegistrationEvents, incomingEvent, relevantEvents...)
 	}
 
 	return &target, nil
