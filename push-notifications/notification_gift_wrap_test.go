@@ -413,7 +413,7 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), ev)
+		notifications, err := pm.processEvent(t.Context(), ev, "")
 		require.NoError(t, err)
 		require.NotNil(t, notifications, "Notifications should not be nil")
 		require.Len(t, notifications.Local, 1, "Should create one notification")

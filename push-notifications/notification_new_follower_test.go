@@ -686,7 +686,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	require.NotNil(t, updatedEvent.Previous, "Updated event should have previous version")
 	require.Equal(t, initialEvent.Event, updatedEvent.Previous.Event, "Previous event should match initial event")
 
-	notifications, err := pm.processEvent(t.Context(), updatedEvent)
+	notifications, err := pm.processEvent(t.Context(), updatedEvent, "")
 	require.NoError(t, err, "processEvent should not return error")
 
 	require.Len(t, notifications.Local, 2, "Should have two notifications for the two new followers")

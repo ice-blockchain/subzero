@@ -424,7 +424,7 @@ func TestPushNotificationManager_AcceptEvents(t *testing.T) {
 	pm := helperNewManager(t)
 
 	t.Run("Returns nil when no events", func(t *testing.T) {
-		err := pm.AcceptEvents(t.Context(), nil)
+		err := pm.AcceptEvents(t.Context(), nil, "")
 		require.NoError(t, err)
 	})
 }
@@ -446,7 +446,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event)
+		notifications, err := pm.processEvent(t.Context(), event, "")
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -460,7 +460,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event)
+		notifications, err := pm.processEvent(t.Context(), event, "")
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -473,7 +473,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event)
+		notifications, err := pm.processEvent(t.Context(), event, "")
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -499,7 +499,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event)
+		notifications, err := pm.processEvent(t.Context(), event, "")
 		require.NoError(t, err)
 		require.Empty(t, notifications)
 	})
@@ -525,7 +525,7 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event)
+		notifications, err := pm.processEvent(t.Context(), event, "")
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
@@ -537,7 +537,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 	pm := helperNewManager(t)
 
 	t.Run("Returns empty when no events", func(t *testing.T) {
-		targets, err := pm.collectNotifications(t.Context(), nil)
+		targets, err := pm.collectNotifications(t.Context(), nil, "")
 		require.NoError(t, err)
 		require.Empty(t, targets)
 	})
@@ -549,7 +549,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			},
 		}
 
-		targets, err := pm.collectNotifications(t.Context(), []*model.Event{unsupported})
+		targets, err := pm.collectNotifications(t.Context(), []*model.Event{unsupported}, "")
 		require.NoError(t, err)
 		require.Empty(t, targets)
 	})
@@ -577,7 +577,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			},
 		}
 
-		targets, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events, "")
 		require.NoError(t, err)
 		require.Empty(t, targets)
 	})
@@ -605,7 +605,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent, ephemeralEvent}
 
-		targets, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events, "")
 		require.NoError(t, err)
 		require.Empty(t, targets)
 	})
@@ -631,7 +631,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent, ephemeralEvent}
 
-		targets, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events, "")
 		require.NoError(t, err)
 		require.Empty(t, targets)
 	})
@@ -649,7 +649,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent}
 
-		targets, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events, "")
 		require.NoError(t, err)
 		require.Empty(t, targets)
 	})
@@ -697,7 +697,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{mainEvent}
 
-		targets, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events, "")
 		require.NoError(t, err)
 		require.NotEmpty(t, targets.Local, "Should process events even without ephemeral events")
 		require.Empty(t, targets.Topic)
@@ -742,7 +742,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 
 		events := []*model.Event{giftWrapEvent}
 
-		targets, err := pm.collectNotifications(t.Context(), events)
+		targets, err := pm.collectNotifications(t.Context(), events, "")
 		require.NoError(t, err)
 		require.NotEmpty(t, targets.Local)
 		require.Empty(t, targets.Topic)
@@ -961,7 +961,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.Equal(t, event.String(), string(decompressedEvent), "Decompressed event should match original")
 	require.Equal(t, CompressionMethodZlib, notification.Data["compression"], "Compression method should be zlib")
 
-	notificationsFromProcessEvent, err := pm.processEvent(t.Context(), event)
+	notificationsFromProcessEvent, err := pm.processEvent(t.Context(), event, "")
 	require.NoError(t, err)
 	require.NotNil(t, notificationsFromProcessEvent, "Notifications should not be nil")
 	require.Len(t, notificationsFromProcessEvent.Local, 1, "Should create one notification")
@@ -992,11 +992,14 @@ func TestCreateRemoteNotifications(t *testing.T) {
 	pm := helperNewManager(t)
 
 	var device1, device2 model.Event // 4 total relays, 2 shared, 1 unique.
+	device1.PubKey = "device1_pubkey"
 	device1.Tags = model.Tags{
 		{"relay", "wss://relay1.EXAmple.com"},
 		{"relay", "wss://relay2.example.com"},
 		{"relay", "wss://relay3.example.com"},
 	}
+
+	device2.PubKey = "device2_pubkey"
 	device2.Tags = model.Tags{
 		{"relay", "wss://relay1.example.com:4443"},
 		{"relay", "wss://relay2.example.com"},
@@ -1009,12 +1012,14 @@ func TestCreateRemoteNotifications(t *testing.T) {
 		},
 	})
 	require.Len(t, targets, 4, "Should create one notification per unique relay")
-	for relayURL := range targets {
+	for relayURL, remote := range targets {
 		r := strings.ToLower(relayURL)
-		switch r {
-		case "wss://relay1.example.com", "wss://relay2.example.com", "wss://relay3.example.com", "wss://relay4.example.com":
-		default:
-			t.Fatalf("Unexpected relay URL in notification: %s", relayURL)
+		if strings.HasPrefix(r, "wss://relay1") || strings.HasPrefix(r, "wss://relay2") {
+			require.ElementsMatch(t, []string{device1.PubKey, device2.PubKey}, remote.UserMasterPublicKeys)
+		} else if strings.HasPrefix(r, "wss://relay3") {
+			require.ElementsMatch(t, []string{device1.PubKey}, remote.UserMasterPublicKeys)
+		} else {
+			require.ElementsMatch(t, []string{device2.PubKey}, remote.UserMasterPublicKeys)
 		}
 	}
 }

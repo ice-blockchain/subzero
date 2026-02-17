@@ -470,7 +470,7 @@ func TestMentionWithAuthoritativeEvents(t *testing.T) {
 	require.NotNil(t, profileEvent, "Should find sender's profile event")
 	require.NotNil(t, attestationEvent, "Should find sender's attestation event")
 
-	notifications, err := pm.processEvent(t.Context(), mentionEvent)
+	notifications, err := pm.processEvent(t.Context(), mentionEvent, "")
 	require.NoError(t, err)
 	require.NotNil(t, notifications)
 	require.Len(t, notifications.Local, 1)

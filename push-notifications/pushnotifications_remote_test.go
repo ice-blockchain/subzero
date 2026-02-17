@@ -132,7 +132,7 @@ func TestRemoteNotificationSendFlow(t *testing.T) {
 
 	var tagets *notificationTargets
 	t.Run("Process event and verify notifications are created", func(t *testing.T) {
-		notifications, err := pm.processEvent(t.Context(), textNoteEvent)
+		notifications, err := pm.processEvent(t.Context(), textNoteEvent, "")
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
 
@@ -181,9 +181,15 @@ func TestRemoteNotificationSendFlow(t *testing.T) {
 			require.True(t, ok, "Ephemeral event signature should be valid")
 
 			for _, event := range broadcast.Events {
-				t.Logf("received event %s from relay %s to relay %s", event.ID, event.GetTag("relay").Value(), broadcast.RelayURL)
+				t.Logf("received event %s from relay %s to relay %s for users %v", event.ID, event.GetTag("relay").Value(), broadcast.RelayURL, helperCollectTargetUsers(t, event))
 				require.Equal(t, pm.relayURL, event.GetTag("relay").Value())
 			}
 		}
 	})
+}
+
+func helperCollectTargetUsers(t testing.TB, event *model.Event) []string {
+	t.Helper()
+
+	return extractTargetUsers(event)
 }

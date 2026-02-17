@@ -54,7 +54,8 @@ type (
 	}
 
 	notificationTargetRemote struct {
-		Events model.Events // Events to send to the devices.
+		UserMasterPublicKeys []string     // Master public keys of users to send the notification to.
+		Events               model.Events // Events to send to the devices.
 	}
 
 	notificationTargets struct {
@@ -398,7 +399,7 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	}
 
 	err = errors.Join(err,
-		globalPushNotificationManager.AcceptEvents(ctx, events),
+		globalPushNotificationManager.AcceptEvents(ctx, events, ""),
 		globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events),
 		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
 	)
@@ -479,12 +480,12 @@ func (pm *PushNotificationManager) packEventsForBroadcast(_ context.Context, in 
 	return out
 }
 
-func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*model.Event) error {
+func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*model.Event, targetUserMasterKey string) error {
 	if len(events) == 0 {
 		return nil
 	}
 
-	notifications, err := pm.collectNotifications(ctx, events)
+	notifications, err := pm.collectNotifications(ctx, events, targetUserMasterKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to collect notifications")
 	}
@@ -492,7 +493,7 @@ func (pm *PushNotificationManager) AcceptEvents(ctx context.Context, events []*m
 	return errors.Wrap(pm.sendNotifications(ctx, notifications), "failed to send notifications")
 }
 
-func (pm *PushNotificationManager) collectNotifications(ctx context.Context, events model.Events) (*notificationTargets, error) {
+func (pm *PushNotificationManager) collectNotifications(ctx context.Context, events model.Events, targetUserMasterKey string) (*notificationTargets, error) {
 	var targets notificationTargets
 
 	ephemeralByRef, parseErr := model.ParseEphemeralEmbeddingEvents(events...)
@@ -522,7 +523,7 @@ func (pm *PushNotificationManager) collectNotifications(ctx context.Context, eve
 				}
 			}
 		}
-		notifications, err := pm.processEvent(ctx, event, relevantEvents...)
+		notifications, err := pm.processEvent(ctx, event, targetUserMasterKey, relevantEvents...)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to process event")
 		}
@@ -536,7 +537,34 @@ func shouldSkipEphemeralEvent(event *model.Event) bool {
 	return event.Kind == nostr.KindGiftWrap || event.Kind == model.CustomIONSystemMessage
 }
 
-func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) (notifications *notificationTargets, err error) {
+func (pm *PushNotificationManager) collectRemoteNotifications(_ context.Context, event *model.Event, relevantEvents ...*model.Event) *notificationTargets {
+	author := event.GetMasterPublicKey()
+
+	pm.deviceMutex.RLock()
+	defer pm.deviceMutex.RUnlock()
+
+	devices, ok := pm.userDevicesMap[author]
+	if !ok || len(devices) == 0 {
+		return nil
+	}
+
+	var remoteDevices model.Events
+	for _, device := range devices {
+		if !device.Remote {
+			continue
+		}
+
+		if model.FiltersMatch(device.Filters, event, "", "") {
+			remoteDevices = append(remoteDevices, device.Event)
+		}
+	}
+
+	return &notificationTargets{
+		Remote: pm.createRemoteNotifications(remoteDevices, event, relevantEvents...),
+	}
+}
+
+func (pm *PushNotificationManager) processEvent(ctx context.Context, event *model.Event, targetUserMasterKey string, relevantEvents ...*model.Event) (notifications *notificationTargets, err error) {
 	if len(relevantEvents) == 0 && !shouldSkipEphemeralEvent(event) {
 		isAuthoritative, profileMetadataEvent, attestationEvent, err := pm.getAuthoritativeEvents(ctx, event)
 		if err != nil {
@@ -555,6 +583,10 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 				Str("master_pubkey", event.GetMasterPublicKey()).
 				Msg("non-authoritative event processed without relevant events")
 		}
+	}
+
+	if targetUserMasterKey != "" {
+		return pm.handleRemoteEvent(ctx, targetUserMasterKey, event, relevantEvents...)
 	}
 
 	if event.Kind == nostr.KindGenericRepost {
@@ -596,6 +628,10 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to handle event %s", event.ID)
+	}
+
+	if targetUserMasterKey == "" {
+		notifications.Append(pm.collectRemoteNotifications(ctx, event, relevantEvents...))
 	}
 
 	return notifications, nil
@@ -647,9 +683,12 @@ func (pm *PushNotificationManager) sendRemoteNotificationsAsync(ctx context.Cont
 				return a.ID
 			})
 
+			destUsers := model.Tag{"l", "users"}
+			destUsers = append(destUsers, data.UserMasterPublicKeys...)
+
 			batchID := model.Events(eventsToSend).Hash()
 			pushErr := pm.rq.Push(ctx, &broadcasterBroadcastWorkerArgs{
-				Events:   pm.packEventsForBroadcast(ctx, eventsToSend, batchID, model.Tag{"relay", pm.relayURL}),
+				Events:   pm.packEventsForBroadcast(ctx, eventsToSend, batchID, model.Tag{"relay", pm.relayURL}, destUsers),
 				BatchID:  batchID,
 				RelayURL: target,
 			})
@@ -833,28 +872,38 @@ func (pm *PushNotificationManager) createRemoteNotifications(devices model.Event
 	allEvents := model.DeduplicateSlice(append(model.Events{incomingEvent}, relevantEvents...), func(a *model.Event) string {
 		return a.ID
 	})
-	allRelays := make([]string, 0, len(devices))
+
+	allRelays := make(map[string][]string) // Relay URL -> list of master public keys of devices that should receive the notification through this relay.
 	for _, device := range devices {
 		for _, tag := range device.Tags {
 			if !(tag.Key() == "relay" && tag.Value() != "") {
 				continue
 			}
-			allRelays = append(allRelays, tag.Value())
+			allRelays[tag.Value()] = append(allRelays[tag.Value()], device.GetMasterPublicKey())
 		}
 	}
 
-	slices.SortStableFunc(allRelays, func(a, b string) int {
-		if model.CompareRelaysURLs(a, b) {
-			return 0
+	// TODO: Optimize this O(n^2) loop. In practice, the number of relays per device is expected to be very low, so it shouldn't cause performance issues, but it's still worth optimizing.
+	optimizedRelays := make(map[string][]string)
+	for k, v := range allRelays {
+		var found bool
+		for oK, oV := range optimizedRelays {
+			if model.CompareRelaysURLs(k, oK) {
+				found = true
+				optimizedRelays[oK] = append(oV, v...)
+				break
+			}
 		}
-		return strings.Compare(a, b)
-	})
+		if !found {
+			optimizedRelays[k] = v
+		}
+	}
 
-	relays := slices.CompactFunc(allRelays, model.CompareRelaysURLs)
-	targets := make(map[string]notificationTargetRemote, len(relays))
-	for i := range relays {
-		targets[relays[i]] = notificationTargetRemote{
-			Events: allEvents,
+	targets := make(map[string]notificationTargetRemote, len(optimizedRelays))
+	for k, v := range optimizedRelays {
+		targets[k] = notificationTargetRemote{
+			Events:               allEvents,
+			UserMasterPublicKeys: v,
 		}
 	}
 	return targets
@@ -993,6 +1042,10 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 
 func (pm *PushNotificationManager) getTranslation(notificationType NotificationType) notificationTranslation {
 	translation, ok := defaultTranslations[notificationType]
+	if !ok {
+		translation, ok = defaultRemoteTranslations[notificationType]
+	}
+
 	if !ok {
 		log.Error().Str("context", "PUSH_NOTIFICATIONS").
 			Str("notification_type", string(notificationType)).

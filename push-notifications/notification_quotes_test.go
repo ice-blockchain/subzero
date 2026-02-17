@@ -63,7 +63,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), event)
+		notifications, err := pm.processEvent(t.Context(), event, "")
 		require.NoError(t, err, "Process event should not return an error")
 		require.Len(t, notifications.Local, 1, "Should create one notification")
 
@@ -116,7 +116,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 			},
 		}
 
-		notifications, err := pm.processEvent(t.Context(), ev)
+		notifications, err := pm.processEvent(t.Context(), ev, "")
 		require.NoError(t, err)
 		require.Len(t, notifications.Local, 1, "Should create one notification")
 		require.Equal(t, notifications.Local[0].Target, registrationEvent, "Target should be the registration event")

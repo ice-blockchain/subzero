@@ -153,7 +153,7 @@ func helperCreateDeviceRegistrationEvent(
 	return &ev
 }
 
-func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content string) *model.Event {
+func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content string, pTags ...string) *model.Event {
 	t.Helper()
 
 	var ev model.Event
@@ -163,6 +163,11 @@ func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content str
 	ev.Tags = model.Tags{
 		{"d", rand.Text()},
 	}
+
+	for _, p := range pTags {
+		ev.Tags = append(ev.Tags, model.Tag{"p", p})
+	}
+
 	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
 }
@@ -194,18 +199,19 @@ func helperVerifyBroadcastEvents(t *testing.T, broadcastedEvents []mockedBroadca
 	}
 }
 
-func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient, expectedEvent *model.Event) {
+func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient, notificationType NotificationType, expectedEvent *model.Event) {
 	t.Helper()
 
+	t.Logf("Waiting for push notification of type %s for event %s", notificationType, expectedEvent.ID)
 	select {
 	case n := <-mockClient.Chan:
 		t.Logf("Received push notification %#v", n)
 		require.Equal(t, expectedEvent, n.SourceEvent)
-		require.Equal(t, defaultTranslations[NotificationTypePost].Title, n.Title)
-		require.Equal(t, defaultTranslations[NotificationTypePost].Body, n.Body)
+		require.Equal(t, defaultTranslations[notificationType].Title, n.Title)
+		require.Equal(t, defaultTranslations[notificationType].Body, n.Body)
 
 	case <-time.After(time.Second * 5):
-		t.Fatalf("Timed out waiting for push notification")
+		require.FailNow(t, "Timed out waiting for push notification")
 	}
 }
 
@@ -308,21 +314,23 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 	})
 
 	t.Run("Publish EditableTextNote from user1", func(t *testing.T) {
-		postEvent := helperCreateEditableTextNoteEvent(t, user1, "Hello from User1!")
+		postEvent := helperCreateEditableTextNoteEvent(t, user1, "Hello from User1!", user3.PublicKey)
 		t.Logf("Publishing 30175 event from User1: %s", postEvent.ID)
 
 		err := pm.AcceptEventsForBroadcast(t.Context(), []*model.Event{postEvent})
 		require.NoError(t, err)
 
 		var receivedBroadcasts []mockedBroadcastEvent
-		for range user3.Relays {
+		for i := range user3.Relays {
+			t.Logf("Waiting for broadcast to User3's relay %s", user3.Relays[i])
 			select {
 			case b := <-pm.broadcaster.(*mockBroadcaster).Chan:
 				t.Logf("Received broadcast to relay %s with %d events", b.RelayURL, len(b.Events))
 				require.Contains(t, user3.Relays, b.RelayURL)
 				receivedBroadcasts = append(receivedBroadcasts, b)
+
 			case <-time.After(time.Second * 5):
-				t.Fatal("Timed out waiting for broadcasts to User3's relays")
+				require.FailNow(t, "Timed out waiting for broadcasts to User3's relays")
 			}
 		}
 
@@ -331,7 +339,7 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 			require.NoError(t, pm.AcceptEventsFromBroadcast(t.Context(), b.Events))
 		}
 		// Wait just for a single event since we have deduplication inside RQ.
-		helperWaitForNotifications(t, mockNotificationClient, postEvent)
+		helperWaitForNotifications(t, mockNotificationClient, NotificationTypeMentionReply, postEvent)
 	})
 
 	t.Run("Publish_TokenizedCommunityDefinition_From_User2", func(t *testing.T) {
@@ -362,6 +370,6 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 			require.NoError(t, pm.AcceptEventsFromBroadcast(t.Context(), b.Events))
 		}
 		// Wait just for a single event since we have deduplication inside RQ.
-		helperWaitForNotifications(t, mockNotificationClient, postEvent)
+		helperWaitForNotifications(t, mockNotificationClient, NotificationTypeTokenizedCommunityCreated, postEvent)
 	})
 }
