@@ -17,10 +17,7 @@ import (
 
 func TestMain(m *testing.M) {
 	validation.MustInit(context.Background(), validation.WithIONIdentityPublicKeys(func() []string { return []string{} }))
-	code := m.Run()
-	if code != 0 {
-		os.Exit(code)
-	}
+	os.Exit(m.Run())
 }
 
 type attestationOptions struct {

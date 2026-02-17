@@ -86,7 +86,7 @@ func validateUserAccessFromTags(ctx context.Context, relayUrl string, e, attesta
 	if relayMetadata.Kind != nostr.KindRelayListMetadata {
 		return nil, false, errors.Errorf("relay metadata event has unexpected kind %d", relayMetadata.Kind)
 	} else if relayMetadata.GetMasterPublicKey() != e.GetMasterPublicKey() {
-		return nil, false, errors.Errorf("relay metadata event has unexpected author %q, expected %q", relayMetadata.GetMasterPublicKey(), attestation.PubKey)
+		return nil, false, errors.Errorf("relay metadata event has unexpected author %q, expected %q", relayMetadata.GetMasterPublicKey(), e.GetMasterPublicKey())
 	}
 
 	err = validation.Validate(ctx, model.Events{relayMetadata})
