@@ -57,20 +57,20 @@ func ValidateUserAttestation(ctx context.Context, e, attestationEvent *model.Eve
 	return kindsToMap(records.AllowedKinds(e.PubKey)), nil
 }
 
-func ValidateUserAccessAuthoritative(ctx context.Context, currentRelayURL string, e *model.Event) (map[int]struct{}, error) {
-	authoritative, kinds, err := validation.IsRelayAuthoritativeForUser(ctx, currentRelayURL, e.GetMasterPublicKey(), e.PubKey)
+func ValidateUserAccessAuthoritative(ctx context.Context, relayURL string, e *model.Event) (map[int]struct{}, error) {
+	authoritative, kinds, err := validation.IsRelayAuthoritativeForUser(ctx, relayURL, e.GetMasterPublicKey(), e.PubKey)
 	if err != nil {
 		return nil, err
 	}
 
 	if !authoritative {
-		return nil, errors.Wrapf(ErrRelayNotAuthoritative, "current relay %q not found in user's relay list", currentRelayURL)
+		return nil, errors.Wrapf(ErrRelayNotAuthoritative, "relay %q not found in user's relay list", relayURL)
 	}
 
 	return kindsToMap(kinds), nil
 }
 
-func validateUserAccessFromTags(ctx context.Context, relayUrl string, e, attestation, relayMetadata *model.Event) (allowedKinds map[int]struct{}, authoritative bool, err error) {
+func validateUserAccessFromTags(ctx context.Context, relayURL string, e, attestation, relayMetadata *model.Event) (allowedKinds map[int]struct{}, authoritative bool, err error) {
 	if e.GetMasterPublicKey() != e.PubKey {
 		allowedKinds, err = ValidateUserAttestation(ctx, e, attestation)
 		if err != nil {
@@ -95,17 +95,7 @@ func validateUserAccessFromTags(ctx context.Context, relayUrl string, e, attesta
 	}
 
 	for _, tag := range relayMetadata.Tags {
-		var userRelayURL string
-
-		if tag.Key() == "r" {
-			userRelayURL = tag.Value()
-		}
-
-		if userRelayURL == "" {
-			continue
-		}
-
-		if model.CompareRelaysURLs(userRelayURL, relayUrl) {
+		if tag.Key() == "r" && model.CompareRelaysURLs(tag.Value(), relayURL) {
 			authoritative = true
 			break
 		}
@@ -114,11 +104,11 @@ func validateUserAccessFromTags(ctx context.Context, relayUrl string, e, attesta
 	return allowedKinds, authoritative, nil
 }
 
-func ValidateUserAccess(ctx context.Context, relayUrl string, e *model.Event) (allowedKinds map[int]struct{}, authoritative bool, err error) {
+func ValidateUserAccess(ctx context.Context, relayURL string, e *model.Event) (allowedKinds map[int]struct{}, authoritative bool, err error) {
 	attestation := e.GetTag(tagNameAttestation).Value()
 	if attestation == "" {
 		// User request for authoritative relay.
-		allowedKinds, err = ValidateUserAccessAuthoritative(ctx, relayUrl, e)
+		allowedKinds, err = ValidateUserAccessAuthoritative(ctx, relayURL, e)
 		return allowedKinds, err == nil, err
 	}
 
@@ -136,5 +126,5 @@ func ValidateUserAccess(ctx context.Context, relayUrl string, e *model.Event) (a
 		relayMetadataEvent = &ev
 	}
 
-	return validateUserAccessFromTags(ctx, relayUrl, e, &attestationEvent, relayMetadataEvent)
+	return validateUserAccessFromTags(ctx, relayURL, e, &attestationEvent, relayMetadataEvent)
 }
