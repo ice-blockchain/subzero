@@ -1,5 +1,13 @@
 -- SPDX-License-Identifier: ice License 1.0
 
+CREATE OR REPLACE FUNCTION is_indexable_tag_key(tag_key TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT length(tag_key) = 1 OR tag_key IN ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token', 'relay', 'tx_type')
+$$;
+--------
 CREATE OR REPLACE FUNCTION trigger_events_after_insert_generate_tags()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -22,7 +30,7 @@ BEGIN
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
-        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token', 'relay', 'tx_type')
+        is_indexable_tag_key(value->>0)
     ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;
@@ -52,8 +60,7 @@ BEGIN
         FROM
             jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
         WHERE
-            length(value->>0) = 1
-            OR value->>0 IN ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token', 'relay', 'tx_type')
+            is_indexable_tag_key(value->>0)
     )
     -- Delete old tags that are not present in the new set of tags.
     DELETE
@@ -98,7 +105,7 @@ BEGIN
         COALESCE(value->>5, '')
     FROM jsonb_array_elements(COALESCE(NEW.tags, '[]'::jsonb)) AS value
     WHERE
-        length(value->>0) = 1 OR value->>0 in ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token', 'relay', 'tx_type')
+        is_indexable_tag_key(value->>0)
     ON CONFLICT(event_id, event_tag_key, event_tag_value1, event_tag_value3) DO NOTHING;
 
     RETURN NEW;
