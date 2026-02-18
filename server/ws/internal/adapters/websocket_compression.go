@@ -11,7 +11,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsflate"
 
-	"github.com/ice-blockchain/subzero/server/ws/internal/pool"
+	"github.com/ice-blockchain/subzero/pool"
 )
 
 type compressor struct {

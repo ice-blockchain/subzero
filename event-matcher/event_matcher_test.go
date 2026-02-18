@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: ice License 1.0
 
-package ws
+package eventmatcher
 
 import (
 	"math/rand/v2"
@@ -13,102 +13,92 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperMustSubscriptionRemove(t *testing.T, matcher *eventMatcher, writer Writer, ID string) {
-	t.Helper()
-
-	require.NotNil(t, matcher)
-
-	_, ok := matcher.Remove(writer, ID)
-	require.Truef(t, ok, "failed to remove subscription with ID %s", ID)
-}
-
 func TestEventMatcherSetAndGet(t *testing.T) {
 	t.Parallel()
 
-	writer := new(mockWriter)
-
-	matcher := newEventMatcher()
+	matcher := newEventMatcher[*model.Subscription]()
 	require.NotNil(t, matcher)
 
 	t.Run("Empty", func(t *testing.T) {
 		sub := model.NewSubscription("sub-empty-filter", model.Filters{})
 
-		require.True(t, matcher.Index(writer, sub))
+		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Generic.GetCardinality())
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		require.EqualValues(t, 1, matcher.Values.Size())
 
 		data := matcher.Get(new(model.Event))
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.Equal(t, sub, data[0])
+
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("Generic", func(t *testing.T) {
-		sub := model.NewSubscription("sub-empty-filter", model.Filters{{Authors: []string{"root"}}})
+		sub := model.NewSubscription("sub-author-filter", model.Filters{{Authors: []string{"root"}}})
 
-		require.True(t, matcher.Index(writer, sub))
+		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Generic.GetCardinality())
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		require.EqualValues(t, 1, matcher.Values.Size())
 
 		data := matcher.Get(new(model.Event))
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
+
 	t.Run("By kind", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-only", model.Filters{{Kinds: []int{1, 2, 3}}})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 		require.Len(t, matcher.ByKind, 3)
 
 		var ev model.Event
 		ev.Kind = 1
 		data := matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Kind = 2
 		data = matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Kind = 4
 		data = matcher.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("By p tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-p-tag-only", model.Filters{{Tags: model.TagMap{}.SetLiterals("p", "root")}})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 		require.Len(t, matcher.ByDestination, 1)
 
 		var ev model.Event
 		ev.Tags = model.Tags{{"p", "root"}}
 		data := matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Tags = model.Tags{{"p", "non-root"}}
 		data = matcher.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("By Q tag", func(t *testing.T) {
-		sub := model.NewSubscription("sub-Q-tag-only", model.Filters{{Tags: model.TagMap{}.Set("Q", nil, nil, model.PointerOf("relay.example.com"))}})
+		sub := model.NewSubscription("sub-Q-tag-only", model.Filters{{Tags: model.TagMap{}.Set("Q", nil, nil, new("relay.example.com"))}})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 		require.Len(t, matcher.ByDestination, 1)
 
 		var ev model.Event
 		ev.Tags = model.Tags{{"Q", "", "", "relay.example.com"}}
 		data := matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Tags = model.Tags{{"Q", "", "", "other-relay.example.com"}}
 		data = matcher.Get(&ev)
@@ -119,13 +109,13 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		data = matcher.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("By kind and p tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-and-p-tag", model.Filters{{Kinds: []int{10, 11}, Tags: model.TagMap{}.SetLiterals("p", "root")}})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 		require.Len(t, matcher.ByKindDestination, 2)
 
 		var ev model.Event
@@ -133,13 +123,13 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		ev.Tags = model.Tags{{"p", "root"}}
 		data := matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Kind = 11
 		ev.Tags = model.Tags{{"p", "root"}}
 		data = matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Kind = 12
 		ev.Tags = model.Tags{{"p", "root"}}
@@ -151,31 +141,31 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		data = matcher.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("By kind and Q tag", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-and-Q-tag", model.Filters{
 			{
 				Kinds: []int{10, 11},
 				Tags: model.TagMap{}.
-					Set("Q", nil, nil, model.PointerOf("relay.example.com")),
+					Set("Q", nil, nil, new("relay.example.com")),
 			}},
 		)
 
-		require.True(t, matcher.Index(writer, sub))
+		matcher.Index(sub.Filters, sub)
 
 		var ev model.Event
 		ev.Kind = 10
 		ev.Tags = model.Tags{{"Q", "", "", "relay.example.com"}}
 		data := matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source) // Match by kind and Q tag.
+		require.Equal(t, sub, data[0]) // Match by kind and Q tag.
 
 		ev.Kind = 11
 		ev.Tags = model.Tags{{"Q", "", "", "relay.example.com"}}
 		data = matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source) // Match by kind and Q tag.
+		require.Equal(t, sub, data[0]) // Match by kind and Q tag.
 
 		ev.Kind = 12
 		ev.Tags = model.Tags{{"Q", "", "", "relay.example.com"}}
@@ -187,19 +177,19 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		data = matcher.Get(&ev)
 		require.Empty(t, data) // No match, Q tag does not match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("By p and Q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-p-and-Q-tags", model.Filters{
 			{
 				Tags: model.TagMap{}.
-					Set("p", model.PointerOf("root")).
-					Set("Q", nil, nil, model.PointerOf("relay.example.com")),
+					Set("p", new("root")).
+					Set("Q", nil, nil, new("relay.example.com")),
 			},
 		})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 
 		var ev model.Event
 		ev.Kind = 10
@@ -219,22 +209,23 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		}
 		data = matcher.Get(&ev)
 		require.Len(t, data, 1) // Match by p and Q tags.
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.RemoveByHash(sub.Hash()))
 	})
+
 	t.Run("By kind p and Q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-p-and-Q-tags", model.Filters{
 			{
 				Kinds: []int{1, 2},
 				Tags: model.TagMap{}.
-					Set("p", model.PointerOf("root")).
-					Set("Q", nil, nil, model.PointerOf("relay.example.com")),
+					Set("p", new("root")).
+					Set("Q", nil, nil, new("relay.example.com")),
 			},
 		})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 
 		var ev model.Event
 		ev.Kind = 10
@@ -262,14 +253,57 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		}
 		data = matcher.Get(&ev)
 		require.Len(t, data, 1) // Match by kind and tags.
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
+	})
+	t.Run("By kind with author", func(t *testing.T) {
+		sub := model.NewSubscription("sub-kinds-and-author", model.Filters{
+			{
+				Kinds:   []int{1, 2},
+				Authors: []string{"root"},
+			},
+		})
+
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
+		require.Len(t, matcher.ByKindAuthor, 2)
+
+		var ev model.Event
+		ev.Kind = 1
+		ev.PubKey = "root"
+		data := matcher.Get(&ev)
+		require.Len(t, data, 1)
+		require.Equal(t, sub, data[0]) // Match by kind and author.
+
+		ev.Kind = 2
+		ev.PubKey = "root"
+		data = matcher.Get(&ev)
+		require.Len(t, data, 1)
+		require.Equal(t, sub, data[0]) // Match by kind and author.
+
+		ev.Kind = 3
+		ev.PubKey = "root"
+		data = matcher.Get(&ev)
+		require.Empty(t, data) // No match, kind 3 not in index.
+
+		ev.Kind = 1
+		ev.PubKey = "non-root"
+		data = matcher.Get(&ev)
+		require.Empty(t, data) // No match, author does not match.
+
+		ev.Kind = 1
+		ev.PubKey = "beta"
+		ev.Tags = model.Tags{{"b", "root"}} // Author matches by b tag.
+		data = matcher.Get(&ev)
+		require.Len(t, data, 1)
+
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("Kind-only sub with tagged ev", func(t *testing.T) {
 		sub := model.NewSubscription("kind-only", model.Filters{{Kinds: []int{1}}})
 
-		require.True(t, matcher.Index(writer, sub))
+		matcher.Index(sub.Filters, sub)
 
 		var ev model.Event
 		ev.Kind = 1
@@ -277,7 +311,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		data := matcher.Get(&ev)
 		require.Len(t, data, 1) // Should match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("Multi-filter OR", func(t *testing.T) {
 		sub := model.NewSubscription("sub-mixed-or-kind-p-tag",
@@ -286,22 +320,22 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 				{Tags: model.TagMap{}.SetLiterals("p", "root")},
 			})
 
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
 		require.Len(t, matcher.ByDestination, 1)
 
 		var ev1 model.Event
 		ev1.Kind = 1
 		data1 := matcher.Get(&ev1)
 		require.Len(t, data1, 1) // Matches first filter.
-		require.Equal(t, sub, data1[0].Source)
+		require.Equal(t, sub, data1[0])
 
 		var ev2 model.Event
 		ev2.Kind = 2
 		ev2.Tags = model.Tags{{"p", "root"}}
 		data2 := matcher.Get(&ev2)
 		require.Len(t, data2, 1) // Matches second filter.
-		require.Equal(t, sub, data2[0].Source)
+		require.Equal(t, sub, data2[0])
 
 		var ev3 model.Event
 		ev3.Kind = 2
@@ -313,9 +347,9 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		ev4.Tags = model.Tags{{"p", "root"}}
 		data4 := matcher.Get(&ev4)
 		require.Len(t, data4, 1) // Matches both filters.
-		require.Equal(t, sub, data4[0].Source)
+		require.Equal(t, sub, data4[0])
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 	t.Run("Multi keys OR", func(t *testing.T) {
 		sub := model.NewSubscription("sub-mixed-or-kind-p-tag",
@@ -326,7 +360,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 				},
 				{
 					Kinds: []int{2},
-					Tags:  model.TagMap{}.Set("Q", nil, nil, model.PointerOf("root")),
+					Tags:  model.TagMap{}.Set("Q", nil, nil, new("root")),
 				},
 				{
 					Kinds: []int{3},
@@ -340,14 +374,14 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 					Kinds: []int{5},
 					Tags: model.TagMap{
 						"x": []model.TagValues{
-							{model.PointerOf("val1"), model.PointerOf("val2")}, // Should be ignored.
-							{model.PointerOf("val3")},
+							{new("val1"), new("val2")}, // Should be ignored.
+							{new("val3")},
 						},
 					},
 				},
 			})
 
-		require.True(t, matcher.Index(writer, sub))
+		matcher.Index(sub.Filters, sub)
 
 		var ev model.Event
 
@@ -360,7 +394,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		ev.Tags = model.Tags{{"p", "root"}}
 		data = matcher.Get(&ev)
 		require.Len(t, data, 1)
-		require.Equal(t, sub, data[0].Source)
+		require.Equal(t, sub, data[0])
 
 		ev.Kind = 4
 		ev.Tags = model.Tags{
@@ -380,18 +414,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		data = matcher.Get(&ev)
 		require.Empty(t, data) // No match.
 
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
-	})
-	t.Run("Remove non-ownned", func(t *testing.T) {
-		sub := model.NewSubscription("sub-to-not-remove", model.Filters{{Kinds: []int{1, 2, 3}}})
-
-		require.True(t, matcher.Index(writer, sub))
-		require.EqualValues(t, 1, matcher.Subscriptions.Size())
-
-		_, removed := matcher.Remove(new(mockWriter), sub.ID)
-		require.False(t, removed, "should not remove subscription owned by different writer")
-
-		helperMustSubscriptionRemove(t, matcher, writer, sub.ID)
+		require.True(t, matcher.Remove(sub))
 	})
 }
 
@@ -408,16 +431,16 @@ func TestMatcherStorageIterators(t *testing.T) {
 	}
 
 	t.Run("Shard iterator", func(t *testing.T) {
-		matcher := newEventMatcher()
+		matcher := newEventMatcher[*model.Subscription]()
 		for _, sub := range subs {
-			matcher.Index(new(mockWriter), sub)
+			matcher.Index(sub.Filters, sub)
 		}
-		require.EqualValues(t, subCount, matcher.Subscriptions.Size())
+		require.EqualValues(t, subCount, matcher.Values.Size())
 		var ev model.Event
 		ev.Kind = 1
 		t.Run("Full", func(t *testing.T) {
 			var found int
-			matcher.Lookup(&ev, func(s subscription) bool {
+			matcher.Lookup(&ev, func(s *model.Subscription) bool {
 				found++
 				return true
 			})
@@ -425,7 +448,7 @@ func TestMatcherStorageIterators(t *testing.T) {
 		})
 		t.Run("Partial", func(t *testing.T) {
 			var found int
-			matcher.Lookup(&ev, func(s subscription) bool {
+			matcher.Lookup(&ev, func(s *model.Subscription) bool {
 				found++
 				return found < subCount/2
 			})
@@ -435,9 +458,9 @@ func TestMatcherStorageIterators(t *testing.T) {
 	t.Run("Storage iterator", func(t *testing.T) {
 		const shardCount = 42
 
-		storage := newEventMatcherStorage(shardCount)
+		storage := NewMatcherStorage[*model.Subscription](shardCount)
 		for _, sub := range subs {
-			storage.Index(new(mockWriter), sub)
+			storage.Index(sub.Filters, sub)
 		}
 		require.EqualValues(t, subCount, storage.Size())
 		var ev model.Event
@@ -468,8 +491,7 @@ func BenchmarkMatcherStorageInsert(b *testing.B) {
 		numberOfSubscriptions = 50_000
 	)
 
-	storage := newEventMatcherStorage(numberOfShards)
-	writer := new(mockWriter)
+	storage := NewMatcherStorage[*model.Subscription](numberOfShards)
 
 	var subs []*model.Subscription
 	for i := range numberOfSubscriptions {
@@ -496,7 +518,7 @@ func BenchmarkMatcherStorageInsert(b *testing.B) {
 
 	zerolog.SetGlobalLevel(zerolog.Disabled)
 
-	randSource := rand.NewPCG(42, 42)
+	randSource := rand.NewChaCha8([32]byte{42, 42})
 	require.NotNil(b, randSource)
 
 	b.ReportAllocs()
@@ -504,10 +526,10 @@ func BenchmarkMatcherStorageInsert(b *testing.B) {
 	b.RunParallel(func(p *testing.PB) {
 		for p.Next() {
 			idx := randSource.Uint64() % uint64(len(subs))
-			storage.Index(writer, subs[int(idx)])
+			storage.Index(subs[int(idx)].Filters, subs[int(idx)])
 		}
 	})
-	for i, shard := range storage.Shards {
-		b.ReportMetric(float64(shard.Subscriptions.Size()), "subs_count/shard_"+strconv.Itoa(i))
+	for i, shard := range storage.shards {
+		b.ReportMetric(float64(shard.Values.Size()), "subs_count/shard_"+strconv.Itoa(i))
 	}
 }

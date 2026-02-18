@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
+	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -32,6 +33,20 @@ var (
 		nostr.KindGenericRepost:             {},
 	}
 )
+
+func (s *subscriptionPair) Hash() uint64 {
+	var parts []string
+
+	if s.Writer != nil {
+		parts = append(parts, s.Writer.RemoteAddr().String())
+	}
+
+	if s.Source != nil {
+		parts = append(parts, s.Source.ID)
+	}
+
+	return xxh3.HashString(strings.Join(parts, "|"))
+}
 
 func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
 	if len(currentkinds) > 0 {
@@ -104,22 +119,37 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
-	if h.Subscriptions.Index(respWriter, sub) {
-		respWriter.Metadata().Set(sub.ID, sub)
+	if sub.OneShot {
+		return
 	}
+
+	h.Subscriptions.Index(sub.Filters, &subscriptionPair{
+		Source: sub,
+		Writer: respWriter,
+	})
+	respWriter.Metadata().Set(sub.ID, sub)
+
 }
 
 func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 	if ID == nil {
 		// Connection is closing, remove all subscriptions.
-		for id := range respWriter.Metadata().Range() {
-			h.Subscriptions.Remove(respWriter, id)
+		for _, sub := range respWriter.Metadata().Range() {
+			if v, ok := sub.(*model.Subscription); ok {
+				h.Subscriptions.Remove(&subscriptionPair{
+					Source: v,
+					Writer: respWriter,
+				})
+			}
 		}
 		respWriter.Metadata().Clear()
 		return true
 	}
 
-	_, ok := h.Subscriptions.Remove(respWriter, *ID)
+	ok := h.Subscriptions.Remove(&subscriptionPair{
+		Source: &model.Subscription{ID: *ID},
+		Writer: respWriter,
+	})
 	if ok {
 		respWriter.Metadata().Delete(*ID)
 	}
@@ -425,26 +455,26 @@ func canForwardLiveEvent(ctx context.Context, filters model.Filters, in *model.E
 
 func (h *handler) BroadcastNewEvents(ctx context.Context, events ...*model.Event) (numberOfSubscriptions int) {
 	for _, event := range events {
-		for w, sub := range h.Subscriptions.Lookup(event) {
-			authData := authConnGetState(w)
-			if !canForwardLiveEvent(ctx, sub.Filters, event, &authData) {
+		for pair := range h.Subscriptions.Lookup(event) {
+			authData := authConnGetState(pair.Writer)
+			if !canForwardLiveEvent(ctx, pair.Source.Filters, event, &authData) {
 				continue
 			}
 
-			if sub.IsLive() {
-				err := h.writeResponse(ctx, w, &nostr.EventEnvelope{
+			if pair.Source.IsLive() {
+				err := h.writeResponse(ctx, pair.Writer, &nostr.EventEnvelope{
 					Events:         []*nostr.Event{&event.Event},
-					SubscriptionID: &sub.ID,
+					SubscriptionID: &pair.Source.ID,
 				})
 				if err != nil {
 					log.Warn().Str("context", "WEBSOCKET").
 						Err(err).
 						Str("event_id", event.ID).
-						Str("subscription_id", sub.ID).
+						Str("subscription_id", pair.Source.ID).
 						Msg("failed to write event to subscription")
 				}
 			} else {
-				sub.Push(event)
+				pair.Source.Push(event)
 			}
 			numberOfSubscriptions++
 		}
