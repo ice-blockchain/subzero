@@ -395,8 +395,8 @@ func (pm *PushNotificationManager) AcceptEventsFromBroadcast(ctx context.Context
 	}
 
 	// Syntax: l, batch, <batch_id>.
-	if lTag := events[0].GetTag("l"); lTag != nil && lTag.Value() == "batch" && len(lTag) >= 3 {
-		batchID = lTag[2]
+	if lTag := events[0].GetTag("l"); len(lTag) >= 3 && lTag[2] == "push-notification.broadcasting.tracing.id" {
+		batchID = lTag.Value()
 	}
 
 	return errors.Wrapf(
@@ -440,7 +440,8 @@ func (pm *PushNotificationManager) createEphemeralEmbeddingEvent(contentEvent *m
 		{"k", strconv.Itoa(int(contentEvent.Kind))},
 	}
 	if len(source) > 0 {
-		ev.Tags = append(ev.Tags, model.Tag{"l", "batch", source[0]})
+		ev.Tags = append(ev.Tags, model.Tag{"L", "push-notification.broadcasting.tracing.id", source[0]})
+		ev.Tags = append(ev.Tags, model.Tag{"l", source[0], "push-notification.broadcasting.tracing.id", source[0]})
 	}
 	if err := ev.SignWithAlg(pm.privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 		log.Panic().Err(err).Str("context", "PUSH_NOTIFICATIONS").Str("event_id", contentEvent.ID).Msg("failed to sign ephemeral embedding event for broadcasting")
