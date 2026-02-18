@@ -76,19 +76,23 @@ type (
 )
 
 const (
-	NotificationTypePost                      NotificationType = "post"
-	NotificationTypeReaction                  NotificationType = "reaction"
-	NotificationTypeRepost                    NotificationType = "repost"
-	NotificationTypeMentionReply              NotificationType = "mention_reply"
-	NotificationTypeDirectMessage             NotificationType = "direct_message"
-	NotificationTypeGroupChatMessage          NotificationType = "group_chat_message"
-	NotificationTypeChannelMessage            NotificationType = "channel_message"
-	NotificationTypePaymentRequest            NotificationType = "payment_request"
-	NotificationTypePaymentReceived           NotificationType = "payment_received"
-	NotificationTypeSystem                    NotificationType = "system"
-	NotificationTypeNewFollower               NotificationType = "new_follower"
-	NotificationTypeTokenizedCommunityCreated NotificationType = "community_token_created"
-	NotificationTypeTokenizedCommunityAction  NotificationType = "community_token_swapped"
+	NotificationTypePost             NotificationType = "post"
+	NotificationTypeReaction         NotificationType = "reaction"
+	NotificationTypeRepost           NotificationType = "repost"
+	NotificationTypeMentionReply     NotificationType = "mention_reply"
+	NotificationTypeDirectMessage    NotificationType = "direct_message"
+	NotificationTypeGroupChatMessage NotificationType = "group_chat_message"
+	NotificationTypeChannelMessage   NotificationType = "channel_message"
+	NotificationTypePaymentRequest   NotificationType = "payment_request"
+	NotificationTypePaymentReceived  NotificationType = "payment_received"
+	NotificationTypeSystem           NotificationType = "system"
+	NotificationTypeNewFollower      NotificationType = "new_follower"
+
+	NotificationTypeCreatorTokenCreated NotificationType = "creator_token_created"
+	NotificationTypeCreatorTokenSwapped NotificationType = "creator_token_swapped"
+
+	NotificationTypeContentTokenCreated NotificationType = "content_token_created"
+	NotificationTypeContentTokenSwapped NotificationType = "content_token_swapped"
 
 	CompressionMethodZlib = "zlib"
 )
@@ -150,14 +154,24 @@ var (
 			Body:     "Someone is now following you",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
-		NotificationTypeTokenizedCommunityCreated: {
-			Title:    "Someone created a token based on your post or a profile",
-			Body:     "Token created",
+		NotificationTypeCreatorTokenCreated: {
+			Title:    "Creator Token Is Live",
+			Body:     "Your token is now available for trading",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
-		NotificationTypeTokenizedCommunityAction: {
-			Title:    "Someone swapped a token from your tokenized community",
-			Body:     "Token swapped",
+		NotificationTypeCreatorTokenSwapped: {
+			Title:    "Someone Bought Your Creator Token",
+			Body:     "Someone Bought Your Creator Token",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeContentTokenCreated: {
+			Title:    "Content Token Is Live",
+			Body:     "Community launched a token for your post",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeContentTokenSwapped: {
+			Title:    "Someone Bought Your Content Token",
+			Body:     "Someone Bought Your Content Token",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 	}
