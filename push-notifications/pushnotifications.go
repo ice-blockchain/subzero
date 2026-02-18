@@ -368,12 +368,12 @@ func AcceptEventsFromBroadcast(ctx context.Context, events ...*model.Event) erro
 func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	var err error
 
-	hasOnlyEphemeralEvents := !slices.ContainsFunc(events, func(event *model.Event) bool {
+	hasNonEphemeralEvent := slices.ContainsFunc(events, func(event *model.Event) bool {
 		return event.Kind != model.CustomIONKindEphemeralEmbedding
 	})
 
 	// Ephemeral embedding batch may come only from broadcaster, so we handle it separately.
-	if hasOnlyEphemeralEvents && len(events) > 0 {
+	if !hasNonEphemeralEvent && len(events) > 0 {
 		return globalPushNotificationManager.AcceptEventsFromBroadcast(ctx, events)
 	}
 
