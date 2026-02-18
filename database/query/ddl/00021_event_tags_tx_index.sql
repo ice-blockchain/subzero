@@ -5,6 +5,7 @@ RETURNS BOOLEAN
 LANGUAGE sql
 IMMUTABLE
 AS $$
+    -- TODO: review the list of indexable tag keys and remove any that are not necessary for indexing or not used.
     SELECT length(tag_key) = 1 OR tag_key IN ('summary', 'name', 'description', 'title', 'poll', 'ox', 'token', 'relay', 'tx_type')
 $$;
 --------
