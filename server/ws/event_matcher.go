@@ -11,7 +11,7 @@ import (
 	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/server/ws/internal/pool"
+	"github.com/ice-blockchain/subzero/pool"
 )
 
 const (
