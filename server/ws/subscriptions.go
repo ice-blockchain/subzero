@@ -35,17 +35,17 @@ var (
 )
 
 func (s *subscriptionPair) Hash() uint64 {
-	var data string
+	var parts []string
 
 	if s.Writer != nil {
-		data += s.Writer.RemoteAddr().String()
+		parts = append(parts, s.Writer.RemoteAddr().String())
 	}
 
 	if s.Source != nil {
-		data += s.Source.ID
+		parts = append(parts, s.Source.ID)
 	}
 
-	return xxh3.HashString(data)
+	return xxh3.HashString(strings.Join(parts, "|"))
 }
 
 func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
