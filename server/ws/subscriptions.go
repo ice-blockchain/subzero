@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
+	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -34,10 +35,17 @@ var (
 )
 
 func (s *subscriptionPair) Hash() uint64 {
-	if s.Source != nil {
-		return s.Source.Hash()
+	var data string
+
+	if s.Writer != nil {
+		data += s.Writer.RemoteAddr().String()
 	}
-	return 0
+
+	if s.Source != nil {
+		data += s.Source.ID
+	}
+
+	return xxh3.HashString(data)
 }
 
 func canForwardEvent(in *model.Event, currentkinds map[int]struct{}, masterPubkey, deviceKey string) bool {
@@ -111,6 +119,10 @@ func (h *handler) authRequiredReq(ctx context.Context, respWriter Writer, sub *m
 }
 
 func (h *handler) linkSubscription(respWriter Writer, sub *model.Subscription) {
+	if sub.OneShot {
+		return
+	}
+
 	h.Subscriptions.Index(sub.Filters, &subscriptionPair{
 		Source: sub,
 		Writer: respWriter,
@@ -124,7 +136,10 @@ func (h *handler) unlinkSubscription(respWriter Writer, ID *string) bool {
 		// Connection is closing, remove all subscriptions.
 		for _, sub := range respWriter.Metadata().Range() {
 			if v, ok := sub.(*model.Subscription); ok {
-				h.Subscriptions.RemoveByHash(v.Hash())
+				h.Subscriptions.Remove(&subscriptionPair{
+					Source: v,
+					Writer: respWriter,
+				})
 			}
 		}
 		respWriter.Metadata().Clear()
