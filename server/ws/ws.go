@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/database/query"
+	em "github.com/ice-blockchain/subzero/event-matcher"
 	"github.com/ice-blockchain/subzero/model"
 	"github.com/ice-blockchain/subzero/server/ws/internal"
 	"github.com/ice-blockchain/subzero/server/ws/internal/adapters"
@@ -75,7 +76,7 @@ func newHandler(relayURL, broadcastPublicKey string) *handler {
 	numShards := uint32(runtime.NumCPU() * 2)
 
 	return &handler{
-		Subscriptions:      newEventMatcherStorage(numShards),
+		Subscriptions:      em.NewMatcherStorage[*subscriptionPair](numShards),
 		RelayURL:           relayURL,
 		BroadcastPublicKey: broadcastPublicKey,
 	}
