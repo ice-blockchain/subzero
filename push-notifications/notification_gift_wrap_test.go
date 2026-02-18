@@ -14,7 +14,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tags nostr.Tags) *model.Event {
+func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tags model.Tags) *model.Event {
 	t.Helper()
 
 	return &model.Event{
@@ -31,25 +31,20 @@ func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tag
 func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	recipientMasterPubKey := "recipient_master_pubkey"
 	deviceID := "device1"
 	devicePubKey := "device_pubkey"
 
-	filters := nostr.Filters{
+	filters := model.Filters{
 		{
 			Kinds: []int{nostr.KindDirectMessage, model.CustomIONKindDirectMessage, model.CustomIONKindFundReceive,
 				model.CustomIONKindFundSendNotify, nostr.KindReaction},
 		},
 	}
 
-	deviceTags := nostr.Tags{
+	deviceTags := model.Tags{
 		{"t", "ios"},
 		{"d", deviceID},
 		{"relay", "wss://relay.example.com"},
@@ -60,13 +55,13 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
 
 	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
 	require.True(t, ok, "Device should exist in userDevicesMap")
 
 	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-		pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+		pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 	}
-	pm.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.userDevicesMap[recipientMasterPubKey][(deviceID)] = deviceInfo
 	pm.deviceMutex.Unlock()
 
 	t.Run("self recipient", func(t *testing.T) {
@@ -74,7 +69,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			t,
 			"test_self_recipient",
 			"sender_pubkey",
-			nostr.Tags{
+			model.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
 				{"p", "sender_pubkey", "", devicePubKey},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
@@ -91,7 +86,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			t,
 			"test_p_tag_without_device",
 			"sender_pubkey",
-			nostr.Tags{
+			model.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
 				{"p", recipientMasterPubKey, ""},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
@@ -108,7 +103,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			t,
 			"test_device_not_found",
 			"sender_pubkey",
-			nostr.Tags{
+			model.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
 				{"p", recipientMasterPubKey, "", "unknown_device_pubkey"},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
@@ -147,20 +142,15 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			localPM := &PushNotificationManager{
-				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-				relayURL:       testRelayURL,
-				compressorPool: helperCreateTestCompressorPool(),
-				stats:          newPushStats(),
-			}
+			localPM := helperNewManager(t)
 
-			filters := nostr.Filters{
+			filters := model.Filters{
 				{
 					Kinds: []int{nostr.KindGiftWrap, tc.kind},
 				},
 			}
 
-			deviceTags := nostr.Tags{
+			deviceTags := model.Tags{
 				{"t", "ios"},
 				{"d", deviceID},
 				{"relay", "wss://relay.example.com"},
@@ -171,13 +161,13 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			require.NoError(t, localPM.processDeviceRegistrationEvent(deviceEvent))
 
 			localPM.deviceMutex.Lock()
-			deviceInfo, ok := localPM.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+			deviceInfo, ok := localPM.userDevicesMap[devicePubKey][deviceID]
 			require.True(t, ok, "Device should exist in userDevicesMap")
 
 			if _, ok := localPM.userDevicesMap[recipientMasterPubKey]; !ok {
-				localPM.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+				localPM.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 			}
-			localPM.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+			localPM.userDevicesMap[recipientMasterPubKey][deviceID] = deviceInfo
 			localPM.deviceMutex.Unlock()
 
 			eventID := "test_gift_wrap_" + tc.name
@@ -185,7 +175,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 				t,
 				eventID,
 				senderPubKey,
-				nostr.Tags{
+				model.Tags{
 					{"k", strconv.Itoa(tc.kind)},
 					{"p", recipientMasterPubKey, "", devicePubKey},
 					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
@@ -235,24 +225,17 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 	}
 
 	for _, device := range devices {
-		device := device
 		t.Run("notify_"+device.platform+"_device", func(t *testing.T) {
-			t.Parallel()
+			pm := helperNewManager(t)
 
-			pm := &PushNotificationManager{
-				userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-				relayURL:       testRelayURL,
-				compressorPool: helperCreateTestCompressorPool(),
-			}
-
-			filters := nostr.Filters{
+			filters := model.Filters{
 				{
 					Kinds: []int{nostr.KindGiftWrap},
-					Tags:  nostr.TagMap{}.SetLiterals("k", strconv.Itoa(nostr.KindDirectMessage)),
+					Tags:  model.TagMap{}.SetLiterals("k", strconv.Itoa(nostr.KindDirectMessage)),
 				},
 			}
 
-			deviceTags := nostr.Tags{
+			deviceTags := model.Tags{
 				{"t", device.platform},
 				{"d", device.id},
 				{"relay", "wss://relay.example.com"},
@@ -263,20 +246,20 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
 			pm.deviceMutex.Lock()
-			deviceInfo, ok := pm.userDevicesMap[device.pubKey][DeviceID(device.id)]
+			deviceInfo, ok := pm.userDevicesMap[device.pubKey][device.id]
 			require.True(t, ok, "Device should exist in userDevicesMap")
 
 			if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-				pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+				pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 			}
-			pm.userDevicesMap[recipientMasterPubKey][DeviceID(device.id)] = deviceInfo
+			pm.userDevicesMap[recipientMasterPubKey][device.id] = deviceInfo
 			pm.deviceMutex.Unlock()
 
 			event := helperCreateGiftWrapEvent(
 				t,
 				"test_gift_wrap_"+device.id,
 				senderPubKey,
-				nostr.Tags{
+				model.Tags{
 					{"k", strconv.Itoa(nostr.KindDirectMessage)},
 					{"p", recipientMasterPubKey, "", device.pubKey},
 					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
@@ -315,24 +298,20 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 func TestHandleGiftWrapEventReaction(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-	}
+	pm := helperNewManager(t)
 
 	recipientMasterPubKey := "recipient_master_pubkey"
 	deviceID := "device1"
 	devicePubKey := "device_pubkey"
 
-	filters := nostr.Filters{
+	filters := model.Filters{
 		{
 			Kinds: []int{nostr.KindGiftWrap},
-			Tags:  nostr.TagMap{}.SetLiterals("k", strconv.Itoa(nostr.KindReaction)),
+			Tags:  model.TagMap{}.SetLiterals("k", strconv.Itoa(nostr.KindReaction)),
 		},
 	}
 
-	deviceTags := nostr.Tags{
+	deviceTags := model.Tags{
 		{"t", "ios"},
 		{"d", deviceID},
 		{"relay", "wss://relay.example.com"},
@@ -343,13 +322,13 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 
 	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][DeviceID(deviceID)]
+	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
 	require.True(t, ok, "Device should exist in userDevicesMap")
 
 	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-		pm.userDevicesMap[recipientMasterPubKey] = make(map[DeviceID]DeviceInfo)
+		pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
 	}
-	pm.userDevicesMap[recipientMasterPubKey][DeviceID(deviceID)] = deviceInfo
+	pm.userDevicesMap[recipientMasterPubKey][deviceID] = deviceInfo
 	pm.deviceMutex.Unlock()
 
 	t.Run("Reaction", func(t *testing.T) {
@@ -357,7 +336,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 			t,
 			"test_reaction",
 			"sender_pubkey",
-			nostr.Tags{
+			model.Tags{
 				{"k", strconv.Itoa(nostr.KindReaction)},
 				{"p", recipientMasterPubKey, "", devicePubKey},
 				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
@@ -387,11 +366,8 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 
 func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 	t.Parallel()
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-	}
+
+	pm := helperNewManager(t)
 
 	jsonContent := `[{"kinds":[1059],"#k":["1756"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175,30023],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[16],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"],"#k":["30175","30023"]},{"kinds":[6],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175],"#Q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[1],"#q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[7],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["7"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[3],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["30014","14"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["1755"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]}]`
 
@@ -406,33 +382,33 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 				Kind:    model.CustomIONKindDeviceRegistration,
 				Content: jsonContent,
 				PubKey:  devicePubKey,
-				Tags: nostr.Tags{
-					nostr.Tag{"b", userPubKey},
-					nostr.Tag{"d", deviceID},
-					nostr.Tag{"token", "test-token"},
-					nostr.Tag{"t", "ios"},
+				Tags: model.Tags{
+					model.Tag{"b", userPubKey},
+					model.Tag{"d", deviceID},
+					model.Tag{"token", "test-token"},
+					model.Tag{"t", "ios"},
 				},
 			},
 		}
 
-		var filters nostr.Filters
+		var filters model.Filters
 		require.NoError(t, json.Unmarshal([]byte(jsonContent), &filters))
 
 		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
 
 		if _, ok := pm.userDevicesMap[userPubKey]; !ok {
-			pm.userDevicesMap[userPubKey] = make(map[DeviceID]DeviceInfo)
+			pm.userDevicesMap[userPubKey] = make(map[string]DeviceInfo)
 		}
-		pm.userDevicesMap[userPubKey][DeviceID(deviceID)] = deviceInfo
+		pm.userDevicesMap[userPubKey][deviceID] = deviceInfo
 
 		ev := &model.Event{
 			Event: nostr.Event{
 				ID:     "gift-wrap-event-id",
 				Kind:   nostr.KindGiftWrap,
 				PubKey: "author-pubkey",
-				Tags: nostr.Tags{
-					nostr.Tag{"k", "14"},
-					nostr.Tag{"p", userPubKey, "", devicePubKey},
+				Tags: model.Tags{
+					model.Tag{"k", "14"},
+					model.Tag{"p", userPubKey, "", devicePubKey},
 				},
 			},
 		}

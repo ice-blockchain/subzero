@@ -29,11 +29,9 @@ const (
 )
 
 type (
-	DeviceRegistrationEvent = model.Event
-	DeviceID                string
-	SubscriptionTopic       string
-	Client                  interface {
-		SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error
+	SubscriptionTopic string
+	Client            interface {
+		SendSingle(ctx context.Context, notification *Notification[*model.Event]) error
 		SendTopic(ctx context.Context, notification *Notification[SubscriptionTopic]) error
 	}
 	notificationClient struct {
@@ -41,8 +39,8 @@ type (
 		privateKey string
 		retry      RetryConfig
 	}
-	Notification[TARGET SubscriptionTopic | *DeviceRegistrationEvent] struct {
-		Data        map[string]interface{} `json:"data,omitempty"`
+	Notification[TARGET SubscriptionTopic | *model.Event] struct {
+		Data        map[string]any `json:"data,omitempty"`
 		Target      TARGET
 		Title       string       `json:"title,omitempty"`
 		Body        string       `json:"body,omitempty"`
@@ -182,7 +180,7 @@ func (s *notificationClient) sendWithRetry(ctx context.Context, message *messagi
 	return id, nil
 }
 
-func (s *notificationClient) createSingleMessage(notification *Notification[*DeviceRegistrationEvent]) (*messaging.Message, error) {
+func (s *notificationClient) createSingleMessage(notification *Notification[*model.Event]) (*messaging.Message, error) {
 	tokenTag := notification.Target.GetTag("token")
 	if tokenTag == nil || tokenTag.Value() == "" {
 		return nil, nil
@@ -217,7 +215,7 @@ func (s *notificationClient) createSingleMessage(notification *Notification[*Dev
 	return message, nil
 }
 
-func (s *notificationClient) SendSingle(ctx context.Context, notification *Notification[*DeviceRegistrationEvent]) error {
+func (s *notificationClient) SendSingle(ctx context.Context, notification *Notification[*model.Event]) error {
 	message, err := s.createSingleMessage(notification)
 	if err != nil {
 		return err

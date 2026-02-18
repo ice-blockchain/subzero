@@ -3,10 +3,10 @@
 package pushnotifications
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -15,19 +15,16 @@ import (
 
 func TestProcessEventWithQuotes(t *testing.T) {
 	t.Parallel()
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+
+	pm := helperNewManager(t)
 
 	recipientPubKey := "58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"
 	senderPubKey := "9e58d6f86dce97b32a86dc7544f21471a4c25506ec9f0c340184b3b6e11980a5"
 
 	jsonContent := `[{"kinds":[1059],"#k":["1756"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175,30023],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[16],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"],"#k":["30175","30023"]},{"kinds":[6],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[30175],"#Q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[1],"#q":[[null,null,"58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]]},{"kinds":[7],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["7"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[3],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["30014","14"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]},{"kinds":[1059],"#k":["1755"],"#p":["58eeb816af31498e81b9843250d7a813ad84934e0cfc563e3fd4753130a4bd78"]}]`
-	deviceID := uuid.NewString()
+	deviceID := rand.Text()
 
-	var filters nostr.Filters
+	var filters model.Filters
 	require.NoError(t, json.Unmarshal([]byte(jsonContent), &filters))
 
 	t.Run("Tests event processing with Q tag in custom editable text note", func(t *testing.T) {
@@ -36,7 +33,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 				ID:     "device-event-id",
 				PubKey: recipientPubKey,
 				Kind:   model.CustomIONKindDeviceRegistration,
-				Tags: nostr.Tags{
+				Tags: model.Tags{
 					{"t", "ios"},
 					{"d", deviceID},
 					{"token", "test-token"},
@@ -44,8 +41,8 @@ func TestProcessEventWithQuotes(t *testing.T) {
 			},
 		}
 
-		pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
-			DeviceID(deviceID): {
+		pm.userDevicesMap[recipientPubKey] = map[string]DeviceInfo{
+			deviceID: {
 				Filters: filters,
 				Event:   deviceEvent,
 			},
@@ -57,7 +54,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 				PubKey:    senderPubKey,
 				CreatedAt: nostr.Timestamp(1746342561),
 				Kind:      model.CustomIONKindEditableTextNote,
-				Tags: nostr.Tags{
+				Tags: model.Tags{
 					{"b", senderPubKey},
 					{"d", "01969a20-c6f3-7604-a694-aa39acc4830e"},
 					{"Q", "30175:4a2787e0a54946b4b6f879f693d8c288c8534f805f97ab048f6c7cf9e63a1939:019695e9-8dfd-760d-95f3-e3bb6a5397fc", "", recipientPubKey},
@@ -90,11 +87,11 @@ func TestProcessEventWithQuotes(t *testing.T) {
 				Kind:    model.CustomIONKindDeviceRegistration,
 				Content: jsonContent,
 				PubKey:  recipientPubKey,
-				Tags: nostr.Tags{
-					nostr.Tag{"b", recipientPubKey},
-					nostr.Tag{"d", deviceID},
-					nostr.Tag{"token", "test-token"},
-					nostr.Tag{"t", "ios"},
+				Tags: model.Tags{
+					model.Tag{"b", recipientPubKey},
+					model.Tag{"d", deviceID},
+					model.Tag{"token", "test-token"},
+					model.Tag{"t", "ios"},
 				},
 			},
 		}
@@ -102,9 +99,9 @@ func TestProcessEventWithQuotes(t *testing.T) {
 		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
 
 		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
-			pm.userDevicesMap[recipientPubKey] = make(map[DeviceID]DeviceInfo)
+			pm.userDevicesMap[recipientPubKey] = make(map[string]DeviceInfo)
 		}
-		pm.userDevicesMap[recipientPubKey][DeviceID(deviceID)] = deviceInfo
+		pm.userDevicesMap[recipientPubKey][deviceID] = deviceInfo
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -112,8 +109,8 @@ func TestProcessEventWithQuotes(t *testing.T) {
 				Kind:    nostr.KindTextNote,
 				PubKey:  senderPubKey,
 				Content: "This is a text note referring to someone",
-				Tags: nostr.Tags{
-					nostr.Tag{"q", "quoted-event-id", "", recipientPubKey},
+				Tags: model.Tags{
+					model.Tag{"q", "quoted-event-id", "", recipientPubKey},
 				},
 			},
 		}

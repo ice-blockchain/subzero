@@ -3,10 +3,10 @@
 package pushnotifications
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -18,9 +18,9 @@ import (
 func helperCreateFollowListEvent(t *testing.T, id string, pubKey string, followedPubKeys []string) *model.Event {
 	t.Helper()
 
-	tags := nostr.Tags{}
+	tags := model.Tags{}
 	for _, followedPubKey := range followedPubKeys {
-		tags = append(tags, nostr.Tag{"p", followedPubKey})
+		tags = append(tags, model.Tag{"p", followedPubKey})
 	}
 
 	return &model.Event{
@@ -39,7 +39,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 
 	emptyTagsEvent := helperCreateFollowListEvent(
 		t,
-		"test_id_"+uuid.NewString(),
+		"test_id_"+rand.Text(),
 		"follower_pubkey",
 		[]string{},
 	)
@@ -49,7 +49,7 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 
 	singleTagEvent := helperCreateFollowListEvent(
 		t,
-		"test_id_"+uuid.NewString(),
+		"test_id_"+rand.Text(),
 		"follower_pubkey",
 		[]string{"follower_pubkey"},
 	)
@@ -60,14 +60,14 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 
 	oldEvent := helperCreateFollowListEvent(
 		t,
-		"old_id_"+uuid.NewString(),
+		"old_id_"+rand.Text(),
 		"follower_pubkey",
 		[]string{"pubkey1", "pubkey2", "pubkey3"},
 	)
 
 	newReducedEvent := helperCreateFollowListEvent(
 		t,
-		"new_id_"+uuid.NewString(),
+		"new_id_"+rand.Text(),
 		"follower_pubkey",
 		[]string{"pubkey1", "pubkey2"},
 	)
@@ -102,13 +102,9 @@ func TestGetNewlyFollowedPubkeys(t *testing.T) {
 func TestCreateNewFollowerNotification(t *testing.T) {
 	t.Parallel()
 
-	testSuffix := uuid.NewString()
+	testSuffix := rand.Text()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	followerPubKey := "follower_pubkey_" + testSuffix
 	targetPubKey := "target_pubkey_" + testSuffix
@@ -120,7 +116,7 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 		[]string{"pubkey1", "pubkey2", targetPubKey},
 	)
 
-	filters := nostr.Filters{
+	filters := model.Filters{
 		{
 			Kinds: []int{nostr.KindFollowList},
 		},
@@ -129,8 +125,8 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(
 		t,
 		targetPubKey,
-		"device1_"+testSuffix,
-		nostr.Tags{
+		"device1-"+testSuffix,
+		model.Tags{
 			{"t", "ios"},
 			{"token", "test_token_" + testSuffix},
 		},
@@ -176,13 +172,9 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	t.Parallel()
 
-	testSuffix := uuid.NewString()
+	testSuffix := rand.Text()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	followerPubKey := "follower_pubkey_" + testSuffix
 	targetPubKey := "multi_device_target_" + testSuffix
@@ -194,7 +186,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		[]string{"pubkey1", "pubkey2", targetPubKey},
 	)
 
-	filters := nostr.Filters{
+	filters := model.Filters{
 		{
 			Kinds: []int{nostr.KindFollowList},
 		},
@@ -202,15 +194,15 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 
 	require.NoError(t, query.AcceptEvents(t.Context(), followListEvent))
 
-	deviceID1 := "device1_" + testSuffix
-	deviceID2 := "device2_" + testSuffix
-	deviceID3 := "device3_" + testSuffix
+	deviceID1 := "device1-" + testSuffix
+	deviceID2 := "device2-" + testSuffix
+	deviceID3 := "device3-" + testSuffix
 
 	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 		t,
 		targetPubKey,
 		deviceID1,
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
 			{"d", deviceID1},
 			{"token", "token1_" + testSuffix},
@@ -224,7 +216,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		t,
 		targetPubKey,
 		deviceID2,
-		nostr.Tags{
+		model.Tags{
 			{"t", "android"},
 			{"d", deviceID2},
 			{"token", "token2_" + testSuffix},
@@ -238,7 +230,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		t,
 		targetPubKey,
 		deviceID3,
-		nostr.Tags{
+		model.Tags{
 			{"t", "web"},
 			{"d", deviceID3},
 			{"token", "token3_" + testSuffix},
@@ -252,9 +244,9 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	require.Contains(t, pm.userDevicesMap, targetPubKey, "User should be in the device map")
 	require.Len(t, pm.userDevicesMap[targetPubKey], 3, "User should have three devices")
 
-	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID1), "Device 1 should be in the map")
-	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID2), "Device 2 should be in the map")
-	require.Contains(t, pm.userDevicesMap[targetPubKey], DeviceID(deviceID3), "Device 3 should be in the map")
+	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID1, "Device 1 should be in the map")
+	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID2, "Device 2 should be in the map")
+	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID3, "Device 3 should be in the map")
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
 	require.NoError(t, err)
@@ -262,7 +254,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	require.NotNil(t, notifications, "Notifications should not be nil")
 	require.Len(t, notifications, 3, "Should create three notifications")
 
-	deviceTypeMap := make(map[string]*pn.Notification[*DeviceRegistrationEvent])
+	deviceTypeMap := make(map[string]*pn.Notification[*model.Event])
 	for _, notification := range notifications {
 		deviceType := notification.Target.GetTag("t").Value()
 		deviceTypeMap[deviceType] = notification
@@ -316,13 +308,9 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 func TestCreateNewFollowerNotificationNoDevices(t *testing.T) {
 	t.Parallel()
 
-	testSuffix := uuid.NewString()
+	testSuffix := rand.Text()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	followerPubKey := "follower_pubkey_" + testSuffix
 	targetPubKey := "no_device_target_" + testSuffix
@@ -346,15 +334,9 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 	t.Parallel()
 
 	t.Run("new_follower_without_old_event", func(t *testing.T) {
-		t.Parallel()
+		testSuffix := rand.Text()
 
-		testSuffix := uuid.NewString()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
+		pm := helperNewManager(t)
 
 		followerPubKey := "follower_pubkey_" + testSuffix
 		targetPubKey1 := "target_pubkey1_" + testSuffix
@@ -367,7 +349,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 			[]string{"pubkey1", targetPubKey1, "pubkey2", targetPubKey2},
 		)
 
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindFollowList},
 			},
@@ -376,8 +358,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey1,
-			"device1_"+testSuffix,
-			nostr.Tags{
+			"device1-"+testSuffix,
+			model.Tags{
 				{"t", "ios"},
 				{"token", "test_token1_" + testSuffix},
 			},
@@ -387,8 +369,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey2,
-			"device2_"+testSuffix,
-			nostr.Tags{
+			"device2-"+testSuffix,
+			model.Tags{
 				{"t", "android"},
 				{"token", "test_token2_" + testSuffix},
 			},
@@ -408,15 +390,9 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 	})
 
 	t.Run("new_follower_with_old_event", func(t *testing.T) {
-		t.Parallel()
+		testSuffix := rand.Text()
 
-		testSuffix := uuid.NewString()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
+		pm := helperNewManager(t)
 
 		followerPubKey := "follower_pubkey_" + testSuffix
 		targetPubKey1 := "target_pubkey1_" + testSuffix
@@ -436,7 +412,7 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 			[]string{"pubkey1", "pubkey2", targetPubKey1, targetPubKey2},
 		)
 
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindFollowList},
 			},
@@ -445,8 +421,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey1,
-			"device1_"+testSuffix,
-			nostr.Tags{
+			"device1-"+testSuffix,
+			model.Tags{
 				{"t", "ios"},
 				{"token", "test_token1_" + testSuffix},
 			},
@@ -456,8 +432,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			targetPubKey2,
-			"device2_"+testSuffix,
-			nostr.Tags{
+			"device2-"+testSuffix,
+			model.Tags{
 				{"t", "android"},
 				{"token", "test_token2_" + testSuffix},
 			},
@@ -481,13 +457,9 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	t.Parallel()
 
-	testSuffix := uuid.NewString()
+	testSuffix := rand.Text()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	followerPubKey := "follower_pubkey_" + testSuffix
 	targetPubKey := "target_pubkey_" + testSuffix
@@ -519,7 +491,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 		},
 	}
 
-	filters := nostr.Filters{
+	filters := model.Filters{
 		{
 			Kinds: []int{nostr.KindFollowList},
 		},
@@ -529,7 +501,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 		t,
 		targetPubKey,
 		"device1_"+testSuffix,
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
 			{"token", "test_token_" + testSuffix},
 		},
@@ -537,8 +509,8 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	)
 
 	pm.deviceMutex.Lock()
-	pm.userDevicesMap[targetPubKey] = map[DeviceID]DeviceInfo{
-		DeviceID("device1_" + testSuffix): {
+	pm.userDevicesMap[targetPubKey] = map[string]DeviceInfo{
+		"device1_" + testSuffix: {
 			Filters: filters,
 			Event:   deviceEvent,
 		},
@@ -571,7 +543,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	t.Parallel()
 
-	testSuffix := uuid.NewString()
+	testSuffix := rand.Text()
 
 	pm := helperNewManager(t)
 
@@ -624,7 +596,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	require.NoError(t, followListAuthorRelayListEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	require.NoError(t, query.AcceptEvents(t.Context(), followListAuthorRelayListEvent))
 
-	filters := nostr.Filters{
+	filters := model.Filters{
 		{
 			Kinds: []int{nostr.KindFollowList},
 		},
@@ -634,9 +606,9 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		t,
 		recipientPubKey1,
 		"device1_"+testSuffix,
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
-			{"d", "device1_" + testSuffix},
+			{"d", "device1-" + testSuffix},
 			{"relay", pm.relayURL},
 			{"token", "token1_" + testSuffix},
 		},
@@ -649,9 +621,9 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		t,
 		recipientPubKey2,
 		"device2_"+testSuffix,
-		nostr.Tags{
+		model.Tags{
 			{"t", "android"},
-			{"d", "device2_" + testSuffix},
+			{"d", "device2-" + testSuffix},
 			{"relay", pm.relayURL},
 			{"token", "token2_" + testSuffix},
 		},
@@ -664,9 +636,9 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		t,
 		recipientPubKey3,
 		"device3_"+testSuffix,
-		nostr.Tags{
+		model.Tags{
 			{"t", "web"},
-			{"d", "device3_" + testSuffix},
+			{"d", "device3-" + testSuffix},
 			{"relay", pm.relayURL},
 			{"token", "token3_" + testSuffix},
 		},

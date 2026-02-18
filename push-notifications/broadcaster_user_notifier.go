@@ -9,15 +9,16 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/model"
+	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/ice-blockchain/subzero/rq"
 )
 
 type (
 	broadcasterPushNotificationWorkerArgs struct {
-		Device          *DeviceRegistrationEvent `json:"device"`
-		MasterPublicKey string                   `json:"user_master_public_key"`
-		BatchID         string                   `json:"batch_id"`
-		Events          model.Events             `json:"events"`
+		Device          *model.Event `json:"device"`
+		MasterPublicKey string       `json:"user_master_public_key"`
+		BatchID         string       `json:"batch_id"`
+		Events          model.Events `json:"events"`
 	}
 	broadcasterPushNotificationWorker struct {
 		rq.WorkerDefaults[broadcasterPushNotificationWorkerArgs]
@@ -37,16 +38,38 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		Str("batch", job.Args.BatchID).
 		Msg("starting broadcaster push notification worker")
 
-	for _, ev := range job.Args.Events {
-		notification, err := w.Manager.createNotifications([]*DeviceRegistrationEvent{job.Args.Device}, NotificationTypePost, ev)
-		if err != nil {
-			return errors.Wrap(err, "failed to create notifications")
-		}
-
-		err = w.Manager.sendNotifications(ctx, notification, nil)
-		if err != nil {
-			return errors.Wrap(err, "failed to send notifications")
-		}
+	if len(job.Args.Events) == 0 {
+		return nil
 	}
-	return nil
+
+	singleNotifications, topicNotifications, err := w.Manager.collectNotifications(ctx, job.Args.Events)
+	if err != nil {
+		return errors.Wrap(err, "failed to collect notifications")
+	}
+
+	var singleNotificationsFiltered []*pn.Notification[*model.Event]
+	if job.Args.Device != nil {
+		for _, n := range singleNotifications {
+			if n.Target.PubKey != job.Args.Device.PubKey {
+				continue
+			}
+
+			singleNotificationsFiltered = append(singleNotificationsFiltered, n)
+		}
+	} else {
+		singleNotificationsFiltered = singleNotifications
+	}
+
+	if len(singleNotificationsFiltered) == 0 {
+		log.Trace().
+			Str("context", "PUSH_NOTIFICATIONS").
+			Str("master_public_key", job.Args.MasterPublicKey).
+			Str("device_public_key", job.Args.Device.PubKey).
+			Int("events_count", len(job.Args.Events)).
+			Str("batch", job.Args.BatchID).
+			Msg("no notifications to send for this device and user")
+		return nil
+	}
+
+	return errors.Wrap(w.Manager.sendNotifications(ctx, singleNotifications, topicNotifications), "failed to send notifications from broadcaster push notification worker")
 }

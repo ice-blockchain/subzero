@@ -3,8 +3,11 @@
 package pushnotifications
 
 import (
+	"cmp"
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -16,8 +19,20 @@ import (
 
 const testRelayURL = "wss://relay.example.com"
 
-func helperCreateTestDeviceRegistrationEvent(t *testing.T, pubKey string, deviceID string, tags nostr.Tags, filters nostr.Filters) *model.Event {
-	t.Helper()
+func helperCreateTestDeviceRegistrationEvent(tb testing.TB, pubKey string, deviceID string, tags model.Tags, filters model.Filters) *model.Event {
+	tb.Helper()
+
+	if !slices.ContainsFunc(tags, func(tag model.Tag) bool {
+		return tag.Key() == "relay" && tag.Value() != ""
+	}) {
+		tags = append(tags, model.Tag{"relay", testRelayURL})
+	}
+
+	if !slices.ContainsFunc(tags, func(tag model.Tag) bool {
+		return tag.Key() == "d" && tag.Value() != ""
+	}) {
+		tags = append(tags, model.Tag{"d", cmp.Or(deviceID, rand.Text())})
+	}
 
 	return &model.Event{
 		Event: nostr.Event{
@@ -34,16 +49,8 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 	t.Parallel()
 
 	t.Run("basic_device_registration", func(t *testing.T) {
-		t.Parallel()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			relayURL:       testRelayURL,
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		filters := nostr.Filters{
+		pm := helperNewManager(t)
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote, model.CustomIONKindFundReceive},
 			},
@@ -51,7 +58,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 
 		masterPubKey := "master_pubkey"
 		deviceID := "device1"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"t", "ios"},
 			{"d", deviceID},
 			{"relay", "wss://relay.example.com"},
@@ -66,29 +73,22 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		require.Len(t, pm.userDevicesMap, 1)
 		require.Contains(t, pm.userDevicesMap, masterPubKey)
 		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 
-		deviceInfo := pm.userDevicesMap[masterPubKey][DeviceID(deviceID)]
+		deviceInfo := pm.userDevicesMap[masterPubKey][deviceID]
 		require.Equal(t, event, deviceInfo.Event)
 
-		var parsedFilters nostr.Filters
+		var parsedFilters model.Filters
 		require.NoError(t, json.Unmarshal([]byte(event.Content), &parsedFilters))
 		require.Equal(t, parsedFilters, deviceInfo.Filters)
 	})
 
 	t.Run("invalid_filter_json", func(t *testing.T) {
-		t.Parallel()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			relayURL:       testRelayURL,
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
+		pm := helperNewManager(t)
 
 		masterPubKey := "master_pubkey"
 		deviceID := "device3"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"t", "ios"},
 			{"d", deviceID},
 			{"relay", "wss://relay.example.com"},
@@ -114,16 +114,9 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 	t.Parallel()
 
 	t.Run("basic_device_removal", func(t *testing.T) {
-		t.Parallel()
+		pm := helperNewManager(t)
 
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			relayURL:       testRelayURL,
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -131,7 +124,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 
 		masterPubKey := "master_pubkey"
 		deviceID := "device1"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"t", "ios"},
 			{"d", deviceID},
 			{"relay", "wss://relay.example.com"},
@@ -143,21 +136,14 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
 
-		pm.removeDeviceFromCache(DeviceID(deviceID), masterPubKey)
+		pm.removeDeviceFromCache(event)
 		require.Len(t, pm.userDevicesMap, 0)
 	})
 
 	t.Run("device_belongs_to_another_user", func(t *testing.T) {
-		t.Parallel()
+		pm := helperNewManager(t)
 
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			relayURL:       testRelayURL,
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -166,7 +152,7 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		masterPubKey := "master_pubkey"
 		otherPubKey := "other_pubkey"
 		deviceID := "device3"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"t", "ios"},
 			{"d", deviceID},
 			{"relay", "wss://relay.example.com"},
@@ -177,30 +163,24 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 
 		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 
-		pm.userDevicesMap[otherPubKey] = make(map[DeviceID]DeviceInfo)
-		pm.userDevicesMap[otherPubKey][DeviceID(deviceID)] = DeviceInfo{
+		pm.userDevicesMap[otherPubKey] = make(map[string]DeviceInfo)
+		pm.userDevicesMap[otherPubKey][deviceID] = DeviceInfo{
 			Event:   event,
 			Filters: filters,
 		}
 		require.Len(t, pm.userDevicesMap, 2)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 	})
 }
 
 func TestShouldProcessDeletionEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	t.Run("not_a_deletion_event", func(t *testing.T) {
-		t.Parallel()
-
 		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindTextNote,
@@ -212,12 +192,10 @@ func TestShouldProcessDeletionEvent(t *testing.T) {
 	})
 
 	t.Run("deletion_event_without_k_tag", func(t *testing.T) {
-		t.Parallel()
-
 		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindDeletion,
-				Tags: nostr.Tags{},
+				Tags: model.Tags{},
 			},
 		}
 
@@ -226,12 +204,10 @@ func TestShouldProcessDeletionEvent(t *testing.T) {
 	})
 
 	t.Run("deletion_event_with_matching_k_tag", func(t *testing.T) {
-		t.Parallel()
-
 		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindDeletion,
-				Tags: nostr.Tags{
+				Tags: model.Tags{
 					{"k", strconv.Itoa(model.CustomIONKindDeviceRegistration)},
 				},
 			},
@@ -242,12 +218,10 @@ func TestShouldProcessDeletionEvent(t *testing.T) {
 	})
 
 	t.Run("deletion_event_with_non_matching_k_tag", func(t *testing.T) {
-		t.Parallel()
-
 		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindDeletion,
-				Tags: nostr.Tags{
+				Tags: model.Tags{
 					{"k", strconv.Itoa(nostr.KindTextNote)},
 				},
 			},
@@ -258,12 +232,10 @@ func TestShouldProcessDeletionEvent(t *testing.T) {
 	})
 
 	t.Run("deletion_event_with_multiple_k_tags", func(t *testing.T) {
-		t.Parallel()
-
 		event := &model.Event{
 			Event: nostr.Event{
 				Kind: nostr.KindDeletion,
-				Tags: nostr.Tags{
+				Tags: model.Tags{
 					{"k", strconv.Itoa(nostr.KindTextNote)},
 					{"k", strconv.Itoa(model.CustomIONKindDeviceRegistration)},
 				},
@@ -279,35 +251,22 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty_events_list", func(t *testing.T) {
-		t.Parallel()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			relayURL:       testRelayURL,
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
+		pm := helperNewManager(t)
 
 		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{})
 		require.NoError(t, err)
 	})
 
 	t.Run("process_registration_events", func(t *testing.T) {
-		t.Parallel()
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			relayURL:       testRelayURL,
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-		filters := nostr.Filters{
+		pm := helperNewManager(t)
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
 		}
 		masterPubKey := "master_pubkey"
 		deviceID := "device1"
-		deviceTags := nostr.Tags{
+		deviceTags := model.Tags{
 			{"t", "ios"},
 			{"d", deviceID},
 			{"relay", "wss://relay.example.com"},
@@ -320,19 +279,14 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], DeviceID(deviceID))
+		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
 	})
 }
 
 func TestProcessDeviceRegistrationBatch(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	devices := []struct {
 		pubKey   string
@@ -345,13 +299,13 @@ func TestProcessDeviceRegistrationBatch(t *testing.T) {
 	}
 
 	for _, d := range devices {
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
 		}
 
-		tags := nostr.Tags{
+		tags := model.Tags{
 			{"t", d.platform},
 			{"d", d.deviceID},
 			{"relay", "wss://relay.example.com"},

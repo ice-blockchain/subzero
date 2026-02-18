@@ -9,8 +9,8 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*DeviceRegistrationEvent], error) {
-	notifications := make([]*pn.Notification[*DeviceRegistrationEvent], 0)
+func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
+	notifications := make([]*pn.Notification[*model.Event], 0)
 	mentionedPubkeys, err := model.ExtractMentionedPubkeys(event)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract mentioned pubkeys")

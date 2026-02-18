@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -15,16 +14,16 @@ import (
 func helperCreateSystemNotificationEvent(t *testing.T, id string, pubKey string, content string, notificationType string, targetPubKey string) *model.Event {
 	t.Helper()
 
-	tags := nostr.Tags{
+	tags := model.Tags{
 		{"type", notificationType},
 		{"title", "System " + notificationType},
 		{"body", content},
 	}
 
 	if targetPubKey != "" {
-		tags = append(tags, nostr.Tag{"p", targetPubKey})
+		tags = append(tags, model.Tag{"p", targetPubKey})
 	} else {
-		tags = append(tags, nostr.Tag{"topic", "all_users"})
+		tags = append(tags, model.Tag{"topic", "all_users"})
 	}
 
 	return &model.Event{
@@ -41,10 +40,7 @@ func helperCreateSystemNotificationEvent(t *testing.T, id string, pubKey string,
 func TestHandleSystemEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	t.Run("Basic system event", func(t *testing.T) {
 		t.Parallel()
@@ -55,7 +51,7 @@ func TestHandleSystemEvent(t *testing.T) {
 				PubKey:  "system_pubkey",
 				Kind:    model.CustomIONSystemMessage,
 				Content: "System notification",
-				Tags:    nostr.Tags{{"type", "system_announcement"}},
+				Tags:    model.Tags{{"type", "system_announcement"}},
 			},
 		}
 
@@ -65,13 +61,13 @@ func TestHandleSystemEvent(t *testing.T) {
 		notifications := pm.handleSystemEvent(event)
 
 		require.NotNil(t, notifications, "Notifications should not be nil")
-		assert.Len(t, notifications, expectedCount, "Should have correct number of notifications")
+		require.Len(t, notifications, expectedCount, "Should have correct number of notifications")
 
 		for _, notification := range notifications {
 			topicName := string(notification.Target)
-			assert.Contains(t, expectedTopics, topicName, "Topic name should be in expected list")
-			assert.Contains(t, notification.Data, "event", "Data should contain event")
-			assert.NotEmpty(t, notification.Data["event"], "Event data should not be empty")
+			require.Contains(t, expectedTopics, topicName, "Topic name should be in expected list")
+			require.Contains(t, notification.Data, "event", "Data should contain event")
+			require.NotEmpty(t, notification.Data["event"], "Event data should not be empty")
 		}
 	})
 
@@ -93,13 +89,13 @@ func TestHandleSystemEvent(t *testing.T) {
 		notifications := pm.handleSystemEvent(event)
 
 		require.NotNil(t, notifications, "Notifications should not be nil")
-		assert.Len(t, notifications, expectedCount, "Should have correct number of notifications")
+		require.Len(t, notifications, expectedCount, "Should have correct number of notifications")
 
 		for _, notification := range notifications {
 			topicName := string(notification.Target)
-			assert.Contains(t, expectedTopics, topicName, "Topic name should be in expected list")
-			assert.Contains(t, notification.Data, "event", "Data should contain event")
-			assert.NotEmpty(t, notification.Data["event"], "Event data should not be empty")
+			require.Contains(t, expectedTopics, topicName, "Topic name should be in expected list")
+			require.Contains(t, notification.Data, "event", "Data should contain event")
+			require.NotEmpty(t, notification.Data["event"], "Event data should not be empty")
 		}
 	})
 }
@@ -107,10 +103,7 @@ func TestHandleSystemEvent(t *testing.T) {
 func TestHandleSystemEventDataFormat(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	event := &model.Event{
 		Event: nostr.Event{
@@ -118,20 +111,20 @@ func TestHandleSystemEventDataFormat(t *testing.T) {
 			PubKey:  "system_pubkey",
 			Kind:    model.CustomIONSystemMessage,
 			Content: "Test data format",
-			Tags:    nostr.Tags{{"type", "data_format_test"}},
+			Tags:    model.Tags{{"type", "data_format_test"}},
 		},
 	}
 
 	notifications := pm.handleSystemEvent(event)
 
 	require.NotNil(t, notifications, "Notifications should not be nil")
-	assert.Len(t, notifications, 6, "Should have 6 notifications")
+	require.Len(t, notifications, 6, "Should have 6 notifications")
 
 	for _, notification := range notifications {
-		assert.Len(t, notification.Data, 1, "Data should contain exactly one entry")
+		require.Len(t, notification.Data, 1, "Data should contain exactly one entry")
 
-		assert.Empty(t, notification.Title, "Title should be empty")
-		assert.Empty(t, notification.Body, "Body should be empty")
-		assert.Empty(t, notification.ImageURL, "ImageURL should be empty")
+		require.Empty(t, notification.Title, "Title should be empty")
+		require.Empty(t, notification.Body, "Body should be empty")
+		require.Empty(t, notification.ImageURL, "ImageURL should be empty")
 	}
 }

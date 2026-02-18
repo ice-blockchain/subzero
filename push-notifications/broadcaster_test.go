@@ -4,12 +4,12 @@ package pushnotifications
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand/v2"
+	mathRand "math/rand/v2"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +35,7 @@ type (
 	}
 	mockNotificationClient struct {
 		T    testing.TB
-		Chan chan *internal.Notification[*DeviceRegistrationEvent]
+		Chan chan *internal.Notification[*model.Event]
 	}
 )
 
@@ -60,7 +60,7 @@ func (m *mockNotificationClient) Reset() {
 	}
 }
 
-func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *internal.Notification[*DeviceRegistrationEvent]) error {
+func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *internal.Notification[*model.Event]) error {
 	select {
 	case m.Chan <- notification:
 		m.T.Logf("Mock SendSingle to device %s for master public key %s", notification.Target.PubKey, notification.Target.GetMasterPublicKey())
@@ -94,11 +94,12 @@ func (m *mockBroadcaster) Close() {}
 
 func helperCreateTestUser(t *testing.T) *testUser {
 	t.Helper()
+
 	privateKey, publicKey := model.GenerateKeyPair()
-	relayCount := rand.IntN(5) + 1 // 1 to 5 relays.
+	relayCount := mathRand.IntN(5) + 1 // 1 to 5 relays.
 	relays := make([]string, relayCount)
 	for i := range relayCount {
-		relays[i] = fmt.Sprintf("wss://relay-%s-%d.example.com", uuid.NewString()[:8], i)
+		relays[i] = fmt.Sprintf("wss://relay-%s-%d.example.com", rand.Text()[:8], i)
 	}
 	return &testUser{
 		PrivateKey: privateKey,
@@ -122,15 +123,15 @@ func helperCreateRelayListEvent(t *testing.T, user *testUser) *model.Event {
 }
 
 func helperCreateDeviceRegistrationEvent(
-	t *testing.T,
+	tb testing.TB,
 	user *testUser,
 	subscribeToAuthors []string,
 	kinds []int,
 	relayURL string,
 ) *model.Event {
-	t.Helper()
+	tb.Helper()
 
-	deviceID := uuid.NewString()
+	deviceID := rand.Text()
 	filters := model.Filters{
 		{
 			Kinds:   kinds,
@@ -146,13 +147,13 @@ func helperCreateDeviceRegistrationEvent(
 		{"d", deviceID},
 		{"t", "ios"},
 		{"relay", relayURL},
-		{"token", "encrypted-token-" + uuid.NewString()[:8]},
+		{"token", "encrypted-token-" + rand.Text()[:8]},
 	}
-	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(tb, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
 }
 
-func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content string) *model.Event {
+func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content string, pTags ...string) *model.Event {
 	t.Helper()
 
 	var ev model.Event
@@ -160,8 +161,12 @@ func helperCreateEditableTextNoteEvent(t *testing.T, user *testUser, content str
 	ev.CreatedAt = nostr.Now()
 	ev.Content = content
 	ev.Tags = model.Tags{
-		{"d", uuid.NewString()},
+		{"d", rand.Text()},
 	}
+	for _, p := range pTags {
+		ev.Tags = append(ev.Tags, model.Tag{"p", p})
+	}
+
 	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
 }
@@ -174,8 +179,9 @@ func helperCreateTokenizedCommunityDefinitionEvent(t *testing.T, user *testUser,
 	ev.CreatedAt = nostr.Now()
 	ev.Content = "First buy event"
 	ev.Tags = model.Tags{
-		{"d", uuid.NewString()},
+		{"d", rand.Text()},
 		{"p", buyerPubKey},
+		{"t", "community_token_action"},
 	}
 	require.NoError(t, ev.SignWithAlg(user.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	return &ev
@@ -193,15 +199,15 @@ func helperVerifyBroadcastEvents(t *testing.T, broadcastedEvents []mockedBroadca
 	}
 }
 
-func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient, expectedEvent *model.Event) {
+func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient, notificationType NotificationType, expectedEvent *model.Event) {
 	t.Helper()
 
 	select {
 	case n := <-mockClient.Chan:
 		t.Logf("Received push notification %#v", n)
 		require.Equal(t, expectedEvent, n.SourceEvent)
-		require.Equal(t, defaultTranslations[NotificationTypePost].Title, n.Title)
-		require.Equal(t, defaultTranslations[NotificationTypePost].Body, n.Body)
+		require.Equal(t, defaultTranslations[notificationType].Title, n.Title)
+		require.Equal(t, defaultTranslations[notificationType].Body, n.Body)
 
 	case <-time.After(time.Second * 5):
 		t.Fatalf("Timed out waiting for push notification")
@@ -216,7 +222,7 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 
 	mockNotificationClient := &mockNotificationClient{
 		T:    t,
-		Chan: make(chan *internal.Notification[*DeviceRegistrationEvent], 100),
+		Chan: make(chan *internal.Notification[*model.Event], 100),
 	}
 
 	pm := helperNewManager(t)
@@ -307,7 +313,7 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 	})
 
 	t.Run("Publish EditableTextNote from user1", func(t *testing.T) {
-		postEvent := helperCreateEditableTextNoteEvent(t, user1, "Hello from User1!")
+		postEvent := helperCreateEditableTextNoteEvent(t, user1, "Hello from User1!", user3.PublicKey)
 		t.Logf("Publishing 30175 event from User1: %s", postEvent.ID)
 
 		err := pm.AcceptEventsForBroadcast(t.Context(), []*model.Event{postEvent})
@@ -330,7 +336,7 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 			require.NoError(t, pm.AcceptEventsFromBroadcast(t.Context(), b.Events))
 		}
 		// Wait just for a single event since we have deduplication inside RQ.
-		helperWaitForNotifications(t, mockNotificationClient, postEvent)
+		helperWaitForNotifications(t, mockNotificationClient, NotificationTypeMentionReply, postEvent)
 	})
 
 	t.Run("Publish_TokenizedCommunityDefinition_From_User2", func(t *testing.T) {
@@ -361,6 +367,6 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 			require.NoError(t, pm.AcceptEventsFromBroadcast(t.Context(), b.Events))
 		}
 		// Wait just for a single event since we have deduplication inside RQ.
-		helperWaitForNotifications(t, mockNotificationClient, postEvent)
+		helperWaitForNotifications(t, mockNotificationClient, NotificationTypeContentTokenCreated, postEvent)
 	})
 }

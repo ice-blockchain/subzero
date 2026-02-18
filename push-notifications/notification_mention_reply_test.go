@@ -3,10 +3,10 @@
 package pushnotifications
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/stretchr/testify/require"
@@ -15,7 +15,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperCreatePostEvent(t *testing.T, id, pubKey string, kind int, content string, tags nostr.Tags) *model.Event {
+func helperCreatePostEvent(t *testing.T, id, pubKey string, kind int, content string, tags model.Tags) *model.Event {
 	t.Helper()
 
 	return &model.Event{
@@ -32,30 +32,25 @@ func helperCreatePostEvent(t *testing.T, id, pubKey string, kind int, content st
 func TestHandleMentionReplyEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	event1 := helperCreatePostEvent(
 		t,
-		"test_id_1_"+uuid.NewString(),
+		"test_id_1_"+rand.Text(),
 		"author_pubkey",
 		nostr.KindTextNote,
 		"Regular post",
-		nostr.Tags{},
+		model.Tags{},
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), event1))
 
 	event2 := helperCreatePostEvent(
 		t,
-		"test_id_2_"+uuid.NewString(),
+		"test_id_2_"+rand.Text(),
 		"author_pubkey",
 		nostr.KindTextNote,
 		"Post with mention user1",
-		nostr.Tags{
+		model.Tags{
 			{"e", "event_id", "", model.TagMarkerMention},
 			{"p", "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"},
 		},
@@ -66,13 +61,13 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		t,
 		"7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
 		"device1",
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
 			{"d", "device1"},
 			{"relay", "wss://relay.example.com"},
 			{"token", "token1"},
 		},
-		nostr.Filters{
+		model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -84,13 +79,13 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		t,
 		"7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
 		"device2",
-		nostr.Tags{
+		model.Tags{
 			{"t", "android"},
 			{"d", "device2"},
 			{"relay", "wss://relay.example.com"},
 			{"token", "token2"},
 		},
-		nostr.Filters{
+		model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -122,21 +117,21 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		require.NoError(t, err)
 		originalPost := helperCreatePostEvent(
 			t,
-			"original_post_"+uuid.NewString(),
+			"original_post_"+rand.Text(),
 			"original_author_pubkey",
 			nostr.KindTextNote,
 			"Original post content",
-			nostr.Tags{},
+			model.Tags{},
 		)
 		require.NoError(t, query.AcceptEvents(t.Context(), originalPost))
 
 		replyEvent := helperCreatePostEvent(
 			t,
-			"reply_id_"+uuid.NewString(),
+			"reply_id_"+rand.Text(),
 			"reply_author_pubkey",
 			nostr.KindTextNote,
 			"Reply with mention: "+nprofileEncoded,
-			nostr.Tags{
+			model.Tags{
 				{"e", originalPost.GetID(), "", model.TagMarkerReply},
 				{"e", originalPost.GetID(), "", model.TagMarkerRoot},
 				{"p", originalPost.GetMasterPublicKey()},
@@ -164,12 +159,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 func TestMention(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	nprofileEncoded, err := nip19.EncodeProfile("7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e", []string{"wss://relay.example.com"})
 	require.NoError(t, err)
@@ -178,13 +168,13 @@ func TestMention(t *testing.T) {
 		t,
 		"7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
 		"device1",
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
 			{"d", "device1"},
 			{"relay", "wss://relay.example.com"},
 			{"token", "token1"},
 		},
-		nostr.Filters{
+		model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -195,11 +185,11 @@ func TestMention(t *testing.T) {
 	t.Run("content nprofile mention", func(t *testing.T) {
 		event := helperCreatePostEvent(
 			t,
-			"test_id_content_"+uuid.NewString(),
+			"test_id_content_"+rand.Text(),
 			"author_pubkey",
 			nostr.KindTextNote,
 			"Post with nprofile mention in content: "+nprofileEncoded,
-			nostr.Tags{},
+			model.Tags{},
 		)
 		require.NoError(t, query.AcceptEvents(t.Context(), event))
 
@@ -237,11 +227,11 @@ func TestMention(t *testing.T) {
 
 		event := helperCreatePostEvent(
 			t,
-			"test_id_richtext_"+uuid.NewString(),
+			"test_id_richtext_"+rand.Text(),
 			"author_pubkey",
 			nostr.KindTextNote,
 			"",
-			nostr.Tags{
+			model.Tags{
 				{"rich_text", model.QuillDeltaProtocol, string(richTextJSON)},
 			},
 		)
@@ -256,11 +246,11 @@ func TestMention(t *testing.T) {
 	t.Run("both content and p tag mention - no duplicate", func(t *testing.T) {
 		event := helperCreatePostEvent(
 			t,
-			"test_id_both_"+uuid.NewString(),
+			"test_id_both_"+rand.Text(),
 			"author_pubkey",
 			nostr.KindTextNote,
 			"Post with nprofile mention in content: "+nprofileEncoded,
-			nostr.Tags{
+			model.Tags{
 				{"p", "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"},
 			},
 		)
@@ -276,20 +266,15 @@ func TestMention(t *testing.T) {
 func TestSelfReplyNotification(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
 	selfReplyEvent := helperCreatePostEvent(
 		t,
-		"self_reply_id_"+uuid.NewString(),
+		"self_reply_id_"+rand.Text(),
 		"author_pubkey",
 		nostr.KindTextNote,
 		"Reply to my own post",
-		nostr.Tags{
+		model.Tags{
 			{"e", "original_event_id", "", model.TagMarkerReply},
 			{"p", "author_pubkey"},
 		},
@@ -298,13 +283,13 @@ func TestSelfReplyNotification(t *testing.T) {
 		t,
 		"author_pubkey",
 		"device1",
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
 			{"d", "device1"},
 			{"relay", "wss://relay.example.com"},
 			{"token", "token1"},
 		},
-		nostr.Filters{
+		model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -321,15 +306,10 @@ func TestSelfReplyNotification(t *testing.T) {
 func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		relayURL:       testRelayURL,
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
-	authorPubKey := "author_pubkey_" + uuid.NewString()
-	mentionedPubKey := "mentioned_pubkey_" + uuid.NewString()
+	authorPubKey := "author_pubkey_" + rand.Text()
+	mentionedPubKey := "mentioned_pubkey_" + rand.Text()
 
 	profileData := struct {
 		Name        string `json:"name,omitempty"`
@@ -344,7 +324,7 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 
 	profileEvent := &model.Event{
 		Event: nostr.Event{
-			ID:      "profile_id_" + uuid.NewString(),
+			ID:      "profile_id_" + rand.Text(),
 			PubKey:  authorPubKey,
 			Kind:    nostr.KindProfileMetadata,
 			Content: string(profileJSON),
@@ -353,27 +333,27 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 
 	mentionEvent := helperCreatePostEvent(
 		t,
-		"mention_id_"+uuid.NewString(),
+		"mention_id_"+rand.Text(),
 		authorPubKey,
 		nostr.KindTextNote,
 		"Post mentioning someone",
-		nostr.Tags{
+		model.Tags{
 			{"e", "event_id", "", model.TagMarkerMention},
 			{"p", mentionedPubKey},
 		},
 	)
 
-	deviceID := "device1_" + uuid.NewString()
+	deviceID := "device1_" + rand.Text()
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(
 		t,
 		mentionedPubKey,
 		deviceID,
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
 			{"d", deviceID},
-			{"token", "token1_" + uuid.NewString()},
+			{"token", "token1_" + rand.Text()},
 		},
-		nostr.Filters{
+		model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
@@ -381,9 +361,9 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	)
 
 	pm.deviceMutex.Lock()
-	pm.userDevicesMap[mentionedPubKey] = map[DeviceID]DeviceInfo{
-		DeviceID(deviceID): {
-			Filters: nostr.Filters{
+	pm.userDevicesMap[mentionedPubKey] = map[string]DeviceInfo{
+		deviceID: {
+			Filters: model.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
 				},

@@ -3,10 +3,10 @@
 package internal
 
 import (
+	"crypto/rand"
 	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/stretchr/testify/require"
@@ -49,22 +49,22 @@ func TestCreateSingleMessage(t *testing.T) {
 		privateKey: privKeyX25519,
 	}
 
-	validToken := "valid-test-token-" + uuid.NewString()
+	validToken := "valid-test-token-" + rand.Text()
 	encryptedValidToken := createEncryptedToken(t, validToken, privateKey, publicKey)
 
 	event1 := &model.Event{}
 	event1.Tags = append(event1.Tags, model.Tag{"token", encryptedValidToken})
-	event1.Tags = append(event1.Tags, model.Tag{"deviceId", uuid.NewString()})
+	event1.Tags = append(event1.Tags, model.Tag{"deviceId", rand.Text()})
 	require.NoError(t, event1.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	notification1 := &Notification[*DeviceRegistrationEvent]{
+	notification1 := &Notification[*model.Event]{
 		Data: map[string]interface{}{
-			"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString()),
+			"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text()),
 			"number":   42,
 		},
 		Target:   event1,
 		Title:    testTitle,
-		Body:     testBody + uuid.NewString(),
+		Body:     testBody + rand.Text(),
 		ImageURL: "https://example.com/image.jpg",
 	}
 
@@ -80,13 +80,13 @@ func TestCreateSingleMessage(t *testing.T) {
 	require.Contains(t, message1.Data["number"], "42")
 
 	event2 := &model.Event{}
-	event2.Tags = append(event2.Tags, model.Tag{"deviceId", uuid.NewString()})
+	event2.Tags = append(event2.Tags, model.Tag{"deviceId", rand.Text()})
 	require.NoError(t, event2.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	notification2 := &Notification[*DeviceRegistrationEvent]{
-		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+	notification2 := &Notification[*model.Event]{
+		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target:   event2,
 		Title:    testTitle,
-		Body:     testBody + uuid.NewString(),
+		Body:     testBody + rand.Text(),
 		ImageURL: "https://example.com/image.jpg",
 	}
 
@@ -99,13 +99,13 @@ func TestCreateSingleMessage(t *testing.T) {
 	event3 := &model.Event{}
 	event3.PubKey = wrongPublicKey
 	event3.Tags = append(event3.Tags, model.Tag{"token", encryptedValidToken})
-	event3.Tags = append(event3.Tags, model.Tag{"deviceId", uuid.NewString()})
+	event3.Tags = append(event3.Tags, model.Tag{"deviceId", rand.Text()})
 
-	notification3 := &Notification[*DeviceRegistrationEvent]{
-		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+	notification3 := &Notification[*model.Event]{
+		Data:     map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target:   event3,
 		Title:    testTitle,
-		Body:     testBody + uuid.NewString(),
+		Body:     testBody + rand.Text(),
 		ImageURL: "https://example.com/image.jpg",
 	}
 
@@ -116,11 +116,11 @@ func TestCreateSingleMessage(t *testing.T) {
 
 	event4 := &model.Event{}
 	event4.Tags = append(event4.Tags, model.Tag{"token", encryptedValidToken})
-	event4.Tags = append(event4.Tags, model.Tag{"deviceId", uuid.NewString()})
+	event4.Tags = append(event4.Tags, model.Tag{"deviceId", rand.Text()})
 	require.NoError(t, event4.SignWithAlg(privateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
-	notification4 := &Notification[*DeviceRegistrationEvent]{
-		Data:   map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+	notification4 := &Notification[*model.Event]{
+		Data:   map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target: event4,
 	}
 
@@ -139,12 +139,12 @@ func TestCreateTopicMessage(t *testing.T) {
 
 	notification1 := &Notification[SubscriptionTopic]{
 		Data: map[string]interface{}{
-			"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString()),
+			"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text()),
 			"number":   42,
 		},
 		Target:      SubscriptionTopic(testTopic),
 		Title:       testTitle,
-		Body:        testBody + uuid.NewString(),
+		Body:        testBody + rand.Text(),
 		ImageURL:    "https://example.com/image.jpg",
 		SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 	}
@@ -160,10 +160,10 @@ func TestCreateTopicMessage(t *testing.T) {
 	require.Contains(t, message1.Data["number"], "42")
 
 	notification2 := &Notification[SubscriptionTopic]{
-		Data:        map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Data:        map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target:      SubscriptionTopic(""),
 		Title:       testTitle,
-		Body:        testBody + uuid.NewString(),
+		Body:        testBody + rand.Text(),
 		ImageURL:    "https://example.com/image.jpg",
 		SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 	}
@@ -174,7 +174,7 @@ func TestCreateTopicMessage(t *testing.T) {
 	require.Equal(t, testTitle, message2.Notification.Title)
 
 	notification3 := &Notification[SubscriptionTopic]{
-		Data:        map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", uuid.NewString())},
+		Data:        map[string]interface{}{"deeplink": fmt.Sprintf("ion.app/something/%v", rand.Text())},
 		Target:      SubscriptionTopic(testTopic),
 		SourceEvent: &model.Event{Event: nostr.Event{Kind: nostr.KindTextNote}},
 	}

@@ -3,12 +3,11 @@
 package pushnotifications
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query"
@@ -19,12 +18,12 @@ import (
 func helperCreateCommunityMessageEvent(t *testing.T, id string, pubKey string, content string, communityID string, recipientPubKey string) *model.Event {
 	t.Helper()
 
-	tags := nostr.Tags{
+	tags := model.Tags{
 		{model.CustomIONTagCommunity, communityID},
 	}
 
 	if recipientPubKey != "" {
-		tags = append(tags, nostr.Tag{"p", recipientPubKey})
+		tags = append(tags, model.Tag{"p", recipientPubKey})
 	}
 
 	return &model.Event{
@@ -38,16 +37,16 @@ func helperCreateCommunityMessageEvent(t *testing.T, id string, pubKey string, c
 	}
 }
 
-func helperCreateCommunityDefinitionEvent(t *testing.T, id string, pubKey string, communityID string, commentsEnabled bool) *model.Event {
+func helperCreateCommunityDefinitionEvent(t testing.TB, id string, pubKey string, communityID string, commentsEnabled bool) *model.Event {
 	t.Helper()
 
-	tags := nostr.Tags{
+	tags := model.Tags{
 		{model.CustomIONTagCommunity, communityID},
 	}
 	if commentsEnabled {
-		tags = append(tags, nostr.Tag{"settings", model.CommentsEnabledSettings, "true", "1000"})
+		tags = append(tags, model.Tag{"settings", model.CommentsEnabledSettings, "true", "1000"})
 	} else {
-		tags = append(tags, nostr.Tag{"settings", model.CommentsEnabledSettings, "false", "1000"})
+		tags = append(tags, model.Tag{"settings", model.CommentsEnabledSettings, "false", "1000"})
 	}
 
 	return &model.Event{
@@ -65,10 +64,8 @@ func TestGetCommunityNotificationType(t *testing.T) {
 	t.Parallel()
 
 	t.Run("community with comments enabled", func(t *testing.T) {
-		t.Parallel()
-
-		ownerPubKey := "owner_pubkey1" + uuid.NewString()
-		communityID := "community_id_1_test" + uuid.NewString()
+		ownerPubKey := "owner_pubkey1" + rand.Text()
+		communityID := "community_id_1_test" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -90,14 +87,12 @@ func TestGetCommunityNotificationType(t *testing.T) {
 
 		notificationType, err := getCommunityNotificationType(t.Context(), messageEvent)
 		require.NoError(t, err, "Should not return error")
-		assert.Equal(t, NotificationTypeGroupChatMessage, notificationType, "Should return group chat message type")
+		require.Equal(t, NotificationTypeGroupChatMessage, notificationType, "Should return group chat message type")
 	})
 
 	t.Run("community with comments disabled", func(t *testing.T) {
-		t.Parallel()
-
-		ownerPubKey := "owner_pubkey2" + uuid.NewString()
-		communityID := "community_id_2_test" + uuid.NewString()
+		ownerPubKey := "owner_pubkey2" + rand.Text()
+		communityID := "community_id_2_test" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -120,16 +115,14 @@ func TestGetCommunityNotificationType(t *testing.T) {
 
 		notificationType, err := getCommunityNotificationType(t.Context(), messageEvent)
 		require.NoError(t, err, "Should not return error")
-		assert.Equal(t, NotificationTypeChannelMessage, notificationType, "Should return channel message type")
+		require.Equal(t, NotificationTypeChannelMessage, notificationType, "Should return channel message type")
 	})
 
 	t.Run("community without comments settings", func(t *testing.T) {
-		t.Parallel()
+		ownerPubKey := "owner_pubkey3" + rand.Text()
+		communityID := "community_id_3_test" + rand.Text()
 
-		ownerPubKey := "owner_pubkey3" + uuid.NewString()
-		communityID := "community_id_3_test" + uuid.NewString()
-
-		tags := nostr.Tags{
+		tags := model.Tags{
 			{model.CustomIONTagCommunity, communityID},
 		}
 
@@ -156,7 +149,7 @@ func TestGetCommunityNotificationType(t *testing.T) {
 
 		notificationType, err := getCommunityNotificationType(t.Context(), messageEvent)
 		require.NoError(t, err, "Should not return error")
-		assert.Equal(t, NotificationTypeChannelMessage, notificationType, "Should return channel message type")
+		require.Equal(t, NotificationTypeChannelMessage, notificationType, "Should return channel message type")
 	})
 
 	t.Run("non-existent community", func(t *testing.T) {
@@ -180,18 +173,11 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 	t.Parallel()
 
 	t.Run("message with p-tag", func(t *testing.T) {
-		t.Parallel()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		ownerPubKey := "owner_pubkey1" + uuid.NewString()
-		authorPubKey := "author_pubkey1" + uuid.NewString()
-		recipientPubKey := "recipient_pubkey1" + uuid.NewString()
-		communityID := "community_id_5" + uuid.NewString()
+		pm := helperNewManager(t)
+		ownerPubKey := "owner_pubkey1" + rand.Text()
+		authorPubKey := "author_pubkey1" + rand.Text()
+		recipientPubKey := "recipient_pubkey1" + rand.Text()
+		communityID := "community_id_5" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -216,11 +202,11 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			t,
 			recipientPubKey,
 			"device1",
-			nostr.Tags{
+			model.Tags{
 				{"t", "ios"},
 				{"token", "test_token1"},
 			},
-			nostr.Filters{
+			model.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
 				},
@@ -239,24 +225,18 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.Len(t, notifications, 1, "Should create one notification")
 
 		notification := notifications[0]
-		assert.Equal(t, defaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
-		assert.Equal(t, defaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
-		assert.Equal(t, deviceEvent, notification.Target, "Target should match")
-		assert.Contains(t, notification.Data, "event", "Data should contain event")
+		require.Equal(t, defaultTranslations[NotificationTypeGroupChatMessage].Title, notification.Title, "Title should match")
+		require.Equal(t, defaultTranslations[NotificationTypeGroupChatMessage].Body, notification.Body, "Body should match")
+		require.Equal(t, deviceEvent, notification.Target, "Target should match")
+		require.Contains(t, notification.Data, "event", "Data should contain event")
 	})
 
 	t.Run("message without p-tag", func(t *testing.T) {
-		t.Parallel()
+		pm := helperNewManager(t)
 
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		ownerPubKey := "owner_pubkey2" + uuid.NewString()
-		authorPubKey := "author_pubkey2" + uuid.NewString()
-		communityID := "community_id_6" + uuid.NewString()
+		ownerPubKey := "owner_pubkey2" + rand.Text()
+		authorPubKey := "author_pubkey2" + rand.Text()
+		communityID := "community_id_6" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -284,17 +264,11 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 	})
 
 	t.Run("message with p-tag containing sender's pubkey", func(t *testing.T) {
-		t.Parallel()
+		pm := helperNewManager(t)
 
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		ownerPubKey := "owner_pubkey3" + uuid.NewString()
-		authorPubKey := "author_pubkey3" + uuid.NewString()
-		communityID := "community_id_7" + uuid.NewString()
+		ownerPubKey := "owner_pubkey3" + rand.Text()
+		authorPubKey := "author_pubkey3" + rand.Text()
+		communityID := "community_id_7" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -322,18 +296,12 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 	})
 
 	t.Run("message with non-existent recipient", func(t *testing.T) {
-		t.Parallel()
+		pm := helperNewManager(t)
 
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		ownerPubKey := "owner_pubkey4" + uuid.NewString()
-		authorPubKey := "author_pubkey4" + uuid.NewString()
-		nonExistentRecipientPubKey := "non_existent_recipient" + uuid.NewString()
-		communityID := "community_id_8" + uuid.NewString()
+		ownerPubKey := "owner_pubkey4" + rand.Text()
+		authorPubKey := "author_pubkey4" + rand.Text()
+		nonExistentRecipientPubKey := "non_existent_recipient" + rand.Text()
+		communityID := "community_id_8" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -361,18 +329,12 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 	})
 
 	t.Run("message with recipient having no devices", func(t *testing.T) {
-		t.Parallel()
+		pm := helperNewManager(t)
 
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
-
-		ownerPubKey := "owner_pubkey5" + uuid.NewString()
-		authorPubKey := "author_pubkey5" + uuid.NewString()
-		recipientPubKey := "recipient_without_devices" + uuid.NewString()
-		communityID := "community_id_9" + uuid.NewString()
+		ownerPubKey := "owner_pubkey5" + rand.Text()
+		authorPubKey := "author_pubkey5" + rand.Text()
+		recipientPubKey := "recipient_without_devices" + rand.Text()
+		communityID := "community_id_9" + rand.Text()
 
 		communityDefEvent := helperCreateCommunityDefinitionEvent(
 			t,
@@ -399,15 +361,8 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 	})
 
 	t.Run("message_with_recipient_having_multiple_devices", func(t *testing.T) {
-		t.Parallel()
-
-		testSuffix := uuid.NewString()
-
-		pm := &PushNotificationManager{
-			userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-			compressorPool: helperCreateTestCompressorPool(),
-			stats:          newPushStats(),
-		}
+		testSuffix := rand.Text()
+		pm := helperNewManager(t)
 
 		communityID := "community_" + testSuffix
 		senderPubKey := "sender_pubkey_" + testSuffix
@@ -425,21 +380,21 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			recipientPubKey,
 		)
 
-		filters := nostr.Filters{
+		filters := model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
 			},
 		}
 
-		deviceID1 := "device1_" + testSuffix
-		deviceID2 := "device2_" + testSuffix
-		deviceID3 := "device3_" + testSuffix
+		deviceID1 := "device1-" + testSuffix
+		deviceID2 := "device2-" + testSuffix
+		deviceID3 := "device3-" + testSuffix
 
 		deviceEvent1 := helperCreateTestDeviceRegistrationEvent(
 			t,
 			recipientPubKey,
 			deviceID1,
-			nostr.Tags{
+			model.Tags{
 				{"t", "ios"},
 				{"d", deviceID1},
 				{"token", "token1_" + testSuffix},
@@ -451,7 +406,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			t,
 			recipientPubKey,
 			deviceID2,
-			nostr.Tags{
+			model.Tags{
 				{"t", "android"},
 				{"d", deviceID2},
 				{"token", "token2_" + testSuffix},
@@ -463,7 +418,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			t,
 			recipientPubKey,
 			deviceID3,
-			nostr.Tags{
+			model.Tags{
 				{"t", "web"},
 				{"d", deviceID3},
 				{"token", "token3_" + testSuffix},
@@ -482,9 +437,9 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.Contains(t, pm.userDevicesMap, recipientPubKey, "User should be in cache")
 		require.Len(t, pm.userDevicesMap[recipientPubKey], 3, "User should have 3 devices")
 
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], DeviceID(deviceID1), "Device 1 should be in cache")
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], DeviceID(deviceID2), "Device 2 should be in cache")
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], DeviceID(deviceID3), "Device 3 should be in cache")
+		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID1, "Device 1 should be in cache")
+		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID2, "Device 2 should be in cache")
+		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID3, "Device 3 should be in cache")
 
 		require.NoError(t, query.AcceptEvents(t.Context(), messageEvent))
 
@@ -494,7 +449,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.NotNil(t, notifications, "Notifications should not be nil")
 		require.Len(t, notifications, 3, "Should create three notifications (one for each device)")
 
-		deviceTypeMap := make(map[string]*pn.Notification[*DeviceRegistrationEvent])
+		deviceTypeMap := make(map[string]*pn.Notification[*model.Event])
 		for _, notification := range notifications {
 			deviceType := notification.Target.GetTag("t").Value()
 			deviceTypeMap[deviceType] = notification
@@ -524,15 +479,11 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	t.Parallel()
 
-	pm := &PushNotificationManager{
-		userDevicesMap: make(map[PublicKey]map[DeviceID]DeviceInfo),
-		compressorPool: helperCreateTestCompressorPool(),
-		stats:          newPushStats(),
-	}
+	pm := helperNewManager(t)
 
-	authorPubKey := "author_pubkey_" + uuid.NewString()
-	recipientPubKey := "recipient_pubkey_" + uuid.NewString()
-	communityID := "community_id_" + uuid.NewString()
+	authorPubKey := "author_pubkey_" + rand.Text()
+	recipientPubKey := "recipient_pubkey_" + rand.Text()
+	communityID := "community_id_" + rand.Text()
 
 	profileData := struct {
 		Name        string `json:"name,omitempty"`
@@ -547,7 +498,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 
 	profileEvent := &model.Event{
 		Event: nostr.Event{
-			ID:      "profile_id_" + uuid.NewString(),
+			ID:      "profile_id_" + rand.Text(),
 			PubKey:  authorPubKey,
 			Kind:    nostr.KindProfileMetadata,
 			Content: string(profileJSON),
@@ -556,37 +507,37 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 
 	messageEvent := helperCreateCommunityMessageEvent(
 		t,
-		"message_id_"+uuid.NewString(),
+		"message_id_"+rand.Text(),
 		authorPubKey,
 		"Message with recipient",
 		communityID,
 		recipientPubKey,
 	)
 
-	deviceID := "device1_" + uuid.NewString()
+	deviceID := "device1_" + rand.Text()
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(
 		t,
 		recipientPubKey,
 		deviceID,
-		nostr.Tags{
+		model.Tags{
 			{"t", "ios"},
-			{"token", "test_token_" + uuid.NewString()},
+			{"token", "test_token_" + rand.Text()},
 		},
-		nostr.Filters{
+		model.Filters{
 			{
 				Kinds: []int{nostr.KindTextNote},
-				Tags:  nostr.TagMap{"p": []nostr.TagValues{{&recipientPubKey}}},
+				Tags:  model.TagMap{"p": []model.TagValues{{&recipientPubKey}}},
 			},
 		},
 	)
 
 	pm.deviceMutex.Lock()
-	pm.userDevicesMap[recipientPubKey] = map[DeviceID]DeviceInfo{
-		DeviceID(deviceID): {
-			Filters: nostr.Filters{
+	pm.userDevicesMap[recipientPubKey] = map[string]DeviceInfo{
+		deviceID: {
+			Filters: model.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
-					Tags:  nostr.TagMap{"p": []nostr.TagValues{{&recipientPubKey}}},
+					Tags:  model.TagMap{"p": []model.TagValues{{&recipientPubKey}}},
 				},
 			},
 			Event: deviceEvent,
@@ -595,7 +546,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	pm.deviceMutex.Unlock()
 
 	notifications, err := pm.createNotifications(
-		[]*DeviceRegistrationEvent{deviceEvent},
+		[]*model.Event{deviceEvent},
 		NotificationTypeMentionReply,
 		messageEvent,
 		profileEvent,
