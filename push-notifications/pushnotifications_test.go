@@ -869,7 +869,8 @@ func TestProcessDeviceRegistrationEventWithRemoteDevice(t *testing.T) {
 	t.Parallel()
 
 	pm := helperNewManager(t)
-	ev := helperCreateTestDeviceRegistrationEvent(t, "remote-device-id", "masterkey_deviceID", model.Tags{}, model.Filters{{Kinds: []int{nostr.KindTextNote}}})
+	_, pubkey := model.GenerateKeyPair()
+	ev := helperCreateTestDeviceRegistrationEvent(t, pubkey, "masterkey_deviceID", model.Tags{}, model.Filters{{Kinds: []int{nostr.KindTextNote}}})
 
 	err := pm.processDeviceRegistrationEvent(ev)
 	require.NoError(t, err)

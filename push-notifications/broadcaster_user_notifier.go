@@ -37,16 +37,7 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		Str("batch", job.Args.BatchID).
 		Msg("starting broadcaster push notification worker")
 
-	for _, ev := range job.Args.Events {
-		notification, err := w.Manager.createNotifications(model.Events{job.Args.Device}, NotificationTypePost, ev)
-		if err != nil {
-			return errors.Wrap(err, "failed to create notifications")
-		}
+	err := w.Manager.AcceptEvents(ctx, job.Args.Events)
 
-		err = w.Manager.sendNotifications(ctx, notification, nil)
-		if err != nil {
-			return errors.Wrap(err, "failed to send notifications")
-		}
-	}
-	return nil
+	return errors.Wrap(err, "failed to accept events in broadcaster push notification worker")
 }
