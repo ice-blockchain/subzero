@@ -71,5 +71,5 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		return nil
 	}
 
-	return errors.Wrap(w.Manager.sendNotifications(ctx, singleNotifications, topicNotifications), "failed to send notifications from broadcaster push notification worker")
+	return errors.Wrap(w.Manager.sendNotifications(ctx, singleNotificationsFiltered, topicNotifications), "failed to send notifications from broadcaster push notification worker")
 }
