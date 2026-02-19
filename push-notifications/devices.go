@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog/log"
+	"github.com/zeebo/xxh3"
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
@@ -25,8 +26,11 @@ type (
 	}
 )
 
+func (d *DeviceInfo) Hash() uint64 {
+	return xxh3.HashString(d.Event.ID)
+}
+
 func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
-	var totalDevices int
 	for event, err := range query.CollectDeviceRegistrationEvents(ctx) {
 		if err != nil {
 			return fmt.Errorf("error getting device registration events: %w", err)
@@ -41,14 +45,9 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 		}
 	}
 
-	for _, devices := range pm.userDevicesMap {
-		totalDevices += len(devices)
-	}
-
 	log.Info().
 		Str("context", "PUSH-NOTIFICATIONS").
-		Int("total_users", len(pm.userDevicesMap)).
-		Int("total_devices", totalDevices).
+		Int("total_devices", pm.devicesFilterIndex.Size()).
 		Msg("device synchronization completed")
 
 	return nil
@@ -91,42 +90,24 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	// And we should just delete the device if it exists in the cache without adding the new one, since we won't be able to send notifications to it.
 	shouldDeleteFromCache := !remote && !model.CompareRelaysURLs(event.GetTag("relay").Value(), pm.relayURL)
 
-	pm.deviceMutex.Lock()
-	defer pm.deviceMutex.Unlock()
-
 	if shouldDeleteFromCache {
-		devicesByUser, ok := pm.userDevicesMap[masterPubKey]
-		if ok {
-			if _, exists := devicesByUser[deviceID]; exists {
-				delete(devicesByUser, deviceID)
-				if len(devicesByUser) == 0 {
-					delete(pm.userDevicesMap, masterPubKey)
-				}
-			}
+		if value, ok := pm.devicesEventMap.LoadAndDelete(deviceID); ok {
+			pm.devicesFilterIndex.Remove(&DeviceInfo{Event: value})
 		}
 		return nil
 	}
 
-	if _, ok := pm.userDevicesMap[masterPubKey]; !ok {
-		pm.userDevicesMap[masterPubKey] = make(map[string]DeviceInfo)
-	}
-	pm.userDevicesMap[masterPubKey][deviceID] = deviceInfo
+	pm.devicesEventMap.Store(deviceID, event)
+	pm.devicesFilterIndex.Index(filters, &deviceInfo)
 
 	return nil
 }
 
 func (pm *PushNotificationManager) removeDeviceFromCache(event *model.Event) {
-	masterPubKey, deviceID, _ := notificationTarget(event)
+	_, deviceID, _ := notificationTarget(event)
 
-	pm.deviceMutex.Lock()
-	defer pm.deviceMutex.Unlock()
-
-	if _, ok := pm.userDevicesMap[masterPubKey]; ok {
-		delete(pm.userDevicesMap[masterPubKey], deviceID)
-
-		if len(pm.userDevicesMap[masterPubKey]) == 0 {
-			delete(pm.userDevicesMap, masterPubKey)
-		}
+	if value, ok := pm.devicesEventMap.LoadAndDelete(deviceID); ok {
+		pm.devicesFilterIndex.Remove(&DeviceInfo{Event: value})
 	}
 }
 

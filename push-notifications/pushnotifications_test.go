@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/panjf2000/ants/v2"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	em "github.com/ice-blockchain/subzero/event-matcher"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/ice-blockchain/subzero/rq"
@@ -119,8 +121,9 @@ func helperNewManagerWithClient(t testing.TB) (*PushNotificationManager, *MockPu
 	client := pn.Client(mockClient)
 
 	return &PushNotificationManager{
+		devicesFilterIndex:     em.NewMatcherStorage[*DeviceInfo](0),
+		devicesEventMap:        xsync.NewMap[string, *model.Event](),
 		relayURL:               testRelayURL,
-		userDevicesMap:         make(map[string]map[string]DeviceInfo),
 		pushNotificationClient: client,
 		compressorPool:         helperCreateTestCompressorPool(),
 		stats:                  newPushStats(),
@@ -283,6 +286,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 
 		deviceEvent := &model.Event{
 			Event: nostr.Event{
+				PubKey: pubKey,
 				Tags: model.Tags{
 					model.Tag{"d", string(deviceID)},
 				},
@@ -290,12 +294,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 		}
 
 		deviceInfo := DeviceInfo{Filters: filters, Event: deviceEvent}
-
-		pm.deviceMutex.Lock()
-		pm.userDevicesMap[pubKey] = map[string]DeviceInfo{
-			deviceID: deviceInfo,
-		}
-		pm.deviceMutex.Unlock()
+		pm.devicesFilterIndex.Index(filters, &deviceInfo)
 
 		devices := pm.collectUserValidDevices(pubKey, event)
 
@@ -660,6 +659,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		devicePubKey := "device-pubkey-for-process-test"
 		deviceID := "device-id-for-process-test"
 		deviceTags := model.Tags{
+			{"b", recipientPubKey},
 			{"d", deviceID},
 			{"t", "ios"},
 			{"token", "test-token-for-process-test"},
@@ -672,11 +672,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				Tags:   deviceTags,
 			},
 		}
-		pm.deviceMutex.Lock()
-		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
-			pm.userDevicesMap[recipientPubKey] = make(map[string]DeviceInfo)
-		}
-		pm.userDevicesMap[recipientPubKey][deviceID] = DeviceInfo{
+		di := DeviceInfo{
 			Event: deviceEvent,
 			Filters: model.Filters{
 				{
@@ -684,7 +680,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				},
 			},
 		}
-		pm.deviceMutex.Unlock()
+		pm.devicesFilterIndex.Index(di.Filters, &di)
 
 		mainEvent := &model.Event{
 			Event: nostr.Event{
@@ -709,6 +705,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		devicePubKey := "device-pubkey"
 		deviceID := "device-id"
 		deviceTags := model.Tags{
+			{"b", recipientPubKey},
 			{"d", deviceID},
 			{"t", "ios"},
 			{"token", "test-token"},
@@ -721,12 +718,9 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				Tags:   deviceTags,
 			},
 		}
-		pm.deviceMutex.Lock()
-		if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
-			pm.userDevicesMap[recipientPubKey] = make(map[string]DeviceInfo)
-		}
-		pm.userDevicesMap[recipientPubKey][deviceID] = DeviceInfo{Event: deviceEvent}
-		pm.deviceMutex.Unlock()
+
+		di := DeviceInfo{Event: deviceEvent}
+		pm.devicesFilterIndex.Index(model.Filters{}, &di)
 
 		giftWrapEvent := &model.Event{
 			Event: nostr.Event{
@@ -875,14 +869,11 @@ func TestProcessDeviceRegistrationEventWithRemoteDevice(t *testing.T) {
 	err := pm.processDeviceRegistrationEvent(ev)
 	require.NoError(t, err)
 
-	devices, ok := pm.userDevicesMap["masterkey"]
-	require.True(t, ok, "masterkey should exist in userDevicesMap")
-	require.Len(t, devices, 1, "masterkey should have one device registered")
-
-	deviceInfo, ok := devices["deviceID"]
-	require.True(t, ok)
-	require.Equal(t, ev, deviceInfo.Event)
-	require.True(t, deviceInfo.Remote)
+	require.Equal(t, 1, pm.devicesFilterIndex.Size())
+	for dev := range pm.devicesFilterIndex.Range() {
+		require.Equal(t, ev, dev.Event)
+		require.True(t, dev.Remote)
+	}
 }
 
 func TestProcessEventWithReaction(t *testing.T) {
@@ -899,9 +890,10 @@ func TestProcessEventWithReaction(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(filterJSON), &filters))
 
 	deviceTags := model.Tags{
+		{"b", recipientPubKey},
 		{"t", "ios"},
 		{"d", deviceID},
-		{"relay", "wss://relay.example.com"},
+		{"relay", pm.relayURL},
 		{"token", "token1"},
 	}
 
@@ -916,16 +908,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 	}
 
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
-
-	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
-	require.True(t, ok, "Device should exist in userDevicesMap")
-
-	if _, ok := pm.userDevicesMap[recipientPubKey]; !ok {
-		pm.userDevicesMap[recipientPubKey] = make(map[string]DeviceInfo)
-	}
-	pm.userDevicesMap[recipientPubKey][deviceID] = deviceInfo
-	pm.deviceMutex.Unlock()
+	require.Equal(t, 1, pm.devicesFilterIndex.Size(), "Device should be indexed in devicesFilterIndex")
 
 	event := &model.Event{
 		Event: nostr.Event{

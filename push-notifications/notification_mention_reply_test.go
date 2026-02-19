@@ -92,7 +92,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 		},
 	)
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
-	require.Equal(t, 2, len(pm.userDevicesMap["7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"]))
+	require.Equal(t, 2, pm.devicesFilterIndex.Size())
 
 	t.Run("mention in post", func(t *testing.T) {
 		notifications, err := pm.handleMentionReplyEvent(event2)
@@ -360,18 +360,15 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 		},
 	)
 
-	pm.deviceMutex.Lock()
-	pm.userDevicesMap[mentionedPubKey] = map[string]DeviceInfo{
-		deviceID: {
-			Filters: model.Filters{
-				{
-					Kinds: []int{nostr.KindTextNote},
-				},
+	di := &DeviceInfo{
+		Filters: model.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
 			},
-			Event: deviceEvent,
 		},
+		Event: deviceEvent,
 	}
-	pm.deviceMutex.Unlock()
+	pm.devicesFilterIndex.Index(di.Filters, di)
 
 	notifications, err := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
 	require.NoError(t, err)

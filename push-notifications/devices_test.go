@@ -4,7 +4,6 @@ package pushnotifications
 
 import (
 	"cmp"
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"slices"
@@ -45,7 +44,7 @@ func helperCreateTestDeviceRegistrationEvent(tb testing.TB, pubKey string, devic
 	}
 }
 
-func TestProcessDeviceRegistrationEvent(t *testing.T) {
+func TestProcessDeviceRegistrationEventBasic(t *testing.T) {
 	t.Parallel()
 
 	t.Run("basic_device_registration", func(t *testing.T) {
@@ -70,17 +69,16 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		err := pm.processDeviceRegistrationEvent(event)
 		require.NoError(t, err)
 
-		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap, masterPubKey)
-		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
+		require.Equal(t, 1, pm.devicesFilterIndex.Size())
+		require.Equal(t, 1, pm.devicesEventMap.Size())
 
-		deviceInfo := pm.userDevicesMap[masterPubKey][deviceID]
-		require.Equal(t, event, deviceInfo.Event)
+		dev, ok := pm.devicesEventMap.Load(deviceID)
+		require.True(t, ok)
+		require.Equal(t, event, dev)
 
 		var parsedFilters model.Filters
-		require.NoError(t, json.Unmarshal([]byte(event.Content), &parsedFilters))
-		require.Equal(t, parsedFilters, deviceInfo.Filters)
+		require.NoError(t, json.Unmarshal([]byte(dev.Content), &parsedFilters))
+		require.Equal(t, filters, parsedFilters)
 	})
 
 	t.Run("invalid_filter_json", func(t *testing.T) {
@@ -106,7 +104,7 @@ func TestProcessDeviceRegistrationEvent(t *testing.T) {
 		}
 
 		require.Error(t, pm.processDeviceRegistrationEvent(event))
-		require.Len(t, pm.userDevicesMap, 0)
+		require.Zero(t, pm.devicesFilterIndex.Size())
 	})
 }
 
@@ -134,44 +132,11 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
 
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
-		require.Len(t, pm.userDevicesMap[masterPubKey], 1)
+		require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 		pm.removeDeviceFromCache(event)
-		require.Len(t, pm.userDevicesMap, 0)
-	})
-
-	t.Run("device_belongs_to_another_user", func(t *testing.T) {
-		pm := helperNewManager(t)
-
-		filters := model.Filters{
-			{
-				Kinds: []int{nostr.KindTextNote},
-			},
-		}
-
-		masterPubKey := "master_pubkey"
-		otherPubKey := "other_pubkey"
-		deviceID := "device3"
-		deviceTags := model.Tags{
-			{"t", "ios"},
-			{"d", deviceID},
-			{"relay", "wss://relay.example.com"},
-			{"token", "token3"},
-		}
-
-		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(event))
-
-		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
-
-		pm.userDevicesMap[otherPubKey] = make(map[string]DeviceInfo)
-		pm.userDevicesMap[otherPubKey][deviceID] = DeviceInfo{
-			Event:   event,
-			Filters: filters,
-		}
-		require.Len(t, pm.userDevicesMap, 2)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
+		require.Zero(t, pm.devicesFilterIndex.Size())
+		require.Zero(t, pm.devicesEventMap.Size())
 	})
 }
 
@@ -253,7 +218,7 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 	t.Run("empty_events_list", func(t *testing.T) {
 		pm := helperNewManager(t)
 
-		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{})
+		err := pm.ManageDeviceRegistrationEvents(t.Context(), []*model.Event{})
 		require.NoError(t, err)
 	})
 
@@ -275,11 +240,13 @@ func TestManageDeviceRegistrationEvents(t *testing.T) {
 
 		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
 
-		err := pm.ManageDeviceRegistrationEvents(context.Background(), []*model.Event{event})
+		err := pm.ManageDeviceRegistrationEvents(t.Context(), []*model.Event{event})
 		require.NoError(t, err)
 
-		require.Len(t, pm.userDevicesMap, 1)
-		require.Contains(t, pm.userDevicesMap[masterPubKey], deviceID)
+		require.Equal(t, 1, pm.devicesFilterIndex.Size())
+		for device := range pm.devicesFilterIndex.Range() {
+			require.Equal(t, event, device.Event)
+		}
 	})
 }
 
@@ -316,7 +283,9 @@ func TestProcessDeviceRegistrationBatch(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(event))
 	}
 
-	require.Len(t, pm.userDevicesMap, 2)
-	require.Len(t, pm.userDevicesMap["user1"], 2)
-	require.Len(t, pm.userDevicesMap["user2"], 1)
+	require.Equal(t, 3, pm.devicesFilterIndex.Size())
+	for device := range pm.devicesFilterIndex.Range() {
+		t.Logf("Device in index: PubKey=%s, DeviceID=%s", device.Event.GetMasterPublicKey(), device.Event.GetTag("d").Value())
+		require.Contains(t, []string{"device1", "device2", "device3"}, device.Event.GetTag("d").Value())
+	}
 }

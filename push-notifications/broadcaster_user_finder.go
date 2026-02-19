@@ -55,7 +55,7 @@ func (w *broadcasterUserNotificationWorker) Work(ctx context.Context, job *rq.Jo
 
 	targets := make(map[string]*broadcasterPushNotificationWorkerArgs) // Device key -> Events.
 	for _, event := range decodedEvents {
-		devices := w.Manager.collectTargetDevices(event)
+		devices := w.Manager.collectUserValidDevices("", event)
 		for _, device := range devices {
 			args, exists := targets[device.PubKey]
 			if !exists {

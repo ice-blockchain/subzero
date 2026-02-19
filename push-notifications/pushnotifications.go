@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -21,10 +20,12 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/panjf2000/ants/v2"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/cfg"
 	"github.com/ice-blockchain/subzero/database/query"
+	em "github.com/ice-blockchain/subzero/event-matcher"
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/ice-blockchain/subzero/rq"
@@ -38,13 +39,13 @@ type (
 		pushNotificationClient pn.Client
 		rq                     rq.Client
 		broadcaster            eventBroadcaster
-		userDevicesMap         map[string]map[string]DeviceInfo // Master public key -> device ID -> device info.
+		devicesFilterIndex     *em.Storage[*DeviceInfo]
+		devicesEventMap        *xsync.Map[string, *model.Event] // Device ID -> Device Registration Event.
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
 		relayURL               string
 		privateKey             string
-		deviceMutex            sync.RWMutex
 	}
 
 	notificationTranslation struct {
@@ -95,6 +96,14 @@ const (
 	NotificationTypeContentTokenSwapped NotificationType = "content_token_swapped"
 
 	CompressionMethodZlib = "zlib"
+)
+
+const (
+	NotificationTypeSomeoneCreatorTokenCreated NotificationType = "someone_creator_token_created"
+	NotificationTypeSomeoneCreatorTokenSwapped NotificationType = "someone_creator_token_swapped"
+
+	NotificationTypeSomeoneContentTokenCreated NotificationType = "someone_content_token_created"
+	NotificationTypeSomeoneContentTokenSwapped NotificationType = "someone_content_token_swapped"
 )
 
 var (
@@ -174,6 +183,26 @@ var (
 			Body:     "Someone Bought Your Content Token",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
+		NotificationTypeSomeoneCreatorTokenCreated: {
+			Title:    "New Creator Token",
+			Body:     "Someone just launched their token. Trade now!",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneContentTokenCreated: {
+			Title:    "New Content Token",
+			Body:     `Community launched a token for someone's post`,
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneCreatorTokenSwapped: {
+			Title:    `Someone Bought Another Person's Creator Token`,
+			Body:     `Someone Bought Another Person's Creator Token`,
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneContentTokenSwapped: {
+			Title:    `Someone Bought Another Person's Content Token`,
+			Body:     `Someone Bought Another Person's Content Token`,
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
 		nostr.KindTextNote:                              {},
@@ -203,10 +232,10 @@ func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClie
 	var err error
 
 	if config.FCMCredentialsFile == "" {
-		return nil, fmt.Errorf("FCM credentials not provided")
+		return nil, errors.Errorf("FCM credentials not provided")
 	}
 	if config.PrivateKey == "" {
-		return nil, fmt.Errorf("private key is empty")
+		return nil, errors.Errorf("private key is empty")
 	}
 
 	var opts []pn.Option
@@ -229,7 +258,8 @@ func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClie
 	}
 
 	manager := &PushNotificationManager{
-		userDevicesMap:         make(map[string]map[string]DeviceInfo),
+		devicesFilterIndex:     em.NewMatcherStorage[*DeviceInfo](0),
+		devicesEventMap:        xsync.NewMap[string, *model.Event](),
 		pushNotificationClient: pnClient,
 		relayURL:               config.RelayURL,
 		stats:                  newPushStats(),
@@ -528,7 +558,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		}
 		if isAuthoritative {
 			if profileMetadataEvent == nil || attestationEvent == nil {
-				return nil, fmt.Errorf("empty profile metadata or attestation event for event %s", event.ID)
+				return nil, errors.Errorf("empty profile metadata or attestation event for event %s", event.ID)
 			}
 			relevantEvents = append(relevantEvents, pm.createEphemeralEmbeddingEvent(profileMetadataEvent), pm.createEphemeralEmbeddingEvent(attestationEvent))
 		} else {
@@ -671,19 +701,19 @@ func (pm *PushNotificationManager) sendNotificationsAsync(
 }
 
 func (pm *PushNotificationManager) collectErrorsAndProcessInvalidDevices(ctx context.Context, totalCount int, errChan chan error, invalidDevices []*model.Event) error {
-	var errors []error
+	var receivedErrors []error
 	for i := 0; i < totalCount; i++ {
 		if err := <-errChan; err != nil {
-			errors = append(errors, err)
+			receivedErrors = append(receivedErrors, err)
 		}
 	}
 	if len(invalidDevices) > 0 {
 		if err := pm.handleInvalidDeviceTokens(ctx, invalidDevices); err != nil {
-			errors = append(errors, err)
+			receivedErrors = append(receivedErrors, err)
 		}
 	}
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to send notifications: %v", errors)
+	if len(receivedErrors) > 0 {
+		return errors.Wrap(errors.Join(receivedErrors...), "errors occurred while sending notifications")
 	}
 
 	return nil
@@ -764,19 +794,13 @@ func (pm *PushNotificationManager) createNotifications(
 }
 
 func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event *model.Event) (devices model.Events) {
-	pm.deviceMutex.RLock()
-	userDevices, ok := pm.userDevicesMap[pubKey]
-	pm.deviceMutex.RUnlock()
-	if !ok || len(userDevices) == 0 {
-		log.Trace().Str("context", "PUSH-NOTIFICATIONS").
-			Str("pubkey", pubKey).
-			Str("event_id", event.ID).
-			Msg("no devices found for user")
-		return nil
-	}
+	for deviceInfo := range pm.devicesFilterIndex.Lookup(event) {
+		// If set, pubKey indicates that we should only consider devices registered with this public key.
+		if pubKey != "" && deviceInfo.Event.GetMasterPublicKey() != pubKey && deviceInfo.Event.PubKey != pubKey {
+			continue
+		}
 
-	for _, deviceInfo := range userDevices {
-		if deviceInfo.Filters == nil || deviceInfo.Filters.Match(&event.Event) {
+		if model.FiltersMatch(deviceInfo.Filters, event, "", "") {
 			devices = append(devices, deviceInfo.Event)
 		}
 	}
@@ -784,7 +808,6 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event 
 	log.Trace().Str("context", "PUSH-NOTIFICATIONS").
 		Str("pubkey", pubKey).
 		Int("target_num_devices", len(devices)).
-		Int("total_num_devices", len(userDevices)).
 		Str("event_id", event.ID).
 		Msg("collected valid devices for user")
 
@@ -795,40 +818,10 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event 
 // which master keys (users) have at least one device with filters matching the provided event.
 // It returns a slice of master keys for users who should receive a notification for the event.
 func (pm *PushNotificationManager) collectTargetMasterKeys(event *model.Event) (keys []string) {
-	const currentUserKeyPlaceholder = "current_user"
-
-	pm.deviceMutex.RLock()
-	defer pm.deviceMutex.RUnlock()
-
-	// TODO: Optimize this to use some index rather than iterating over all users and devices.
-	for masterKey, devices := range pm.userDevicesMap {
-		for _, deviceInfo := range devices {
-			if !model.FiltersMatch(deviceInfo.Filters, event, currentUserKeyPlaceholder, currentUserKeyPlaceholder) {
-				continue
-			}
-			keys = append(keys, masterKey)
-			break
-		}
+	for _, device := range pm.collectUserValidDevices("", event) {
+		keys = append(keys, device.GetMasterPublicKey())
 	}
-
 	return keys
-}
-
-func (pm *PushNotificationManager) collectTargetDevices(event *model.Event) (devices []*model.Event) {
-	const currentUserKeyPlaceholder = "current_user"
-
-	pm.deviceMutex.RLock()
-	defer pm.deviceMutex.RUnlock()
-
-	for _, alldevices := range pm.userDevicesMap {
-		for _, deviceInfo := range alldevices {
-			if !model.FiltersMatch(deviceInfo.Filters, event, currentUserKeyPlaceholder, currentUserKeyPlaceholder) {
-				continue
-			}
-			devices = append(devices, deviceInfo.Event)
-		}
-	}
-	return devices
 }
 
 func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {

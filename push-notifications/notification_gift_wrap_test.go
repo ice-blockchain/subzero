@@ -19,11 +19,10 @@ func helperCreateGiftWrapEvent(t *testing.T, id string, authorPubKey string, tag
 
 	return &model.Event{
 		Event: nostr.Event{
-			ID:      id,
-			PubKey:  authorPubKey,
-			Kind:    nostr.KindGiftWrap,
-			Content: "",
-			Tags:    tags,
+			ID:     id,
+			PubKey: authorPubKey,
+			Kind:   nostr.KindGiftWrap,
+			Tags:   tags,
 		},
 	}
 }
@@ -45,24 +44,15 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 	}
 
 	deviceTags := model.Tags{
+		{"b", recipientMasterPubKey},
 		{"t", "ios"},
 		{"d", deviceID},
-		{"relay", "wss://relay.example.com"},
+		{"relay", pm.relayURL},
 		{"token", "token1"},
 	}
 
 	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
-
-	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
-	require.True(t, ok, "Device should exist in userDevicesMap")
-
-	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-		pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
-	}
-	pm.userDevicesMap[recipientMasterPubKey][(deviceID)] = deviceInfo
-	pm.deviceMutex.Unlock()
 
 	t.Run("self recipient", func(t *testing.T) {
 		event := helperCreateGiftWrapEvent(
@@ -72,7 +62,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			model.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
 				{"p", "sender_pubkey", "", devicePubKey},
-				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+				{"expiration", nostr.Now().Add(time.Hour).String()},
 			},
 		)
 
@@ -89,7 +79,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			model.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
 				{"p", recipientMasterPubKey, ""},
-				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+				{"expiration", nostr.Now().Add(time.Hour).String()},
 			},
 		)
 
@@ -106,7 +96,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 			model.Tags{
 				{"k", strconv.Itoa(nostr.KindDirectMessage)},
 				{"p", recipientMasterPubKey, "", "unknown_device_pubkey"},
-				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+				{"expiration", nostr.Now().Add(time.Hour).String()},
 			},
 		)
 
@@ -151,24 +141,15 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			}
 
 			deviceTags := model.Tags{
+				{"b", recipientMasterPubKey},
 				{"t", "ios"},
 				{"d", deviceID},
-				{"relay", "wss://relay.example.com"},
+				{"relay", localPM.relayURL},
 				{"token", "token1"},
 			}
 
 			deviceEvent := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
 			require.NoError(t, localPM.processDeviceRegistrationEvent(deviceEvent))
-
-			localPM.deviceMutex.Lock()
-			deviceInfo, ok := localPM.userDevicesMap[devicePubKey][deviceID]
-			require.True(t, ok, "Device should exist in userDevicesMap")
-
-			if _, ok := localPM.userDevicesMap[recipientMasterPubKey]; !ok {
-				localPM.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
-			}
-			localPM.userDevicesMap[recipientMasterPubKey][deviceID] = deviceInfo
-			localPM.deviceMutex.Unlock()
 
 			eventID := "test_gift_wrap_" + tc.name
 			event := helperCreateGiftWrapEvent(
@@ -178,7 +159,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 				model.Tags{
 					{"k", strconv.Itoa(tc.kind)},
 					{"p", recipientMasterPubKey, "", devicePubKey},
-					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+					{"expiration", nostr.Now().Add(time.Hour).String()},
 				},
 			)
 
@@ -236,24 +217,27 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			}
 
 			deviceTags := model.Tags{
+				{"b", recipientMasterPubKey},
 				{"t", device.platform},
 				{"d", device.id},
-				{"relay", "wss://relay.example.com"},
+				{"relay", pm.relayURL},
 				{"token", "token_" + device.id},
 			}
 
 			deviceEvent := helperCreateTestDeviceRegistrationEvent(t, device.pubKey, device.id, deviceTags, filters)
 			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+			require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
-			pm.deviceMutex.Lock()
-			deviceInfo, ok := pm.userDevicesMap[device.pubKey][device.id]
-			require.True(t, ok, "Device should exist in userDevicesMap")
+			/*
+				pm.deviceMutex.Lock()
+				deviceInfo, ok := pm.userDevicesMap[device.pubKey][device.id]
+				require.True(t, ok, "Device should exist in userDevicesMap")
 
-			if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-				pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
-			}
-			pm.userDevicesMap[recipientMasterPubKey][device.id] = deviceInfo
-			pm.deviceMutex.Unlock()
+				if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
+					pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
+				}
+				pm.userDevicesMap[recipientMasterPubKey][device.id] = deviceInfo
+				pm.deviceMutex.Unlock()*/
 
 			event := helperCreateGiftWrapEvent(
 				t,
@@ -262,7 +246,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 				model.Tags{
 					{"k", strconv.Itoa(nostr.KindDirectMessage)},
 					{"p", recipientMasterPubKey, "", device.pubKey},
-					{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+					{"expiration", nostr.Now().Add(time.Hour).String()},
 				},
 			)
 
@@ -312,24 +296,16 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 	}
 
 	deviceTags := model.Tags{
+		{"b", recipientMasterPubKey},
 		{"t", "ios"},
 		{"d", deviceID},
-		{"relay", "wss://relay.example.com"},
+		{"relay", pm.relayURL},
 		{"token", "token1"},
 	}
 
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
-
-	pm.deviceMutex.Lock()
-	deviceInfo, ok := pm.userDevicesMap[devicePubKey][deviceID]
-	require.True(t, ok, "Device should exist in userDevicesMap")
-
-	if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-		pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
-	}
-	pm.userDevicesMap[recipientMasterPubKey][deviceID] = deviceInfo
-	pm.deviceMutex.Unlock()
+	require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 	t.Run("Reaction", func(t *testing.T) {
 		event := helperCreateGiftWrapEvent(
@@ -339,7 +315,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 			model.Tags{
 				{"k", strconv.Itoa(nostr.KindReaction)},
 				{"p", recipientMasterPubKey, "", devicePubKey},
-				{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},
+				{"expiration", nostr.Now().Add(time.Hour).String()},
 			},
 		)
 
@@ -383,23 +359,19 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 				Content: jsonContent,
 				PubKey:  devicePubKey,
 				Tags: model.Tags{
-					model.Tag{"b", userPubKey},
-					model.Tag{"d", deviceID},
-					model.Tag{"token", "test-token"},
-					model.Tag{"t", "ios"},
+					{"b", userPubKey},
+					{"d", deviceID},
+					{"relay", pm.relayURL},
+					{"token", "test-token"},
+					{"t", "ios"},
 				},
 			},
 		}
 
 		var filters model.Filters
 		require.NoError(t, json.Unmarshal([]byte(jsonContent), &filters))
-
-		deviceInfo := DeviceInfo{Filters: filters, Event: registrationEvent}
-
-		if _, ok := pm.userDevicesMap[userPubKey]; !ok {
-			pm.userDevicesMap[userPubKey] = make(map[string]DeviceInfo)
-		}
-		pm.userDevicesMap[userPubKey][deviceID] = deviceInfo
+		require.NoError(t, pm.processDeviceRegistrationEvent(registrationEvent))
+		require.Equal(t, 1, pm.devicesFilterIndex.Size(), "Should have one device in the index")
 
 		ev := &model.Event{
 			Event: nostr.Event{
@@ -407,11 +379,12 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 				Kind:   nostr.KindGiftWrap,
 				PubKey: "author-pubkey",
 				Tags: model.Tags{
-					model.Tag{"k", "14"},
-					model.Tag{"p", userPubKey, "", devicePubKey},
+					{"k", "14"},
+					{"p", userPubKey, "", devicePubKey},
 				},
 			},
 		}
+		require.True(t, filters.Match(&ev.Event), "Event should match the device filters")
 
 		notifications, err := pm.processEvent(t.Context(), ev)
 		require.NoError(t, err)
