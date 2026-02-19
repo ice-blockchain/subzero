@@ -430,7 +430,7 @@ func TestMatcherStorageIterators(t *testing.T) {
 		}))
 	}
 
-	t.Run("Shard iterator", func(t *testing.T) {
+	t.Run("Matcher iterator", func(t *testing.T) {
 		matcher := newEventMatcher[*model.Subscription]()
 		for _, sub := range subs {
 			matcher.Index(sub.Filters, sub)
@@ -481,6 +481,23 @@ func TestMatcherStorageIterators(t *testing.T) {
 				}
 			}
 			require.Zero(t, left)
+		})
+		t.Run("Partial Range", func(t *testing.T) {
+			left := subCount / 2
+			for range storage.Range() {
+				left--
+				if left == 0 {
+					break
+				}
+			}
+			require.Zero(t, left)
+		})
+		t.Run("Full Range", func(t *testing.T) {
+			var count int
+			for range storage.Range() {
+				count++
+			}
+			require.EqualValues(t, subCount, count)
 		})
 	})
 }

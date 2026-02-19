@@ -303,13 +303,18 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent4))
 
 		// Verify devices are registered.
-		pm.deviceMutex.RLock()
-		_, hasUser3 := pm.userDevicesMap[user3.PublicKey]
-		_, hasUser4 := pm.userDevicesMap[user4.PublicKey]
-		pm.deviceMutex.RUnlock()
+		require.Equal(t, 2, pm.devicesFilterIndex.Size()) // We should have 2 registered devices in total.
 
-		require.True(t, hasUser3, "User3 should have registered devices")
-		require.True(t, hasUser4, "User4 should have registered devices")
+		for dev := range pm.devicesFilterIndex.Range() {
+			switch dev.Event.ID {
+			case deviceEvent3.ID:
+				require.Equal(t, deviceEvent3, dev.Event)
+			case deviceEvent4.ID:
+				require.Equal(t, deviceEvent4, dev.Event)
+			default:
+				t.Fatalf("unexpected device event ID: %s", dev.Event.ID)
+			}
+		}
 	})
 
 	t.Run("Publish EditableTextNote from user1", func(t *testing.T) {

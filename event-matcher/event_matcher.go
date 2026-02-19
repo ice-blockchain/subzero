@@ -3,6 +3,8 @@
 package eventmatcher
 
 import (
+	"iter"
+
 	"github.com/RoaringBitmap/roaring/v2/roaring64"
 	"github.com/puzpuzpuz/xsync/v4"
 
@@ -217,7 +219,8 @@ func (s *matcher[V]) Get(ev *model.Event) (data []V) {
 	return data
 }
 
-// Lookup finds all values matching the given event and calls the callback for each match. It stops if the callback returns false.
+// Lookup finds all potentially matching values (NOT EXACT MATCH) for the given event by checking against the indexed filters and yields them through the provided callback function.
+// If the callback returns false, the lookup will stop early.
 func (s *matcher[V]) Lookup(ev *model.Event, cb func(V) bool) {
 	result := s.RoaringPool.Get()
 	defer s.RoaringPool.Put(result)
@@ -291,5 +294,14 @@ func (s *matcher[V]) Lookup(ev *model.Event, cb func(V) bool) {
 		if !cb(v.Value) {
 			break
 		}
+	}
+}
+
+// Range returns a sequence of all values currently indexed in the matcher.
+func (s *matcher[V]) Range() iter.Seq[V] {
+	return func(yield func(V) bool) {
+		s.Values.Range(func(key uint64, value entry[V]) bool {
+			return yield(value.Value)
+		})
 	}
 }

@@ -16,8 +16,6 @@ import (
 func TestHandleTokenizedCommunityEvent(t *testing.T) {
 	t.Parallel()
 
-	pm := helperNewManager(t)
-
 	t.Run("CreatorTokenCreated", func(t *testing.T) {
 		_, targetPubKey := model.GenerateKeyPair()
 		_, senderPubKey := model.GenerateKeyPair()
@@ -33,8 +31,14 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 			{"token", "testToken"},
 		}
 
-		deviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		pm := helperNewManager(t)
+		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+
+		_, subscriberPubKey := model.GenerateKeyPair()
+		subscriberDeviceID := rand.Text()
+		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
 
 		// Kind 31175 with t=community_token_action and k=0 (KindProfileMetadata) -> CreatorTokenCreated
 		event := &model.Event{
@@ -54,12 +58,18 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 		notifications, err := pm.handleTokenizedCommunityEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications, 2)
 
-		notification := notifications[0]
-		require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenCreated].Title, notification.Title)
-		require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenCreated].Body, notification.Body)
-		require.Equal(t, deviceEvent, notification.Target)
+		for _, notification := range notifications {
+			if notification.Target == ownerDeviceEvent {
+				require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenCreated].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenCreated].Body, notification.Body)
+			} else {
+				require.Equal(t, subscriberDeviceEvent, notification.Target)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneCreatorTokenCreated].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneCreatorTokenCreated].Body, notification.Body)
+			}
+		}
 	})
 
 	t.Run("ContentTokenCreated", func(t *testing.T) {
@@ -77,8 +87,14 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 			{"token", "testToken"},
 		}
 
-		deviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		pm := helperNewManager(t)
+		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+
+		_, subscriberPubKey := model.GenerateKeyPair()
+		subscriberDeviceID := rand.Text()
+		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
 
 		// Kind 31175 with t=community_token_action and k=1 (KindTextNote) -> ContentTokenCreated
 		event := &model.Event{
@@ -98,12 +114,18 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 		notifications, err := pm.handleTokenizedCommunityEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications, 2)
 
-		notification := notifications[0]
-		require.Equal(t, defaultTranslations[NotificationTypeContentTokenCreated].Title, notification.Title)
-		require.Equal(t, defaultTranslations[NotificationTypeContentTokenCreated].Body, notification.Body)
-		require.Equal(t, deviceEvent, notification.Target)
+		for _, notification := range notifications {
+			if notification.Target == ownerDeviceEvent {
+				require.Equal(t, defaultTranslations[NotificationTypeContentTokenCreated].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeContentTokenCreated].Body, notification.Body)
+			} else {
+				require.Equal(t, subscriberDeviceEvent, notification.Target)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneContentTokenCreated].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneContentTokenCreated].Body, notification.Body)
+			}
+		}
 	})
 
 	t.Run("CreatorTokenSwapped", func(t *testing.T) {
@@ -121,8 +143,14 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 			{"token", "testToken"},
 		}
 
-		deviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		pm := helperNewManager(t)
+		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+
+		_, subscriberPubKey := model.GenerateKeyPair()
+		subscriberDeviceID := rand.Text()
+		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
 
 		// Kind 1175 with tx_type=buy and a tag starting with "0:" (KindProfileMetadata) -> CreatorTokenSwapped
 		event := &model.Event{
@@ -146,12 +174,18 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 		notifications, err := pm.handleTokenizedCommunityEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications, 2)
 
-		notification := notifications[0]
-		require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenSwapped].Title, notification.Title)
-		require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenSwapped].Body, notification.Body)
-		require.Equal(t, deviceEvent, notification.Target)
+		for _, notification := range notifications {
+			if notification.Target == ownerDeviceEvent {
+				require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenSwapped].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeCreatorTokenSwapped].Body, notification.Body)
+			} else {
+				require.Equal(t, subscriberDeviceEvent, notification.Target)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneCreatorTokenSwapped].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneCreatorTokenSwapped].Body, notification.Body)
+			}
+		}
 	})
 
 	t.Run("ContentTokenSwapped", func(t *testing.T) {
@@ -169,8 +203,14 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 			{"token", "testToken"},
 		}
 
-		deviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		pm := helperNewManager(t)
+		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+
+		_, subscriberPubKey := model.GenerateKeyPair()
+		subscriberDeviceID := rand.Text()
+		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTags, filters)
+		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
 
 		// Kind 1175 with tx_type=buy and a tag starting with "1:" (KindTextNote) -> ContentTokenSwapped
 		event := &model.Event{
@@ -194,11 +234,17 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 		notifications, err := pm.handleTokenizedCommunityEvent(t.Context(), event)
 		require.NoError(t, err)
 		require.NotNil(t, notifications)
-		require.Len(t, notifications, 1)
+		require.Len(t, notifications, 2)
 
-		notification := notifications[0]
-		require.Equal(t, defaultTranslations[NotificationTypeContentTokenSwapped].Title, notification.Title)
-		require.Equal(t, defaultTranslations[NotificationTypeContentTokenSwapped].Body, notification.Body)
-		require.Equal(t, deviceEvent, notification.Target)
+		for _, notification := range notifications {
+			if notification.Target == ownerDeviceEvent {
+				require.Equal(t, defaultTranslations[NotificationTypeContentTokenSwapped].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeContentTokenSwapped].Body, notification.Body)
+			} else {
+				require.Equal(t, subscriberDeviceEvent, notification.Target)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneContentTokenSwapped].Title, notification.Title)
+				require.Equal(t, defaultTranslations[NotificationTypeSomeoneContentTokenSwapped].Body, notification.Body)
+			}
+		}
 	})
 }

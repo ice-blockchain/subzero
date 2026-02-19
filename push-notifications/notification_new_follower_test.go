@@ -137,9 +137,7 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
 
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
-	require.Len(t, pm.userDevicesMap, 1, "User should be added to the device map")
-	require.Contains(t, pm.userDevicesMap, targetPubKey, "User should be in the device map")
-	require.Len(t, pm.userDevicesMap[targetPubKey], 1, "User should have one device")
+	require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
 	require.NoError(t, err)
@@ -239,14 +237,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent3))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
-
-	require.Len(t, pm.userDevicesMap, 1, "Should have one user in the device map")
-	require.Contains(t, pm.userDevicesMap, targetPubKey, "User should be in the device map")
-	require.Len(t, pm.userDevicesMap[targetPubKey], 3, "User should have three devices")
-
-	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID1, "Device 1 should be in the map")
-	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID2, "Device 2 should be in the map")
-	require.Contains(t, pm.userDevicesMap[targetPubKey], deviceID3, "Device 3 should be in the map")
+	require.Equal(t, 3, pm.devicesFilterIndex.Size(), "Should have three devices in the filter index")
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
 	require.NoError(t, err)
@@ -508,14 +499,11 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 		filters,
 	)
 
-	pm.deviceMutex.Lock()
-	pm.userDevicesMap[targetPubKey] = map[string]DeviceInfo{
-		"device1_" + testSuffix: {
-			Filters: filters,
-			Event:   deviceEvent,
-		},
+	di := &DeviceInfo{
+		Filters: filters,
+		Event:   deviceEvent,
 	}
-	pm.deviceMutex.Unlock()
+	pm.devicesFilterIndex.Index(filters, di)
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey, profileEvent)
 	require.NoError(t, err)
@@ -646,11 +634,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent3))
 	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
-
-	require.Len(t, pm.userDevicesMap, 3, "Should have three users in device map")
-	require.Contains(t, pm.userDevicesMap, recipientPubKey1, "Should have recipient1 in device map")
-	require.Contains(t, pm.userDevicesMap, recipientPubKey2, "Should have recipient2 in device map")
-	require.Contains(t, pm.userDevicesMap, recipientPubKey3, "Should have recipient3 in device map")
+	require.Equal(t, 3, pm.devicesFilterIndex.Size(), "Should have three devices in the filter index")
 
 	initialEvent := &model.Event{
 		Event: nostr.Event{

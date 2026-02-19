@@ -433,13 +433,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 			require.NoError(t, pm.processDeviceRegistrationEvent(device))
 		}
 
-		require.Len(t, pm.userDevicesMap, 1, "Should have one user in cache")
-		require.Contains(t, pm.userDevicesMap, recipientPubKey, "User should be in cache")
-		require.Len(t, pm.userDevicesMap[recipientPubKey], 3, "User should have 3 devices")
-
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID1, "Device 1 should be in cache")
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID2, "Device 2 should be in cache")
-		require.Contains(t, pm.userDevicesMap[recipientPubKey], deviceID3, "Device 3 should be in cache")
+		require.Equal(t, 3, pm.devicesFilterIndex.Size(), "Should have three devices in the index")
 
 		require.NoError(t, query.AcceptEvents(t.Context(), messageEvent))
 
@@ -531,19 +525,16 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 		},
 	)
 
-	pm.deviceMutex.Lock()
-	pm.userDevicesMap[recipientPubKey] = map[string]DeviceInfo{
-		deviceID: {
-			Filters: model.Filters{
-				{
-					Kinds: []int{nostr.KindTextNote},
-					Tags:  model.TagMap{"p": []model.TagValues{{&recipientPubKey}}},
-				},
+	di := &DeviceInfo{
+		Filters: model.Filters{
+			{
+				Kinds: []int{nostr.KindTextNote},
+				Tags:  model.TagMap{"p": []model.TagValues{{&recipientPubKey}}},
 			},
-			Event: deviceEvent,
 		},
+		Event: deviceEvent,
 	}
-	pm.deviceMutex.Unlock()
+	pm.devicesFilterIndex.Index(di.Filters, di)
 
 	notifications, err := pm.createNotifications(
 		[]*model.Event{deviceEvent},
