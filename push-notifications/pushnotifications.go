@@ -104,6 +104,11 @@ const (
 
 	NotificationTypeSomeoneContentTokenCreated NotificationType = "someone_content_token_created"
 	NotificationTypeSomeoneContentTokenSwapped NotificationType = "someone_content_token_swapped"
+
+	NotificationTypeSomeonePost    NotificationType = "someone_post"
+	NotificationTypeSomeoneVideo   NotificationType = "someone_video"
+	NotificationTypeSomeoneArticle NotificationType = "someone_article"
+	NotificationTypeSomeoneStory   NotificationType = "someone_story"
 )
 
 var (
@@ -201,6 +206,26 @@ var (
 		NotificationTypeSomeoneContentTokenSwapped: {
 			Title:    `Someone Bought Another Person's Content Token`,
 			Body:     `Someone Bought Another Person's Content Token`,
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeonePost: {
+			Title:    "New post",
+			Body:     "New post from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneVideo: {
+			Title:    "New video",
+			Body:     "New video from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneArticle: {
+			Title:    "New article is out",
+			Body:     "New article from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneStory: {
+			Title:    "Quick update",
+			Body:     "New story from someone you enabled account notifications for",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 	}
