@@ -58,7 +58,7 @@ func (is *Storage[V]) Size() (size int) {
 	return size
 }
 
-// Lookup finds all values matching the given event and yields them through the provided callback function.
+// Lookup finds all possible candidates (NOT EXACT MATCH) for the given event by checking against the indexed filters.
 func (is *Storage[V]) Lookup(ev *model.Event) iter.Seq[V] {
 	return func(yield func(V) bool) {
 		for i := range is.shards {
@@ -71,6 +71,19 @@ func (is *Storage[V]) Lookup(ev *model.Event) iter.Seq[V] {
 			// Stop early if requested.
 			if !shouldContinue {
 				return
+			}
+		}
+	}
+}
+
+// Range returns a sequence of all values currently indexed in the storage.
+func (is *Storage[V]) Range() iter.Seq[V] {
+	return func(yield func(V) bool) {
+		for i := range is.shards {
+			for v := range is.shards[i].Range() {
+				if !yield(v) {
+					return
+				}
 			}
 		}
 	}
