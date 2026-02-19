@@ -228,17 +228,6 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
 			require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
-			/*
-				pm.deviceMutex.Lock()
-				deviceInfo, ok := pm.userDevicesMap[device.pubKey][device.id]
-				require.True(t, ok, "Device should exist in userDevicesMap")
-
-				if _, ok := pm.userDevicesMap[recipientMasterPubKey]; !ok {
-					pm.userDevicesMap[recipientMasterPubKey] = make(map[string]DeviceInfo)
-				}
-				pm.userDevicesMap[recipientMasterPubKey][device.id] = deviceInfo
-				pm.deviceMutex.Unlock()*/
-
 			event := helperCreateGiftWrapEvent(
 				t,
 				"test_gift_wrap_"+device.id,
