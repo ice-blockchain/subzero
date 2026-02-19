@@ -821,7 +821,7 @@ func (pm *PushNotificationManager) collectTargetMasterKeys(event *model.Event) (
 	for _, device := range pm.collectUserValidDevices("", event) {
 		keys = append(keys, device.GetMasterPublicKey())
 	}
-	return keys
+	return model.DeduplicateStringSlice(keys)
 }
 
 func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {

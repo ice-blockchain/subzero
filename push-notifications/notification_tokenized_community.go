@@ -124,7 +124,7 @@ func (pm *PushNotificationManager) handleTokenizedCommunityCreation(_ context.Co
 			Str("event_master_key", event.GetMasterPublicKey()).
 			Str("owner_master_key", ownerMasterKey).
 			Str("event_id", event.ID).
-			Msg("event master key is the same as owner master key for tokenized community definition, skipping avoid self-notifications")
+			Msg("event master key is the same as owner master key for tokenized community definition; skipping self-notifications")
 		return "", nil
 	}
 

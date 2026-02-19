@@ -3,6 +3,7 @@
 package pushnotifications
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,7 +28,7 @@ type (
 )
 
 func (d *DeviceInfo) Hash() uint64 {
-	return xxh3.HashString(d.Event.ID)
+	return xxh3.HashString(cmp.Or(d.Event.Tags.GetD(), d.Event.ID))
 }
 
 func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
@@ -85,15 +86,15 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 		Remote:  remote,
 	}
 
+	// Remove old device info from cache if exists to avoid duplicates and stale data.
+	if value, ok := pm.devicesEventMap.LoadAndDelete(deviceID); ok {
+		pm.devicesFilterIndex.Remove(&DeviceInfo{Event: value})
+	}
+
 	// If the relay URL in the event doesn't match the manager's relay URL for local device,
 	// It means the device registration event was created on another relay
 	// And we should just delete the device if it exists in the cache without adding the new one, since we won't be able to send notifications to it.
-	shouldDeleteFromCache := !remote && !model.CompareRelaysURLs(event.GetTag("relay").Value(), pm.relayURL)
-
-	if shouldDeleteFromCache {
-		if value, ok := pm.devicesEventMap.LoadAndDelete(deviceID); ok {
-			pm.devicesFilterIndex.Remove(&DeviceInfo{Event: value})
-		}
+	if !remote && !model.CompareRelaysURLs(event.GetTag("relay").Value(), pm.relayURL) {
 		return nil
 	}
 
