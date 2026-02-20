@@ -77,7 +77,6 @@ type (
 )
 
 const (
-	NotificationTypePost             NotificationType = "post"
 	NotificationTypeReaction         NotificationType = "reaction"
 	NotificationTypeRepost           NotificationType = "repost"
 	NotificationTypeMentionReply     NotificationType = "mention_reply"
@@ -121,11 +120,6 @@ var (
 		NotificationTypeRepost: {
 			Title:    "New repost",
 			Body:     "Someone reposted your post",
-			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
-		},
-		NotificationTypePost: {
-			Title:    "New post",
-			Body:     "Someone posted a new post",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeMentionReply: {
@@ -625,10 +619,16 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		} else if event.Kind == nostr.KindGenericRepost {
 			notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeRepost, relevantEvents...)
 			err = errors.Wrap(err, "failed to handle event for generic repost")
+		} else if event.Kind == model.CustomIONKindEditableTextNote && (event.GetTag("expiration").Value() != "" || event.GetTag("p").Value() == "") {
+			notifications, err = pm.handleNewPostEvent(ctx, event, relevantEvents...)
+			err = errors.Wrap(err, "failed to handle new story/post event")
 		} else {
 			notifications, err = pm.handleMentionReplyEvent(event, relevantEvents...)
 			err = errors.Wrap(err, "failed to handle mention reply/mention event")
 		}
+	case nostr.KindArticle:
+		notifications, err = pm.handleNewPostEvent(ctx, event, relevantEvents...)
+		err = errors.Wrap(err, "failed to handle article event")
 	case nostr.KindReaction:
 		notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeReaction, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle event for reaction")

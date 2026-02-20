@@ -68,6 +68,15 @@ func notificationTarget(e *model.Event) (masterPubKey string, deviceID string, r
 	return masterPubKey, deviceID, remote
 }
 
+func filterDevices(devices model.Events, event *model.Event, fn func(deviceEvent, event *model.Event) (keep bool)) (matchedDevices model.Events) {
+	for _, deviceEvent := range devices {
+		if fn(deviceEvent, event) {
+			matchedDevices = append(matchedDevices, deviceEvent)
+		}
+	}
+	return matchedDevices
+}
+
 func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.Event) error {
 	masterPubKey, deviceID, remote := notificationTarget(event)
 
