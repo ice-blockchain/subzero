@@ -51,7 +51,7 @@ func (pm *PushNotificationManager) handleGiftWrapEvent(event *model.Event) ([]*p
 	if devicePubKey == "" {
 		return nil, nil
 	}
-	deviceRegistrationEvents := pm.collectUserValidDevices(recipientMasterPubKey, event)
+	deviceRegistrationEvents := pm.collectLocalDevices(recipientMasterPubKey, event)
 	evIdx := slices.IndexFunc(deviceRegistrationEvents, func(ev *model.Event) bool {
 		return ev.PubKey == devicePubKey
 	})

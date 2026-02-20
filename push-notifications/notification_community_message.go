@@ -21,7 +21,7 @@ func (pm *PushNotificationManager) handleCommunityMessageEvent(ctx context.Conte
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get community notification type")
 	}
-	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
+	deviceEvents := pm.collectLocalDevices(referencePubkey, event)
 	notifications, err := pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create notifications")

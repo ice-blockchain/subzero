@@ -107,7 +107,7 @@ func BenchmarkCollectTargetDevices(b *testing.B) {
 
 			b.ResetTimer()
 			for b.Loop() {
-				_ = pm.collectUserValidDevices("", testEvent)
+				_ = pm.collectLocalDevices("", testEvent)
 			}
 		})
 	}

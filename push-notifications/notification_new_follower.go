@@ -32,7 +32,7 @@ func (pm *PushNotificationManager) createNewFollowerNotification(event *model.Ev
 		return nil, nil
 	}
 
-	devices := pm.collectUserValidDevices(recipientPubKey, event)
+	devices := pm.collectLocalDevices(recipientPubKey, event)
 	notifications, err := pm.createNotifications(devices, NotificationTypeNewFollower, event, relevantEvents...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create new follower notification")

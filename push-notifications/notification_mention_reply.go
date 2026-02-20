@@ -24,7 +24,7 @@ func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, r
 			continue
 		}
 		processedPubkeys[pubkey] = true
-		devices := pm.collectUserValidDevices(pubkey, event)
+		devices := pm.collectLocalDevices(pubkey, event)
 		pubkeyNotifications, err := pm.createNotifications(devices, NotificationTypeMentionReply, event, relevantEvents...)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create notifications")
@@ -39,7 +39,7 @@ func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, r
 			continue
 		}
 		processedPubkeys[pTag.Value()] = true
-		devices := pm.collectUserValidDevices(pTag.Value(), event)
+		devices := pm.collectLocalDevices(pTag.Value(), event)
 		pubkeyNotifications, err := pm.createNotifications(devices, NotificationTypeMentionReply, event, relevantEvents...)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create notifications")

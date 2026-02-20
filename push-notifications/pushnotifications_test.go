@@ -260,7 +260,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 	pm := helperNewManager(t)
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
-		devices := pm.collectUserValidDevices("non-existent-user", &model.Event{})
+		devices := pm.collectLocalDevices("non-existent-user", &model.Event{})
 		require.Nil(t, devices)
 	})
 
@@ -296,7 +296,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 		deviceInfo := DeviceInfo{Filters: filters, Event: deviceEvent}
 		pm.devicesFilterIndex.Index(filters, &deviceInfo)
 
-		devices := pm.collectUserValidDevices(pubKey, event)
+		devices := pm.collectLocalDevices(pubKey, event)
 
 		require.Len(t, devices, 1)
 		require.Equal(t, deviceEvent, devices[0])

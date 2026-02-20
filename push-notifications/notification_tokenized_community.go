@@ -143,7 +143,7 @@ func (pm *PushNotificationManager) handleTokenizedCommunityCreation(_ context.Co
 
 func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Context, event *model.Event, relevantEvents ...*model.Event) (notifications []*pn.Notification[*model.Event], err error) {
 	// Collect devices without filtering by master key as we need all of them to determine type of notification to create.
-	devices := pm.collectUserValidDevices("", event)
+	devices := pm.collectLocalDevices("", event)
 	if len(devices) == 0 {
 		log.Trace().
 			Str("context", "PUSH_NOTIFICATION").

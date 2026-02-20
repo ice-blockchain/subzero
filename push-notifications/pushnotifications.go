@@ -329,6 +329,7 @@ func (pnm *PushNotificationManager) registerWorkers() {
 		rq.RegisterWorker(reg, &broadcasterBroadcastWorker{Manager: pnm})
 		rq.RegisterWorker(reg, &broadcasterUserNotificationWorker{Manager: pnm})
 		rq.RegisterWorker(reg, &broadcasterPushNotificationWorker{Manager: pnm})
+		rq.RegisterWorker(reg, &broadcasterPushNotificationRemoteWorker{Manager: pnm})
 	}
 }
 
@@ -466,16 +467,23 @@ func (pm *PushNotificationManager) AcceptEventsFromBroadcast(ctx context.Context
 	)
 }
 
-func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context, events []*model.Event) error {
+func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context, events model.Events) error {
 	if len(events) == 0 {
 		return nil
 	}
+
+	batchID := events.Hash()
+
 	return errors.Wrapf(
 		pm.rq.Push(
 			ctx,
 			&broadcasterRelayFinderWorkerArgs{
 				Events:  events,
-				BatchID: model.Events(events).Hash(),
+				BatchID: batchID,
+			},
+			&broadcasterPushNotificationRemoteWorkerArgs{
+				Events:  events,
+				BatchID: batchID,
 			},
 		),
 		"failed to push a job for broadcasting %d events",
@@ -818,10 +826,14 @@ func (pm *PushNotificationManager) createNotifications(
 	return notifications, nil
 }
 
-func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event *model.Event) (devices model.Events) {
+func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool, event *model.Event) (devices model.Events) {
 	for deviceInfo := range pm.devicesFilterIndex.Lookup(event) {
 		// If set, pubKey indicates that we should only consider devices registered with this public key.
 		if pubKey != "" && deviceInfo.Event.GetMasterPublicKey() != pubKey && deviceInfo.Event.PubKey != pubKey {
+			continue
+		}
+
+		if deviceInfo.Remote != remote {
 			continue
 		}
 
@@ -839,11 +851,19 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event 
 	return devices
 }
 
+func (pm *PushNotificationManager) collectRemoteDevices(pubKey string, event *model.Event) (devices model.Events) {
+	return pm.collectUserDevices(pubKey, true, event)
+}
+
+func (pm *PushNotificationManager) collectLocalDevices(pubKey string, event *model.Event) (devices model.Events) {
+	return pm.collectUserDevices(pubKey, false, event)
+}
+
 // collectTargetMasterKeys iterates through all registered user devices and identifies
 // which master keys (users) have at least one device with filters matching the provided event.
 // It returns a slice of master keys for users who should receive a notification for the event.
 func (pm *PushNotificationManager) collectTargetMasterKeys(event *model.Event) (keys []string) {
-	for _, device := range pm.collectUserValidDevices("", event) {
+	for _, device := range pm.collectLocalDevices("", event) {
 		keys = append(keys, device.GetMasterPublicKey())
 	}
 	return model.DeduplicateStringSlice(keys)
@@ -854,7 +874,7 @@ func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, 
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil, nil
 	}
-	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
+	deviceEvents := pm.collectLocalDevices(referencePubkey, event)
 
 	return pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
 }
@@ -870,7 +890,7 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 	} else {
 		return nil, nil
 	}
-	devices := pm.collectUserValidDevices(referencePubkey, event)
+	devices := pm.collectLocalDevices(referencePubkey, event)
 	if len(devices) == 0 {
 		return nil, nil
 	}
