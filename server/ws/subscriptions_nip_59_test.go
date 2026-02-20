@@ -91,8 +91,8 @@ func TestSelfChat(t *testing.T) {
 		{
 			Kinds: []int{nostr.KindGiftWrap},
 			Tags: model.TagMap{}.
-				Append("k", model.PointerOf("1")).
-				Append("k", model.PointerOf("42")),
+				Append("k", new("1")).
+				Append("k", new("42")),
 		},
 	})
 	require.NoError(t, err)

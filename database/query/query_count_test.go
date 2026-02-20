@@ -302,7 +302,7 @@ func TestEventCounters(t *testing.T) {
 			require.NoError(t, db.AcceptEvents(t.Context(), &ev))
 			// Total: root + reply.
 			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.SetLiterals("e", "1rp")})
-			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.Set("e", model.PointerOf("1rp"), nil, model.PointerOf("reply"))})
+			helperMustBePrecalculatedCount(t, db, 2, model.Filter{Kinds: []int{nostr.KindTextNote}, Tags: model.TagMap{}.Set("e", new("1rp"), nil, new("reply"))})
 		})
 		t.Run("Repost with multiple E tags", func(t *testing.T) {
 			var ev model.Event

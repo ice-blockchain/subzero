@@ -922,7 +922,7 @@ func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, e
 	relayTag := model.TagMap{}.Set("r", &pm.relayURL)
 	if u, err := url.Parse(pm.relayURL); err == nil && u.Port() != "" {
 		u.Host = u.Hostname()
-		relayTag = relayTag.Append("r", model.PointerOf(u.String()))
+		relayTag = relayTag.Append("r", new(u.String()))
 	}
 
 	it := query.GetStoredEvents(ctx,

@@ -847,7 +847,7 @@ func helperMustGetPrecalculatedCounters(t *testing.T, db *dbClient, filters ...m
 	)
 	if errors.Is(err, connector.ErrNotFound) {
 		err = nil
-		counter = model.PointerOf[int64](0)
+		counter = new(int64(0))
 	}
 	require.NoErrorf(t, err, "failed to prepare statement where: %v", where)
 	require.NotNil(t, counter)
@@ -960,7 +960,7 @@ func TestFilterTagsNegative(t *testing.T) {
 	})
 	t.Run("Tags", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
-			Tags: model.TagMap{}.Set("!e", nil, nil, model.PointerOf("root")),
+			Tags: model.TagMap{}.Set("!e", nil, nil, new("root")),
 		})
 		require.Len(t, events, 1)
 		require.Equal(t, "2id", events[0].ID)
@@ -979,8 +979,8 @@ func TestGetReplyTypeFromValues(t *testing.T) {
 	require.Empty(t, getReplyTypeFromValues([]model.TagValues{}))
 	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{}}))
 	require.Empty(t, getReplyTypeFromValues([]model.TagValues{{nil, nil}}))
-	require.Equal(t, "root", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("root")}}))
-	require.Equal(t, "reply", getReplyTypeFromValues([]model.TagValues{{nil, nil, model.PointerOf("reply")}}))
+	require.Equal(t, "root", getReplyTypeFromValues([]model.TagValues{{nil, nil, new("root")}}))
+	require.Equal(t, "reply", getReplyTypeFromValues([]model.TagValues{{nil, nil, new("reply")}}))
 }
 
 func TestCommunityEventsLookup(t *testing.T) {
@@ -1133,8 +1133,8 @@ func TestLookupByLanuage(t *testing.T) {
 	filters := model.Filters{
 		{
 			Tags: model.TagMap{}.
-				Set("l", model.PointerOf("en"), model.PointerOf(model.LangISO)).
-				Append("l", model.PointerOf("fr"), model.PointerOf(model.LangISO)),
+				Set("l", new("en"), new(model.LangISO)).
+				Append("l", new("fr"), new(model.LangISO)),
 		},
 	}
 	t.Logf("filters: %s", filters.String())

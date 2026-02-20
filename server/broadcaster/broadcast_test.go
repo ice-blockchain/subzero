@@ -80,7 +80,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 				require.Len(t, msg.Events, 1)
 				require.Equal(t, nostr.KindClientAuthentication, msg.Events[0].Kind)
 				require.NoError(t, conn.WriteJSON(&nostr.AuthEnvelope{
-					Challenge: model.PointerOf(authChallenge),
+					Challenge: new(authChallenge),
 				}))
 				require.NoError(t, conn.WriteJSON(&nostr.OKEnvelope{
 					EventID: msg.Events[0].ID,

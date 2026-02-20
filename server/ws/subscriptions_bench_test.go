@@ -60,7 +60,7 @@ func BenchmarkAuthLoadAndBroadcast(b *testing.B) {
 			Filters: model.Filters{
 				{
 					Kinds: []int{nostr.KindTextNote},
-					Since: model.PointerOf(nostr.Now().Add(time.Hour)),
+					Since: new(nostr.Now().Add(time.Hour)),
 				},
 			},
 		})

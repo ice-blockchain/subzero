@@ -240,7 +240,7 @@ func getGiftWrapFilterIndex(filters model.Filters) int {
 }
 
 func isValidGiftWrapFilter(filter model.Filter, master, device string) bool {
-	expectedTags := model.TagValues{&master, model.PointerOf(""), &device}
+	expectedTags := model.TagValues{&master, new(""), &device}
 	return slices.CompareFunc(filter.Tags["p"][0], expectedTags, compareStringPointers) == 0
 }
 
@@ -391,7 +391,7 @@ func (h *handler) handleReq(ctx context.Context, respWriter Writer, sub *model.S
 		return errors.Join(err, h.closeSubscriptionWithReason(ctx, respWriter, sub, err.Error()))
 	}
 
-	err = h.writeResponse(ctx, respWriter, model.PointerOf(nostr.EOSEEnvelope(sub.ID)))
+	err = h.writeResponse(ctx, respWriter, new(nostr.EOSEEnvelope(sub.ID)))
 	if err != nil {
 		return errors.Wrap(err, "failed to write EOS message")
 	}
