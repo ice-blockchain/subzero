@@ -82,9 +82,9 @@ func (w *broadcasterPushNotificationRemoteWorker) Work(ctx context.Context, job 
 	var nextJobArgs []rq.JobArgs
 	for relayURL, events := range targets {
 		nextJobArgs = append(nextJobArgs, &broadcasterBroadcastWorkerArgs{
-			RelayURL: relayURL,
-			BatchID:  job.Args.BatchID,
-			Events:   events,
+			RelayURL:        relayURL,
+			BatchID:         job.Args.BatchID,
+			EphemeralEvents: events,
 		})
 	}
 

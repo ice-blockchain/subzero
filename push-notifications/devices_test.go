@@ -72,7 +72,7 @@ func TestProcessDeviceRegistrationEventBasic(t *testing.T) {
 		require.Equal(t, 1, pm.devicesFilterIndex.Size())
 		require.Equal(t, 1, pm.devicesEventMap.Size())
 
-		dev, ok := pm.devicesEventMap.Load(deviceID)
+		dev, ok := pm.devicesEventMap.Load(calcDeviceKey(event))
 		require.True(t, ok)
 		require.Equal(t, event, dev)
 

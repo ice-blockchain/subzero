@@ -40,7 +40,7 @@ type (
 		rq                     rq.Client
 		broadcaster            eventBroadcaster
 		devicesFilterIndex     *em.Storage[*DeviceInfo]
-		devicesEventMap        *xsync.Map[string, *model.Event] // Device ID -> Device Registration Event.
+		devicesEventMap        *xsync.Map[string, *model.Event] // D tag -> Device Registration Event.
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
@@ -224,6 +224,7 @@ var (
 		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
+		nostr.KindArticle:                               {},
 		nostr.KindTextNote:                              {},
 		model.CustomIONKindEditableTextNote:             {},
 		nostr.KindGenericRepost:                         {},
@@ -432,7 +433,6 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 		globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events),
 		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
 	)
-
 	return errors.Wrap(err, "failed to process events")
 
 }
@@ -775,7 +775,7 @@ func (pm *PushNotificationManager) createNotifications(
 		return nil, nil
 	}
 
-	notifications := make([]*pn.Notification[*model.Event], 0)
+	notifications := make([]*pn.Notification[*model.Event], 0, len(deviceRegistrationEvents))
 	defaultTranslation := pm.getTranslation(notificationType)
 
 	compressedEvent, err := pm.compressAndEncodeBase64(incomingEvent.String())
@@ -796,7 +796,7 @@ func (pm *PushNotificationManager) createNotifications(
 	var deviceEventIDs []string
 	for _, event := range deviceRegistrationEvents {
 		deviceEventIDs = append(deviceEventIDs, event.ID)
-		data := map[string]interface{}{
+		data := map[string]any{
 			"compression": CompressionMethodZlib,
 			"event":       compressedEvent,
 		}

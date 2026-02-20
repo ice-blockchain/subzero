@@ -6,21 +6,13 @@ import (
 	"context"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ice-blockchain/subzero/model"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
 func (pm *PushNotificationManager) handleNewPostEvent(_ context.Context, event *model.Event, relevantEvents ...*model.Event) (notifications []*pn.Notification[*model.Event], err error) {
-	authorMasterKey := event.GetMasterPublicKey()
-	devices := filterDevices(pm.collectLocalDevices("", event), event, func(deviceEvent, _ *model.Event) bool {
-		return deviceEvent.GetMasterPublicKey() != authorMasterKey // Don't notify the author of the article.
-	})
-
-	if len(devices) == 0 {
-		return nil, nil
-	}
-
 	var notificationType NotificationType
 	switch event.Kind {
 	case nostr.KindArticle:
@@ -35,8 +27,23 @@ func (pm *PushNotificationManager) handleNewPostEvent(_ context.Context, event *
 		default:
 			notificationType = NotificationTypeSomeonePost
 		}
+	}
 
-	default:
+	if notificationType == "" {
+		log.Trace().
+			Str("context", "PUSH-NOTIFICATIONS").
+			Int("kind", event.Kind).
+			Str("event_id", event.ID).
+			Msg("ignoring event with unsupported kind for post notifications")
+		return nil, nil
+	}
+
+	authorMasterKey := event.GetMasterPublicKey()
+	devices := filterDevices(pm.collectLocalDevices("", event), event, func(deviceEvent, _ *model.Event) bool {
+		return deviceEvent.GetMasterPublicKey() != authorMasterKey // Don't notify the author of the article.
+	})
+
+	if len(devices) == 0 {
 		return nil, nil
 	}
 

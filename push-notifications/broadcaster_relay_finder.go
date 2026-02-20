@@ -134,9 +134,9 @@ func (w *broadcasterRelayFinderWorker) Work(ctx context.Context, job *rq.Job[bro
 	broadcastArgs := make([]rq.JobArgs, 0, len(targets))
 	for relayURL := range targets {
 		broadcastArgs = append(broadcastArgs, &broadcasterBroadcastWorkerArgs{
-			RelayURL: relayURL,
-			BatchID:  job.Args.BatchID,
-			Events:   broadcastEvents,
+			RelayURL:        relayURL,
+			BatchID:         job.Args.BatchID,
+			EphemeralEvents: broadcastEvents,
 		})
 	}
 

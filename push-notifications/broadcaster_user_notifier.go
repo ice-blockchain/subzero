@@ -30,10 +30,17 @@ func (broadcasterPushNotificationWorkerArgs) Kind() string {
 	return "pn_broadcaster_push_notification_worker_args"
 }
 
+func (broadcasterPushNotificationWorker) deviceKey(ev *model.Event) string {
+	if ev == nil {
+		return ""
+	}
+	return ev.PubKey
+}
+
 func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Job[broadcasterPushNotificationWorkerArgs]) error {
 	log.Debug().Str("context", "PUSH_NOTIFICATIONS").
 		Str("master_public_key", job.Args.MasterPublicKey).
-		Str("device_public_key", job.Args.Device.PubKey).
+		Str("device_public_key", w.deviceKey(job.Args.Device)).
 		Int("events_count", len(job.Args.Events)).
 		Str("batch", job.Args.BatchID).
 		Msg("starting broadcaster push notification worker")
@@ -48,9 +55,11 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 	}
 
 	var singleNotificationsFiltered []*pn.Notification[*model.Event]
+	var filteredCount int
 	if job.Args.Device != nil {
 		for _, n := range singleNotifications {
 			if n.Target.PubKey != job.Args.Device.PubKey {
+				filteredCount++
 				continue
 			}
 
@@ -64,8 +73,9 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		log.Trace().
 			Str("context", "PUSH_NOTIFICATIONS").
 			Str("master_public_key", job.Args.MasterPublicKey).
-			Str("device_public_key", job.Args.Device.PubKey).
+			Str("device_public_key", w.deviceKey(job.Args.Device)).
 			Int("events_count", len(job.Args.Events)).
+			Int("filtered_count", filteredCount).
 			Str("batch", job.Args.BatchID).
 			Msg("no notifications to send for this device and user")
 		return nil

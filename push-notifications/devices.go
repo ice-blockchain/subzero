@@ -27,8 +27,12 @@ type (
 	}
 )
 
+func calcDeviceKey(event *model.Event) string {
+	return cmp.Or(event.Tags.GetD(), event.ID)
+}
+
 func (d *DeviceInfo) Hash() uint64 {
-	return xxh3.HashString(cmp.Or(d.Event.Tags.GetD(), d.Event.ID))
+	return xxh3.HashString(calcDeviceKey(d.Event))
 }
 
 func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
@@ -96,9 +100,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	}
 
 	// Remove old device info from cache if exists to avoid duplicates and stale data.
-	if value, ok := pm.devicesEventMap.LoadAndDelete(deviceID); ok {
-		pm.devicesFilterIndex.Remove(&DeviceInfo{Event: value})
-	}
+	pm.removeDeviceFromCache(event)
 
 	// If the relay URL in the event doesn't match the manager's relay URL for local device,
 	// It means the device registration event was created on another relay
@@ -107,16 +109,14 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 		return nil
 	}
 
-	pm.devicesEventMap.Store(deviceID, event)
+	pm.devicesEventMap.Store(calcDeviceKey(event), event)
 	pm.devicesFilterIndex.Index(filters, &deviceInfo)
 
 	return nil
 }
 
 func (pm *PushNotificationManager) removeDeviceFromCache(event *model.Event) {
-	_, deviceID, _ := notificationTarget(event)
-
-	if value, ok := pm.devicesEventMap.LoadAndDelete(deviceID); ok {
+	if value, ok := pm.devicesEventMap.LoadAndDelete(calcDeviceKey(event)); ok {
 		pm.devicesFilterIndex.Remove(&DeviceInfo{Event: value})
 	}
 }
