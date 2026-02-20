@@ -15,7 +15,6 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/push-notifications/internal"
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/ice-blockchain/subzero/rq"
 )
@@ -36,7 +35,7 @@ type (
 	}
 	mockNotificationClient struct {
 		T    testing.TB
-		Chan chan *internal.Notification[*model.Event]
+		Chan chan *pn.Notification[*model.Event]
 	}
 )
 
@@ -61,7 +60,7 @@ func (m *mockNotificationClient) Reset() {
 	}
 }
 
-func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *internal.Notification[*model.Event]) error {
+func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *pn.Notification[*model.Event]) error {
 	select {
 	case m.Chan <- notification:
 		m.T.Logf("Mock SendSingle to device %s for master public key %s", notification.Target.PubKey, notification.Target.GetMasterPublicKey())
@@ -71,7 +70,7 @@ func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *i
 	}
 }
 
-func (m *mockNotificationClient) SendTopic(ctx context.Context, notification *internal.Notification[internal.SubscriptionTopic]) error {
+func (m *mockNotificationClient) SendTopic(ctx context.Context, notification *pn.Notification[pn.SubscriptionTopic]) error {
 	m.T.Fatalf("unexpected call to SendTopic with topic: %v", notification.Target)
 	return nil
 }
