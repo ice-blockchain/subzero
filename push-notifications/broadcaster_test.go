@@ -214,11 +214,26 @@ func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient
 	}
 }
 
+func helperNewRiverConfig(t testing.TB, m *PushNotificationManager, ID string) *rq.Config {
+	t.Helper()
+
+	require.NotNil(t, testGlobalDatabaseConfig)
+	localConf := *testGlobalDatabaseConfig
+
+	require.NotNil(t, m)
+	require.NotEmpty(t, ID)
+
+	localConf.RelayURL = m.relayURL
+	localConf.PrivateKey = m.privateKey
+
+	return &rq.Config{
+		Config: localConf,
+		ID:     ID,
+	}
+}
+
 func TestNotificationBroadcastEndToEnd(t *testing.T) {
 	t.Parallel()
-
-	addr, release := query.NewTestDatabase(t.Context())
-	defer release()
 
 	mockNotificationClient := &mockNotificationClient{
 		T:    t,
@@ -228,17 +243,7 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 	pm := helperNewManager(t)
 	pm.pushNotificationClient = internal.Client(mockNotificationClient)
 
-	dbConf := query.Config{
-		PrivateKey: pm.privateKey,
-		RelayURL:   pm.relayURL,
-		WriteURLs:  []string{addr},
-	}
-	query.MustInit(t.Context(), query.WithConfig(&dbConf))
-
-	pm.rq = rq.MustNewClient(t.Context(), rq.WithConfig(&rq.Config{
-		Config: dbConf,
-		ID:     "pn-test-e2e",
-	}))
+	pm.rq = rq.MustNewClient(t.Context(), rq.WithConfig(helperNewRiverConfig(t, pm, "pn-broadcaster-e2e-test")))
 	pm.registerWorkers()
 
 	require.NoError(t, pm.rq.Start(t.Context()))

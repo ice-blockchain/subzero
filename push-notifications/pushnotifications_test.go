@@ -966,5 +966,5 @@ func TestProcessEventWithReaction(t *testing.T) {
 func helperCreateTestAntsPool(t testing.TB) *ants.Pool {
 	t.Helper()
 
-	return globalTestAntsPool
+	return testGlobalAntsPool
 }
