@@ -15,9 +15,9 @@ import (
 
 type (
 	broadcasterBroadcastWorkerArgs struct {
-		RelayURL string       `json:"relay_url"`
-		BatchID  string       `json:"batch_id"`
-		Events   model.Events `json:"events"`
+		RelayURL        string       `json:"relay_url"`
+		BatchID         string       `json:"batch_id"`
+		EphemeralEvents model.Events `json:"events"`
 	}
 	broadcasterBroadcastWorker struct {
 		rq.WorkerDefaults[broadcasterBroadcastWorkerArgs]
@@ -33,20 +33,20 @@ func (w *broadcasterBroadcastWorker) Work(ctx context.Context, job *rq.Job[broad
 	log.Debug().Str("context", "PUSH_NOTIFICATIONS").
 		Str("batch", job.Args.BatchID).
 		Str("relay_url", job.Args.RelayURL).
-		Int("events_count", len(job.Args.Events)).
+		Int("events_count", len(job.Args.EphemeralEvents)).
 		Msg("starting broadcaster broadcast worker")
 
 	start := time.Now()
-	err := w.Manager.broadcaster.BroadcastTo(ctx, job.Args.RelayURL, job.Args.Events)
+	err := w.Manager.broadcaster.BroadcastTo(ctx, job.Args.RelayURL, job.Args.EphemeralEvents)
 	spent := time.Since(start)
 	if err != nil {
-		return errors.Wrapf(err, "failed to broadcast %d events to relay %s", len(job.Args.Events), job.Args.RelayURL)
+		return errors.Wrapf(err, "failed to broadcast %d events to relay %s", len(job.Args.EphemeralEvents), job.Args.RelayURL)
 	}
 
 	log.Debug().Str("context", "PUSH_NOTIFICATIONS").
 		Str("batch", job.Args.BatchID).
 		Str("relay_url", job.Args.RelayURL).
-		Int("events_count", len(job.Args.Events)).
+		Int("events_count", len(job.Args.EphemeralEvents)).
 		Dur("time_spent", spent).
 		Msg("finished broadcaster broadcast worker")
 

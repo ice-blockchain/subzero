@@ -984,8 +984,8 @@ func TestQueryReply(t *testing.T) {
 	t.Run("Filter", func(t *testing.T) {
 		events := helperSelectEvents(t, db, model.Filter{
 			Tags: model.TagMap{}.
-				Set("e", nil, nil, model.PointerOf("reply")).
-				Append("e", nil, nil, model.PointerOf("root")),
+				Set("e", nil, nil, new("reply")).
+				Append("e", nil, nil, new("root")),
 		})
 		require.Len(t, events, 2)
 	})
@@ -1294,7 +1294,7 @@ func TestEditablePostFlow(t *testing.T) {
 		})
 		helperMustBePrecalculatedCount(t, db, 2, model.Filter{
 			Kinds: []int{nostr.KindArticle},
-			Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("reply")),
+			Tags:  model.TagMap{}.Set("a", &postAddress, nil, new("reply")),
 		})
 
 		t.Run("Delete reply1", func(t *testing.T) {
@@ -1313,7 +1313,7 @@ func TestEditablePostFlow(t *testing.T) {
 			})
 			helperMustBePrecalculatedCount(t, db, 1, model.Filter{
 				Kinds: []int{nostr.KindArticle},
-				Tags:  model.TagMap{}.Set("a", &postAddress, nil, model.PointerOf("reply")),
+				Tags:  model.TagMap{}.Set("a", &postAddress, nil, new("reply")),
 			})
 		})
 	})
@@ -1803,7 +1803,7 @@ func TestSoftDeletedReplies(t *testing.T) {
 	mainPostAddress := mainPost.Address()
 	helperMustBePrecalculatedCount(t, db, 1, model.Filter{
 		Kinds: []int{model.CustomIONKindEditableTextNote},
-		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, model.PointerOf("reply")),
+		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, new("reply")),
 	})
 
 	// Soft delete the reply.
@@ -1824,7 +1824,7 @@ func TestSoftDeletedReplies(t *testing.T) {
 	// Check that reply counter is now zero.
 	helperMustBePrecalculatedCount(t, db, 0, model.Filter{
 		Kinds: []int{model.CustomIONKindEditableTextNote},
-		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, model.PointerOf("reply")),
+		Tags:  model.TagMap{}.Set("a", &mainPostAddress, nil, new("reply")),
 	})
 }
 

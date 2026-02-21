@@ -298,8 +298,6 @@ func SplitBatch[T any](slice []T, batchSize int) (batches [][]T) {
 	return append(batches, slice)
 }
 
-func PointerOf[T any](v T) *T { return &v }
-
 func ParseEphemeralEmbeddingEvents(events ...*Event) (map[string][]*EphemeralEmbeddingEvent, error) {
 	ephemeralEmbeddingEventsByAddr := make(map[string][]*EphemeralEmbeddingEvent, len(events))
 	for _, ev := range events {

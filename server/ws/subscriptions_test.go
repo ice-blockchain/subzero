@@ -318,7 +318,7 @@ func TestRelayMultiEventsAndFilter(t *testing.T) {
 		model.Filter{
 			Kinds: []int{nostr.KindTextNote},
 			Tags: model.TagMap{}.
-				Set("e", model.PointerOf("bar"), nil, model.PointerOf("reply")),
+				Set("e", new("bar"), nil, new("reply")),
 		})
 	require.NoError(t, err)
 
@@ -413,7 +413,7 @@ func TestSubscriptionMostRelevantFollowers(t *testing.T) {
 	t.Run("Request", func(t *testing.T) {
 		helperQueryEventsWithOptions(t, relay.Relay, []nostr.SubscriptionOption{nostr.WithDoNotCheckFilters()}, model.Filter{
 			Search: model.ExtensionTextMRF,
-			Tags:   model.TagMap{}.Set("p", model.PointerOf("foo")).Append("p", model.PointerOf("bar")),
+			Tags:   model.TagMap{}.Set("p", new("foo")).Append("p", new("bar")),
 		})
 	})
 	helperMustCloseRelay(t, relay)

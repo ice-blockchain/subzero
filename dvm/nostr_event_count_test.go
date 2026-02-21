@@ -601,7 +601,7 @@ func TestEventCountersConsistency(t *testing.T) {
 				reqDVM.Content = model.Filters{
 					{
 						Kinds: []int{1},
-						Tags:  model.TagMap{}.Set("e", &events[0].ID, nil, model.PointerOf(model.TagMarkerReply)),
+						Tags:  model.TagMap{}.Set("e", &events[0].ID, nil, new(model.TagMarkerReply)),
 					}}.String()
 			},
 			Events: func(t *testing.T, d *dvm) []*model.Event {

@@ -55,7 +55,7 @@ func (w *broadcasterUserNotificationWorker) Work(ctx context.Context, job *rq.Jo
 
 	targets := make(map[string]*broadcasterPushNotificationWorkerArgs) // Device key -> Events.
 	for _, event := range decodedEvents {
-		devices := w.Manager.collectUserValidDevices("", event)
+		devices := w.Manager.collectLocalDevices("", event)
 		for _, device := range devices {
 			args, exists := targets[device.PubKey]
 			if !exists {
@@ -73,7 +73,7 @@ func (w *broadcasterUserNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		Str("context", "PUSH_NOTIFICATIONS").
 		Str("batch", job.Args.BatchID).
 		Int("unique_devices_count", len(targets)).
-		Msg("collected target devices for push notifications")
+		Msg("collected local devices for push notifications")
 
 	tasks := make([]rq.JobArgs, 0, len(targets))
 	for _, args := range targets {

@@ -260,7 +260,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 	pm := helperNewManager(t)
 
 	t.Run("Returns nil when user has no devices", func(t *testing.T) {
-		devices := pm.collectUserValidDevices("non-existent-user", &model.Event{})
+		devices := pm.collectLocalDevices("non-existent-user", &model.Event{})
 		require.Nil(t, devices)
 	})
 
@@ -296,7 +296,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 		deviceInfo := DeviceInfo{Filters: filters, Event: deviceEvent}
 		pm.devicesFilterIndex.Index(filters, &deviceInfo)
 
-		devices := pm.collectUserValidDevices(pubKey, event)
+		devices := pm.collectLocalDevices(pubKey, event)
 
 		require.Len(t, devices, 1)
 		require.Equal(t, deviceEvent, devices[0])
@@ -966,5 +966,58 @@ func TestProcessEventWithReaction(t *testing.T) {
 func helperCreateTestAntsPool(t testing.TB) *ants.Pool {
 	t.Helper()
 
-	return globalTestAntsPool
+	return testGlobalAntsPool
+}
+
+func TestCompactRelays(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		relays   []string
+		expected []string
+	}{
+		{
+			name:     "empty",
+			relays:   []string{},
+			expected: nil,
+		},
+		{
+			name:     "no duplicates",
+			relays:   []string{"wss://relay1.com", "wss://relay2.com"},
+			expected: []string{"wss://relay1.com", "wss://relay2.com"},
+		},
+		{
+			name:     "exact duplicates",
+			relays:   []string{"wss://relay1.com", "wss://relay1.com"},
+			expected: []string{"wss://relay1.com"},
+		},
+		{
+			name:     "duplicates with different ports",
+			relays:   []string{"wss://relay1.com:4443", "wss://relay1.com", "wss://relay1.com:888"},
+			expected: []string{"wss://relay1.com:4443"},
+		},
+		{
+			name:     "duplicates with different cases",
+			relays:   []string{"wss://RELAY1.com", "wss://relay1.com"},
+			expected: []string{"wss://RELAY1.com"},
+		},
+		{
+			name:     "mixed duplicates",
+			relays:   []string{"wss://relay1.com:4443", "wss://relay2.com", "wss://relay1.com", "wss://RELAY2.com:888"},
+			expected: []string{"wss://relay1.com:4443", "wss://relay2.com"},
+		},
+		{
+			name:     "invalid urls",
+			relays:   []string{"not-a-url", "not-a-url", "NOT-A-URL"},
+			expected: []string{"not-a-url"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := compactRelays(tt.relays)
+			require.Equal(t, tt.expected, actual)
+		})
+	}
 }

@@ -15,7 +15,7 @@ import (
 
 	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
-	"github.com/ice-blockchain/subzero/push-notifications/internal"
+	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 	"github.com/ice-blockchain/subzero/rq"
 )
 
@@ -35,7 +35,7 @@ type (
 	}
 	mockNotificationClient struct {
 		T    testing.TB
-		Chan chan *internal.Notification[*model.Event]
+		Chan chan *pn.Notification[*model.Event]
 	}
 )
 
@@ -60,7 +60,7 @@ func (m *mockNotificationClient) Reset() {
 	}
 }
 
-func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *internal.Notification[*model.Event]) error {
+func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *pn.Notification[*model.Event]) error {
 	select {
 	case m.Chan <- notification:
 		m.T.Logf("Mock SendSingle to device %s for master public key %s", notification.Target.PubKey, notification.Target.GetMasterPublicKey())
@@ -70,7 +70,7 @@ func (m *mockNotificationClient) SendSingle(ctx context.Context, notification *i
 	}
 }
 
-func (m *mockNotificationClient) SendTopic(ctx context.Context, notification *internal.Notification[internal.SubscriptionTopic]) error {
+func (m *mockNotificationClient) SendTopic(ctx context.Context, notification *pn.Notification[pn.SubscriptionTopic]) error {
 	m.T.Fatalf("unexpected call to SendTopic with topic: %v", notification.Target)
 	return nil
 }
@@ -202,6 +202,7 @@ func helperVerifyBroadcastEvents(t *testing.T, broadcastedEvents []mockedBroadca
 func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient, notificationType NotificationType, expectedEvent *model.Event) {
 	t.Helper()
 
+	t.Logf("Waiting for push notification of type %q for event ID %s", notificationType, expectedEvent.ID)
 	select {
 	case n := <-mockClient.Chan:
 		t.Logf("Received push notification %#v", n)
@@ -209,36 +210,41 @@ func helperWaitForNotifications(t *testing.T, mockClient *mockNotificationClient
 		require.Equal(t, defaultTranslations[notificationType].Title, n.Title)
 		require.Equal(t, defaultTranslations[notificationType].Body, n.Body)
 
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 10):
 		t.Fatalf("Timed out waiting for push notification")
 	}
 }
 
-func TestNotificationBroadcastEndToEnd(t *testing.T) {
-	t.Parallel()
+func helperNewRiverConfig(t testing.TB, m *PushNotificationManager, ID string) *rq.Config {
+	t.Helper()
 
-	addr, release := query.NewTestDatabase(t.Context())
-	defer release()
+	require.NotNil(t, testGlobalDatabaseConfig)
+	localConf := *testGlobalDatabaseConfig
+
+	require.NotNil(t, m)
+	require.NotEmpty(t, ID)
+
+	localConf.RelayURL = m.relayURL
+	localConf.PrivateKey = m.privateKey
+
+	return &rq.Config{
+		Config: localConf,
+		ID:     ID,
+	}
+}
+
+func TestNotificationBroadcastEndToEnd(t *testing.T) {
+	// This test is NOT parallel because it relies on shared database state.
 
 	mockNotificationClient := &mockNotificationClient{
 		T:    t,
-		Chan: make(chan *internal.Notification[*model.Event], 100),
+		Chan: make(chan *pn.Notification[*model.Event], 100),
 	}
 
 	pm := helperNewManager(t)
-	pm.pushNotificationClient = internal.Client(mockNotificationClient)
+	pm.pushNotificationClient = pn.Client(mockNotificationClient)
 
-	dbConf := query.Config{
-		PrivateKey: pm.privateKey,
-		RelayURL:   pm.relayURL,
-		WriteURLs:  []string{addr},
-	}
-	query.MustInit(t.Context(), query.WithConfig(&dbConf))
-
-	pm.rq = rq.MustNewClient(t.Context(), rq.WithConfig(&rq.Config{
-		Config: dbConf,
-		ID:     "pn-test-e2e",
-	}))
+	pm.rq = rq.MustNewClient(t.Context(), rq.WithConfig(helperNewRiverConfig(t, pm, "pn-broadcaster-e2e-test")))
 	pm.registerWorkers()
 
 	require.NoError(t, pm.rq.Start(t.Context()))

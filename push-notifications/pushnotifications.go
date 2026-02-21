@@ -40,7 +40,7 @@ type (
 		rq                     rq.Client
 		broadcaster            eventBroadcaster
 		devicesFilterIndex     *em.Storage[*DeviceInfo]
-		devicesEventMap        *xsync.Map[string, *model.Event] // Device ID -> Device Registration Event.
+		devicesEventMap        *xsync.Map[string, *model.Event] // D tag -> Device Registration Event.
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
@@ -77,7 +77,6 @@ type (
 )
 
 const (
-	NotificationTypePost             NotificationType = "post"
 	NotificationTypeReaction         NotificationType = "reaction"
 	NotificationTypeRepost           NotificationType = "repost"
 	NotificationTypeMentionReply     NotificationType = "mention_reply"
@@ -104,6 +103,11 @@ const (
 
 	NotificationTypeSomeoneContentTokenCreated NotificationType = "someone_content_token_created"
 	NotificationTypeSomeoneContentTokenSwapped NotificationType = "someone_content_token_swapped"
+
+	NotificationTypeSomeonePost    NotificationType = "someone_post"
+	NotificationTypeSomeoneVideo   NotificationType = "someone_video"
+	NotificationTypeSomeoneArticle NotificationType = "someone_article"
+	NotificationTypeSomeoneStory   NotificationType = "someone_story"
 )
 
 var (
@@ -116,11 +120,6 @@ var (
 		NotificationTypeRepost: {
 			Title:    "New repost",
 			Body:     "Someone reposted your post",
-			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
-		},
-		NotificationTypePost: {
-			Title:    "New post",
-			Body:     "Someone posted a new post",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeMentionReply: {
@@ -203,8 +202,29 @@ var (
 			Body:     `Someone Bought Another Person's Content Token`,
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
+		NotificationTypeSomeonePost: {
+			Title:    "New post",
+			Body:     "New post from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneVideo: {
+			Title:    "New video",
+			Body:     "New video from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneArticle: {
+			Title:    "New article is out",
+			Body:     "New article from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeSomeoneStory: {
+			Title:    "Quick update",
+			Body:     "New story from someone you enabled account notifications for",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
+		nostr.KindArticle:                               {},
 		nostr.KindTextNote:                              {},
 		model.CustomIONKindEditableTextNote:             {},
 		nostr.KindGenericRepost:                         {},
@@ -410,9 +430,9 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	err = errors.Join(err,
 		globalPushNotificationManager.AcceptEvents(ctx, events),
 		globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events),
+		globalPushNotificationManager.AcceptEventsForRemotePush(ctx, events),
 		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
 	)
-
 	return errors.Wrap(err, "failed to process events")
 
 }
@@ -441,16 +461,74 @@ func (pm *PushNotificationManager) AcceptEventsFromBroadcast(ctx context.Context
 	)
 }
 
-func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context, events []*model.Event) error {
+func (pm *PushNotificationManager) AcceptEventsForRemotePush(ctx context.Context, events model.Events) error {
+	submitErr := pm.antsPool.Submit(func() {
+		var relays []string
+		var devicesCollected uint
+
+		for _, event := range events {
+			if event.IsEphemeral() {
+				continue
+			}
+
+			devices := pm.collectRemoteDevices("", event)
+			for _, device := range devices {
+				devicesCollected++
+				if v := collectRelaysFromDevice(device); len(v) > 0 {
+					relays = append(relays, v...)
+				}
+			}
+		}
+		uniqueRelays := compactRelays(relays)
+
+		if len(uniqueRelays) == 0 || devicesCollected == 0 {
+			// No relays found, nothing to do.
+			return
+		}
+
+		batchID := events.Hash()
+		log.Trace().
+			Str("context", "PUSH_NOTIFICATIONS").
+			Int("events_count", len(events)).
+			Uint("devices_collected", devicesCollected).
+			Int("total_relays_collected", len(relays)).
+			Int("unique_relays_collected", len(uniqueRelays)).
+			Msg("collected relays for remote push notification")
+
+		packedEvents := pm.packEventsForBroadcast(ctx, events, batchID)
+		broadcastArgs := make([]rq.JobArgs, 0, len(uniqueRelays))
+		for _, relayURL := range uniqueRelays {
+			broadcastArgs = append(broadcastArgs, &broadcasterBroadcastWorkerArgs{
+				RelayURL:        relayURL,
+				BatchID:         batchID,
+				EphemeralEvents: packedEvents,
+			})
+		}
+
+		if err := pm.rq.Push(ctx, broadcastArgs...); err != nil {
+			log.Error().Str("context", "PUSH_NOTIFICATIONS").
+				Err(err).
+				Str("batch", batchID).
+				Strs("event_ids", events.IDs()).
+				Msg("failed to push broadcaster broadcast worker jobs for remote push notification")
+		}
+	})
+	return errors.Wrap(submitErr, "failed to submit task to ants pool for processing events for remote push")
+}
+
+func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context, events model.Events) error {
 	if len(events) == 0 {
 		return nil
 	}
+
+	batchID := events.Hash()
+
 	return errors.Wrapf(
 		pm.rq.Push(
 			ctx,
 			&broadcasterRelayFinderWorkerArgs{
 				Events:  events,
-				BatchID: model.Events(events).Hash(),
+				BatchID: batchID,
 			},
 		),
 		"failed to push a job for broadcasting %d events",
@@ -592,10 +670,16 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		} else if event.Kind == nostr.KindGenericRepost {
 			notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeRepost, relevantEvents...)
 			err = errors.Wrap(err, "failed to handle event for generic repost")
+		} else if event.Kind == model.CustomIONKindEditableTextNote && (event.GetTag("expiration").Value() != "" || event.GetTag("p").Value() == "") {
+			notifications, err = pm.handleNewPostEvent(ctx, event, relevantEvents...)
+			err = errors.Wrap(err, "failed to handle new story/post event")
 		} else {
 			notifications, err = pm.handleMentionReplyEvent(event, relevantEvents...)
 			err = errors.Wrap(err, "failed to handle mention reply/mention event")
 		}
+	case nostr.KindArticle:
+		notifications, err = pm.handleNewPostEvent(ctx, event, relevantEvents...)
+		err = errors.Wrap(err, "failed to handle article event")
 	case nostr.KindReaction:
 		notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeReaction, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle event for reaction")
@@ -742,7 +826,7 @@ func (pm *PushNotificationManager) createNotifications(
 		return nil, nil
 	}
 
-	notifications := make([]*pn.Notification[*model.Event], 0)
+	notifications := make([]*pn.Notification[*model.Event], 0, len(deviceRegistrationEvents))
 	defaultTranslation := pm.getTranslation(notificationType)
 
 	compressedEvent, err := pm.compressAndEncodeBase64(incomingEvent.String())
@@ -763,7 +847,7 @@ func (pm *PushNotificationManager) createNotifications(
 	var deviceEventIDs []string
 	for _, event := range deviceRegistrationEvents {
 		deviceEventIDs = append(deviceEventIDs, event.ID)
-		data := map[string]interface{}{
+		data := map[string]any{
 			"compression": CompressionMethodZlib,
 			"event":       compressedEvent,
 		}
@@ -793,10 +877,14 @@ func (pm *PushNotificationManager) createNotifications(
 	return notifications, nil
 }
 
-func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event *model.Event) (devices model.Events) {
+func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool, event *model.Event) (devices model.Events) {
 	for deviceInfo := range pm.devicesFilterIndex.Lookup(event) {
 		// If set, pubKey indicates that we should only consider devices registered with this public key.
 		if pubKey != "" && deviceInfo.Event.GetMasterPublicKey() != pubKey && deviceInfo.Event.PubKey != pubKey {
+			continue
+		}
+
+		if deviceInfo.Remote != remote {
 			continue
 		}
 
@@ -814,14 +902,22 @@ func (pm *PushNotificationManager) collectUserValidDevices(pubKey string, event 
 	return devices
 }
 
+func (pm *PushNotificationManager) collectRemoteDevices(pubKey string, event *model.Event) (devices model.Events) {
+	return pm.collectUserDevices(pubKey, true, event)
+}
+
+func (pm *PushNotificationManager) collectLocalDevices(pubKey string, event *model.Event) (devices model.Events) {
+	return pm.collectUserDevices(pubKey, false, event)
+}
+
 // collectTargetMasterKeys iterates through all registered user devices and identifies
 // which master keys (users) have at least one device with filters matching the provided event.
 // It returns a slice of master keys for users who should receive a notification for the event.
 func (pm *PushNotificationManager) collectTargetMasterKeys(event *model.Event) (keys []string) {
-	for _, device := range pm.collectUserValidDevices("", event) {
+	for _, device := range pm.collectLocalDevices("", event) {
 		keys = append(keys, device.GetMasterPublicKey())
 	}
-	return keys
+	return model.DeduplicateStringSlice(keys)
 }
 
 func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, notificationType NotificationType, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
@@ -829,7 +925,7 @@ func (pm *PushNotificationManager) handleEventWithPublicKey(event *model.Event, 
 	if referencePubkey == "" || referencePubkey == event.GetMasterPublicKey() {
 		return nil, nil
 	}
-	deviceEvents := pm.collectUserValidDevices(referencePubkey, event)
+	deviceEvents := pm.collectLocalDevices(referencePubkey, event)
 
 	return pm.createNotifications(deviceEvents, notificationType, event, relevantEvents...)
 }
@@ -845,7 +941,7 @@ func (pm *PushNotificationManager) handleQuoteEvent(event *model.Event, relevant
 	} else {
 		return nil, nil
 	}
-	devices := pm.collectUserValidDevices(referencePubkey, event)
+	devices := pm.collectLocalDevices(referencePubkey, event)
 	if len(devices) == 0 {
 		return nil, nil
 	}
@@ -897,7 +993,7 @@ func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, e
 	relayTag := model.TagMap{}.Set("r", &pm.relayURL)
 	if u, err := url.Parse(pm.relayURL); err == nil && u.Port() != "" {
 		u.Host = u.Hostname()
-		relayTag = relayTag.Append("r", model.PointerOf(u.String()))
+		relayTag = relayTag.Append("r", new(u.String()))
 	}
 
 	it := query.GetStoredEvents(ctx,
@@ -940,4 +1036,41 @@ func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, e
 func (c *compressorPoolItem) reset() {
 	c.buf.Reset()
 	c.zlibWriter.Reset(c.base64Encoder)
+}
+
+func collectRelaysFromDevice(ev *model.Event) []string {
+	relays := make([]string, 0, len(ev.Tags))
+	for _, tag := range ev.Tags {
+		if tag.Key() == "relay" && tag.Value() != "" {
+			relays = append(relays, tag.Value())
+		}
+	}
+	return relays
+}
+
+func compactRelays(relays []string) []string {
+	var compacted []string
+
+	seen := make(map[string][]string)
+	for _, relay := range relays {
+		key := strings.ToLower(relay)
+		if parsed, err := url.Parse(relay); err == nil {
+			key = strings.ToLower(parsed.Hostname())
+		}
+
+		var isDuplicate bool
+		for _, seenRelay := range seen[key] {
+			if model.CompareRelaysURLs(relay, seenRelay) {
+				isDuplicate = true
+				break
+			}
+		}
+
+		if !isDuplicate {
+			seen[key] = append(seen[key], relay)
+			compacted = append(compacted, relay)
+		}
+	}
+
+	return compacted
 }

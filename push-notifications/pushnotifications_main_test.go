@@ -21,7 +21,9 @@ import (
 )
 
 var (
-	globalTestAntsPool *ants.Pool
+	testGlobalAntsPool          *ants.Pool
+	testGlobalDatabaseContainer *query.Container
+	testGlobalDatabaseConfig    *query.Config
 )
 
 func TestMain(m *testing.M) {
@@ -29,9 +31,9 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to create test ants pool: %v", err))
 	}
-	globalTestAntsPool = pool
+	testGlobalAntsPool = pool
 	defer func() {
-		globalTestAntsPool.Release()
+		testGlobalAntsPool.Release()
 		if err := goleak.Find(); err != nil {
 			panic(fmt.Sprintf("goleak found issues: %v\n", err))
 		}
@@ -39,13 +41,20 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	ctx, _ = appcontext.NewAppContext(ctx)
-	addr, release := query.NewTestDatabase(ctx)
-	query.MustInit(ctx, query.WithConfig(&query.Config{
+
+	testGlobalDatabaseContainer = query.NewTestContainer(ctx)
+	addr, release := testGlobalDatabaseContainer.MustTempDB(ctx)
+
+	testGlobalDatabaseConfig = &query.Config{
 		WriteURLs:       []string{addr},
 		RunDDL:          true,
 		DisableSelfTest: true,
-	}))
-	validation.MustInit(ctx, validation.WithIONIdentityPublicKeys(func() []string { return nil }))
+	}
+
+	query.MustInit(ctx, query.WithConfig(testGlobalDatabaseConfig))
+	validation.MustInit(ctx,
+		validation.WithQueryFunc(query.GetStoredEvents),
+		validation.WithIONIdentityPublicKeys(func() []string { return nil }))
 
 	code := m.Run()
 	cancel()

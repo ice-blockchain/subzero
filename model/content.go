@@ -177,7 +177,6 @@ func extractPubkeysFromContent(content string) []string {
 		if pubkey := decodePubkeyFromNprofile(match); pubkey != "" {
 			pubkeys = append(pubkeys, pubkey)
 		}
-
 	}
 
 	return pubkeys

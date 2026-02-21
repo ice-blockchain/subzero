@@ -9,8 +9,7 @@ import (
 	pn "github.com/ice-blockchain/subzero/push-notifications/internal"
 )
 
-func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, relevantEvents ...*model.Event) ([]*pn.Notification[*model.Event], error) {
-	notifications := make([]*pn.Notification[*model.Event], 0)
+func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, relevantEvents ...*model.Event) (notifications []*pn.Notification[*model.Event], err error) {
 	mentionedPubkeys, err := model.ExtractMentionedPubkeys(event)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract mentioned pubkeys")
@@ -24,7 +23,7 @@ func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, r
 			continue
 		}
 		processedPubkeys[pubkey] = true
-		devices := pm.collectUserValidDevices(pubkey, event)
+		devices := pm.collectLocalDevices(pubkey, event)
 		pubkeyNotifications, err := pm.createNotifications(devices, NotificationTypeMentionReply, event, relevantEvents...)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create notifications")
@@ -39,7 +38,7 @@ func (pm *PushNotificationManager) handleMentionReplyEvent(event *model.Event, r
 			continue
 		}
 		processedPubkeys[pTag.Value()] = true
-		devices := pm.collectUserValidDevices(pTag.Value(), event)
+		devices := pm.collectLocalDevices(pTag.Value(), event)
 		pubkeyNotifications, err := pm.createNotifications(devices, NotificationTypeMentionReply, event, relevantEvents...)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create notifications")

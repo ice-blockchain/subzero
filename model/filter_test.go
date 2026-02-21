@@ -37,7 +37,7 @@ func TestFiltersMatchWithMasterKey(t *testing.T) {
 
 	t.Run("direct match - event tag", func(t *testing.T) {
 		ev := createEvent(nostr.KindTextNote, Tags{{"t", "test"}}, privkey)
-		filters := Filters{{Tags: TagMap{}.Set("t", PointerOf("test"))}}
+		filters := Filters{{Tags: TagMap{}.Set("t", new("test"))}}
 
 		result := FiltersMatch(filters, ev, masterPubkey, pubkey)
 		require.True(t, result)
@@ -91,9 +91,9 @@ func TestFiltersMatchWithMasterKey(t *testing.T) {
 		ev := createEvent(nostr.KindTextNote, Tags{{"t", "test"}, {CustomIONTagOnBehalfOf, masterPubkey}}, masterPriv)
 
 		filters := Filters{
-			{Kinds: []int{nostr.KindArticle}},            // No match.
-			{Tags: TagMap{}.Set("t", PointerOf("test"))}, // Direct match.
-			{Authors: []string{pubkey}},                  // Master key match.
+			{Kinds: []int{nostr.KindArticle}},      // No match.
+			{Tags: TagMap{}.Set("t", new("test"))}, // Direct match.
+			{Authors: []string{pubkey}},            // Master key match.
 		}
 
 		result := FiltersMatch(filters, ev, masterPubkey, pubkey)
