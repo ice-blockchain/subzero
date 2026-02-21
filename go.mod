@@ -15,7 +15,7 @@ require (
 	github.com/alitto/pond/v2 v2.6.2
 	github.com/bdragon300/tusgo v0.1.3-0.20250807091306-5a1233754936
 	github.com/bzick/tokenizer v1.4.10
-	github.com/caddyserver/certmagic v0.25.1
+	github.com/caddyserver/certmagic v0.25.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/cockroachdb/errors v1.12.0
@@ -72,7 +72,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/wal v1.2.1
-	github.com/tus/tusd/v2 v2.8.0
+	github.com/tus/tusd/v2 v2.9.1
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xssnick/tonutils-go v1.15.5
 	github.com/xssnick/tonutils-storage v1.3.2
@@ -231,7 +231,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
-	github.com/mholt/acmez/v3 v3.1.4 // indirect
+	github.com/mholt/acmez/v3 v3.1.6 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
 	github.com/minio/highwayhash v1.0.3 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
