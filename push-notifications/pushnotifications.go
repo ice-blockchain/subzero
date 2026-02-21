@@ -324,7 +324,6 @@ func (pnm *PushNotificationManager) registerWorkers() {
 		rq.RegisterWorker(reg, &broadcasterBroadcastWorker{Manager: pnm})
 		rq.RegisterWorker(reg, &broadcasterUserNotificationWorker{Manager: pnm})
 		rq.RegisterWorker(reg, &broadcasterPushNotificationWorker{Manager: pnm})
-		rq.RegisterWorker(reg, &broadcasterPushNotificationRemoteWorker{Manager: pnm})
 	}
 }
 
@@ -431,6 +430,7 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 	err = errors.Join(err,
 		globalPushNotificationManager.AcceptEvents(ctx, events),
 		globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events),
+		globalPushNotificationManager.AcceptEventsForRemotePush(ctx, events),
 		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
 	)
 	return errors.Wrap(err, "failed to process events")
@@ -461,6 +461,61 @@ func (pm *PushNotificationManager) AcceptEventsFromBroadcast(ctx context.Context
 	)
 }
 
+func (pm *PushNotificationManager) AcceptEventsForRemotePush(ctx context.Context, events model.Events) error {
+	submitErr := pm.antsPool.Submit(func() {
+		var relays []string
+		var devicesCollected uint
+
+		for _, event := range events {
+			if event.IsEphemeral() {
+				continue
+			}
+
+			devices := pm.collectRemoteDevices("", event)
+			for _, device := range devices {
+				devicesCollected++
+				if v := collectRelaysFromDevice(device); len(v) > 0 {
+					relays = append(relays, v...)
+				}
+			}
+		}
+		uniqueRelays := compactRelays(relays)
+
+		if len(uniqueRelays) == 0 || devicesCollected == 0 {
+			// No relays found, nothing to do.
+			return
+		}
+
+		batchID := events.Hash()
+		log.Trace().
+			Str("context", "PUSH_NOTIFICATIONS").
+			Int("events_count", len(events)).
+			Uint("devices_collected", devicesCollected).
+			Int("total_relays_collected", len(relays)).
+			Int("unique_relays_collected", len(uniqueRelays)).
+			Msg("collected relays for remote push notification")
+
+		packedEvents := pm.packEventsForBroadcast(ctx, events, batchID)
+		broadcastArgs := make([]rq.JobArgs, 0, len(uniqueRelays))
+		for _, relayURL := range uniqueRelays {
+			broadcastArgs = append(broadcastArgs, &broadcasterBroadcastWorkerArgs{
+				RelayURL:        relayURL,
+				BatchID:         batchID,
+				EphemeralEvents: packedEvents,
+			})
+		}
+
+		if err := pm.rq.Push(ctx, broadcastArgs...); err != nil {
+			log.Error().Str("context", "PUSH_NOTIFICATIONS").
+				Err(err).
+				Str("batch", batchID).
+				Strs("event_ids", events.IDs()).
+				Msg("failed to push broadcaster broadcast worker jobs for remote push notification")
+		}
+	})
+	return errors.Wrap(submitErr, "failed to submit task to ants pool for processing events for remote push")
+}
+
 func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context, events model.Events) error {
 	if len(events) == 0 {
 		return nil
@@ -472,10 +527,6 @@ func (pm *PushNotificationManager) AcceptEventsForBroadcast(ctx context.Context,
 		pm.rq.Push(
 			ctx,
 			&broadcasterRelayFinderWorkerArgs{
-				Events:  events,
-				BatchID: batchID,
-			},
-			&broadcasterPushNotificationRemoteWorkerArgs{
 				Events:  events,
 				BatchID: batchID,
 			},
@@ -985,4 +1036,41 @@ func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, e
 func (c *compressorPoolItem) reset() {
 	c.buf.Reset()
 	c.zlibWriter.Reset(c.base64Encoder)
+}
+
+func collectRelaysFromDevice(ev *model.Event) []string {
+	relays := make([]string, 0, len(ev.Tags))
+	for _, tag := range ev.Tags {
+		if tag.Key() == "relay" && tag.Value() != "" {
+			relays = append(relays, tag.Value())
+		}
+	}
+	return relays
+}
+
+func compactRelays(relays []string) []string {
+	var compacted []string
+
+	seen := make(map[string][]string)
+	for _, relay := range relays {
+		key := strings.ToLower(relay)
+		if parsed, err := url.Parse(relay); err == nil {
+			key = strings.ToLower(parsed.Hostname())
+		}
+
+		var isDuplicate bool
+		for _, seenRelay := range seen[key] {
+			if model.CompareRelaysURLs(relay, seenRelay) {
+				isDuplicate = true
+				break
+			}
+		}
+
+		if !isDuplicate {
+			seen[key] = append(seen[key], relay)
+			compacted = append(compacted, relay)
+		}
+	}
+
+	return compacted
 }
