@@ -3,29 +3,25 @@
 package eventmatcher
 
 import (
+	"slices"
+
 	"github.com/ice-blockchain/subzero/model"
 )
 
-type (
-	// parsedFilter represents a parsed filter with extracted tag values.
-	parsedFilter struct {
-		*model.Filter                            // Embedded filter.
-		MasterKeysByKind map[model.Kind][]string // Extracted p/Q tag values per kind.
-		MasterKeys       []string                // All p/Q tag values from the filter.
+func parseFilters(filters model.Filters) []indexKey {
+	uniqueKeys := make(map[indexKey]struct{})
+
+	if len(filters) == 0 {
+		return []indexKey{{Kind: anyKind, Dimension: dimNone}}
 	}
 
-	// parsedFilters is a slice of parsedFilter, representing multiple filters.
-	parsedFilters []parsedFilter
-)
-
-func parseFilters(filters model.Filters) (parsedFilters parsedFilters) {
 	for i := range filters {
-		parsed := parsedFilter{
-			Filter:           &filters[i],
-			MasterKeysByKind: make(map[model.Kind][]string),
+		var targets []indexKey
+
+		for _, author := range filters[i].Authors {
+			targets = append(targets, indexKey{Dimension: dimAuthor, Value: author})
 		}
 
-	tagsLoop:
 		for k, v := range filters[i].Tags {
 			if len(v) != 1 {
 				// Expected formats:
@@ -35,49 +31,78 @@ func parseFilters(filters model.Filters) (parsedFilters parsedFilters) {
 				continue
 			}
 
-			var targetKey string
+			var dim dimension
+			var val string
+
 			switch k {
-			case "p":
-				if len(v[0]) < 1 || v[0][0] == nil || *v[0][0] == "" {
-					continue tagsLoop
+			case "p", "k":
+				if len(v[0]) >= 1 && v[0][0] != nil && *v[0][0] != "" {
+					val = *v[0][0]
+					if k == "p" {
+						dim = dimTagP
+					} else {
+						dim = dimTagK
+					}
 				}
-				targetKey = k + *v[0][0] // Prefix to avoid collision with Q tags.
-
 			case model.CustomIONTagAddressableQ:
-				if len(v[0]) != 3 || v[0][0] != nil || v[0][1] != nil || v[0][2] == nil || *v[0][2] == "" {
-					continue tagsLoop
-				}
-				targetKey = k + *v[0][2]
-
-			default:
-				continue tagsLoop
-			}
-
-			if len(filters[i].Kinds) > 0 {
-				for _, kind := range filters[i].Kinds {
-					parsed.MasterKeysByKind[kind] = append(parsed.MasterKeysByKind[kind], targetKey)
+				if len(v[0]) == 3 && v[0][2] != nil && *v[0][2] != "" {
+					dim = dimTagQ
+					val = *v[0][2]
 				}
 			}
-			parsed.MasterKeys = append(parsed.MasterKeys, targetKey)
-		}
-		parsedFilters = append(parsedFilters, parsed)
-	}
-	return parsedFilters
-}
 
-// Meta extracts all unique master keys, authors and kinds from the parsed filters for removal purposes.
-func (p parsedFilters) Meta() (keys []string, kinds []model.Kind) {
-	for i := range p {
-		if len(p[i].Kinds) > 0 {
-			kinds = append(kinds, p[i].Kinds...)
+			if dim != dimNone && val != "" {
+				targets = append(targets, indexKey{Dimension: dim, Value: val})
+			}
 		}
-		if len(p[i].MasterKeys) > 0 {
-			keys = append(keys, p[i].MasterKeys...)
+
+		kinds := slices.DeleteFunc(filters[i].Kinds, func(k int) bool { return k < 0 })
+		if len(kinds) != len(filters[i].Kinds) && len(kinds) > 0 {
+			// If we had any negative kinds, we need to add the any-kind key to the targets to ensure they get matched against events of any kind.
+			uniqueKeys[indexKey{Kind: anyKind, Dimension: dimNone}] = struct{}{}
 		}
-		if len(p[i].Authors) > 0 {
-			keys = append(keys, p[i].Authors...)
+		numKinds := max(1, len(kinds))
+		numTargets := max(1, len(targets))
+		combinations := numKinds * numTargets
+
+		if combinations <= indexCartesianLimit {
+			if len(kinds) == 0 && len(targets) == 0 {
+				uniqueKeys[indexKey{Kind: anyKind, Dimension: dimNone}] = struct{}{}
+			} else if len(targets) == 0 {
+				for _, kind := range kinds {
+					uniqueKeys[indexKey{Kind: kind, Dimension: dimNone}] = struct{}{}
+				}
+			} else if len(kinds) == 0 {
+				for _, t := range targets {
+					t.Kind = anyKind
+					uniqueKeys[t] = struct{}{}
+				}
+			} else {
+				for _, kind := range kinds {
+					for _, t := range targets {
+						t.Kind = kind
+						uniqueKeys[t] = struct{}{}
+					}
+				}
+			}
+		} else {
+			if len(targets) > 0 {
+				for _, t := range targets {
+					t.Kind = anyKind
+					uniqueKeys[t] = struct{}{}
+				}
+			} else {
+				for _, kind := range kinds {
+					uniqueKeys[indexKey{Kind: kind, Dimension: dimNone}] = struct{}{}
+				}
+			}
 		}
 	}
 
-	return model.DeduplicateStringSlice(keys), model.DeduplicateIntSlice(kinds)
+	keys := make([]indexKey, 0, len(uniqueKeys))
+	for k := range uniqueKeys {
+		keys = append(keys, k)
+	}
+
+	return keys
 }

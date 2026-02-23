@@ -5,6 +5,7 @@ package eventmatcher
 import (
 	"math/rand/v2"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -23,7 +24,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		sub := model.NewSubscription("sub-empty-filter", model.Filters{})
 
 		matcher.Index(sub.Filters, sub)
-		require.EqualValues(t, 1, matcher.Generic.GetCardinality())
+		require.EqualValues(t, 1, len(matcher.Indexes))
 		require.EqualValues(t, 1, matcher.Values.Size())
 
 		data := matcher.Get(new(model.Event))
@@ -32,15 +33,22 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		require.True(t, matcher.Remove(sub))
 	})
-	t.Run("Generic", func(t *testing.T) {
+	t.Run("Author", func(t *testing.T) {
 		sub := model.NewSubscription("sub-author-filter", model.Filters{{Authors: []string{"root"}}})
 
 		matcher.Index(sub.Filters, sub)
-		require.EqualValues(t, 1, matcher.Generic.GetCardinality())
+		require.EqualValues(t, 1, len(matcher.Indexes))
 		require.EqualValues(t, 1, matcher.Values.Size())
 
 		data := matcher.Get(new(model.Event))
+		require.Zero(t, data)
+
+		var ev model.Event
+		ev.PubKey = "root"
+		data = matcher.Get(&ev)
 		require.Len(t, data, 1)
+		require.Equal(t, sub, data[0])
+
 		require.True(t, matcher.Remove(sub))
 	})
 
@@ -49,7 +57,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Values.Size())
-		require.Len(t, matcher.ByKind, 3)
+		require.Len(t, matcher.Indexes, 3)
 
 		var ev model.Event
 		ev.Kind = 1
@@ -73,7 +81,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Values.Size())
-		require.Len(t, matcher.ByDestination, 1)
+		require.Len(t, matcher.Indexes, 1)
 
 		var ev model.Event
 		ev.Tags = model.Tags{{"p", "root"}}
@@ -92,7 +100,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Values.Size())
-		require.Len(t, matcher.ByDestination, 1)
+		require.Len(t, matcher.Indexes, 1)
 
 		var ev model.Event
 		ev.Tags = model.Tags{{"Q", "", "", "relay.example.com"}}
@@ -116,7 +124,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Values.Size())
-		require.Len(t, matcher.ByKindDestination, 2)
+		require.Len(t, matcher.Indexes, 2)
 
 		var ev model.Event
 		ev.Kind = 10
@@ -257,6 +265,52 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		require.True(t, matcher.Remove(sub))
 	})
+	t.Run("By kind p, k and Q tags", func(t *testing.T) {
+		sub := model.NewSubscription("sub-kinds-p-k-and-Q-tags", model.Filters{
+			{
+				Kinds: []int{1, 2},
+				Tags: model.TagMap{}.
+					Set("p", new("root")).
+					Set("k", new("123")).
+					Set("Q", nil, nil, new("relay.example.com")),
+			},
+		})
+
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
+		require.Len(t, matcher.Indexes, 6)
+
+		var ev model.Event
+		ev.Kind = 1
+		ev.Tags = model.Tags{
+			{"Q", "", "", "relay.example.com"},
+			{"p", "root"},
+			{"k", "123"},
+		}
+		data := matcher.Get(&ev)
+		require.Len(t, data, 1) // Match by kind and tags.
+		require.Equal(t, sub, data[0])
+
+		ev.Kind = 2
+		ev.Tags = model.Tags{
+			{"Q", "", "", "relay.example.com"},
+			{"p", "root"},
+			{"k", "123"},
+		}
+		data = matcher.Get(&ev)
+		require.Len(t, data, 1) // Match by kind and tags.
+		require.Equal(t, sub, data[0])
+
+		ev.Kind = 3
+		ev.Tags = model.Tags{
+			{"Q", "", "", "relay.example.com"},
+			{"p", "root"},
+			{"k", "123"},
+		}
+		data = matcher.Get(&ev)
+		require.Empty(t, data) // No match, kind 3 not in index.
+		require.True(t, matcher.Remove(sub))
+	})
 	t.Run("By kind with author", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-and-author", model.Filters{
 			{
@@ -267,7 +321,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Values.Size())
-		require.Len(t, matcher.ByKindAuthor, 2)
+		require.Len(t, matcher.Indexes, 2)
 
 		var ev model.Event
 		ev.Kind = 1
@@ -322,7 +376,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		matcher.Index(sub.Filters, sub)
 		require.EqualValues(t, 1, matcher.Values.Size())
-		require.Len(t, matcher.ByDestination, 1)
+		require.Len(t, matcher.Indexes, 2)
 
 		var ev1 model.Event
 		ev1.Kind = 1
@@ -549,4 +603,81 @@ func BenchmarkMatcherStorageInsert(b *testing.B) {
 	for i, shard := range storage.shards {
 		b.ReportMetric(float64(shard.Values.Size()), "subs_count/shard_"+strconv.Itoa(i))
 	}
+}
+
+func BenchmarkMatcherStorageLookup(b *testing.B) {
+	const (
+		numberOfShards        = 16
+		numberOfSubscriptions = 50_000
+		numberOfEvents        = 1_000
+	)
+
+	storage := NewMatcherStorage[*model.Subscription](numberOfShards)
+
+	for i := range numberOfSubscriptions {
+		var filters model.Filters
+		numKinds := 1 + (i % 2)
+		kinds := make([]int, numKinds)
+		for j := range numKinds {
+			kinds[j] = 1 + (i*31+j)%100
+		}
+
+		filter := model.Filter{Kinds: kinds}
+
+		if i%2 == 0 {
+			filter.Tags = model.TagMap{}.SetLiterals("p", "ptagvalue_"+strconv.Itoa(i%50))
+		} else if i%3 == 0 {
+			filter.Authors = []string{"author_" + strconv.Itoa(i%25)}
+		}
+
+		filters = append(filters, filter)
+		sub := model.NewSubscription("sub-test-num-"+strconv.Itoa(i), filters)
+		storage.Index(sub.Filters, sub)
+	}
+
+	events := make([]*model.Event, numberOfEvents)
+	for i := range numberOfEvents {
+		var ev model.Event
+
+		ev.Kind = 1 + (i*17)%100
+		ev.PubKey = "author_" + strconv.Itoa(i%25)
+
+		if i%2 == 0 {
+			ev.Tags = append(ev.Tags, model.Tag{"p", "ptagvalue_" + strconv.Itoa(i%50)})
+		}
+		if i%5 == 0 {
+			ev.Tags = append(ev.Tags, model.Tag{"k", strconv.Itoa(i % 10)})
+		}
+		if i%7 == 0 {
+			ev.Tags = append(ev.Tags, model.Tag{"Q", "", "", "target_" + strconv.Itoa(i%5)})
+		}
+
+		events[i] = &ev
+	}
+
+	var totalCandidates atomic.Uint64
+
+	zerolog.SetGlobalLevel(zerolog.Disabled)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(p *testing.PB) {
+		var localCounter int
+		var localCandidates uint64
+
+		for p.Next() {
+			ev := events[localCounter%numberOfEvents]
+			localCounter++
+
+			for ev := range storage.Lookup(ev) {
+				_ = ev
+				localCandidates++
+			}
+		}
+
+		totalCandidates.Add(localCandidates)
+	})
+
+	avgCandidates := float64(totalCandidates.Load()) / float64(b.N)
+	b.ReportMetric(avgCandidates, "candidates/op")
 }
