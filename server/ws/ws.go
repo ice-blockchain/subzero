@@ -246,7 +246,10 @@ func (h *handler) handleBroadcast(ctx context.Context, e *model.BroadcastEnvelop
 		validation.RuleWithSkipProfileMetadataProofEventsVerify(),
 		validation.RuleWithSkipRootContentNFTCollectionsValidation(),
 	); err != nil {
-		log.Error().Err(err).Str("relay", e.Relay).Msg("validation failed for broadcast")
+		log.Error().Err(err).
+			Str("relay", e.Relay).
+			Strs("event_ids", model.Events(e.Events).IDs()).
+			Msg("validation failed for broadcast")
 		return
 	}
 
