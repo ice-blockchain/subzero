@@ -375,4 +375,34 @@ func TestParseEphemeralEmbeddingEvents(t *testing.T) {
 		_, err := ParseEphemeralEmbeddingEvents(&ev)
 		require.Error(t, err)
 	})
+	t.Run("Empty reference values", func(t *testing.T) {
+		t.Parallel()
+		var ev Event
+		ev.Kind = CustomIONKindEphemeralEmbedding
+		ev.CreatedAt = nostr.Now()
+		ev.Content = profileEvent.String()
+		ev.Tags = nostr.Tags{
+			{"e", ""},
+			{"a", ""},
+			{"e", "ref1"},
+			{"a", "ref2"},
+		}
+		require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+		refs, err := ParseEphemeralEmbeddingEvents(&ev)
+		require.NoError(t, err)
+
+		// Empty tag values should be ignored as references.
+		require.NotContains(t, refs, "")
+
+		// Non-empty references should be parsed as in the multiple references case.
+		require.Contains(t, refs, "ref1")
+		require.Contains(t, refs, "ref2")
+
+		for _, events := range refs {
+			for _, event := range events {
+				require.Equal(t, &profileEvent, event.ContentEvent)
+			}
+		}
+	})
 }
