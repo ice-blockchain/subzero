@@ -96,6 +96,24 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.ErrorIs(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev, nil), ErrNotFound)
 	})
+	t.Run("First buy without tokenized event in broadcast mode", func(t *testing.T) {
+		v := &eventValidator{
+			QueryFunc: func(ctx context.Context, f ...model.Filter) query.EventIterator {
+				return func(yield func(*model.Event, error) bool) {
+				}
+			},
+		}
+		var ev model.Event
+
+		ev.Kind = model.CustomIONKindTokenizedCommunityDefinition
+		ev.Tags = model.Tags{
+			{"a", "some_event_address"},
+			{"p", "creator_pubkey"},
+			{"k", "1"},
+		}
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, validateTokenizedCommunityFirstBuy(t.Context(), v, &ev, &ruleSet{BroadcastMode: true}))
+	})
 	t.Run("Missing profile metadata event", func(t *testing.T) {
 		v := &eventValidator{
 			QueryFunc: func(ctx context.Context, f ...model.Filter) query.EventIterator {

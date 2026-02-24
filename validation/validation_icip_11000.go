@@ -22,7 +22,12 @@ func validateInternalTopicTC(_ context.Context, _ *eventValidator, event *model.
 	return errors.Errorf("missing required tag %q with value %q", "t", "community_token")
 }
 
-func validateTokenizedCommunityFirstBuy(ctx context.Context, v *eventValidator, firstBuy *model.Event, _ *ruleSet) error {
+func validateTokenizedCommunityFirstBuy(ctx context.Context, v *eventValidator, firstBuy *model.Event, rules *ruleSet) error {
+	if rules != nil && rules.BroadcastMode {
+		// Do not validate in broadcast mode as the event might be forwarded from another relay.
+		return nil
+	}
+
 	creator := firstBuy.GetTag("p").Value()
 	if creator == "" {
 		// Looks like a generic defination event, nothing to validate.
