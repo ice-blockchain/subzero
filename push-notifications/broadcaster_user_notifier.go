@@ -40,8 +40,9 @@ func (broadcasterPushNotificationWorker) deviceKey(ev *model.Event) string {
 func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Job[broadcasterPushNotificationWorkerArgs]) error {
 	log.Debug().Str("context", "PUSH_NOTIFICATIONS").
 		Str("master_public_key", job.Args.MasterPublicKey).
-		Str("device_public_key", w.deviceKey(job.Args.Device)).
+		Str("device_key", w.deviceKey(job.Args.Device)).
 		Int("events_count", len(job.Args.Events)).
+		Strs("event_ids", job.Args.Events.IDs()).
 		Str("batch", job.Args.BatchID).
 		Msg("starting broadcaster push notification worker")
 
@@ -73,8 +74,9 @@ func (w *broadcasterPushNotificationWorker) Work(ctx context.Context, job *rq.Jo
 		log.Trace().
 			Str("context", "PUSH_NOTIFICATIONS").
 			Str("master_public_key", job.Args.MasterPublicKey).
-			Str("device_public_key", w.deviceKey(job.Args.Device)).
+			Str("device_key", w.deviceKey(job.Args.Device)).
 			Int("events_count", len(job.Args.Events)).
+			Strs("event_ids", job.Args.Events.IDs()).
 			Int("filtered_count", filteredCount).
 			Str("batch", job.Args.BatchID).
 			Msg("no notifications to send for this device and user")

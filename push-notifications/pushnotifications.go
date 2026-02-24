@@ -449,6 +449,13 @@ func (pm *PushNotificationManager) AcceptEventsFromBroadcast(ctx context.Context
 		batchID = lTag.Value()
 	}
 
+	log.Trace().
+		Str("context", "PUSH_NOTIFICATIONS").
+		Int("events_count", len(events)).
+		Str("batch", batchID).
+		Strs("event_ids", model.Events(events).IDs()).
+		Msg("received events from broadcaster for processing")
+
 	return errors.Wrapf(
 		pm.rq.Push(ctx,
 			&broadcasterUserNotificationWorkerArgs{
@@ -476,24 +483,32 @@ func (pm *PushNotificationManager) AcceptEventsForRemotePush(ctx context.Context
 				devicesCollected++
 				if v := collectRelaysFromDevice(device); len(v) > 0 {
 					relays = append(relays, v...)
+				} else if len(v) == 0 {
+					log.Debug().
+						Str("context", "PUSH_NOTIFICATIONS").
+						Str("device_pubkey", device.PubKey).
+						Str("event_id", event.ID).
+						Msg("no relays found for device, skipping for remote push notification")
 				}
 			}
 		}
 		uniqueRelays := compactRelays(relays)
 
-		if len(uniqueRelays) == 0 || devicesCollected == 0 {
-			// No relays found, nothing to do.
-			return
-		}
-
 		batchID := events.Hash()
 		log.Trace().
 			Str("context", "PUSH_NOTIFICATIONS").
 			Int("events_count", len(events)).
+			Strs("event_ids", events.IDs()).
 			Uint("devices_collected", devicesCollected).
 			Int("total_relays_collected", len(relays)).
 			Int("unique_relays_collected", len(uniqueRelays)).
+			Str("batch", batchID).
 			Msg("collected relays for remote push notification")
+
+		if len(uniqueRelays) == 0 || devicesCollected == 0 {
+			// No relays found, nothing to do.
+			return
+		}
 
 		packedEvents := pm.packEventsForBroadcast(ctx, events, batchID)
 		broadcastArgs := make([]rq.JobArgs, 0, len(uniqueRelays))
@@ -897,6 +912,7 @@ func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool
 		Str("pubkey", pubKey).
 		Int("target_num_devices", len(devices)).
 		Str("event_id", event.ID).
+		Bool("remote", remote).
 		Msg("collected valid devices for user")
 
 	return devices
