@@ -72,6 +72,7 @@ func (w *broadcasterUserNotificationWorker) Work(ctx context.Context, job *rq.Jo
 	log.Debug().
 		Str("context", "PUSH_NOTIFICATIONS").
 		Str("batch", job.Args.BatchID).
+		Strs("event_ids", decodedEvents.IDs()).
 		Int("unique_devices_count", len(targets)).
 		Msg("collected local devices for push notifications")
 
