@@ -309,3 +309,70 @@ func TestHasVideoImeta(t *testing.T) {
 		})
 	}
 }
+
+func TestParseEphemeralEmbeddingEvents(t *testing.T) {
+	t.Parallel()
+
+	var profileEvent Event
+	profileEvent.Kind = nostr.KindProfileMetadata
+	profileEvent.CreatedAt = nostr.Now()
+	profileEvent.Content = ProfileMetadataContent{
+		Name:  "test",
+		About: "test about",
+	}.String()
+	require.NoError(t, profileEvent.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+	t.Run("Multiple references", func(t *testing.T) {
+		t.Parallel()
+		var ev Event
+		ev.Kind = CustomIONKindEphemeralEmbedding
+		ev.CreatedAt = nostr.Now()
+		ev.Content = profileEvent.String()
+		ev.Tags = nostr.Tags{
+			{"e", "ref1"},
+			{"a", "ref2"},
+			{"e", "ref3"},
+		}
+		require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+		refs, err := ParseEphemeralEmbeddingEvents(&ev)
+		require.NoError(t, err)
+
+		for _, tag := range ev.Tags {
+			if tag.Key() == "e" || tag.Key() == "a" {
+				require.Contains(t, refs, tag.Value())
+			}
+		}
+
+		for _, events := range refs {
+			for _, event := range events {
+				require.Equal(t, &profileEvent, event.ContentEvent)
+			}
+		}
+	})
+	t.Run("Malformed content", func(t *testing.T) {
+		t.Parallel()
+		var ev Event
+		ev.Kind = CustomIONKindEphemeralEmbedding
+		ev.CreatedAt = nostr.Now()
+		ev.Content = "invalid json"
+		ev.Tags = nostr.Tags{
+			{"e", "ref1"},
+		}
+		require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+		_, err := ParseEphemeralEmbeddingEvents(&ev)
+		require.Error(t, err)
+	})
+	t.Run("No references", func(t *testing.T) {
+		t.Parallel()
+		var ev Event
+		ev.Kind = CustomIONKindEphemeralEmbedding
+		ev.CreatedAt = nostr.Now()
+		ev.Content = profileEvent.String()
+		require.NoError(t, ev.SignWithAlg(GeneratePrivateKey(), SignAlgEDDSA, KeyAlgCurve25519))
+
+		_, err := ParseEphemeralEmbeddingEvents(&ev)
+		require.Error(t, err)
+	})
+}
