@@ -304,27 +304,42 @@ func ParseEphemeralEmbeddingEvents(events ...*Event) (map[string][]*EphemeralEmb
 		if ev.Kind != CustomIONKindEphemeralEmbedding {
 			continue
 		}
-		ref, content, aErr := ParseEphemeralEmbeddingEventRef(ev)
-		if aErr != nil {
-			return nil, errors.Wrapf(aErr, "malformed 21750: %v", ev.Content)
+
+		refs, content, err := ParseEphemeralEmbeddingEventRef(ev)
+		if err != nil {
+			return nil, err
 		}
-		ephemeralEmbeddingEventsByAddr[ref] = append(ephemeralEmbeddingEventsByAddr[ref], &EphemeralEmbeddingEvent{ContentEvent: content, Event: ev})
+
+		embedding := &EphemeralEmbeddingEvent{ContentEvent: content, Event: ev}
+		for _, ref := range refs {
+			ephemeralEmbeddingEventsByAddr[ref] = append(ephemeralEmbeddingEventsByAddr[ref], embedding)
+		}
 	}
 	return ephemeralEmbeddingEventsByAddr, nil
 }
 
-func ParseEphemeralEmbeddingEventRef(ev *Event) (key string, eventContent *Event, err error) {
+func ParseEphemeralEmbeddingEventRef(ev *Event) (keys []string, eventContent *Event, err error) {
 	var content Event
+
 	err = content.UnmarshalJSON([]byte(ev.Content))
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "malformed %v event, incorrect content %v", CustomIONKindEphemeralEmbedding, ev.Content)
+		return nil, nil, errors.Wrapf(err, "malformed %v event, incorrect content %v", CustomIONKindEphemeralEmbedding, ev.Content)
 	}
 	eventContent = &content
-	ref := cmp.Or(ev.GetTag("e").Value(), ev.GetTag("a").Value())
-	if ref == "" {
-		return "", nil, errors.Errorf("malformed ephemeral embedding, missing a / e tag: %+v", ev)
+
+	for _, tag := range ev.Tags {
+		if tag.Key() == "e" || tag.Key() == "a" {
+			if v := tag.Value(); v != "" {
+				keys = append(keys, v)
+			}
+		}
 	}
-	return ref, eventContent, nil
+
+	if len(keys) == 0 {
+		return nil, nil, errors.Errorf("%v: malformed ephemeral embedding, missing 'a' or 'e' tags", ev.ID)
+	}
+
+	return keys, eventContent, nil
 }
 
 func CollectRelaysFromRelayEvent(ev *Event) []string {
