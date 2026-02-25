@@ -231,7 +231,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.Error(t, validator.Validate(ctx, model.Events{&ev}))
 		})
-		t.Run("valid event with event fitlers", func(t *testing.T) {
+		t.Run("valid event with event filters", func(t *testing.T) {
 			var ev model.Event
 			ev.Kind = model.CustomIONKindDeviceRegistration
 			ev.Tags = model.Tags{
