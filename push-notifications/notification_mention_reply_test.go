@@ -361,14 +361,16 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 	)
 
 	di := &DeviceInfo{
-		Filters: model.Filters{
-			{
-				Kinds: []int{nostr.KindTextNote},
+		Filters: model.FiltersWithEvents{
+			Filters: model.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+				},
 			},
 		},
 		Event: deviceEvent,
 	}
-	pm.devicesFilterIndex.Index(di.Filters, di)
+	pm.devicesFilterIndex.Index(di.Filters.Filters, di)
 
 	notifications, err := pm.handleMentionReplyEvent(mentionEvent, profileEvent)
 	require.NoError(t, err)

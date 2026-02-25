@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/goccy/go-json"
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ice-blockchain/subzero/model"
@@ -34,10 +33,19 @@ func validateKindDeviceRegistrationAuthoritative(_ context.Context, ev *eventVal
 }
 
 func validateKindDeviceRegistration(ctx context.Context, ev *eventValidator, e *model.Event, rules *ruleSet) error {
-	var filters model.Filters
+	var filters model.FiltersWithEvents
 
-	if err := json.Unmarshal([]byte(e.Content), &filters); err != nil {
+	if err := filters.UnmarshalJSON([]byte(e.Content)); err != nil {
 		return errors.Wrapf(ErrWrongEventParams, "wrong content JSON value: %v", err)
+	}
+
+	for _, event := range filters.Data {
+		if err := ev.validate(ctx, rules, filters.Data, event); err != nil {
+			return errors.Wrap(err, "validation failed")
+		}
+		if event.GetMasterPublicKey() != e.GetMasterPublicKey() {
+			return errors.Wrap(ErrWrongEventParams, "master public key in filter event does not match the one in the device registration event")
+		}
 	}
 
 	if rules != nil && rules.BroadcastMode {

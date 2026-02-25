@@ -526,15 +526,17 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 	)
 
 	di := &DeviceInfo{
-		Filters: model.Filters{
-			{
-				Kinds: []int{nostr.KindTextNote},
-				Tags:  model.TagMap{"p": []model.TagValues{{&recipientPubKey}}},
+		Filters: model.FiltersWithEvents{
+			Filters: model.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+					Tags:  model.TagMap{"p": []model.TagValues{{&recipientPubKey}}},
+				},
 			},
 		},
 		Event: deviceEvent,
 	}
-	pm.devicesFilterIndex.Index(di.Filters, di)
+	pm.devicesFilterIndex.Index(di.Filters.Filters, di)
 
 	notifications, err := pm.createNotifications(
 		[]*model.Event{deviceEvent},

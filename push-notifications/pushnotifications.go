@@ -903,7 +903,7 @@ func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool
 			continue
 		}
 
-		if model.FiltersMatch(deviceInfo.Filters, event, "", "") {
+		if model.FiltersMatch(deviceInfo.Filters.Filters, event, "", "") {
 			devices = append(devices, deviceInfo.Event)
 		}
 	}

@@ -18,7 +18,7 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		relayURL        = "wss://example.com"
 		validKindFilter = `[{"kinds":[1]}]`
 	)
-
+	var filterEvent model.Event
 	var memdb fixture.MemDB
 
 	key, pubkey := model.GenerateKeyPair()
@@ -30,6 +30,20 @@ func TestValidateDeviceRegistration(t *testing.T) {
 		WithIONIdentityPublicKeys(emptyIONIdentityKeys),
 		WithQueryFunc(memdb.SelectEvents),
 	)
+
+	filtersWithEvents := model.FiltersWithEvents{
+		Filters: []model.Filter{
+			{
+				Kinds: []int{1},
+			},
+		},
+		Data: model.Events{&filterEvent},
+	}
+
+	filterEvent.Kind = 5175
+	filterEvent.CreatedAt = nostr.Now()
+	require.NoError(t, filterEvent.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+
 	t.Run("Authoritative", func(t *testing.T) {
 		ctx := model.SetUserDataInContext(t.Context(), model.UserDataContext{
 			Authenticated:   true,
@@ -216,6 +230,19 @@ func TestValidateDeviceRegistration(t *testing.T) {
 			ev.Content = `{invalid json`
 			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 			require.Error(t, validator.Validate(ctx, model.Events{&ev}))
+		})
+		t.Run("valid event with event filters", func(t *testing.T) {
+			var ev model.Event
+			ev.Kind = model.CustomIONKindDeviceRegistration
+			ev.Tags = model.Tags{
+				{"d", "device-id"},
+				{"t", model.DeviceTokenOSWeb},
+				{"relay", relayURL},
+				{"token", "device-token"},
+			}
+			ev.Content = filtersWithEvents.String()
+			require.NoError(t, ev.SignWithAlg(key, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+			require.NoError(t, validator.Validate(ctx, model.Events{&ev}))
 		})
 	})
 	t.Run("Non-Authoritative", func(t *testing.T) {

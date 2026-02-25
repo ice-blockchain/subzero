@@ -233,9 +233,9 @@ func ReplacePMO(ev *Event, replace func(orig, replace string) (bool, string)) (s
 	}
 
 	type override struct {
+		text  string
 		start int
 		end   int
-		text  string
 	}
 
 	overrides := make([]override, 0, len(pmos))
@@ -260,7 +260,7 @@ func ReplacePMO(ev *Event, replace func(orig, replace string) (bool, string)) (s
 		if start < 0 || end < start || start > len(content) || end > len(content) {
 			return "", errors.Errorf("invalid PMO tag, invalid indexes %v %v (len %v)", parts[0], parts[1], len(content))
 		}
-		overrides = append(overrides, override{start, end, pmo[2]})
+		overrides = append(overrides, override{start: start, end: end, text: pmo[2]})
 	}
 	// start from the end
 	sort.Slice(overrides, func(i, j int) bool {
