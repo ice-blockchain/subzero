@@ -500,8 +500,10 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 	)
 
 	di := &DeviceInfo{
-		Filters: filters,
-		Event:   deviceEvent,
+		Filters: model.FiltersWithEvents{
+			Filters: filters,
+		},
+		Event: deviceEvent,
 	}
 	pm.devicesFilterIndex.Index(filters, di)
 

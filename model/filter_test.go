@@ -249,3 +249,56 @@ func TestFilterMatchAddresses(t *testing.T) {
 		require.False(t, result)
 	})
 }
+
+func TestFiltersWithEvents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Event", func(t *testing.T) {
+		t.Run("Decode", func(t *testing.T) {
+			const jsonData = `[{"ids":["abc"],"authors":["def"],"kinds":[1,2]},{"id":"foo","pubkey":"bar","created_at":1234567890,"kind":1}]`
+
+			var filters FiltersWithEvents
+
+			err := filters.UnmarshalJSON([]byte(jsonData))
+			require.NoError(t, err)
+			require.Len(t, filters.Filters, 1)
+			require.Len(t, filters.Data, 1)
+
+			require.Equal(t, []string{"abc"}, filters.Filters[0].IDs)
+			require.Equal(t, []string{"def"}, filters.Filters[0].Authors)
+			require.Equal(t, []int{1, 2}, filters.Filters[0].Kinds)
+
+			require.Equal(t, "foo", filters.Data[0].ID)
+			require.Equal(t, "bar", filters.Data[0].PubKey)
+			require.Equal(t, Timestamp(1234567890), filters.Data[0].CreatedAt)
+			require.Equal(t, 1, filters.Data[0].Kind)
+		})
+		t.Run("Encode", func(t *testing.T) {
+			filters := FiltersWithEvents{
+				Filters: Filters{
+					{
+						IDs:     []string{"abc"},
+						Authors: []string{"def"},
+						Kinds:   []int{1, 2},
+					},
+				},
+				Data: Events{
+					&Event{
+						Event: nostr.Event{
+							ID:        "foo",
+							PubKey:    "bar",
+							CreatedAt: 1234567890,
+							Kind:      1,
+						},
+					},
+				},
+			}
+
+			jsonBytes, err := filters.MarshalJSON()
+			require.NoError(t, err)
+
+			expectedJSON := `[{"ids":["abc"],"kinds":[1,2],"authors":["def"]},{"kind":1,"id":"foo","pubkey":"bar","created_at":1234567890,"tags":[],"content":""}]`
+			require.Equal(t, expectedJSON, string(jsonBytes))
+		})
+	})
+}

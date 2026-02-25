@@ -6,7 +6,9 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/goccy/go-json"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/tidwall/gjson"
 )
 
 type (
@@ -14,6 +16,13 @@ type (
 	TagValues = nostr.TagValues
 	Filter    = nostr.Filter
 	Filters   = nostr.Filters
+
+	FiltersWithData[T any] struct {
+		Filters Filters
+		Data    []T
+	}
+
+	FiltersWithEvents = FiltersWithData[*Event]
 )
 
 func filterMatchAuthors(filter *Filter, event *Event, currentMasterKey, currentDeviceKey string) bool {
@@ -125,4 +134,78 @@ func FiltersMatch(filters Filters, event *Event, currentMasterKey, currentDevice
 		}
 	}
 	return false
+}
+
+func (f *FiltersWithData[T]) UnmarshalJSON(data []byte) error {
+	r := gjson.ParseBytes(data)
+	arr := r.Array()
+
+	for _, item := range arr {
+		raw := item.Raw
+		isFilter := item.Get("ids").Exists() ||
+			item.Get("authors").Exists() ||
+			item.Get("kinds").Exists() ||
+			item.Get("addresses").Exists() ||
+			item.Get("since").Exists() ||
+			item.Get("until").Exists() ||
+			item.Get("limit").Exists() ||
+			item.Get("search").Exists()
+
+		// Also check for tag filters (fields starting with #).
+		if !isFilter {
+			item.ForEach(func(key, value gjson.Result) bool {
+				if key.Type == gjson.String && len(key.String()) > 0 && key.String()[0] == '#' {
+					isFilter = true
+					return false
+				}
+				return true
+			})
+		}
+
+		if isFilter {
+			var filter Filter
+			if err := json.Unmarshal([]byte(raw), &filter); err != nil {
+				return err
+			}
+			f.Filters = append(f.Filters, filter)
+		} else {
+			var d T
+			if err := json.Unmarshal([]byte(raw), &d); err != nil {
+				return err
+			}
+			f.Data = append(f.Data, d)
+		}
+	}
+
+	return nil
+}
+
+func (f FiltersWithData[T]) MarshalJSON() ([]byte, error) {
+	items := make([]json.RawMessage, 0, len(f.Filters)+len(f.Data))
+
+	for _, filter := range f.Filters {
+		b, err := json.Marshal(filter)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, b)
+	}
+
+	for _, d := range f.Data {
+		b, err := json.Marshal(d)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, b)
+	}
+
+	return json.Marshal(items)
+}
+
+func (f FiltersWithData[T]) String() string {
+	b, err := json.Marshal(f)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

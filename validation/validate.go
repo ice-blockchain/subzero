@@ -212,7 +212,6 @@ var (
 			ContentNotEmpty().
 			Required("relay").
 			Optional("t", "token").
-			Validate(validateKindDeviceRegistration).
 			Build(),
 
 		model.CustomIONKindAttestation: newKindValidatorBuilderEmpty().
@@ -438,6 +437,8 @@ func (ev *eventValidator) validate(ctx context.Context, rules *ruleSet, batch mo
 		return validateKindNostrEventPublishScheduleJob(e)
 	case nostr.KindJobFeedback:
 		return validateKindFeedbackJob(e)
+	case model.CustomIONKindDeviceRegistration:
+		return validateKindDeviceRegistration(ctx, ev, e, rules)
 	// --- End jobs
 	case nostr.KindRelayListMetadata:
 		return validateKindRelayListMetadataEvent(e)

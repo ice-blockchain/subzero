@@ -5,7 +5,6 @@ package pushnotifications
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,7 +21,7 @@ import (
 type (
 	DeviceInfo struct {
 		Event   *model.Event
-		Filters model.Filters
+		Filters model.FiltersWithEvents
 		Remote  bool
 	}
 )
@@ -88,8 +87,8 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 		return fmt.Errorf("invalid device registration event: missing master public key %q or device ID %q in tags", masterPubKey, deviceID)
 	}
 
-	var filters model.Filters
-	if err := json.Unmarshal([]byte(event.Content), &filters); err != nil {
+	var filters model.FiltersWithEvents
+	if err := filters.UnmarshalJSON([]byte(event.Content)); err != nil {
 		return errors.Wrap(err, "failed to unmarshal device filters")
 	}
 
@@ -110,7 +109,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 	}
 
 	pm.devicesEventMap.Store(calcDeviceKey(event), event)
-	pm.devicesFilterIndex.Index(filters, &deviceInfo)
+	pm.devicesFilterIndex.Index(filters.Filters, &deviceInfo)
 
 	return nil
 }

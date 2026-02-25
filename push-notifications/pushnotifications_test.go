@@ -277,10 +277,12 @@ func TestCollectUserValidDevices(t *testing.T) {
 			},
 		}
 
-		filters := model.Filters{
-			{
-				Kinds: []int{nostr.KindTextNote},
-				Tags:  model.TagMap{"p": []model.TagValues{{&pubKey}}},
+		filters := model.FiltersWithEvents{
+			Filters: model.Filters{
+				{
+					Kinds: []int{nostr.KindTextNote},
+					Tags:  model.TagMap{"p": []model.TagValues{{&pubKey}}},
+				},
 			},
 		}
 
@@ -294,7 +296,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 		}
 
 		deviceInfo := DeviceInfo{Filters: filters, Event: deviceEvent}
-		pm.devicesFilterIndex.Index(filters, &deviceInfo)
+		pm.devicesFilterIndex.Index(filters.Filters, &deviceInfo)
 
 		devices := pm.collectLocalDevices(pubKey, event)
 
@@ -674,13 +676,15 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 		}
 		di := DeviceInfo{
 			Event: deviceEvent,
-			Filters: model.Filters{
-				{
-					Kinds: []int{nostr.KindTextNote},
+			Filters: model.FiltersWithEvents{
+				Filters: model.Filters{
+					{
+						Kinds: []int{nostr.KindTextNote},
+					},
 				},
 			},
 		}
-		pm.devicesFilterIndex.Index(di.Filters, &di)
+		pm.devicesFilterIndex.Index(di.Filters.Filters, &di)
 
 		mainEvent := &model.Event{
 			Event: nostr.Event{
