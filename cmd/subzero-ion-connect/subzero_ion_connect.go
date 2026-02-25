@@ -239,7 +239,7 @@ func init() {
 	wsserver.RegisterWSBroadcastEventListener(func(ctx context.Context, events ...*model.Event) error {
 		antsPool.Submit(func() {
 			start := time.Now()
-			n := webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+			n := webserver.BroadcastNewEvents(ctx, events...)
 			end := time.Since(start)
 			log.Trace().
 				Int("event_count", len(events)).
@@ -250,7 +250,7 @@ func init() {
 		})
 		antsPool.Submit(func() {
 			if err := pushnotifications.AcceptEvents(ctx, events...); err != nil {
-				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents")
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to pushnotifications.AcceptEvents from Broadcast")
 			}
 		})
 

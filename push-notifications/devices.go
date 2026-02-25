@@ -41,7 +41,7 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 		}
 
 		if err := pm.processDeviceRegistrationEvent(event); err != nil {
-			log.Error().Str("context", "PUSH-NOTIFICATIONS").
+			log.Error().Str("context", "PUSH_NOTIFICATIONS").
 				Err(err).
 				Str("event_id", event.ID).
 				Msg("error processing device registration event")
@@ -50,7 +50,7 @@ func (pm *PushNotificationManager) syncDevices(ctx context.Context) error {
 	}
 
 	log.Info().
-		Str("context", "PUSH-NOTIFICATIONS").
+		Str("context", "PUSH_NOTIFICATIONS").
 		Int("total_devices", pm.devicesFilterIndex.Size()).
 		Msg("device synchronization completed")
 
