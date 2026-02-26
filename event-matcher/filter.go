@@ -17,6 +17,18 @@ var (
 	}
 )
 
+func hasSpecialKinds(kinds []int) bool {
+	for _, kind := range kinds {
+		if _, isRepost := repostKinds[kind]; isRepost {
+			return true
+		}
+		if kind < 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func parseFilters(filters model.Filters) []indexKey {
 	if len(filters) == 0 {
 		return []indexKey{{Kind: anyKind, Dimension: dimNone}}
@@ -64,25 +76,29 @@ func parseFilters(filters model.Filters) []indexKey {
 			}
 		}
 
-		var kinds = filters[i].Kinds[:0]
-		var hadRepost bool
-		for _, kind := range filters[i].Kinds {
-			if kind < 0 {
-				// If we had any negative kinds, we need to add the any-kind key to the targets to ensure they get matched against events of any kind.
-				uniqueKeys[indexKey{Kind: anyKind, Dimension: dimNone}] = struct{}{}
-				continue
-			}
+		kinds := filters[i].Kinds
+		if hasSpecialKinds(filters[i].Kinds) {
+			kinds = make([]int, 0, len(filters[i].Kinds))
 
-			if _, isRepost := repostKinds[kind]; isRepost {
-				if hadRepost {
+			var hadRepost bool
+			for _, kind := range filters[i].Kinds {
+				if kind < 0 {
+					// If we had any negative kinds, we need to add the any-kind key to the targets to ensure they get matched against events of any kind.
+					uniqueKeys[indexKey{Kind: anyKind, Dimension: dimNone}] = struct{}{}
 					continue
 				}
 
-				hadRepost = true
-				kind = nostr.KindGenericRepost
-			}
+				if _, isRepost := repostKinds[kind]; isRepost {
+					if hadRepost {
+						continue
+					}
 
-			kinds = append(kinds, kind)
+					hadRepost = true
+					kind = nostr.KindGenericRepost
+				}
+
+				kinds = append(kinds, kind)
+			}
 		}
 
 		numKinds := max(1, len(kinds))
