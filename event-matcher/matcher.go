@@ -76,58 +76,7 @@ func newEventMatcher[V Value]() *matcher[V] {
 	}
 }
 
-// parseEvent deconstructs the event into a set of index keys that represent all the possible filter dimensions it matches against.
-func parseEvent(ev *model.Event, buf []indexKey) []indexKey {
-	// Generic Catch-All: {}.
-	buf = append(buf, indexKey{Kind: anyKind, Dimension: dimNone})
-
-	// Kind Catch-All: {"kinds": [x]}.
-	buf = append(buf, indexKey{Kind: ev.Kind, Dimension: dimNone})
-
-	// Author Catch-All: {"authors": [x]}.
-	buf = append(buf, indexKey{Kind: anyKind, Dimension: dimAuthor, Value: ev.PubKey})
-	buf = append(buf, indexKey{Kind: ev.Kind, Dimension: dimAuthor, Value: ev.PubKey})
-	if m := ev.GetMasterPublicKey(); m != "" && m != ev.PubKey {
-		buf = append(buf, indexKey{Kind: anyKind, Dimension: dimAuthor, Value: m})
-		buf = append(buf, indexKey{Kind: ev.Kind, Dimension: dimAuthor, Value: m})
-	}
-
-	// Tags.
-	for i := range ev.Tags {
-		if len(ev.Tags[i]) < 2 {
-			continue // Skip empty or malformed tags.
-		}
-
-		var dim dimension
-		var val string
-
-		switch ev.Tags[i][0] {
-		case "p":
-			dim = dimTagP
-			val = ev.Tags[i][1]
-
-		case "k":
-			dim = dimTagK
-			val = ev.Tags[i][1]
-
-		case model.CustomIONTagAddressableQ:
-			if len(ev.Tags[i]) > 3 {
-				val = ev.Tags[i][3]
-				dim = dimTagQ
-			}
-		}
-
-		// If we matched a tracked dimension, emit both the specific-kind key
-		// and the any-kind key.
-		if dim != dimNone && val != "" {
-			buf = append(buf, indexKey{Kind: anyKind, Dimension: dim, Value: val})
-			buf = append(buf, indexKey{Kind: ev.Kind, Dimension: dim, Value: val})
-		}
-	}
-
-	return buf
-}
-
+// Index adds the given value to the matcher, associating it with the filters derived from the value. If a value with the same hash already exists, it will be replaced.
 func (s *matcher[V]) Index(rawFilters model.Filters, v V) {
 	hash := v.Hash()
 	keys := parseFilters(rawFilters)
@@ -176,6 +125,7 @@ func (s *matcher[V]) removeEntry(hash uint64, keys []indexKey) {
 	}
 }
 
+// RemoveByHash removes the value associated with the given hash from the matcher. Returns true if the value was found and removed, false otherwise.
 func (s *matcher[V]) RemoveByHash(hash uint64) bool {
 	oldValue, loaded := s.Values.LoadAndDelete(hash)
 	if loaded {
@@ -184,10 +134,12 @@ func (s *matcher[V]) RemoveByHash(hash uint64) bool {
 	return loaded
 }
 
+// Remove removes the given value from the matcher. Returns true if the value was found and removed, false otherwise.
 func (s *matcher[V]) Remove(v V) bool {
 	return s.RemoveByHash(v.Hash())
 }
 
+// Size returns the total number of indexed values in the matcher.
 func (s *matcher[V]) Size() int {
 	return s.Values.Size()
 }

@@ -215,7 +215,7 @@ func (h *handler) Handle(ctx context.Context, respWriter adapters.WSWriter, msgB
 		h.unlinkSubscription(respWriter, subscriptionID)
 		h.logOperation(respWriter, time.Since(start), "req: close: %v", subscriptionID)
 	case *model.BroadcastEnvelope:
-		h.handleBroadcast(h.populateContext(ctx, respWriter), e)
+		h.handleBroadcast(h.populateContext(context.WithoutCancel(ctx), respWriter), e)
 		h.logOperation(respWriter, time.Since(start), "broadcast")
 	default:
 		err = errors.Errorf("unknown message type %v", input.Label())

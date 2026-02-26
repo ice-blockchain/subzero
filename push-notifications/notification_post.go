@@ -31,7 +31,7 @@ func (pm *PushNotificationManager) handleNewPostEvent(_ context.Context, event *
 
 	if notificationType == "" {
 		log.Trace().
-			Str("context", "PUSH-NOTIFICATIONS").
+			Str("context", "PUSH_NOTIFICATIONS").
 			Int("kind", event.Kind).
 			Str("event_id", event.ID).
 			Msg("ignoring event with unsupported kind for post notifications")

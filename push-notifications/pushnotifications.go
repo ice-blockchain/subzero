@@ -650,12 +650,15 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 			return nil, errors.Wrap(err, "failed to get authoritative events")
 		}
 		if isAuthoritative {
-			if profileMetadataEvent == nil || attestationEvent == nil {
-				return nil, errors.Errorf("empty profile metadata or attestation event for event %s", event.ID)
+			if profileMetadataEvent == nil {
+				return nil, errors.Errorf("%v: no profile metadata event found", event.ID)
+			}
+			if attestationEvent == nil {
+				return nil, errors.Errorf("%v: no attestation event found", event.ID)
 			}
 			relevantEvents = append(relevantEvents, pm.createEphemeralEmbeddingEvent(profileMetadataEvent), pm.createEphemeralEmbeddingEvent(attestationEvent))
 		} else {
-			log.Info().
+			log.Debug().
 				Str("context", "PUSH_NOTIFICATIONS").
 				Str("event_id", event.ID).
 				Int("event_kind", int(event.Kind)).
@@ -908,7 +911,7 @@ func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool
 		}
 	}
 
-	log.Trace().Str("context", "PUSH-NOTIFICATIONS").
+	log.Trace().Str("context", "PUSH_NOTIFICATIONS").
 		Str("pubkey", pubKey).
 		Int("target_num_devices", len(devices)).
 		Str("event_id", event.ID).
@@ -1034,7 +1037,7 @@ func (pm *PushNotificationManager) getAuthoritativeEvents(ctx context.Context, e
 	var relayListMetadataEvent, profileMetadataEvent, attestationEvent *model.Event
 	for ev, err := range it {
 		if err != nil {
-			return false, nil, nil, errors.Wrap(err, "failed to check relay list metadata")
+			return false, nil, nil, errors.Wrapf(err, "%v: failed to fetch authoritative events from storage", masterPubKey)
 		}
 		switch ev.Kind {
 		case nostr.KindRelayListMetadata:
