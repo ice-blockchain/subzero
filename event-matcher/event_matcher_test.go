@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
@@ -554,6 +555,32 @@ func TestMatcherStorageIterators(t *testing.T) {
 			require.EqualValues(t, subCount, count)
 		})
 	})
+}
+
+func TestEventMatcherMatchRepost(t *testing.T) {
+	t.Parallel()
+
+	matcher := newEventMatcher[*model.Subscription]()
+	require.NotNil(t, matcher)
+
+	sub := model.NewSubscription("sub-with-special-reposts", model.Filters{
+		{
+			Kinds: []int{model.CustomIONKindRepostOfTokenizedCommunityDefinition, model.CustomIONKindRepostOfTokenizedCommunityAction},
+		},
+	})
+
+	matcher.Index(sub.Filters, sub)
+	require.EqualValues(t, 1, len(matcher.Indexes))
+	require.EqualValues(t, 1, matcher.Values.Size())
+
+	var ev model.Event
+	ev.Kind = nostr.KindGenericRepost
+
+	data := matcher.Get(&ev)
+	require.Len(t, data, 1)
+	require.Equal(t, sub, data[0])
+
+	require.True(t, matcher.Remove(sub))
 }
 
 func BenchmarkMatcherStorageInsert(b *testing.B) {

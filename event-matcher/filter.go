@@ -3,18 +3,25 @@
 package eventmatcher
 
 import (
-	"slices"
-
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/nbd-wtf/go-nostr"
+)
+
+var (
+	repostKinds = map[int]struct{}{
+		model.CustomIONKindRepostOfArticle:                      {},
+		model.CustomIONKindRepostOfEditableTextNote:             {},
+		model.CustomIONKindRepostOfTokenizedCommunityDefinition: {},
+		model.CustomIONKindRepostOfTokenizedCommunityAction:     {},
+	}
 )
 
 func parseFilters(filters model.Filters) []indexKey {
-	uniqueKeys := make(map[indexKey]struct{})
-
 	if len(filters) == 0 {
 		return []indexKey{{Kind: anyKind, Dimension: dimNone}}
 	}
 
+	uniqueKeys := make(map[indexKey]struct{}, len(filters))
 	for i := range filters {
 		var targets []indexKey
 
@@ -56,11 +63,27 @@ func parseFilters(filters model.Filters) []indexKey {
 			}
 		}
 
-		kinds := slices.DeleteFunc(filters[i].Kinds, func(k int) bool { return k < 0 })
-		if len(kinds) != len(filters[i].Kinds) && len(kinds) > 0 {
-			// If we had any negative kinds, we need to add the any-kind key to the targets to ensure they get matched against events of any kind.
-			uniqueKeys[indexKey{Kind: anyKind, Dimension: dimNone}] = struct{}{}
+		var kinds = filters[i].Kinds[:0]
+		var hadRepost bool
+		for _, kind := range filters[i].Kinds {
+			if kind < 0 {
+				// If we had any negative kinds, we need to add the any-kind key to the targets to ensure they get matched against events of any kind.
+				uniqueKeys[indexKey{Kind: anyKind, Dimension: dimNone}] = struct{}{}
+				continue
+			}
+
+			if _, isRepost := repostKinds[kind]; isRepost {
+				if hadRepost {
+					continue
+				}
+
+				hadRepost = true
+				kind = nostr.KindGenericRepost
+			}
+
+			kinds = append(kinds, kind)
 		}
+
 		numKinds := max(1, len(kinds))
 		numTargets := max(1, len(targets))
 		combinations := numKinds * numTargets
