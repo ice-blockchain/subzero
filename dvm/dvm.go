@@ -309,7 +309,7 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 	}
 	defer closeRelays(relays)
 
-	var successfull atomic.Int32
+	var successfulPublishes atomic.Int32
 	for _, relay := range relays {
 		wg.Go(func() {
 			defer appcontext.GetAppContext(ctx).Recover()
@@ -338,12 +338,12 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 					Msg("job failed to publish job result to relay")
 				return
 			}
-			successfull.Add(1)
+			successfulPublishes.Add(1)
 		})
 	}
 	wg.Wait()
 
-	if len(relays) > 0 && successfull.Load() == 0 && ctx.Err() == nil {
+	if len(relays) > 0 && successfulPublishes.Load() == 0 && ctx.Err() == nil {
 		return errors.Errorf("failed to publish job result to %d relay(s)", len(relays))
 	}
 	return nil
