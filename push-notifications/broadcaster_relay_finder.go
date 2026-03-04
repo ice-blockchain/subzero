@@ -78,8 +78,6 @@ func (w *broadcasterRelayFinderWorker) Work(ctx context.Context, job *rq.Job[bro
 		return nil
 	}
 
-	targets := make(map[string]struct{}) // Contains unique relay URLs.
-
 	masterKeys := make([]string, 0, len(events))
 	for _, event := range events {
 		keys := w.Manager.collectTargetMasterKeys(event)
@@ -93,6 +91,7 @@ func (w *broadcasterRelayFinderWorker) Work(ctx context.Context, job *rq.Job[bro
 		return nil
 	}
 
+	var relays []string
 	for ev, err := range query.GetStoredEvents(ctx, model.Filter{
 		Authors: masterKeys,
 		Kinds:   []int{nostr.KindRelayListMetadata},
@@ -104,35 +103,36 @@ func (w *broadcasterRelayFinderWorker) Work(ctx context.Context, job *rq.Job[bro
 		}
 
 		// TODO: should we use just a few relays from the list instead of all of them?
-		relays := model.CollectRelaysFromRelayEvent(ev)
-		if len(relays) > highBoundRelayListSize {
+		userRelays := model.CollectRelaysFromRelayEvent(ev)
+		if len(userRelays) > highBoundRelayListSize {
 			log.Warn().Str("context", "PUSH_NOTIFICATIONS").
 				Str("batch", job.Args.BatchID).
 				Str("user", ev.GetMasterPublicKey()).
-				Int("relays_count", len(relays)).
+				Int("relays_count", len(userRelays)).
 				Msg("relay list metadata event contains too many relays, shrinking to high bound")
-			relays = relays[:highBoundRelayListSize]
+			userRelays = userRelays[:highBoundRelayListSize]
 		}
 		log.Trace().
 			Str("context", "PUSH_NOTIFICATIONS").
 			Str("batch", job.Args.BatchID).
 			Str("user", ev.GetMasterPublicKey()).
-			Int("relays_count", len(relays)).
+			Int("relays_count", len(userRelays)).
 			Msg("collected relays from relay list metadata event")
-		for _, r := range relays {
-			targets[r] = struct{}{}
-		}
+
+		relays = append(relays, userRelays...)
 	}
 
+	targets := compactRelays(relays, w.Manager.relayURL)
 	log.Debug().Str("context", "PUSH_NOTIFICATIONS").
 		Str("batch", job.Args.BatchID).
+		Int("relay_count", len(relays)).
 		Int("unique_relay_count", len(targets)).
 		Int("events_count", len(events)).
 		Msg("relay finder found unique relays for broadcasting")
 
 	broadcastEvents := w.Manager.packEventsForBroadcast(ctx, events, job.Args.BatchID)
 	broadcastArgs := make([]rq.JobArgs, 0, len(targets))
-	for relayURL := range targets {
+	for _, relayURL := range targets {
 		broadcastArgs = append(broadcastArgs, &broadcasterBroadcastWorkerArgs{
 			RelayURL:        relayURL,
 			BatchID:         job.Args.BatchID,

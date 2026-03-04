@@ -172,7 +172,7 @@ func (pm *PushNotificationManager) handleTokenizedCommunityEvent(ctx context.Con
 		}
 
 		if notifyType != "" {
-			deviceNotifications, err := pm.createNotifications([]*model.Event{device}, notifyType, event, relevantEvents...)
+			deviceNotifications, err := pm.createNotifications(model.Events{device}, notifyType, event, relevantEvents...)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to create tokenized community notification for device %s and type %q", device.ID, notifyType)
 			}
