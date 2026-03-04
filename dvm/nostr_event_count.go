@@ -46,6 +46,13 @@ func (n *nostrEventCountJob) Process(ctx context.Context, e *model.Event) (paylo
 		return "0", errors.Wrap(err, "count failed")
 	}
 
+	log.Debug().
+		Str("context", "DVM").
+		Str("job_id", e.ID).
+		RawJSON("filters", []byte(e.Content)).
+		Str("count_result", countString).
+		Msg("nostr event count job completed")
+
 	return countString, nil
 }
 
@@ -60,6 +67,10 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 
 	sourceList := collectSourceRelayURLsFromEvent(e, n.dvm.Config.RelayURL)
 	if len(sourceList) == 0 {
+		log.Trace().
+			Str("context", "DVM").
+			Str("job_id", e.ID).
+			Msg("no source relay URLs found in event, counting locally")
 		return n.doCountLocal(ctx, filters, groupBy)
 	}
 
@@ -67,8 +78,19 @@ func (n *nostrEventCountJob) doCount(ctx context.Context, e *model.Event, filter
 	defer closeRelays(queryRelays)
 
 	if len(queryRelays) == 0 {
+		log.Debug().
+			Str("context", "DVM").
+			Str("job_id", e.ID).
+			Msg("failed to connect to any source relay, counting locally")
 		return n.doCountLocal(ctx, filters, groupBy)
 	}
+
+	log.Trace().
+		Str("context", "DVM").
+		Str("job_id", e.ID).
+		Int("relay_count", len(queryRelays)).
+		Strs("relay_urls", sourceList).
+		Msg("connected to source relays, counting remotely")
 
 	return n.doCountRemote(ctx, filters, queryRelays, groupBy)
 }
@@ -154,7 +176,10 @@ func (n *nostrEventCountJob) doCountRemote(ctx context.Context, filters model.Fi
 
 			eventCh, err := relay.QueryEventsMany(ctx, filters...)
 			if err != nil {
-				log.Error().Err(err).Str("relay_url", relay.URL).Msg("cannot get events from relay")
+				log.Error().
+					Str("context", "DVM").
+					Err(err).
+					Str("relay_url", relay.URL).Msg("cannot get events from relay")
 
 				return
 			}

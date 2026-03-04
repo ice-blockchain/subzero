@@ -97,6 +97,10 @@ func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Eve
 			Str("job_id", task.Event.ID).
 			Msg("job result submission timeout")
 	case <-ctx.Done():
+		log.Debug().
+			Str("context", "DVM").
+			Str("job_id", task.Event.ID).
+			Msg("job result submission canceled")
 	case task.Result <- result:
 	}
 }
@@ -121,6 +125,12 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.
 		}
 	}
 
+	log.Trace().
+		Str("context", "DVM").
+		Str("job_id", event.ID).
+		Int("kind", event.Kind).
+		Msg("received new job")
+
 	ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
 	task := &jobInfo{
 		Result: make(chan *model.Event, 1),
@@ -129,17 +139,14 @@ func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.
 	}
 	d.Jobs.Store(event.ID, task)
 
-	d.WG.Add(1)
-
-	go func() {
+	d.WG.Go(func() {
 		defer appcontext.GetAppContext(ctx).Recover()
 		defer d.Jobs.Delete(event.ID)
 		defer cancel()
 
 		d.execute(ctx, task)
-		d.WG.Done()
 		close(task.Result)
-	}()
+	})
 
 	return task.Result, nil
 }
@@ -284,30 +291,28 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 
 	d.SubmitResult(ctx, task, result)
 
-	list := collectTargetRelayURLsFromEvent(task.Event)
-	if len(list) > 0 {
+	relayList := collectTargetRelayURLsFromEvent(task.Event)
+	if len(relayList) > 0 {
 		// TODO: Ignore for now but replace with panic later.
 		log.Trace().
 			Str("context", "DVM").
 			Str("job_id", task.Event.ID).
-			Int("relay_count", len(list)).
-			Interface("relays", list).
+			Int("relay_count", len(relayList)).
+			Strs("relays", relayList).
 			Msg("job found target relays")
 		return nil
 	}
 
-	relays := connectToRelays(ctx, task.Event.ID, list)
+	relays := connectToRelays(ctx, task.Event.ID, relayList)
 	if len(relays) == 0 {
 		return nil
 	}
 	defer closeRelays(relays)
 
-	wg.Add(len(relays))
-	successfull := atomic.Int32{}
+	var successfulPublishes atomic.Int32
 	for _, relay := range relays {
-		go func() {
+		wg.Go(func() {
 			defer appcontext.GetAppContext(ctx).Recover()
-			defer wg.Done()
 
 			err := relay.Publish(ctx, result.Event)
 			if err != nil && strings.Contains(err.Error(), "auth-required:") {
@@ -333,13 +338,12 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 					Msg("job failed to publish job result to relay")
 				return
 			}
-			successfull.Add(1)
-		}()
+			successfulPublishes.Add(1)
+		})
 	}
-
 	wg.Wait()
 
-	if len(relays) > 0 && successfull.Load() == 0 && ctx.Err() == nil {
+	if len(relays) > 0 && successfulPublishes.Load() == 0 && ctx.Err() == nil {
 		return errors.Errorf("failed to publish job result to %d relay(s)", len(relays))
 	}
 	return nil
@@ -443,7 +447,7 @@ func collectSourceRelayURLsFromEvent(e *model.Event, selfURL string) (relayList 
 	for _, tag := range e.Tags {
 		if tag.Key() == "param" && tag.Value() == "relay" {
 			for _, relayURL := range tag[2:] {
-				if selfURL != "" && relayURL == selfURL {
+				if selfURL != "" && model.CompareRelaysURLs(relayURL, selfURL) {
 					continue
 				}
 				relayList = append(relayList, relayURL)
