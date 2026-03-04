@@ -25,6 +25,8 @@ func TestNotificationBroadcastRemoteEvents(t *testing.T) {
 		Chan: make(chan *pn.Notification[*model.Event], 100),
 	}
 
+	const remoteRelayURL = "wss://remote-relay.example.com"
+
 	pm := helperNewManager(t)
 	pm.pushNotificationClient = mockNotificationClient
 
@@ -45,10 +47,13 @@ func TestNotificationBroadcastRemoteEvents(t *testing.T) {
 			select {
 			case <-broadcasterForwardCtx.Done():
 				return
-			case data := <-mockedBroadcaster.Chan:
+			case data, open := <-mockedBroadcaster.Chan:
+				if !open {
+					return
+				}
 				t.Logf("Broadcaster received %d events to forward from %s", len(data.Events), data.RelayURL)
-				if data.RelayURL != pm.relayURL {
-					t.Logf("Ignoring events from relay %s since it doesn't match manager's relay URL %s", data.RelayURL, pm.relayURL)
+				if got, expected := data.RelayURL, remoteRelayURL; got != expected {
+					t.Logf("Ignoring events from relay %q since it doesn't match expected remote relay URL %q", got, expected)
 					continue next
 				}
 				require.NoError(t, pm.AcceptEventsFromBroadcast(broadcasterForwardCtx, data.Events))
@@ -80,7 +85,7 @@ func TestNotificationBroadcastRemoteEvents(t *testing.T) {
 			deviceRegEventRemote.Content = subscriberFilters.String()
 			deviceRegEventRemote.Tags = model.Tags{
 				{"d", subscriber.PublicKey + "_" + deviceID},
-				{"relay", pm.relayURL},
+				{"relay", remoteRelayURL},
 			}
 			for _, relayURL := range subscriber.Relays {
 				deviceRegEventRemote.Tags = append(deviceRegEventRemote.Tags, model.Tag{"relay", relayURL})
@@ -104,7 +109,7 @@ func TestNotificationBroadcastRemoteEvents(t *testing.T) {
 			deviceRegEventLocal.Tags = model.Tags{
 				{"d", deviceID},
 				{"t", model.DeviceTokenOSIOS},
-				{"relay", testRelayURL},
+				{"relay", pm.relayURL},
 			}
 			require.NoError(t, deviceRegEventLocal.SignWithAlg(subscriber.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 

@@ -1025,3 +1025,19 @@ func TestCompactRelays(t *testing.T) {
 		})
 	}
 }
+
+func TestCompactRelaysWithFiltering(t *testing.T) {
+	t.Parallel()
+
+	data := compactRelays(
+		[]string{
+			"wss://relay1.com:4443",
+			"wss://relay1.com",
+			"wss://RELAY1.com:4443",
+			"wss://relay2.com",
+			"wss://RELAY2.com:888",
+		},
+		"wss://relay1.com:4444",
+	)
+	require.ElementsMatch(t, []string{"wss://relay2.com"}, data)
+}

@@ -492,7 +492,7 @@ func (pm *PushNotificationManager) AcceptEventsForRemotePush(ctx context.Context
 				}
 			}
 		}
-		uniqueRelays := compactRelays(relays)
+		uniqueRelays := compactRelays(relays, pm.relayURL)
 
 		batchID := events.Hash()
 		log.Trace().
@@ -656,6 +656,10 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 			if attestationEvent == nil {
 				return nil, errors.Errorf("%v: no attestation event found", event.ID)
 			}
+			log.Trace().
+				Str("context", "PUSH_NOTIFICATIONS").
+				Str("event_id", event.ID).
+				Msg("adding authoritative events as relevant events for push notification processing")
 			relevantEvents = append(relevantEvents, pm.createEphemeralEmbeddingEvent(profileMetadataEvent), pm.createEphemeralEmbeddingEvent(attestationEvent))
 		} else {
 			log.Debug().
@@ -713,6 +717,12 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to handle event %s", event.ID)
 	}
+
+	log.Trace().
+		Str("context", "PUSH_NOTIFICATIONS").
+		Str("event_id", event.ID).
+		Int("notifications_created", len(notifications)).
+		Msg("processed event for notifications")
 
 	return notifications, nil
 }
@@ -864,6 +874,14 @@ func (pm *PushNotificationManager) createNotifications(
 	}
 	var deviceEventIDs []string
 	for _, event := range deviceRegistrationEvents {
+		log.Trace().
+			Str("context", "PUSH_NOTIFICATIONS").
+			Str("device_pubkey", event.PubKey).
+			Str("event_id", incomingEvent.ID).
+			Int("relevant_events_count", len(relevantEvents)).
+			Str("notification_type", string(notificationType)).
+			Msg("creating notification for device")
+
 		deviceEventIDs = append(deviceEventIDs, event.ID)
 		data := map[string]any{
 			"compression": CompressionMethodZlib,
@@ -896,7 +914,9 @@ func (pm *PushNotificationManager) createNotifications(
 }
 
 func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool, event *model.Event) (devices model.Events) {
+	var candidates uint
 	for deviceInfo := range pm.devicesFilterIndex.Lookup(event) {
+		candidates++
 		// If set, pubKey indicates that we should only consider devices registered with this public key.
 		if pubKey != "" && deviceInfo.Event.GetMasterPublicKey() != pubKey && deviceInfo.Event.PubKey != pubKey {
 			continue
@@ -914,6 +934,7 @@ func (pm *PushNotificationManager) collectUserDevices(pubKey string, remote bool
 	log.Trace().Str("context", "PUSH_NOTIFICATIONS").
 		Str("pubkey", pubKey).
 		Int("target_num_devices", len(devices)).
+		Uint("candidate_num_devices", candidates).
 		Str("event_id", event.ID).
 		Bool("remote", remote).
 		Msg("collected valid devices for user")
@@ -1067,7 +1088,7 @@ func collectRelaysFromDevice(ev *model.Event) []string {
 	return relays
 }
 
-func compactRelays(relays []string) []string {
+func compactRelays(relays []string, filterOut ...string) []string {
 	var compacted []string
 
 	seen := make(map[string][]string)
@@ -1086,8 +1107,17 @@ func compactRelays(relays []string) []string {
 		}
 
 		if !isDuplicate {
+			var shouldFilterOut bool
 			seen[key] = append(seen[key], relay)
-			compacted = append(compacted, relay)
+			for _, v := range filterOut {
+				if model.CompareRelaysURLs(relay, v) {
+					shouldFilterOut = true
+					break
+				}
+			}
+			if !shouldFilterOut {
+				compacted = append(compacted, relay)
+			}
 		}
 	}
 
