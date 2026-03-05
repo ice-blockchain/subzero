@@ -142,7 +142,7 @@ func (pm *PushNotificationManager) shouldProcessDeletionEvent(event *model.Event
 	return kCount == 0 // If there are no 'k' tags, we treat it as a deletion of all kinds, including device registrations.
 }
 
-func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, events []*model.Event) {
+func (pm *PushNotificationManager) removeDevicesIfAny(_ context.Context, events []*model.Event) {
 	var deletionEvents model.Events
 
 	for _, event := range events {
@@ -187,6 +187,7 @@ func (pm *PushNotificationManager) ManageDeviceRegistrationEvents(ctx context.Co
 
 func (pm *PushNotificationManager) removeInvalidTokenDevicesFromCache(deviceEvents model.Events) {
 	for _, deviceEvent := range deviceEvents {
+		pm.devicesReverseMap.Delete(deviceEvent.ID)
 		pm.removeDeviceFromCache(deviceEvent)
 	}
 }
