@@ -3,6 +3,7 @@
 package eventmatcher
 
 import (
+	"fmt"
 	"iter"
 
 	"github.com/RoaringBitmap/roaring/v2/roaring64"
@@ -52,11 +53,12 @@ type (
 )
 
 const (
-	dimNone   dimension = iota // Generic (No specific tags/authors)
-	dimAuthor                  // Event PubKey or master pubkey.
-	dimTagP                    // 'p' tag.
-	dimTagQ                    // 'Q' tag.
-	dimTagK                    // 'k' tag.
+	dimNone      dimension = '*' // Generic (No specific tags/authors).
+	dimAuthor    dimension = 'A' // Event PubKey or master pubkey.
+	dimTagP      dimension = 'p' // 'p' tag.
+	dimTagUpperQ dimension = 'Q' // 'Q' tag.
+	dimTagLowerQ dimension = 'q' // 'q' tag.
+	dimTagK      dimension = 'k' // 'k' tag.
 )
 
 func newEventMatcher[V Value]() *matcher[V] {
@@ -144,6 +146,14 @@ func (s *matcher[V]) Size() int {
 	return s.Values.Size()
 }
 
+// IndexSize returns the total number of unique index keys currently used in the matcher.
+func (s *matcher[V]) IndexSize() (size uint64) {
+	token := s.Mu.RLock()
+	size = uint64(len(s.Indexes))
+	s.Mu.RUnlock(token)
+	return size
+}
+
 // Get retrieves the value associated with the given event, if it exists.
 func (s *matcher[V]) Get(ev *model.Event) (data []V) {
 	s.Lookup(ev, func(v V) bool {
@@ -153,7 +163,7 @@ func (s *matcher[V]) Get(ev *model.Event) (data []V) {
 	return data
 }
 
-// Lookup finds all potentially matching values (NOT EXACT MATCH) for the given event by checking against the indexed filters and yields them through the provided callback function.
+// Lookup finds all potentially matching values (not an exact match; this is a prefilter) for the given event by checking against the indexed filters and yields them through the provided callback function.
 // If the callback returns false, the lookup will stop early.
 func (s *matcher[V]) Lookup(ev *model.Event, cb func(V) bool) {
 	result := s.RoaringPool.Get()
@@ -193,4 +203,8 @@ func (s *matcher[V]) Range() iter.Seq[V] {
 			return yield(value.Value)
 		})
 	}
+}
+
+func (key *indexKey) String() string {
+	return fmt.Sprintf("kind: %6d | D: %c | Value: %v", key.Kind, key.Dimension, key.Value)
 }

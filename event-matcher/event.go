@@ -40,10 +40,13 @@ func parseEvent(ev *model.Event, buf []indexKey) []indexKey {
 			dim = dimTagK
 			val = ev.Tags[i][1]
 
-		case model.CustomIONTagAddressableQ:
+		case model.CustomIONTagAddressableQ, "q":
 			if len(ev.Tags[i]) > 3 {
 				val = ev.Tags[i][3]
-				dim = dimTagQ
+				dim = dimTagUpperQ
+				if ev.Tags[i][0] == "q" {
+					dim = dimTagLowerQ
+				}
 			}
 		}
 

@@ -58,7 +58,7 @@ func (is *Storage[V]) Size() (size int) {
 	return size
 }
 
-// Lookup finds all possible candidates (NOT EXACT MATCH) for the given event by checking against the indexed filters.
+// Lookup finds all possible candidates (not an exact match; this is a prefilter) for the given event by checking against the indexed filters.
 func (is *Storage[V]) Lookup(ev *model.Event) iter.Seq[V] {
 	return func(yield func(V) bool) {
 		for i := range is.shards {
@@ -87,4 +87,12 @@ func (is *Storage[V]) Range() iter.Seq[V] {
 			}
 		}
 	}
+}
+
+// IndexSize returns the total number of unique index keys currently used in the storage.
+func (is *Storage[V]) IndexSize() (size uint64) {
+	for i := range is.shards {
+		size += is.shards[i].IndexSize()
+	}
+	return size
 }
