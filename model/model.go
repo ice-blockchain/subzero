@@ -43,6 +43,7 @@ const (
 	CustomIONKindArchiveConversation          = 2175
 	CustomIONKindMute                         = 3175
 	CustomIONKindBlockchainActivityConsent    = 4175
+	CustomIONKindDVMJobRequestPriceChange     = 5176
 	CustomIONKindAttestation                  = 10_100
 	CustomIONKindRelayListMetadata            = 20_002
 	CustomIONKindEphemeralEmbedding           = 21_750

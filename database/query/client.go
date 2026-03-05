@@ -51,6 +51,17 @@ var (
 	}
 )
 
+func mapStructEntryToDatabaseFieldName(in string) string {
+	n := strings.ToLower(in)
+	if mapped, ok := databaseEventFieldMap[n]; ok {
+		return mapped
+	}
+	if mapped, ok := pnFieldMap[n]; ok {
+		return mapped
+	}
+	return n
+}
+
 func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, runDDL bool, ext ...connector.Option) *dbClient {
 	client := &dbClient{
 		rollbackableEvents: xsync.NewMap[eventHash, *databaseRollbackRequest](),
@@ -59,13 +70,7 @@ func openDatabase(ctx context.Context, writeURLs []string, readURLs []string, ru
 		},
 	}
 	options := []connector.Option{
-		connector.WithFieldNameMapper(func(in string) string {
-			n := strings.ToLower(in)
-			if mapped, ok := databaseEventFieldMap[n]; ok {
-				return mapped
-			}
-			return n
-		}),
+		connector.WithFieldNameMapper(mapStructEntryToDatabaseFieldName),
 	}
 	if len(writeURLs) > 0 {
 		options = append(options, connector.WithWriteURLs(writeURLs...))

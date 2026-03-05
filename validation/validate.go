@@ -252,6 +252,53 @@ var (
 			NoExpiration().
 			ContentEmpty().
 			Build(),
+
+		model.CustomIONKindDVMJobRequestPriceChange: newKindValidatorBuilder().
+			Required("param").
+			Optional("i", "output").
+			ContentEmpty().
+			NoExpiration().
+			Validate(func(ctx context.Context, v *eventValidator, e *model.Event, rules *ruleSet) error {
+				var hasTimeWindow, hasDeltaPercentage, hasToken bool
+				for _, tag := range e.Tags {
+					if tag.Key() != "param" {
+						continue
+					}
+
+					if len(tag) < 3 {
+						return errors.Wrapf(ErrWrongEventParams, "tag %v: should have at least 3 parts, but got %d: %v", tag.Key(), len(tag), tag)
+					}
+
+					switch strings.ToLower(tag.Value()) {
+					case "timewindow":
+						n, err := strconv.Atoi(tag[2])
+						if err != nil {
+							return errors.Wrapf(ErrWrongEventParams, "invalid timeWindow value: %v", err)
+						} else if n <= 0 {
+							return errors.Wrapf(ErrWrongEventParams, "timeWindow should be greater than 0, but got %d", n)
+						}
+						hasTimeWindow = true
+					case "deltapercentage":
+						n, err := strconv.Atoi(tag[2])
+						if err != nil {
+							return errors.Wrapf(ErrWrongEventParams, "invalid deltaPercentage value: %v", err)
+						} else if n < -100 || n > 100 || n == 0 {
+							return errors.Wrapf(ErrWrongEventParams, "deltaPercentage should be between -100 and 100 and not zero, but got %d", n)
+						}
+						hasDeltaPercentage = true
+					case "token":
+						if tag[2] == "" {
+							return errors.Wrapf(ErrWrongEventParams, "token value cannot be empty")
+						}
+						hasToken = true
+					}
+				}
+				if !hasTimeWindow || !hasDeltaPercentage || !hasToken {
+					return errors.Wrapf(ErrWrongEventParams, "one or more required parameters are missing: timeWindow=%v, deltaPercentage=%v, token=%v", hasTimeWindow, hasDeltaPercentage, hasToken)
+				}
+				return nil
+			}).
+			Build(),
 	}
 
 	// Allow multiple `p` tags for given kinds that point to the same user.
