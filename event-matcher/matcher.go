@@ -53,7 +53,7 @@ type (
 )
 
 const (
-	dimNone      dimension = '*' // Generic (No specific tags/authors).
+	dimNone      dimension = 0   // Generic (No specific tags/authors).
 	dimAuthor    dimension = 'A' // Event PubKey or master pubkey.
 	dimTagP      dimension = 'p' // 'p' tag.
 	dimTagUpperQ dimension = 'Q' // 'Q' tag.
