@@ -41,6 +41,7 @@ type (
 		broadcaster            eventBroadcaster
 		devicesFilterIndex     *em.Storage[*DeviceInfo]
 		devicesEventMap        *xsync.Map[string, *model.Event] // D tag -> Device Registration Event.
+		devicesReverseMap      *xsync.Map[string, *model.Event] // Device registration event ID -> Device Registration Event.
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
@@ -280,6 +281,7 @@ func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClie
 	manager := &PushNotificationManager{
 		devicesFilterIndex:     em.NewMatcherStorage[*DeviceInfo](0),
 		devicesEventMap:        xsync.NewMap[string, *model.Event](),
+		devicesReverseMap:      xsync.NewMap[string, *model.Event](),
 		pushNotificationClient: pnClient,
 		relayURL:               config.RelayURL,
 		stats:                  newPushStats(),

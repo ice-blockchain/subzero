@@ -222,7 +222,40 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 
 		require.True(t, matcher.RemoveByHash(sub.Hash()))
 	})
+	t.Run("By p and q tags", func(t *testing.T) {
+		sub := model.NewSubscription("sub-p-and-q-tags", model.Filters{
+			{
+				Tags: model.TagMap{}.
+					Set("p", new("root")).
+					Set("q", nil, nil, new("relay.example.com")),
+			},
+		})
 
+		matcher.Index(sub.Filters, sub)
+		require.EqualValues(t, 1, matcher.Values.Size())
+
+		var ev model.Event
+		ev.Kind = 10
+		ev.Tags = model.Tags{{"q", "", "", "relay.example.com"}}
+		data := matcher.Get(&ev)
+		require.Len(t, data, 1) // At least one tag match.
+
+		ev.Kind = 11
+		ev.Tags = model.Tags{{"p", "root"}}
+		data = matcher.Get(&ev)
+		require.Len(t, data, 1) // At least one tag match
+
+		ev.Kind = 12
+		ev.Tags = model.Tags{
+			{"q", "", "", "relay.example.com"},
+			{"p", "root"},
+		}
+		data = matcher.Get(&ev)
+		require.Len(t, data, 1) // Match by p and q tags.
+		require.Equal(t, sub, data[0])
+
+		require.True(t, matcher.RemoveByHash(sub.Hash()))
+	})
 	t.Run("By kind p and Q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-p-and-Q-tags", model.Filters{
 			{
@@ -245,7 +278,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		ev.Kind = 11
 		ev.Tags = model.Tags{{"p", "root"}}
 		data = matcher.Get(&ev)
-		require.Empty(t, data) // No match, kind 10 not in index.
+		require.Empty(t, data) // No match, kind 11 not in index.
 
 		ev.Kind = 12
 		ev.Tags = model.Tags{
@@ -253,7 +286,7 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 			{"p", "root"},
 		}
 		data = matcher.Get(&ev)
-		require.Empty(t, data) // No match, kind 10 not in index.
+		require.Empty(t, data) // No match, kind 12 not in index.
 
 		ev.Kind = 1
 		ev.Tags = model.Tags{

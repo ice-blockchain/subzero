@@ -110,6 +110,7 @@ func (pm *PushNotificationManager) processDeviceRegistrationEvent(event *model.E
 
 	pm.devicesEventMap.Store(calcDeviceKey(event), event)
 	pm.devicesFilterIndex.Index(filters.Filters, &deviceInfo)
+	pm.devicesReverseMap.Store(event.ID, event)
 
 	return nil
 }
@@ -141,49 +142,39 @@ func (pm *PushNotificationManager) shouldProcessDeletionEvent(event *model.Event
 	return kCount == 0 // If there are no 'k' tags, we treat it as a deletion of all kinds, including device registrations.
 }
 
-func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, events []*model.Event) error {
-	var deletionEvents []*model.Event
+func (pm *PushNotificationManager) removeDevicesIfAny(ctx context.Context, events []*model.Event) {
+	var deletionEvents model.Events
+
 	for _, event := range events {
 		if pm.shouldProcessDeletionEvent(event) {
 			deletionEvents = append(deletionEvents, event)
 		}
 	}
 
-	if len(deletionEvents) == 0 {
-		return nil
-	}
-
 	var eventIDs []string
 	for _, event := range deletionEvents {
-		for _, tag := range event.GetTags("e") {
-			eventIDs = append(eventIDs, tag.Value())
+		for _, tag := range event.Tags {
+			if tag.Key() == "e" {
+				eventIDs = append(eventIDs, tag.Value())
+			}
 		}
 	}
 
-	if len(eventIDs) == 0 {
-		return nil
-	}
-
-	// TODO: rebuild devices index to include device registration events ids.
-	for event, err := range query.GetStoredEvents(ctx, model.Filter{IDs: eventIDs}) {
-		if err != nil {
-			return errors.Wrap(err, "error getting event")
-		}
-		if event.Kind == model.CustomIONKindDeviceRegistration {
-			pm.removeDeviceFromCache(event)
+	for _, eventID := range eventIDs {
+		regEvent, ok := pm.devicesReverseMap.LoadAndDelete(eventID)
+		if ok {
+			pm.removeDeviceFromCache(regEvent)
 		}
 	}
-
-	return nil
 }
 
 func (pm *PushNotificationManager) ManageDeviceRegistrationEvents(ctx context.Context, events []*model.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
-	if err := pm.removeDevicesIfAny(ctx, events); err != nil {
-		return err
-	}
+
+	pm.removeDevicesIfAny(ctx, events)
+
 	var errs error
 	for _, event := range events {
 		if event.Kind == model.CustomIONKindDeviceRegistration {

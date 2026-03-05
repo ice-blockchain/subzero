@@ -43,36 +43,33 @@ func parseFilters(filters model.Filters) []indexKey {
 		}
 
 		for k, v := range filters[i].Tags {
-			if len(v) != 1 {
-				// Expected formats:
-				// "p": [[currentUserMasterPubkey]].
-				// "p": [[currentUserMasterPubkey, "", currentDevicePubkey]].
-				// "Q": [[null, null, currentUserMasterPubkey]].
-				continue
-			}
+			for j := range v {
+				var dim dimension
+				var val string
 
-			var dim dimension
-			var val string
-
-			switch k {
-			case "p", "k":
-				if len(v[0]) >= 1 && v[0][0] != nil && *v[0][0] != "" {
-					val = *v[0][0]
-					if k == "p" {
-						dim = dimTagP
-					} else {
-						dim = dimTagK
+				switch k {
+				case "p", "k":
+					if len(v[j]) >= 1 && v[j][0] != nil && *v[j][0] != "" {
+						val = *v[j][0]
+						if k == "p" {
+							dim = dimTagP
+						} else {
+							dim = dimTagK
+						}
+					}
+				case model.CustomIONTagAddressableQ, "q":
+					if len(v[j]) == 3 && v[j][2] != nil && *v[j][2] != "" {
+						dim = dimTagUpperQ
+						if k == "q" {
+							dim = dimTagLowerQ
+						}
+						val = *v[j][2]
 					}
 				}
-			case model.CustomIONTagAddressableQ:
-				if len(v[0]) == 3 && v[0][2] != nil && *v[0][2] != "" {
-					dim = dimTagQ
-					val = *v[0][2]
-				}
-			}
 
-			if dim != dimNone && val != "" {
-				targets = append(targets, indexKey{Dimension: dim, Value: val})
+				if dim != dimNone && val != "" {
+					targets = append(targets, indexKey{Dimension: dim, Value: val})
+				}
 			}
 		}
 
