@@ -122,6 +122,7 @@ func helperNewManagerWithClient(t testing.TB) (*PushNotificationManager, *MockPu
 
 	return &PushNotificationManager{
 		devicesFilterIndex:     em.NewMatcherStorage[*DeviceInfo](0),
+		devicesReverseMap:      xsync.NewMap[string, *model.Event](),
 		devicesEventMap:        xsync.NewMap[string, *model.Event](),
 		relayURL:               testRelayURL,
 		pushNotificationClient: client,
@@ -1040,4 +1041,33 @@ func TestCompactRelaysWithFiltering(t *testing.T) {
 		"wss://relay1.com:4444",
 	)
 	require.ElementsMatch(t, []string{"wss://relay2.com"}, data)
+}
+
+func TestDeleteFilters(t *testing.T) {
+	t.Parallel()
+
+	pm := helperNewManager(t)
+	userKey := model.GeneratePrivateKey()
+
+	var ev model.Event
+	ev.Kind = model.CustomIONKindDeviceRegistration
+	ev.Content = `[{"kinds":[1],"#p":["recipient_master_pubkey"]}]`
+	ev.Tags = model.Tags{
+		{"d", "device1"},
+		{"t", "ios"},
+		{"relay", pm.relayURL},
+	}
+	require.NoError(t, ev.SignWithAlg(userKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
+	require.NoError(t, pm.ManageDeviceRegistrationEvents(t.Context(), model.Events{&ev}))
+
+	var evDelete model.Event
+	evDelete.Kind = nostr.KindDeletion
+	evDelete.Tags = model.Tags{
+		{"e", ev.ID},
+		{"k", strconv.Itoa(ev.Kind)},
+	}
+	require.NoError(t, pm.ManageDeviceRegistrationEvents(t.Context(), model.Events{&evDelete}))
+
+	require.Zero(t, pm.devicesFilterIndex.Size())
+	require.Zero(t, pm.devicesFilterIndex.IndexSize())
 }
