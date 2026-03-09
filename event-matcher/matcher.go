@@ -127,18 +127,22 @@ func (s *matcher[V]) removeEntry(hash uint64, keys []indexKey) {
 	}
 }
 
-// RemoveByHash removes the value associated with the given hash from the matcher. Returns true if the value was found and removed, false otherwise.
-func (s *matcher[V]) RemoveByHash(hash uint64) bool {
+// RemoveByHash removes the value associated with the given hash from the matcher. It returns the removed value and true if found, or the zero value of V and false otherwise.
+func (s *matcher[V]) RemoveByHash(hash uint64) (V, bool) {
 	oldValue, loaded := s.Values.LoadAndDelete(hash)
 	if loaded {
 		s.removeEntry(hash, oldValue.RoutingKeys)
+		return oldValue.Value, true
 	}
-	return loaded
+
+	var zero V
+	return zero, false
 }
 
 // Remove removes the given value from the matcher. Returns true if the value was found and removed, false otherwise.
 func (s *matcher[V]) Remove(v V) bool {
-	return s.RemoveByHash(v.Hash())
+	_, ok := s.RemoveByHash(v.Hash())
+	return ok
 }
 
 // Size returns the total number of indexed values in the matcher.

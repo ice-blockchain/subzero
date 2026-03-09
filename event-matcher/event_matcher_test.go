@@ -220,7 +220,9 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		require.Len(t, data, 1) // Match by p and Q tags.
 		require.Equal(t, sub, data[0])
 
-		require.True(t, matcher.RemoveByHash(sub.Hash()))
+		val, ok := matcher.RemoveByHash(sub.Hash())
+		require.True(t, ok)
+		require.Equal(t, sub, val)
 	})
 	t.Run("By p and q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-p-and-q-tags", model.Filters{
@@ -254,7 +256,9 @@ func TestEventMatcherSetAndGet(t *testing.T) {
 		require.Len(t, data, 1) // Match by p and q tags.
 		require.Equal(t, sub, data[0])
 
-		require.True(t, matcher.RemoveByHash(sub.Hash()))
+		val, ok := matcher.RemoveByHash(sub.Hash())
+		require.True(t, ok)
+		require.Equal(t, sub, val)
 	})
 	t.Run("By kind p and Q tags", func(t *testing.T) {
 		sub := model.NewSubscription("sub-kinds-p-and-Q-tags", model.Filters{
