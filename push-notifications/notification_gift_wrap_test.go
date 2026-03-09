@@ -52,7 +52,7 @@ func TestHandleGiftWrapEventEdgeCases(t *testing.T) {
 	}
 
 	deviceEvent1 := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent1))
 
 	t.Run("self recipient", func(t *testing.T) {
 		event := helperCreateGiftWrapEvent(
@@ -149,7 +149,7 @@ func TestHandleGiftWrapEvent(t *testing.T) {
 			}
 
 			deviceEvent := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
-			require.NoError(t, localPM.processDeviceRegistrationEvent(deviceEvent))
+			require.NoError(t, localPM.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 
 			eventID := "test_gift_wrap_" + tc.name
 			event := helperCreateGiftWrapEvent(
@@ -225,7 +225,7 @@ func TestHandleGiftWrapEventWithMultipleDevices(t *testing.T) {
 			}
 
 			deviceEvent := helperCreateTestDeviceRegistrationEvent(t, device.pubKey, device.id, deviceTags, filters)
-			require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+			require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 			require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 			event := helperCreateGiftWrapEvent(
@@ -293,7 +293,7 @@ func TestHandleGiftWrapEventReaction(t *testing.T) {
 	}
 
 	deviceEvent := helperCreateTestDeviceRegistrationEvent(t, devicePubKey, deviceID, deviceTags, filters)
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 	require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 	t.Run("Reaction", func(t *testing.T) {
@@ -359,7 +359,7 @@ func TestGiftWrapWithJsonTagFilter(t *testing.T) {
 
 		var filters model.Filters
 		require.NoError(t, json.Unmarshal([]byte(jsonContent), &filters))
-		require.NoError(t, pm.processDeviceRegistrationEvent(registrationEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), registrationEvent))
 		require.Equal(t, 1, pm.devicesFilterIndex.Size(), "Should have one device in the index")
 
 		ev := &model.Event{

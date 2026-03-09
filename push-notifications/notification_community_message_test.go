@@ -216,7 +216,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 		require.NoError(t, query.AcceptEvents(t.Context(), messageEvent))
 		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
 
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 
 		notifications, err := pm.handleCommunityMessageEvent(t.Context(), messageEvent)
 
@@ -430,7 +430,7 @@ func TestHandleCommunityMessageEvent(t *testing.T) {
 
 		for _, device := range deviceEvents {
 			require.NoError(t, query.AcceptEvents(t.Context(), device))
-			require.NoError(t, pm.processDeviceRegistrationEvent(device))
+			require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), device))
 		}
 
 		require.Equal(t, 3, pm.devicesFilterIndex.Size(), "Should have three devices in the index")
@@ -525,7 +525,7 @@ func TestHandleCommunityMessageEventWithRelevantEvents(t *testing.T) {
 		},
 	)
 
-	di := &DeviceInfo{
+	di := &deviceInfo{
 		Filters: model.FiltersWithEvents{
 			Filters: model.Filters{
 				{

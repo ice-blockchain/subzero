@@ -39,14 +39,20 @@ type (
 		pushNotificationClient pn.Client
 		rq                     rq.Client
 		broadcaster            eventBroadcaster
-		devicesFilterIndex     *em.Storage[*DeviceInfo]
-		devicesEventMap        *xsync.Map[string, *model.Event] // D tag -> Device Registration Event.
-		devicesReverseMap      *xsync.Map[string, *model.Event] // Device registration event ID -> Device Registration Event.
+		devicesFilterIndex     *em.Storage[*deviceInfo]
+		devicesEventMap        *xsync.Map[deviceIndexKey, *model.Event] // Index key -> Device Registration Event.
 		compressorPool         *sync.Pool
 		stats                  *PushStats
 		antsPool               *ants.Pool
 		relayURL               string
 		privateKey             string
+	}
+
+	deviceIndexKeyType string
+
+	deviceIndexKey struct {
+		Key   deviceIndexKeyType
+		Value string
 	}
 
 	notificationTranslation struct {
@@ -94,6 +100,8 @@ const (
 
 	NotificationTypeContentTokenCreated NotificationType = "content_token_created"
 	NotificationTypeContentTokenSwapped NotificationType = "content_token_swapped"
+
+	NotificationTypeTokenPriceChange NotificationType = "token_price_change"
 
 	CompressionMethodZlib = "zlib"
 )
@@ -223,6 +231,11 @@ var (
 			Body:     "New story from someone you enabled account notifications for",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
+		NotificationTypeTokenPriceChange: {
+			Title:    "Token Price Increased",
+			Body:     "Your token value increased",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
 		nostr.KindArticle:                               {},
@@ -246,6 +259,11 @@ var (
 	}
 
 	globalPushNotificationManager *PushNotificationManager
+)
+
+const (
+	deviceIndexKeyTypeEventID   deviceIndexKeyType = "event_id"
+	deviceIndexKeyTypeDeviceKey deviceIndexKeyType = "device_key"
 )
 
 func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClient rq.Client, selfTest bool) (*PushNotificationManager, error) {
@@ -279,9 +297,8 @@ func newManager(ctx context.Context, config *config, antsPool *ants.Pool, rqClie
 	}
 
 	manager := &PushNotificationManager{
-		devicesFilterIndex:     em.NewMatcherStorage[*DeviceInfo](0),
-		devicesEventMap:        xsync.NewMap[string, *model.Event](),
-		devicesReverseMap:      xsync.NewMap[string, *model.Event](),
+		devicesFilterIndex:     em.NewMatcherStorage[*deviceInfo](0),
+		devicesEventMap:        xsync.NewMap[deviceIndexKey, *model.Event](),
 		pushNotificationClient: pnClient,
 		relayURL:               config.RelayURL,
 		stats:                  newPushStats(),
@@ -841,7 +858,7 @@ func (pm *PushNotificationManager) handleInvalidDeviceTokens(ctx context.Context
 		return errors.Wrap(err, "failed to mark devices as invalid on query level")
 	}
 
-	pm.removeInvalidTokenDevicesFromCache(deviceEvents)
+	pm.removeInvalidTokenDevicesFromCache(ctx, deviceEvents)
 
 	return nil
 }

@@ -114,7 +114,7 @@ func TestNotificationBroadcastRemoteEvents(t *testing.T) {
 			require.NoError(t, deviceRegEventLocal.SignWithAlg(subscriber.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 			require.NoError(t, pm.ManageDeviceRegistrationEvents(t.Context(), model.Events{&deviceRegEventLocal}))
-			require.Equal(t, 2, pm.devicesEventMap.Size())
+			require.Equal(t, 4, pm.devicesEventMap.Size())
 			require.Equal(t, 2, pm.devicesFilterIndex.Size())
 			for dev := range pm.devicesFilterIndex.Range() {
 				require.Equal(t, subscriber.PublicKey, dev.Event.PubKey)

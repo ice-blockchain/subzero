@@ -305,8 +305,8 @@ func TestNotificationBroadcastEndToEnd(t *testing.T) {
 		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent3, deviceEvent4))
 
 		// Register devices in the manager.
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent4))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent3))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent4))
 
 		// Verify devices are registered.
 		require.Equal(t, 2, pm.devicesFilterIndex.Size()) // We should have 2 registered devices in total.

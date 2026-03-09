@@ -73,7 +73,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 			},
 		},
 	)
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent1))
 
 	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 		t,
@@ -91,7 +91,7 @@ func TestHandleMentionReplyEvent(t *testing.T) {
 			},
 		},
 	)
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent2))
 	require.Equal(t, 2, pm.devicesFilterIndex.Size())
 
 	t.Run("mention in post", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestMention(t *testing.T) {
 			},
 		},
 	)
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 
 	t.Run("content nprofile mention", func(t *testing.T) {
 		event := helperCreatePostEvent(
@@ -296,7 +296,7 @@ func TestSelfReplyNotification(t *testing.T) {
 		},
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), selfReplyEvent))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 
 	notifications, err := pm.handleMentionReplyEvent(selfReplyEvent)
 	require.NoError(t, err)
@@ -360,7 +360,7 @@ func TestHandleMentionReplyEventWithRelevantEvents(t *testing.T) {
 		},
 	)
 
-	di := &DeviceInfo{
+	di := &deviceInfo{
 		Filters: model.FiltersWithEvents{
 			Filters: model.Filters{
 				{
@@ -450,7 +450,7 @@ func TestMentionWithAuthoritativeEvents(t *testing.T) {
 		},
 	}
 	require.NoError(t, deviceEvent.SignWithAlg(recipientMasterPriv, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 	mentionEvent := &model.Event{
 		Event: nostr.Event{
 			Kind:      nostr.KindTextNote,
