@@ -232,8 +232,8 @@ var (
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 		NotificationTypeTokenPriceChange: {
-			Title:    "Token Price Increased",
-			Body:     "Your token value increased",
+			Title:    "Token Price Changed",
+			Body:     "Your token price changed",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
 	}
@@ -248,6 +248,7 @@ var (
 		model.CustomIONSystemMessage:                    {},
 		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindTokenizedCommunityAction:     {},
+		model.CustomIONKindDVMJobResponsePriceChange:    {},
 	}
 	allowedBroadcastKinds = map[int]struct{}{
 		model.CustomIONKindTokenizedCommunityAction:     {},
@@ -721,6 +722,9 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	case nostr.KindArticle:
 		notifications, err = pm.handleNewPostEvent(ctx, event, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle article event")
+	case model.CustomIONKindDVMJobResponsePriceChange:
+		notifications, err = pm.handleNewDVMEvent(ctx, event, relevantEvents...)
+		err = errors.Wrap(err, "failed to handle DVM job response event")
 	case nostr.KindReaction:
 		notifications, err = pm.handleEventWithPublicKey(event, NotificationTypeReaction, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle event for reaction")
