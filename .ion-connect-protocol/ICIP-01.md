@@ -99,11 +99,13 @@ These are the extra fields not specified in [NIP-01](https://github.com/nostr-pr
   * possible values:
     * `follows` _-- people you follow --_
     * `friends` _-- people you follow that follow you back --_
+    * `conversation_fee:{$amount:$currency}` _-- people that pay a fee of at least $amount in that $currency can start a conversation with you --_
 * `who_can_invite_you_to_groups` _-- if this is not set then everyone can message you_ --
   * Clients SHOULD validate this information. Relays MUST not validate this information.
   * possible values:
     * `follows` _-- people you follow --_ 
     * `friends` _-- people you follow that follow you back --_
+    * `conversation_fee:{$amount:$currency}` _-- people that pay a fee of at least $amount in that $currency can start a conversation with you --_
 
 ### Special ephemeral event for embedding other non-ephemeral events
 
