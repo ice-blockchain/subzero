@@ -13,10 +13,6 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func GetStoredEvents(ctx context.Context, filters ...model.Filter) query.EventIterator {
-	return globalDVM.searchDVMEvents(ctx, filters)
-}
-
 func (d *dvm) searchDVMEvents(ctx context.Context, filters model.Filters) query.EventIterator {
 	return func(yield func(*model.Event, error) bool) {
 		var doStop bool

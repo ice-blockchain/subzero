@@ -84,7 +84,7 @@ var (
 			defer rqClient.Close(cmd.Context())
 			command.MustInit(cmd.Context())
 			storage.MustInit(cmd.Context(), rqClient)
-			dvm.MustInit(cmd.Context())
+			dvm.MustInit(cmd.Context(), dvm.WithRQClient(rqClient))
 			pushnotifications.MustInit(cmd.Context(), antsPool, rqClient)
 			hashtagssender.MustInit(cmd.Context())
 			nftcontentsender.MustInit(cmd.Context())
@@ -182,16 +182,11 @@ func init() {
 			}
 		})
 
-		if ch, err := dvm.AcceptJob(ctx, events[0]); err == nil && ch != nil {
-			antsPool.Submit(func() {
-				result := <-ch
-				if result != nil {
-					webserver.BroadcastNewEvents(context.WithoutCancel(ctx), result)
-				}
-			})
-		} else if err != nil {
-			log.Error().Str("context", "MAIN").Err(err).Str("event_id", events[0].ID).Msg("dvm failed to accept job for event")
-		}
+		antsPool.Submit(func() {
+			if err := dvm.AcceptEvents(ctx, events...); err != nil {
+				log.Error().Err(err).Str("events", model.Events(events).String()).Msg("failed to dvm.AcceptEvents")
+			}
+		})
 
 		if err := command.AcceptEvents(ctx, events...); err != nil {
 			return errors.Wrap(err, "command.AcceptEvent failed")
@@ -236,7 +231,8 @@ func init() {
 		return nil
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
-	wsserver.RegisterWSBroadcastEventListener(func(ctx context.Context, events ...*model.Event) error {
+
+	push := func(ctx context.Context, events ...*model.Event) error {
 		antsPool.Submit(func() {
 			start := time.Now()
 			n := webserver.BroadcastNewEvents(ctx, events...)
@@ -255,7 +251,9 @@ func init() {
 		})
 
 		return nil
-	})
+	}
+	wsserver.RegisterWSBroadcastEventListener(push)
+	dvm.RegisterEventListener(push)
 }
 
 func newContext() appcontext.WaitForShutdown {

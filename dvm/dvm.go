@@ -19,7 +19,9 @@ import (
 
 	"github.com/ice-blockchain/subzero/appcontext"
 	"github.com/ice-blockchain/subzero/cfg"
+	"github.com/ice-blockchain/subzero/database/query"
 	"github.com/ice-blockchain/subzero/model"
+	"github.com/ice-blockchain/subzero/rq"
 )
 
 type (
@@ -50,6 +52,7 @@ type (
 		ResponseCache *ttlcache.Cache[string, *eventMap]
 		Config        *Config
 		PublicKey     string
+		RQ            rq.Client
 	}
 )
 
@@ -57,6 +60,12 @@ const (
 	jobTimeoutDeadline = 1 * time.Minute
 	logThreshold       = 100 * time.Millisecond
 )
+
+func WithRQClient(rqClient rq.Client) Option {
+	return func(d *dvm) {
+		d.RQ = rqClient
+	}
+}
 
 func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 	var err error
@@ -77,6 +86,16 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 		log.Panic().Str("context", "DVM").Err(err).Msg("can't get public key from private key")
 	}
 
+	if server.RQ != nil {
+		rq.RegisterWorker(server.RQ.Register(), &tokenPriceChangeWorker{
+			DVM: server,
+		})
+	} else {
+		log.Warn().
+			Str("context", "DVM").
+			Msg("RQ client is not provided, some jobs may not work")
+	}
+
 	go server.ResponseCache.Start()
 	appcontext.GetAppContext(ctx).OnShutdown(func() error {
 		log.Trace().Str("context", "DVM").Msg("shutting down")
@@ -90,65 +109,122 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 
 func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Event) {
 	d.acceptDVMResponseEvent(result)
-	select {
-	case <-time.After(time.Minute):
-		log.Warn().
-			Str("context", "DVM").
-			Str("job_id", task.Event.ID).
-			Msg("job result submission timeout")
-	case <-ctx.Done():
-		log.Debug().
-			Str("context", "DVM").
-			Str("job_id", task.Event.ID).
-			Msg("job result submission canceled")
-	case task.Result <- result:
+
+	if globalDVM.EventListener != nil {
+		if err := globalDVM.EventListener(ctx, result); err != nil {
+			log.Error().
+				Str("context", "DVM").
+				Err(err).
+				Str("job_id", task.Event.ID).
+				Msg("failed to submit job result to event listener")
+		}
+	}
+	if task != nil && task.Result != nil {
+		select {
+		case <-time.After(time.Minute):
+			log.Warn().
+				Str("context", "DVM").
+				Str("job_id", task.Event.ID).
+				Msg("job result submission timeout")
+		case <-ctx.Done():
+			log.Debug().
+				Str("context", "DVM").
+				Str("job_id", task.Event.ID).
+				Msg("job result submission canceled")
+		case task.Result <- result:
+		}
 	}
 }
 
-func (d *dvm) AcceptJob(ctx context.Context, event *model.Event) (<-chan *model.Event, error) {
-	if (event.Kind < 5000 && event.Kind != nostr.KindDeletion) || event.Kind > nostr.KindJobFeedback {
-		return nil, nil
-	}
+func (d *dvm) AcceptEvents(ctx context.Context, direct bool, events ...*model.Event) (<-chan *model.Event, error) {
+	var out chan *model.Event
+	var jobsRunning atomic.Int32
 
-	if event.Kind == nostr.KindDeletion {
-		return nil, d.handleDeletionEvent(ctx, event)
-	}
+loop:
+	for _, event := range events {
+		switch event.Kind {
+		case nostr.KindDeletion:
+			if err := d.handleDeletionEvent(ctx, event); err != nil {
+				return nil, err
+			}
 
-	// Disabled for now.
-	if false {
-		if event.GetTag("p").Value() != d.PublicKey {
-			log.Trace().
-				Str("context", "DVM").
-				Interface("event", event).
-				Msg("dvm job is not for specified for this service provider")
-			return nil, nil
+		case model.CustomIONKindTokenizedCommunityAction:
+			if err := d.handleTokenizedCommunityActionEvent(ctx, event); err != nil {
+				return nil, err
+			}
+			continue loop
+
+		default:
+			if !event.IsJobRequest() {
+				continue loop
+			}
 		}
+
+		log.Trace().
+			Str("context", "DVM").
+			Str("job_id", event.ID).
+			Int("kind", event.Kind).
+			Msg("received new job")
+
+		if out == nil && direct {
+			out = make(chan *model.Event, 1)
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
+		task := &jobInfo{
+			Result: out,
+			Event:  event,
+			Cancel: cancel,
+		}
+		d.Jobs.Store(event.ID, task)
+
+		jobsRunning.Add(1)
+		d.WG.Go(func() {
+			defer appcontext.GetAppContext(ctx).Recover()
+			defer d.Jobs.Delete(event.ID)
+			defer cancel()
+
+			d.execute(ctx, task)
+			if jobsRunning.Add(-1) == 0 && out != nil {
+				close(out)
+			}
+		})
 	}
 
-	log.Trace().
-		Str("context", "DVM").
-		Str("job_id", event.ID).
-		Int("kind", event.Kind).
-		Msg("received new job")
+	return out, nil
+}
 
-	ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
-	task := &jobInfo{
-		Result: make(chan *model.Event, 1),
-		Event:  event,
-		Cancel: cancel,
+func (d *dvm) handleTokenizedCommunityActionEvent(ctx context.Context, event *model.Event) error {
+	const batchSize = 200
+	var startID uint64
+
+	for batch := 1; ; batch++ {
+		devices, lastID, err := query.CollectPriceChangeSubscribersCandidates(ctx, event, startID, batchSize)
+		if err != nil {
+			return errors.Wrapf(err, "%v: failed to collect price change subscribers candidates for batch %d", event.ID, batch)
+		} else if len(devices) == 0 {
+			break
+		}
+
+		log.Trace().
+			Str("context", "DVM").
+			Str("event_id", event.ID).
+			Int("batch", batch).
+			Int("device_count", len(devices)).
+			Msg("collected price change subscribers candidates")
+
+		err = d.RQ.Push(ctx, &tokenPriceChangeWorkerArgs{
+			BatchNum: batch,
+			Event:    event,
+			Devices:  devices,
+		})
+		if err != nil {
+			return errors.Wrapf(err, "%v: failed to push token price change worker for batch %d", event.ID, batch)
+		}
+
+		startID = lastID
 	}
-	d.Jobs.Store(event.ID, task)
-
-	d.WG.Go(func() {
-		defer appcontext.GetAppContext(ctx).Recover()
-		defer d.Jobs.Delete(event.ID)
-		defer cancel()
-
-		d.execute(ctx, task)
-		close(task.Result)
-	})
-
-	return task.Result, nil
+	return nil
 }
 
 func (d *dvm) handleDeletionEvent(ctx context.Context, event *model.Event) error {
@@ -205,8 +281,7 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 		}
 	}()
 
-	bidTag := task.Event.GetTag("bid")
-	if bidTag != nil && !job.IsBidAmountEnough(bidTag.Value()) {
+	if bid := task.Event.GetTag("bid").Value(); !job.IsBidAmountEnough(bid) {
 		if err := d.publishJobFeedback(ctx, task, model.JobFeedbackStatusPaymentRequired, "Bid amount is not enough", job.RequiredPaymentAmount()); err != nil {
 			log.Error().
 				Str("context", "DVM").
@@ -223,7 +298,6 @@ func (d *dvm) execute(ctx context.Context, task *jobInfo) {
 			Str("context", "DVM").
 			Str("job_id", task.Event.ID).
 			Msg("job canceled")
-
 		return
 	}
 
@@ -293,8 +367,7 @@ func (d *dvm) publishJobResult(ctx context.Context, task *jobInfo, result *model
 
 	relayList := collectTargetRelayURLsFromEvent(task.Event)
 	if len(relayList) > 0 {
-		// TODO: Ignore for now but replace with panic later.
-		log.Trace().
+		log.Error().
 			Str("context", "DVM").
 			Str("job_id", task.Event.ID).
 			Int("relay_count", len(relayList)).

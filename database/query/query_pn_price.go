@@ -20,8 +20,10 @@ type (
 	PriceChangeData struct {
 		PreviousEvent *model.Event
 		Request       string
+		RequestID     string
 		DeviceUUID    string
 		DevicePubKey  string
+		MasterPubKey  string
 	}
 )
 
@@ -235,7 +237,9 @@ func (client *dbClient) FetchAndUpdatePriceChangeNotification(ctx context.Contex
 		DevicePubKey string
 		OldEvent     string
 		Request      string
+		RequestID    string
 		DeviceUUID   string
+		MasterPubKey string
 	}
 	var currentPrice decimal.Decimal
 	var tokenAddress string
@@ -325,14 +329,18 @@ update_actions AS (
 	RETURNING
 		l.id,
 		l.user_device_pubkey,
+		l.user_master_pubkey,
 		l.user_device_uuid,
 		l.request,
+		l.request_event_id,
 		tn.latest_trade_event_id
 )
 SELECT
 	ua.user_device_pubkey,
 	ua.user_device_uuid,
+	ua.user_master_pubkey as master_pubkey,
 	ua.request,
+	ua.request_event_id as requestid,
 	jsonb_build_object(
 		'id', e.id,
 		'pubkey', e.pubkey,
@@ -386,6 +394,8 @@ JOIN events e ON e.id = ua.latest_trade_event_id;
 			Request:       info.Request,
 			DeviceUUID:    info.DeviceUUID,
 			DevicePubKey:  info.DevicePubKey,
+			MasterPubKey:  info.MasterPubKey,
+			RequestID:     info.RequestID,
 		})
 	}
 
