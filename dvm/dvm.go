@@ -115,7 +115,7 @@ func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Eve
 			log.Error().
 				Str("context", "DVM").
 				Err(err).
-				Str("job_id", task.Event.ID).
+				Str("result_event_id", result.ID).
 				Msg("failed to submit job result to event listener")
 		}
 	}
@@ -147,6 +147,7 @@ loop:
 			if err := d.handleDeletionEvent(ctx, event); err != nil {
 				return nil, err
 			}
+			continue loop
 
 		case model.CustomIONKindTokenizedCommunityAction:
 			if err := d.handleTokenizedCommunityActionEvent(ctx, event); err != nil {
@@ -170,7 +171,7 @@ loop:
 			out = make(chan *model.Event, 1)
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
+		jobCtx, cancel := context.WithTimeout(ctx, jobTimeoutDeadline)
 		task := &jobInfo{
 			Result: out,
 			Event:  event,
@@ -180,11 +181,11 @@ loop:
 
 		jobsRunning.Add(1)
 		d.WG.Go(func() {
-			defer appcontext.GetAppContext(ctx).Recover()
+			defer appcontext.GetAppContext(jobCtx).Recover()
 			defer d.Jobs.Delete(event.ID)
 			defer cancel()
 
-			d.execute(ctx, task)
+			d.execute(jobCtx, task)
 			if jobsRunning.Add(-1) == 0 && out != nil {
 				close(out)
 			}
@@ -197,6 +198,14 @@ loop:
 func (d *dvm) handleTokenizedCommunityActionEvent(ctx context.Context, event *model.Event) error {
 	const batchSize = 200
 	var startID uint64
+
+	if d.RQ == nil {
+		log.Error().
+			Str("context", "DVM").
+			Str("event_id", event.ID).
+			Msg("can't handle tokenized community action event without RQ client")
+		return nil
+	}
 
 	for batch := 1; ; batch++ {
 		devices, lastID, err := query.CollectPriceChangeSubscribersCandidates(ctx, event, startID, batchSize)

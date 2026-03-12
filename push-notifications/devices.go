@@ -164,7 +164,7 @@ func (pm *PushNotificationManager) removeDeviceFromCache(ctx context.Context, ev
 			var err error
 			switch ev.Kind {
 			case model.CustomIONKindDVMJobRequestPriceChange:
-				err = query.DeletePriceChangeSubscriber(ctx, di.Event.PubKey, deviceKey, "", di.Event.ID)
+				err = query.DeletePriceChangeSubscriber(ctx, di.Event.PubKey, deviceKey, "", ev.ID)
 			}
 			if err != nil {
 				log.Error().
