@@ -231,7 +231,7 @@ func IsUnexpected(err error) bool {
 	var netOpErr *net.OpError
 
 	if errors.As(err, &pgConnErr) {
-		return pgConnErr.SQLState() != pgerrcode.SyntaxError
+		return pgConnErr.SQLState() != pgerrcode.SyntaxError && pgConnErr.SQLState() != pgerrcode.UndefinedColumn
 	}
 
 	return errors.As(err, &netOpErr) || errors.IsAny(err, ErrSerializationFailure)

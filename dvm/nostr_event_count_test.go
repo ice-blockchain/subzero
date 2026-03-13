@@ -515,7 +515,7 @@ func helperExecuteJob(t *testing.T, ctx context.Context, d *dvm, req *model.Even
 	req.CreatedAt = nostr.Now()
 	require.NoError(t, req.SignWithAlg(d.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
 	ctx, _ = appcontext.NewAppContext(ctx)
-	ch, err := d.AcceptJob(ctx, req)
+	ch, err := d.AcceptEvents(ctx, true, req)
 	if err != nil {
 		return nil, err
 	}
@@ -573,8 +573,10 @@ func helperCompareResults(t *testing.T, dbResult, dvmResult *model.Event) {
 
 func TestEventCountersConsistency(t *testing.T) {
 	t.Parallel()
+
 	ctx, cancel := appcontext.NewAppContext(t.Context())
 	defer cancel()
+
 	d := mustNewDVM(ctx)
 
 	cases := []struct {

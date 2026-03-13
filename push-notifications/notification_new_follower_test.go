@@ -136,7 +136,7 @@ func TestCreateNewFollowerNotification(t *testing.T) {
 	require.NoError(t, query.AcceptEvents(t.Context(), followListEvent))
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent))
 
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 	require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
@@ -208,7 +208,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		filters,
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent1))
 
 	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 		t,
@@ -222,7 +222,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		filters,
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent2))
 
 	deviceEvent3 := helperCreateTestDeviceRegistrationEvent(
 		t,
@@ -236,7 +236,7 @@ func TestCreateNewFollowerNotificationMultipleDevices(t *testing.T) {
 		filters,
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent3))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent3))
 	require.Equal(t, 3, pm.devicesFilterIndex.Size(), "Should have three devices in the filter index")
 
 	notifications, err := pm.createNewFollowerNotification(followListEvent, targetPubKey)
@@ -370,8 +370,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 
 		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
 		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent1))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent2))
 
 		notifications, err := pm.handleNewFollowerEvent(followListEvent)
 
@@ -434,8 +434,8 @@ func TestHandleNewFollowerEvent(t *testing.T) {
 		require.NoError(t, query.AcceptEvents(t.Context(), oldFollowListEvent))
 		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
 		require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent1))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent2))
 
 		notifications, err := pm.handleNewFollowerEvent(newFollowListEvent)
 
@@ -499,7 +499,7 @@ func TestCreateNewFollowerNotificationWithRelevantEvents(t *testing.T) {
 		filters,
 	)
 
-	di := &DeviceInfo{
+	di := &deviceInfo{
 		Filters: model.FiltersWithEvents{
 			Filters: filters,
 		},
@@ -605,7 +605,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		filters,
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent1))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent1))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent1))
 
 	deviceEvent2 := helperCreateTestDeviceRegistrationEvent(
 		t,
@@ -620,7 +620,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		filters,
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent2))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent2))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent2))
 
 	deviceEvent3 := helperCreateTestDeviceRegistrationEvent(
 		t,
@@ -635,7 +635,7 @@ func TestHandleNewFollowerEventWithOldEvents(t *testing.T) {
 		filters,
 	)
 	require.NoError(t, query.AcceptEvents(t.Context(), deviceEvent3))
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent3))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent3))
 	require.Equal(t, 3, pm.devicesFilterIndex.Size(), "Should have three devices in the filter index")
 
 	initialEvent := &model.Event{

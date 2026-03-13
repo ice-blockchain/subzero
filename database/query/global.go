@@ -286,3 +286,19 @@ func GetStatusReport(ctx context.Context) (*Status, error) {
 	}
 	return globalDB.Tracker.Get(ctx)
 }
+
+func FetchAndUpdatePriceChangeNotification(ctx context.Context, ev *model.Event, targetDevices []string) ([]PriceChangeData, error) {
+	return globalDB.Client.FetchAndUpdatePriceChangeNotification(ctx, ev, targetDevices)
+}
+
+func DeletePriceChangeSubscriber(ctx context.Context, devicePubKey, deviceUUID, token, eventID string) error {
+	return globalDB.Client.DeletePriceChangeSubscriber(ctx, devicePubKey, deviceUUID, token, eventID)
+}
+
+func RegisterPriceChangeSubscriber(ctx context.Context, deviceUUID string, ev *model.Event) error {
+	return globalDB.Client.RegisterPriceChangeSubscriber(ctx, deviceUUID, ev)
+}
+
+func CollectPriceChangeSubscribersCandidates(ctx context.Context, ev *model.Event, startID, limit uint64) ([]string, uint64, error) {
+	return globalDB.Client.CollectPriceChangeSubscribersCandidates(ctx, ev, startID, limit)
+}

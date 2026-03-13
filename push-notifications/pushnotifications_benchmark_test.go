@@ -59,7 +59,7 @@ func benchmarkSetupUsers(b *testing.B, pm *PushNotificationManager, userCount in
 				{"token", "token-" + deviceID},
 			}
 			require.NoError(b, deviceEvent.SignWithAlg(privKey, model.SignAlgEDDSA, model.KeyAlgCurve25519))
-			require.NoError(b, pm.processDeviceRegistrationEvent(&deviceEvent))
+			require.NoError(b, pm.processDeviceRegistrationEvent(b.Context(), &deviceEvent))
 		}
 	}
 

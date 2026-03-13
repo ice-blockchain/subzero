@@ -252,6 +252,63 @@ var (
 			NoExpiration().
 			ContentEmpty().
 			Build(),
+
+		model.CustomIONKindDVMJobRequestPriceChange: newKindValidatorBuilder().
+			Required("i", "param").
+			Optional("output").
+			ContentEmpty().
+			NoExpiration().
+			Validate(func(ctx context.Context, v *eventValidator, e *model.Event, rules *ruleSet) error {
+				var hasTimeWindow, hasDeltaPercentage bool
+				for _, tag := range e.Tags {
+					switch tag.Key() {
+					case "param":
+						if len(tag) < 3 {
+							return errors.Wrapf(ErrWrongEventParams, "tag %v: should have at least 3 parts, but got %d: %v", tag.Key(), len(tag), tag)
+						}
+
+						switch strings.ToLower(tag.Value()) {
+						case "timewindow":
+							n, err := strconv.ParseInt(tag[2], 10, 32)
+							if err != nil {
+								return errors.Wrapf(ErrWrongEventParams, "invalid %q value: %v", tag.Value(), err)
+							} else if n <= 0 {
+								return errors.Wrapf(ErrWrongEventParams, "%s: should be greater than 0, but got %d", tag.Value(), n)
+							} else if maxValue := int64(31622400); n > maxValue { // More than 1 year in seconds.
+								return errors.Wrapf(ErrWrongEventParams, "%s: should be less than or equal to %d, but got %d", tag.Value(), maxValue, n)
+							}
+							hasTimeWindow = true
+						case "deltapercentage":
+							n, err := strconv.ParseInt(tag[2], 10, 32)
+							if err != nil {
+								return errors.Wrapf(ErrWrongEventParams, "invalid %q value: %v", tag.Value(), err)
+							} else if n < -100 || n > 100 || n == 0 {
+								return errors.Wrapf(ErrWrongEventParams, "%s should be between -100 and 100 and not zero, but got %d", tag.Value(), n)
+							}
+							hasDeltaPercentage = true
+						case "token":
+							if tag[2] == "" {
+								return errors.Wrapf(ErrWrongEventParams, "%s: value cannot be empty", tag.Value())
+							} else if len(strings.Split(tag[2], ":")) < 3 {
+								return errors.Wrapf(ErrWrongEventParams, "%s: value should be in format 'kind:key:'", tag.Value())
+							}
+						}
+					case "output":
+						if !strings.EqualFold(tag.Value(), "application/json") {
+							return errors.Wrapf(ErrWrongEventParams, "unsupported output value: %v", tag.Value())
+						}
+					case "i":
+						if !strings.EqualFold(tag.Value(), "priceChange") {
+							return errors.Wrapf(ErrWrongEventParams, "unsupported job type: %v", tag.Value())
+						}
+					}
+				}
+				if !hasTimeWindow || !hasDeltaPercentage {
+					return errors.Wrapf(ErrWrongEventParams, "one or more required parameters are missing: timeWindow=%v, deltaPercentage=%v", hasTimeWindow, hasDeltaPercentage)
+				}
+				return nil
+			}).
+			Build(),
 	}
 
 	// Allow multiple `p` tags for given kinds that point to the same user.

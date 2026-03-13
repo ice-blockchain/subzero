@@ -66,19 +66,23 @@ func TestProcessDeviceRegistrationEventBasic(t *testing.T) {
 
 		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
 
-		err := pm.processDeviceRegistrationEvent(event)
+		err := pm.processDeviceRegistrationEvent(t.Context(), event)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, pm.devicesFilterIndex.Size())
-		require.Equal(t, 1, pm.devicesEventMap.Size())
+		require.Equal(t, 2, pm.devicesEventMap.Size())
 
-		dev, ok := pm.devicesEventMap.Load(calcDeviceKey(event))
+		dev, ok := pm.devicesEventMap.Load(deviceIndexKey{Key: deviceIndexKeyTypeDeviceKey, Value: calcDeviceKey(event)})
 		require.True(t, ok)
 		require.Equal(t, event, dev)
 
 		var parsedFilters model.Filters
 		require.NoError(t, json.Unmarshal([]byte(dev.Content), &parsedFilters))
 		require.Equal(t, filters, parsedFilters)
+
+		pm.removeDeviceFromCache(t.Context(), event)
+		require.Zero(t, pm.devicesFilterIndex.Size())
+		require.Zero(t, pm.devicesEventMap.Size())
 	})
 
 	t.Run("invalid_filter_json", func(t *testing.T) {
@@ -103,7 +107,7 @@ func TestProcessDeviceRegistrationEventBasic(t *testing.T) {
 			},
 		}
 
-		require.Error(t, pm.processDeviceRegistrationEvent(event))
+		require.Error(t, pm.processDeviceRegistrationEvent(t.Context(), event))
 		require.Zero(t, pm.devicesFilterIndex.Size())
 	})
 }
@@ -131,10 +135,10 @@ func TestRemoveDeviceFromCache(t *testing.T) {
 
 		event := helperCreateTestDeviceRegistrationEvent(t, masterPubKey, deviceID, deviceTags, filters)
 
-		require.NoError(t, pm.processDeviceRegistrationEvent(event))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), event))
 		require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
-		pm.removeDeviceFromCache(event)
+		pm.removeDeviceFromCache(t.Context(), event)
 		require.Zero(t, pm.devicesFilterIndex.Size())
 		require.Zero(t, pm.devicesEventMap.Size())
 	})
@@ -280,7 +284,7 @@ func TestProcessDeviceRegistrationBatch(t *testing.T) {
 		}
 
 		event := helperCreateTestDeviceRegistrationEvent(t, d.pubKey, d.deviceID, tags, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(event))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), event))
 	}
 
 	require.Equal(t, 3, pm.devicesFilterIndex.Size())

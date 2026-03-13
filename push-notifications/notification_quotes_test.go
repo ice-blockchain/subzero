@@ -38,7 +38,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 		require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 		event := &model.Event{
@@ -91,7 +91,7 @@ func TestProcessEventWithQuotes(t *testing.T) {
 				},
 			},
 		}
-		require.NoError(t, pm.processDeviceRegistrationEvent(registrationEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), registrationEvent))
 		require.Equal(t, 1, pm.devicesFilterIndex.Size())
 
 		ev := &model.Event{

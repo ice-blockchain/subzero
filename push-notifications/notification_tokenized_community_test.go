@@ -39,12 +39,12 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 
 		pm := helperNewManager(t)
 		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTagsOwner, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), ownerDeviceEvent))
 
 		_, subscriberPubKey := model.GenerateKeyPair()
 		subscriberDeviceID := rand.Text()
 		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTagsSubscriber, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), subscriberDeviceEvent))
 
 		// Kind 31175 with t=community_token_action and k=0 (KindProfileMetadata) -> CreatorTokenCreated
 		event := &model.Event{
@@ -89,12 +89,12 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 
 		pm := helperNewManager(t)
 		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTagsOwner, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), ownerDeviceEvent))
 
 		_, subscriberPubKey := model.GenerateKeyPair()
 		subscriberDeviceID := rand.Text()
 		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTagsSubscriber, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), subscriberDeviceEvent))
 
 		// Kind 31175 with t=community_token_action and k=1 (KindTextNote) -> ContentTokenCreated
 		event := &model.Event{
@@ -139,12 +139,12 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 
 		pm := helperNewManager(t)
 		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTagsOwner, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), ownerDeviceEvent))
 
 		_, subscriberPubKey := model.GenerateKeyPair()
 		subscriberDeviceID := rand.Text()
 		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTagsSubscriber, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), subscriberDeviceEvent))
 
 		// Kind 1175 with tx_type=buy and a tag starting with "0:" (KindProfileMetadata) -> CreatorTokenSwapped
 		event := &model.Event{
@@ -193,12 +193,12 @@ func TestHandleTokenizedCommunityEvent(t *testing.T) {
 
 		pm := helperNewManager(t)
 		ownerDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, targetPubKey, deviceID, deviceTagsOwner, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(ownerDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), ownerDeviceEvent))
 
 		_, subscriberPubKey := model.GenerateKeyPair()
 		subscriberDeviceID := rand.Text()
 		subscriberDeviceEvent := helperCreateTestDeviceRegistrationEvent(t, subscriberPubKey, subscriberDeviceID, deviceTagsSubscriber, filters)
-		require.NoError(t, pm.processDeviceRegistrationEvent(subscriberDeviceEvent))
+		require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), subscriberDeviceEvent))
 
 		// Kind 1175 with tx_type=buy and a tag starting with "1:" (KindTextNote) -> ContentTokenSwapped
 		event := &model.Event{

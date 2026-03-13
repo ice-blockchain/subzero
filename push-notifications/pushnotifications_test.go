@@ -121,9 +121,8 @@ func helperNewManagerWithClient(t testing.TB) (*PushNotificationManager, *MockPu
 	client := pn.Client(mockClient)
 
 	return &PushNotificationManager{
-		devicesFilterIndex:     em.NewMatcherStorage[*DeviceInfo](0),
-		devicesReverseMap:      xsync.NewMap[string, *model.Event](),
-		devicesEventMap:        xsync.NewMap[string, *model.Event](),
+		devicesFilterIndex:     em.NewMatcherStorage[*deviceInfo](0),
+		devicesEventMap:        xsync.NewMap[deviceIndexKey, *model.Event](),
 		relayURL:               testRelayURL,
 		pushNotificationClient: client,
 		compressorPool:         helperCreateTestCompressorPool(),
@@ -296,7 +295,7 @@ func TestCollectUserValidDevices(t *testing.T) {
 			},
 		}
 
-		deviceInfo := DeviceInfo{Filters: filters, Event: deviceEvent}
+		deviceInfo := deviceInfo{Filters: filters, Event: deviceEvent}
 		pm.devicesFilterIndex.Index(filters.Filters, &deviceInfo)
 
 		devices := pm.collectLocalDevices(pubKey, event)
@@ -675,7 +674,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 				Tags:   deviceTags,
 			},
 		}
-		di := DeviceInfo{
+		di := deviceInfo{
 			Event: deviceEvent,
 			Filters: model.FiltersWithEvents{
 				Filters: model.Filters{
@@ -724,7 +723,7 @@ func TestPushNotificationManager_CollectNotifications(t *testing.T) {
 			},
 		}
 
-		di := DeviceInfo{Event: deviceEvent}
+		di := deviceInfo{Event: deviceEvent}
 		pm.devicesFilterIndex.Index(model.Filters{}, &di)
 
 		giftWrapEvent := &model.Event{
@@ -871,7 +870,7 @@ func TestProcessDeviceRegistrationEventWithRemoteDevice(t *testing.T) {
 	_, pubkey := model.GenerateKeyPair()
 	ev := helperCreateTestDeviceRegistrationEvent(t, pubkey, "masterkey_deviceID", model.Tags{}, model.Filters{{Kinds: []int{nostr.KindTextNote}}})
 
-	err := pm.processDeviceRegistrationEvent(ev)
+	err := pm.processDeviceRegistrationEvent(t.Context(), ev)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, pm.devicesFilterIndex.Size())
@@ -912,7 +911,7 @@ func TestProcessEventWithReaction(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, pm.processDeviceRegistrationEvent(deviceEvent))
+	require.NoError(t, pm.processDeviceRegistrationEvent(t.Context(), deviceEvent))
 	require.Equal(t, 1, pm.devicesFilterIndex.Size(), "Device should be indexed in devicesFilterIndex")
 
 	event := &model.Event{

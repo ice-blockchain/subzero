@@ -45,8 +45,8 @@ func (is *Storage[V]) Remove(v V) bool {
 	return is.getMatcherFor(v.Hash()).Remove(v)
 }
 
-// RemoveByHash deletes a value from the storage based on its hash and returns whether it was found and removed.
-func (is *Storage[V]) RemoveByHash(hash uint64) bool {
+// RemoveByHash deletes a value from the storage based on its hash and returns the removed value and whether it was found and removed.
+func (is *Storage[V]) RemoveByHash(hash uint64) (V, bool) {
 	return is.getMatcherFor(hash).RemoveByHash(hash)
 }
 
