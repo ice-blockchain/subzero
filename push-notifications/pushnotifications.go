@@ -664,7 +664,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	var notifications []*pn.Notification[*model.Event]
 	var err error
 
-	if len(relevantEvents) == 0 && !shouldSkipEphemeralEvent(event) {
+	if !event.IsJobResponse() || len(relevantEvents) == 0 && !shouldSkipEphemeralEvent(event) {
 		isAuthoritative, profileMetadataEvent, attestationEvent, err := pm.getAuthoritativeEvents(ctx, event)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get authoritative events")
