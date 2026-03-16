@@ -111,6 +111,10 @@ func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Eve
 	d.acceptDVMResponseEvent(result)
 
 	if globalDVM.EventListener != nil {
+		log.Trace().
+			Str("context", "DVM").
+			Str("result_event_id", result.ID).
+			Msg("submitting job result to event listener")
 		if err := globalDVM.EventListener(ctx, result); err != nil {
 			log.Error().
 				Str("context", "DVM").
@@ -120,6 +124,11 @@ func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Eve
 		}
 	}
 	if task != nil && task.Result != nil {
+		log.Trace().
+			Str("context", "DVM").
+			Str("job_id", task.Event.ID).
+			Str("result_event_id", result.ID).
+			Msg("submitting job result to job result channel")
 		select {
 		case <-time.After(time.Minute):
 			log.Warn().

@@ -62,6 +62,7 @@ func (w *tokenPriceChangeWorker) Work(ctx context.Context, job *tokenPriceChange
 			{"e", entry.RequestID},
 			{"p", entry.MasterPubKey},
 			{"a", job.Args.Event.GetTag("a").Value()},
+			{model.CustomIONTagOnBehalfOf, w.DVM.PublicKey},
 		}
 		if err := ev.SignWithAlg(w.DVM.Config.PrivateKey, model.SignAlgEDDSA, model.KeyAlgCurve25519); err != nil {
 			log.Panic().Err(err).Str("context", "DVM").Str("event_id", job.Args.Event.ID).Msg("failed to sign price change notification event")
