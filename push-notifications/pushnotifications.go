@@ -444,14 +444,14 @@ func AcceptEvents(ctx context.Context, events ...*model.Event) error {
 
 	// Ephemeral embedding batch may come only from broadcaster, so we handle it separately.
 	if !hasNonEphemeralEvent && len(events) > 0 {
-		return globalPushNotificationManager.AcceptEventsFromBroadcast(ctx, events)
+		return errors.Wrap(globalPushNotificationManager.AcceptEventsFromBroadcast(ctx, events), "failed to accept ephemeral embedding events from broadcast")
 	}
 
 	err = errors.Join(err,
-		globalPushNotificationManager.AcceptEvents(ctx, events),
-		globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events),
-		globalPushNotificationManager.AcceptEventsForRemotePush(ctx, events),
-		globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events),
+		errors.Wrap(globalPushNotificationManager.AcceptEvents(ctx, events), "pn.AcceptEvents failed"),
+		errors.Wrap(globalPushNotificationManager.AcceptEventsForBroadcast(ctx, events), "pn.AcceptEventsForBroadcast failed"),
+		errors.Wrap(globalPushNotificationManager.AcceptEventsForRemotePush(ctx, events), "pn.AcceptEventsForRemotePush failed"),
+		errors.Wrap(globalPushNotificationManager.ManageDeviceRegistrationEvents(ctx, events), "pn.ManageDeviceRegistrationEvents failed"),
 	)
 	return errors.Wrap(err, "failed to process events")
 
