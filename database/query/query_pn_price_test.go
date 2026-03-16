@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ice-blockchain/subzero/database/query/internal/connector"
@@ -24,12 +25,75 @@ func helperNewPriceActionEvent(t *testing.T, defAddress, amount string, ts nostr
 	action.Content = "test action"
 	action.Tags = model.Tags{
 		{"a", defAddress},
+		{"token_symbol", "ICE"},
+		{"tx_amount", "1", "ICE"},
 		{"tx_amount", amount, "USD"},
 		{"tx_type", "buy"},
 	}
 	require.NoError(t, action.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	return &action
+}
+
+func TestCalculateUSDPriceFromTxEvent(t *testing.T) {
+	t.Parallel()
+
+	var cases = []struct {
+		name      string
+		eventID   string
+		tags      model.Tags
+		want      decimal.Decimal
+		wantError bool
+	}{
+		{
+			name:    "Computes usd per token",
+			eventID: "price-event-1",
+			tags:    model.Tags{{"token_symbol", "ICE"}, {"tx_amount", "100", "USD"}, {"tx_amount", "4", "ICE"}},
+			want:    decimal.RequireFromString("25"),
+		},
+		{
+			name:    "Computes usd per token when token symbol is last",
+			eventID: "price-event-1-unordered",
+			tags:    model.Tags{{"tx_amount", "100", "USD"}, {"tx_amount", "4", "ICE"}, {"token_symbol", "ICE"}},
+			want:    decimal.RequireFromString("25"),
+		},
+		{
+			name:    "Computes usd per token with very small numbers",
+			eventID: "price-event-small-numbers",
+			tags:    model.Tags{{"token_symbol", "WIN"}, {"tx_amount", "16461.450301622193", "WIN"}, {"tx_amount", "0.021947", "USD"}},
+			want:    decimal.RequireFromString("0.0000013332361121"),
+		},
+		{
+			name:    "Missing data returns zero",
+			eventID: "price-event-2",
+			tags:    model.Tags{{"tx_amount", "100", "USD"}},
+			want:    decimal.Zero,
+		},
+		{
+			name:      "Invalid amount returns error",
+			eventID:   "price-event-3",
+			tags:      model.Tags{{"token_symbol", "ICE"}, {"tx_amount", "not-a-number", "USD"}, {"tx_amount", "1", "ICE"}},
+			wantError: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var ev model.Event
+			ev.ID = tc.eventID
+			ev.Tags = tc.tags
+
+			price, err := calculateUSDPriceFromTxEvent(&ev)
+			if tc.wantError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			t.Logf("calculated price: %s", price.String())
+			require.True(t, price.Equal(tc.want))
+		})
+	}
 }
 
 func helperNewPriceChangeRequestEvent(t *testing.T, tokenAddress string, deltaPercentage int, ts nostr.Timestamp) model.Event {

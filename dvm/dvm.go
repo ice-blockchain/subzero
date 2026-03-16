@@ -165,6 +165,7 @@ loop:
 			Str("context", "DVM").
 			Str("job_id", event.ID).
 			Int("kind", event.Kind).
+			Bool("direct", direct).
 			Msg("received new job")
 
 		if out == nil && direct {

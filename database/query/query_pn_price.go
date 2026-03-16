@@ -127,26 +127,61 @@ RETURNING id
 	return errors.Wrapf(err, "failed to register price change subscriber %v for token %s", ev.PubKey, tokenAddress)
 }
 
-func (client *dbClient) CollectPriceChangeSubscribersCandidates(ctx context.Context, ev *model.Event, startID, limit uint64) ([]string, uint64, error) {
-	var currentPrice decimal.Decimal
-	var tokenAddress string
-	var tokenMasterPubKey string
+func calculateUSDPriceFromTxEvent(ev *model.Event) (decimal.Decimal, error) {
+	if ev == nil {
+		return decimal.Zero, nil
+	}
 
+	var tokenSymbol string
+
+	txAmounts := make(map[string]decimal.Decimal)
 	for _, tag := range ev.Tags {
 		switch tag.Key() {
-		case "tx_amount":
-			if len(tag) >= 3 && tag[2] == "USD" && currentPrice.IsZero() {
-				n, err := decimal.NewFromString(tag.Value())
-				if err != nil {
-					return nil, 0, errors.Wrapf(err, "%s: invalid price amount", ev.ID)
-				}
-				currentPrice = n
+		case "token_symbol":
+			if tokenSymbol == "" {
+				tokenSymbol = tag.Value()
 			}
-		case "a":
-			tokenAddress = tag.Value()
+		case "tx_amount":
+			if len(tag) < 3 {
+				continue
+			}
+
+			amount, err := decimal.NewFromString(tag.Value())
+			if err != nil {
+				return decimal.Zero, errors.Wrapf(err, "%s: invalid tx amount %q", ev.ID, tag.Value())
+			}
+
+			currency := tag[2]
+			if _, exists := txAmounts[currency]; !exists {
+				txAmounts[currency] = amount
+			}
 		}
 	}
 
+	usdAmount, hasUSDAmount := txAmounts["USD"]
+	tokenAmount, hasTokenAmount := txAmounts[tokenSymbol]
+
+	if tokenSymbol == "" || !hasUSDAmount || usdAmount.IsZero() || !hasTokenAmount || tokenAmount.IsZero() {
+		log.Trace().
+			Str("context", "DB").
+			Str("event_id", ev.ID).
+			Str("token_symbol", tokenSymbol).
+			Str("usd_amount", usdAmount.String()).
+			Str("token_amount", tokenAmount.String()).
+			Msg("event does not contain valid price information, skipping price calculation")
+		return decimal.Zero, nil
+	}
+
+	return usdAmount.Div(tokenAmount), nil
+}
+
+func (client *dbClient) CollectPriceChangeSubscribersCandidates(ctx context.Context, ev *model.Event, startID, limit uint64) ([]string, uint64, error) {
+	currentPrice, err := calculateUSDPriceFromTxEvent(ev)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	tokenAddress := ev.GetTag("a").Value()
 	if currentPrice.IsZero() || tokenAddress == "" {
 		log.Trace().
 			Str("context", "DB").
@@ -166,13 +201,13 @@ func (client *dbClient) CollectPriceChangeSubscribersCandidates(ctx context.Cont
 			Msg("token address has invalid format, skipping price change notification")
 		return nil, 0, nil
 	}
-	tokenMasterPubKey = parts[1]
+	tokenMasterPubKey := parts[1]
 
 	const query = `
 WITH latest_trade_event AS (
 	SELECT
 		id,
-		subzero_get_tx_amount(tags, 'USD') as usd_amount
+		subzero_get_token_price_from_tx(tags) AS token_usd_price
 	FROM events
 	WHERE
 		kind = 1175
@@ -196,8 +231,8 @@ WHERE
 	AND (l.last_tc_action_timestamp IS NULL OR :priceEventTs >= l.last_tc_action_timestamp)
 	AND COALESCE(l.last_tc_action_event_id, '') <> :priceEventID
 	AND (l.last_notified_at IS NULL OR :priceEventTs >= l.last_notified_at + l.cfg_time_window)
-	AND lte.usd_amount > 0
-	AND ABS((:currentPrice - lte.usd_amount) / lte.usd_amount) >= ABS(CAST(l.cfg_delta_percentage AS NUMERIC) / 100.0)
+	AND lte.token_usd_price > 0
+	AND ABS((:currentPrice - lte.token_usd_price) / lte.token_usd_price) >= ABS(CAST(l.cfg_delta_percentage AS NUMERIC) / 100.0)
 ORDER BY l.id
 LIMIT :limit
 FOR UPDATE SKIP LOCKED
@@ -241,27 +276,21 @@ func (client *dbClient) FetchAndUpdatePriceChangeNotification(ctx context.Contex
 		DeviceUUID   string
 		MasterPubKey string
 	}
-	var currentPrice decimal.Decimal
-	var tokenAddress string
-	var tokenMasterPubKey string
 
-	for _, tag := range ev.Tags {
-		switch tag.Key() {
-		case "tx_amount":
-			if len(tag) >= 3 && tag[2] == "USD" && currentPrice.IsZero() {
-				n, err := decimal.NewFromString(tag.Value())
-				if err != nil {
-					return nil, errors.Wrapf(err, "%s: invalid price amount", ev.ID)
-				}
-				currentPrice = n
-			}
-		case "a":
-			tokenAddress = tag.Value()
-		}
+	currentPrice, err := calculateUSDPriceFromTxEvent(ev)
+	if err != nil {
+		return nil, err
 	}
 
+	tokenAddress := ev.GetTag("a").Value()
 	if currentPrice.IsZero() || tokenAddress == "" {
-		return nil, nil
+		log.Trace().
+			Str("context", "DB").
+			Str("event_id", ev.ID).
+			Str("current_price", currentPrice.String()).
+			Str("token_address", tokenAddress).
+			Msg("event does not contain price or token information, skipping price change notification")
+		return nil, nil // No price data, so nothing to do.
 	}
 
 	parts := strings.SplitN(tokenAddress, ":", 3)
@@ -273,13 +302,13 @@ func (client *dbClient) FetchAndUpdatePriceChangeNotification(ctx context.Contex
 			Msg("token address has invalid format, skipping price change notification update")
 		return nil, nil
 	}
-	tokenMasterPubKey = parts[1]
+	tokenMasterPubKey := parts[1]
 
 	const query = `
 WITH latest_trade_event AS (
 	SELECT
 		e.id,
-		subzero_get_tx_amount(e.tags, 'USD') AS usd_amount
+		subzero_get_token_price_from_tx(e.tags) AS token_usd_price
 	FROM events e
 	WHERE
 		e.kind = 1175
@@ -308,11 +337,11 @@ to_notify AS (
 		)
 		AND COALESCE(l.last_tc_action_event_id, '') <> :priceEventID
 		AND (l.last_tc_action_timestamp IS NULL OR :priceEventTs >= l.last_tc_action_timestamp)
-		AND lte.usd_amount > 0
+		AND lte.token_usd_price > 0
 		AND (
-			(l.cfg_delta_percentage > 0 AND (:currentPrice - lte.usd_amount) / lte.usd_amount >= CAST(l.cfg_delta_percentage AS NUMERIC) / 100.0)
+			(l.cfg_delta_percentage > 0 AND (:currentPrice - lte.token_usd_price) / lte.token_usd_price >= CAST(l.cfg_delta_percentage AS NUMERIC) / 100.0)
 			OR
-			(l.cfg_delta_percentage < 0 AND (:currentPrice - lte.usd_amount) / lte.usd_amount <= CAST(l.cfg_delta_percentage AS NUMERIC) / 100.0)
+			(l.cfg_delta_percentage < 0 AND (:currentPrice - lte.token_usd_price) / lte.token_usd_price <= CAST(l.cfg_delta_percentage AS NUMERIC) / 100.0)
 		)
 		AND (l.last_notified_at IS NULL OR :priceEventTs >= l.last_notified_at + l.cfg_time_window)
 	ORDER BY l.id
