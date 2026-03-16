@@ -195,7 +195,7 @@ func init() {
 		ctx := context.WithoutCancel(taskCtx)
 		antsPool.Submit(func() {
 			start := time.Now()
-			n := webserver.BroadcastNewEvents(context.WithoutCancel(ctx), events...)
+			n := webserver.BroadcastNewEvents(ctx, events...)
 			end := time.Since(start)
 			log.Trace().
 				Int("event_count", len(events)).
