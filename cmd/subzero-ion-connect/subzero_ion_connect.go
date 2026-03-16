@@ -232,7 +232,8 @@ func init() {
 	})
 	wsserver.RegisterWSSubscriptionListener(query.GetStoredEvents, dvm.GetStoredEvents)
 
-	push := func(ctx context.Context, events ...*model.Event) error {
+	push := func(taskCtx context.Context, events ...*model.Event) error {
+		ctx := context.WithoutCancel(taskCtx)
 		antsPool.Submit(func() {
 			start := time.Now()
 			n := webserver.BroadcastNewEvents(ctx, events...)
