@@ -216,7 +216,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			{"k", strconv.Itoa(comment.Kind)},
 			{"t", "community_token"},
 			{"t", "community_token_action"},
-			{"p", pk},
+			{"p", comment.GetMasterPublicKey()},
 		}
 		require.NoError(t, tcBuy.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
@@ -262,7 +262,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			{"k", strconv.Itoa(comment.Kind)},
 			{"t", "community_token"},
 			{"t", "community_token_action"},
-			{"p", pk},
+			{"p", comment.GetMasterPublicKey()},
 		}
 		require.NoError(t, tcBuy.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
@@ -314,7 +314,7 @@ func TestValidateTokenizedCommunityFirstBuy(t *testing.T) {
 			{"k", strconv.Itoa(nestedComment.Kind)},
 			{"t", "community_token"},
 			{"t", "community_token_action"},
-			{"p", pk},
+			{"p", nestedComment.GetMasterPublicKey()},
 		}
 		require.NoError(t, tcBuy.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
