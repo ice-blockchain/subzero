@@ -55,11 +55,6 @@ next:
 			default:
 				continue next
 			}
-
-		case model.CustomIONKindEditableTextNote:
-			if event.IsComment() { // Want only top-level posts.
-				continue next
-			}
 		}
 
 		out = append(out, event)
