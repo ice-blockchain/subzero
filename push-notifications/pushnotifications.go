@@ -103,6 +103,7 @@ const (
 	NotificationTypeContentTokenSwapped NotificationType = "content_token_swapped"
 
 	NotificationTypeTokenPriceChange NotificationType = "token_price_change"
+	NotificationTypeTokenActivity    NotificationType = "token_activity"
 
 	CompressionMethodZlib = "zlib"
 )
@@ -242,6 +243,11 @@ var (
 			Body:     "Your token price changed",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
+		NotificationTypeTokenActivity: {
+			Title:    "Buying activity increased",
+			Body:     "More buyers joined",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
 		nostr.KindArticle:                               {},
@@ -255,15 +261,17 @@ var (
 		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindTokenizedCommunityAction:     {},
 		model.CustomIONKindDVMJobResponsePriceChange:    {},
+		model.CustomIONKindDVMJobResponseTrendingTokens: {},
 		model.CustomIONKindFundSendNotify:               {},
 	}
 	allowedBroadcastKinds = map[int]struct{}{
 		model.CustomIONKindTokenizedCommunityAction:     {},
 		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindEditableTextNote:             {},
-		nostr.KindArticle:                               {},
-		nostr.KindTextNote:                              {},
-		nostr.KindGenericRepost:                         {},
+		model.CustomIONKindDVMJobResponseTrendingTokens: {},
+		nostr.KindArticle:       {},
+		nostr.KindTextNote:      {},
+		nostr.KindGenericRepost: {},
 	}
 
 	globalPushNotificationManager *PushNotificationManager
@@ -729,7 +737,7 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 	case nostr.KindArticle:
 		notifications, err = pm.handleNewPostEvent(ctx, event, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle article event")
-	case model.CustomIONKindDVMJobResponsePriceChange:
+	case model.CustomIONKindDVMJobResponsePriceChange, model.CustomIONKindDVMJobResponseTrendingTokens:
 		notifications, err = pm.handleNewDVMEvent(ctx, event, relevantEvents...)
 		err = errors.Wrap(err, "failed to handle DVM job response event")
 	case nostr.KindReaction:

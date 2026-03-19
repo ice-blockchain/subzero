@@ -26,6 +26,8 @@ func (pm *PushNotificationManager) handleNewDVMEvent(_ context.Context, event *m
 	switch event.Kind {
 	case model.CustomIONKindDVMJobResponsePriceChange:
 		notificationType = NotificationTypeTokenPriceChange
+	case model.CustomIONKindDVMJobResponseTrendingTokens:
+		notificationType = NotificationTypeTokenActivity
 	default:
 		log.Warn().
 			Str("context", "PUSH_NOTIFICATION").

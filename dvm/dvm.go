@@ -90,6 +90,12 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 		rq.RegisterWorker(server.RQ.Register(), &tokenPriceChangeWorker{
 			DVM: server,
 		})
+		rq.RegisterWorker(server.RQ.Register(), &tokenActivityWorker{
+			DVM: server,
+		})
+		server.WG.Go(func() {
+			server.TokenActivityCollector(ctx)
+		})
 	} else {
 		log.Warn().
 			Str("context", "DVM").
@@ -105,6 +111,57 @@ func mustNewDVM(ctx context.Context, opts ...Option) *dvm {
 	})
 
 	return server
+}
+
+func (d *dvm) TokenActivityCollector(ctx context.Context) {
+	fire := make(chan struct{}, 1)
+
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		defer close(fire)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				select {
+				case fire <- struct{}{}:
+				default:
+					log.Debug().
+						Str("context", "DVM").
+						Msg("skipping token activity collection tick because the previous one is still running")
+				}
+			}
+		}
+	}()
+
+	log.Trace().Str("context", "DVM").Msg("starting token activity collector")
+main:
+	for range fire {
+		var startID uint64
+		now := time.Now()
+		for batch := 1; ; batch++ {
+			candidates, lastID, err := query.CollectTokenActivityCandidates(ctx, now, startID, 100)
+			if err != nil {
+				log.Error().Str("context", "DVM").Err(err).Int("batch", batch).Msg("failed to collect token activity candidates")
+				continue main
+			} else if len(candidates) == 0 {
+				continue main
+			}
+
+			err = d.RQ.Push(ctx, &tokenActivityWorkerArgs{
+				BatchNum: batch,
+				Tokens:   candidates,
+			})
+			if err != nil {
+				log.Error().Str("context", "DVM").Err(err).Int("batch", batch).Msg("failed to push token activity worker for batch")
+				continue main
+			}
+			startID = lastID
+		}
+	}
 }
 
 func (d *dvm) SubmitResult(ctx context.Context, task *jobInfo, result *model.Event) {
