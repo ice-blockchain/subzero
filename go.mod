@@ -222,7 +222,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lib/pq v1.11.2 // indirect
+	github.com/lib/pq v1.12.0 // indirect
 	github.com/libdns/libdns v1.1.1 // indirect
 	github.com/linxGnu/grocksdb v1.10.7 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
@@ -283,7 +283,7 @@ require (
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/samber/lo v1.53.0 // indirect
 	github.com/samber/slog-common v0.20.0 // indirect
-	github.com/sasha-s/go-deadlock v0.3.8 // indirect
+	github.com/sasha-s/go-deadlock v0.3.9 // indirect
 	github.com/sirkon/dst v0.26.4 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/afero v1.15.0 // indirect

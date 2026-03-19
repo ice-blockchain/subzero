@@ -84,16 +84,17 @@ type (
 )
 
 const (
-	NotificationTypeReaction         NotificationType = "reaction"
-	NotificationTypeRepost           NotificationType = "repost"
-	NotificationTypeMentionReply     NotificationType = "mention_reply"
-	NotificationTypeDirectMessage    NotificationType = "direct_message"
-	NotificationTypeGroupChatMessage NotificationType = "group_chat_message"
-	NotificationTypeChannelMessage   NotificationType = "channel_message"
-	NotificationTypePaymentRequest   NotificationType = "payment_request"
-	NotificationTypePaymentReceived  NotificationType = "payment_received"
-	NotificationTypeSystem           NotificationType = "system"
-	NotificationTypeNewFollower      NotificationType = "new_follower"
+	NotificationTypeReaction                 NotificationType = "reaction"
+	NotificationTypeRepost                   NotificationType = "repost"
+	NotificationTypeMentionReply             NotificationType = "mention_reply"
+	NotificationTypeDirectMessage            NotificationType = "direct_message"
+	NotificationTypeGroupChatMessage         NotificationType = "group_chat_message"
+	NotificationTypeChannelMessage           NotificationType = "channel_message"
+	NotificationTypePaymentRequest           NotificationType = "payment_request"
+	NotificationTypePaymentReceived          NotificationType = "payment_received"
+	NotificationTypeAnonymousPaymentReceived NotificationType = "anonymous_payment_received"
+	NotificationTypeSystem                   NotificationType = "system"
+	NotificationTypeNewFollower              NotificationType = "new_follower"
 
 	NotificationTypeCreatorTokenCreated NotificationType = "creator_token_created"
 	NotificationTypeCreatorTokenSwapped NotificationType = "creator_token_swapped"
@@ -158,6 +159,11 @@ var (
 		},
 		NotificationTypePaymentReceived: {
 			Title:    "Payment received",
+			Body:     "You received a payment",
+			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
+		},
+		NotificationTypeAnonymousPaymentReceived: {
+			Title:    "Anonymous payment received",
 			Body:     "You received a payment",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
@@ -249,6 +255,7 @@ var (
 		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindTokenizedCommunityAction:     {},
 		model.CustomIONKindDVMJobResponsePriceChange:    {},
+		model.CustomIONKindFundSendNotify:               {},
 	}
 	allowedBroadcastKinds = map[int]struct{}{
 		model.CustomIONKindTokenizedCommunityAction:     {},
@@ -736,6 +743,8 @@ func (pm *PushNotificationManager) processEvent(ctx context.Context, event *mode
 		err = errors.Wrap(err, "failed to handle tokenized community definition event")
 	case nostr.KindFollowList:
 		return pm.handleNewFollowerEvent(event, relevantEvents...)
+	case model.CustomIONKindFundSendNotify: // Anonymous send from external wallet, in-app transfers are wrapped into gift wrap
+		return pm.handleAnonymousFundSendEvent(event, relevantEvents...)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to handle event %s", event.ID)

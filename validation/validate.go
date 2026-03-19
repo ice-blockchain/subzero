@@ -199,9 +199,9 @@ var (
 
 		model.CustomIONKindFundSendNotify: newKindValidatorBuilderEmpty().
 			ContentNotEmpty().
-			Optional("request", "asset_address").
+			Optional(model.CustomIONTagOnBehalfOf, "request", "asset_address").
 			OneOf("p", "l").
-			Required(model.CustomIONTagOnBehalfOf, "network", "asset_class").
+			Required("network", "asset_class").
 			RequiredWith("l", "L").
 			Validate(func(_ context.Context, v *eventValidator, e *model.Event, _ *ruleSet) error {
 				return validateKindFundSendNotify(e)

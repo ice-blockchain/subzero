@@ -33,6 +33,25 @@ func TestValidateFundSend(t *testing.T) {
 		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 		require.NoError(t, Validate(t.Context(), model.Events{&ev}))
 	})
+	t.Run("Without b but with p", func(t *testing.T) {
+		var ev model.Event
+		ev.Kind = model.CustomIONKindFundSendNotify
+		ev.Tags = model.Tags{
+			{"network", "ion"},
+			{"asset_class", "native"},
+			{"asset_address", "localhost"},
+		}
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), model.Events{&ev}))
+
+		ev.Tags = append(ev.Tags, model.Tag{"p", "foo"})
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.Error(t, Validate(t.Context(), model.Events{&ev}))
+
+		ev.Content = "foo"
+		require.NoError(t, ev.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
+		require.NoError(t, Validate(t.Context(), model.Events{&ev}))
+	})
 
 	t.Run("With l+L", func(t *testing.T) {
 		var ev model.Event
