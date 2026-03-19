@@ -492,8 +492,8 @@ github.com/letsencrypt/challtestsrv v1.4.2/go.mod h1:GhqMqcSoeGpYd5zX5TgwA6er/1M
 github.com/letsencrypt/pebble/v2 v2.10.0 h1:Wq6gYXlsY6ubqI3hhxsTzdyotvfdjFBxuwYqCLCnj/U=
 github.com/letsencrypt/pebble/v2 v2.10.0/go.mod h1:Sk8cmUIPcIdv2nINo+9PB4L+ZBhzY+F9A1a/h/xmWiQ=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
-github.com/lib/pq v1.11.2 h1:x6gxUeu39V0BHZiugWe8LXZYZ+Utk7hSJGThs8sdzfs=
-github.com/lib/pq v1.11.2/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
+github.com/lib/pq v1.12.0 h1:mC1zeiNamwKBecjHarAr26c/+d8V5w/u4J0I/yASbJo=
+github.com/lib/pq v1.12.0/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
 github.com/libdns/cloudflare v0.2.2 h1:XWHv+C1dDcApqazlh08Q6pjytYLgR2a+Y3xrXFu0vsI=
 github.com/libdns/cloudflare v0.2.2/go.mod h1:w9uTmRCDlAoafAsTPnn2nJ0XHK/eaUMh86DUk8BWi60=
 github.com/libdns/libdns v1.1.1 h1:wPrHrXILoSHKWJKGd0EiAVmiJbFShguILTg9leS/P/U=
@@ -698,8 +698,8 @@ github.com/samber/slog-common v0.20.0 h1:WaLnm/aCvBJSk5nR5aXZTFBaV0B47A+AEaEOiZD
 github.com/samber/slog-common v0.20.0/go.mod h1:+Ozat1jgnnE59UAlmNX1IF3IByHsODnnwf9jUcBZ+m8=
 github.com/samber/slog-zerolog/v2 v2.9.1 h1:RMOq8XqzfuGx1X0TEIlS9OXbbFmqLY2/wJppghz66YY=
 github.com/samber/slog-zerolog/v2 v2.9.1/go.mod h1:DQYYve14WgCRN/XnKeHl4266jXK0DgYkYXkfZ4Fp98k=
-github.com/sasha-s/go-deadlock v0.3.8 h1:9O9Lmb3eKnYAY3/81FV+rJTQZMi1XHbAGKC7L3UjZrY=
-github.com/sasha-s/go-deadlock v0.3.8/go.mod h1:KuZj51ZFmx42q/mPaYbRk0P1xcwe697zsJKE03vD4/Y=
+github.com/sasha-s/go-deadlock v0.3.9 h1:fiaT9rB7g5sr5ddNZvlwheclN9IP86eFW9WgqlEQV+w=
+github.com/sasha-s/go-deadlock v0.3.9/go.mod h1:KuZj51ZFmx42q/mPaYbRk0P1xcwe697zsJKE03vD4/Y=
 github.com/schollz/progressbar/v3 v3.19.0 h1:Ea18xuIRQXLAUidVDox3AbwfUhD0/1IvohyTutOIFoc=
 github.com/schollz/progressbar/v3 v3.19.0/go.mod h1:IsO3lpbaGuzh8zIMzgY3+J8l4C8GjO0Y9S69eFvNsec=
 github.com/sergi/go-diff v1.2.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
