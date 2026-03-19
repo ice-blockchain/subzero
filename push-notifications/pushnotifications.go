@@ -92,7 +92,7 @@ const (
 	NotificationTypeChannelMessage           NotificationType = "channel_message"
 	NotificationTypePaymentRequest           NotificationType = "payment_request"
 	NotificationTypePaymentReceived          NotificationType = "payment_received"
-	NotificationAnonymousTypePaymentReceived NotificationType = "anonymous_payment_received"
+	NotificationTypeAnonymousPaymentReceived NotificationType = "anonymous_payment_received"
 	NotificationTypeSystem                   NotificationType = "system"
 	NotificationTypeNewFollower              NotificationType = "new_follower"
 
@@ -162,7 +162,7 @@ var (
 			Body:     "You received a payment",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
 		},
-		NotificationAnonymousTypePaymentReceived: {
+		NotificationTypeAnonymousPaymentReceived: {
 			Title:    "Anonymous payment received",
 			Body:     "You received a payment",
 			ImageURL: "https://ice.io/wp-content/uploads/2024/04/ion-logo-2.png",
@@ -255,6 +255,7 @@ var (
 		model.CustomIONKindTokenizedCommunityDefinition: {},
 		model.CustomIONKindTokenizedCommunityAction:     {},
 		model.CustomIONKindDVMJobResponsePriceChange:    {},
+		model.CustomIONKindFundSendNotify:               {},
 	}
 	allowedBroadcastKinds = map[int]struct{}{
 		model.CustomIONKindTokenizedCommunityAction:     {},

@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ice-blockchain/subzero/model"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ice-blockchain/subzero/model"
 )
 
-func TestKindKindFundSendNotify(t *testing.T) {
+func TestKindFundSendNotify(t *testing.T) {
+	t.Parallel()
 	now := nostr.Now()
 	masterKey := "recipient_master_pubkey"
 	deviceID := "device1"
@@ -70,6 +72,6 @@ func TestKindKindFundSendNotify(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notif, 1)
 	notification := notif[0]
-	require.Equal(t, defaultTranslations[NotificationAnonymousTypePaymentReceived].Title, notification.Title, "Title should match for NotificationAnonymousTypePaymentReceived")
-	require.Equal(t, defaultTranslations[NotificationAnonymousTypePaymentReceived].Body, notification.Body, "Body should match for NotificationAnonymousTypePaymentReceived")
+	require.Equal(t, defaultTranslations[NotificationTypeAnonymousPaymentReceived].Title, notification.Title, "Title should match for NotificationTypeAnonymousPaymentReceived")
+	require.Equal(t, defaultTranslations[NotificationTypeAnonymousPaymentReceived].Body, notification.Body, "Body should match for NotificationTypeAnonymousPaymentReceived")
 }

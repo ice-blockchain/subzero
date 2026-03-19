@@ -460,6 +460,26 @@ func TestPushNotificationManager_ProcessEvent(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, notifications)
 	})
+	t.Run("Handles FundSendNotify event correctly", func(t *testing.T) {
+		event := &model.Event{
+			Event: nostr.Event{
+				CreatedAt: nostr.Now(),
+				Kind:      model.CustomIONKindFundSendNotify,
+				Content:   "bogus",
+				PubKey:    "identity_key",
+				Tags: nostr.Tags{
+					{"network", "BscTestnet"},
+					{"asset_class", "Erc20"},
+					{"asset_address", "0xe1ab61f7b093435204df32f5b3a405de55445ea8"},
+					{"p", "master"},
+				},
+			},
+		}
+
+		notifications, err := pm.processEvent(t.Context(), event)
+		require.NoError(t, err)
+		require.Nil(t, notifications)
+	})
 
 	t.Run("Returns nil for unsupported event kinds", func(t *testing.T) {
 		event := &model.Event{
