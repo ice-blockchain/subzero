@@ -76,6 +76,11 @@ func (w *broadcasterRelayFinderWorker) Work(ctx context.Context, job *rq.Job[bro
 	masterKeys := make([]string, 0, len(events))
 	for _, event := range events {
 		keys := w.Manager.collectTargetMasterKeys(event)
+		if event.IsJobResponse() {
+			if pTag := event.GetTag("p").Value(); pTag != "" {
+				keys = append(keys, pTag)
+			}
+		}
 		if len(keys) == 0 {
 			continue
 		}

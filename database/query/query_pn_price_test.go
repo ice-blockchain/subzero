@@ -16,7 +16,7 @@ import (
 	"github.com/ice-blockchain/subzero/model"
 )
 
-func helperNewPriceActionEvent(t *testing.T, defAddress, amount string, ts nostr.Timestamp) *model.Event {
+func helperNewPriceActionEvent(t *testing.T, defAddress, amount string, ts nostr.Timestamp, txType ...string) *model.Event {
 	t.Helper()
 
 	var action model.Event
@@ -28,8 +28,15 @@ func helperNewPriceActionEvent(t *testing.T, defAddress, amount string, ts nostr
 		{"token_symbol", "ICE"},
 		{"tx_amount", "1", "ICE"},
 		{"tx_amount", amount, "USD"},
-		{"tx_type", "buy"},
 	}
+
+	if len(txType) > 0 {
+		require.Contains(t, []string{"buy", "sell"}, txType[0], "txType must be 'buy' or 'sell'")
+		action.Tags = append(action.Tags, model.Tag{"tx_type", txType[0]})
+	} else {
+		action.Tags = append(action.Tags, model.Tag{"tx_type", "buy"})
+	}
+
 	require.NoError(t, action.SignWithAlg(model.GeneratePrivateKey(), model.SignAlgEDDSA, model.KeyAlgCurve25519))
 
 	return &action

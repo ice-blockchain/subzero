@@ -302,3 +302,11 @@ func RegisterPriceChangeSubscriber(ctx context.Context, deviceUUID string, ev *m
 func CollectPriceChangeSubscribersCandidates(ctx context.Context, ev *model.Event, startID, limit uint64) ([]string, uint64, error) {
 	return globalDB.Client.CollectPriceChangeSubscribersCandidates(ctx, ev, startID, limit)
 }
+
+func CollectTokenActivityCandidates(ctx context.Context, now time.Time, startID, limit uint64) ([]string, uint64, error) {
+	return globalDB.Client.CollectTokenActivityCandidates(ctx, now, startID, limit)
+}
+
+func FetchAndUpdateTokenActivityNotification(ctx context.Context, now time.Time, tokens []string) ([]*TokenActivityData, error) {
+	return globalDB.Client.FetchAndUpdateTokenActivityNotification(ctx, now, tokens)
+}

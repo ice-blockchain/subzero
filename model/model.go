@@ -45,6 +45,8 @@ const (
 	CustomIONKindBlockchainActivityConsent    = 4175
 	CustomIONKindDVMJobRequestPriceChange     = 5176
 	CustomIONKindDVMJobResponsePriceChange    = CustomIONKindDVMJobRequestPriceChange + 1000
+	CustomIONKindDVMJobRequestTrendingTokens  = 5177
+	CustomIONKindDVMJobResponseTrendingTokens = CustomIONKindDVMJobRequestTrendingTokens + 1000
 	CustomIONKindAttestation                  = 10_100
 	CustomIONKindRelayListMetadata            = 20_002
 	CustomIONKindEphemeralEmbedding           = 21_750
