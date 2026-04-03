@@ -4,6 +4,7 @@ package validation
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -221,6 +222,9 @@ var (
 			Required("k").
 			Forbidden("expiration").
 			ContentEmpty().
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
+				return fmt.Errorf("%v: tokenized community definition events are not allowed", e.ID)
+			}).
 			Validate(validateInternalTopicTC).
 			Validate(validateTokenizedCommunityFirstBuy).
 			Build(),
@@ -238,6 +242,9 @@ var (
 			Optional("p").
 			Forbidden("expiration").
 			ContentEmpty().
+			Validate(func(_ context.Context, v *eventValidator, e *model.Event) error {
+				return fmt.Errorf("%v: tokenized community action events are not allowed", e.ID)
+			}).
 			Validate(validateInternalTopicTC).
 			Build(),
 	}

@@ -238,14 +238,14 @@ func (n *nip11handler) collectMetrics(ctx context.Context) (*SystemMetrics, erro
 		return nil, errors.Wrap(err, "failed to collect memory usage for nip-11 system metrics")
 	}
 	storageDiskCalculator := analyze.CreateAnalyzer()
-	fileStorageDiskUsage := storageDiskCalculator.AnalyzeDir(n.storagePath, func(name, path string) bool { return false }, func(string) bool { return false }, true)
+	fileStorageDiskUsage := storageDiskCalculator.AnalyzeDir(n.storagePath, func(name, path string) bool { return false }, func(string) bool { return false })
 	fileStorageDiskUsage.UpdateStats(make(fs.HardLinkedItems, 1))
 	fileStorageDiskUsed := uint64(fileStorageDiskUsage.GetSize())
 	commandStorageUsed := uint64(0)
 	_, err = os.Stat(n.commandPath)
 	if n.commandPath != "" && !os.IsNotExist(err) {
 		commandDiskCalculator := analyze.CreateAnalyzer()
-		commandDiskUsage := commandDiskCalculator.AnalyzeDir(n.commandPath, func(name, path string) bool { return false }, func(string) bool { return false }, true)
+		commandDiskUsage := commandDiskCalculator.AnalyzeDir(n.commandPath, func(name, path string) bool { return false }, func(string) bool { return false })
 		fileStorageDiskUsage.UpdateStats(make(fs.HardLinkedItems, 1))
 		commandStorageUsed = uint64(commandDiskUsage.GetSize())
 	}

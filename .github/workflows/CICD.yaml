@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - feature_disable_gift_wrap_516
   pull_request:
     branches:
       - master
@@ -339,7 +340,7 @@ jobs:
         with:
           tag_name: ${{ steps.check_tag.outputs.next_tag }}
           draft: false
-          prerelease: false
+          prerelease: true
           fail_on_unmatched_files: true
           generate_release_notes: true
           make_latest: true
@@ -362,7 +363,7 @@ jobs:
     #    needs: [ push_docker ]
     needs: [ release ]
     name: Trigger Deployment
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'XXX' }}
     runs-on: ubuntu-22.04
     steps:
       - name: Setting ENV variables for deployment

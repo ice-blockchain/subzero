@@ -146,15 +146,16 @@ var (
 		},
 	}
 	allowedPushEventKinds = map[int]struct{}{
-		nostr.KindTextNote:                              {},
-		model.CustomIONKindEditableTextNote:             {},
-		nostr.KindGenericRepost:                         {},
-		nostr.KindReaction:                              {},
-		nostr.KindGiftWrap:                              {},
-		nostr.KindFollowList:                            {},
-		model.CustomIONSystemMessage:                    {},
-		model.CustomIONKindTokenizedCommunityDefinition: {},
-		model.CustomIONKindTokenizedCommunityAction:     {},
+		nostr.KindTextNote:                  {},
+		model.CustomIONKindEditableTextNote: {},
+		nostr.KindGenericRepost:             {},
+		nostr.KindReaction:                  {},
+		nostr.KindGiftWrap:                  {},
+		nostr.KindFollowList:                {},
+		model.CustomIONSystemMessage:        {},
+		// Disable for now.
+		// model.CustomIONKindTokenizedCommunityDefinition: {},
+		// model.CustomIONKindTokenizedCommunityAction:     {},
 	}
 )
 

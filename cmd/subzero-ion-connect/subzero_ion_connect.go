@@ -158,6 +158,10 @@ func init() {
 	wsserver.RegisterWSEventListener(func(ctx context.Context, events ...*model.Event) error {
 		for _, event := range events {
 			if event.Kind == nostr.KindGiftWrap {
+				// Temporarily disallow gift wrap events.
+				if true {
+					return fmt.Errorf("%v: gift wrap events are not allowed", event.ID)
+				}
 				if model.GetUserDataFromContext(ctx).Authenticated {
 					return fmt.Errorf("%v: authenticated user is not allowed to send gift wrap events", event.ID)
 				}
