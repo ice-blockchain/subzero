@@ -312,23 +312,11 @@ jobs:
           execute_install_scripts: true
       - name: Build Artefacts
         run: env GOOS=linux env GOARCH=amd64 make buildAllBinaries
-      - id: check_tag
-        name: Check new computed Tag version
-        run: |
-            echo "::set-output name=next_tag::v1.516.999"
-        env:
-          NEW_TAG_VERSION: ${{ steps.compute_tag.outputs.next_tag }}
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.check_tag.outputs.next_tag }}
-          draft: false
-          prerelease: true
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          make_latest: false
-          files: |
+          name: binaries
+          path: |
             subzero-ion-connect.linux.amd64.bin
             subzero-ion-connect-indexer.linux.amd64.bin
   trigger_deployment:
