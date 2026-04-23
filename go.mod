@@ -43,7 +43,7 @@ require (
 	github.com/ice-blockchain/go/src v0.0.0-20250625091122-356c0c7d1830
 	github.com/imroc/req/v3 v3.57.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jackc/puddle/v2 v2.2.2
 	github.com/jackc/tern/v2 v2.3.5
 	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
